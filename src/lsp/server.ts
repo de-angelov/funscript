@@ -2,6 +2,7 @@ import { EventEmitter } from "node:events";
 import type { Readable, Writable } from "node:stream";
 import { Lexer } from "../lexer/lexer.js";
 import { Parser } from "../parser/parser.js";
+import { format } from "../formatter/index.js";
 import type { Span } from "../ast/types.js";
 import {
   Diagnostic,
@@ -9,6 +10,7 @@ import {
   DidCloseTextDocumentParams,
   DidChangeTextDocumentParams,
   DidOpenTextDocumentParams,
+  DocumentFormattingParams,
   ErrorCodes,
   InitializeResult,
   Message,
@@ -18,6 +20,7 @@ import {
   ResponseMessage,
   TextDocumentItem,
   TextDocumentSyncKind,
+  TextEdit,
 } from "./protocol.js";
 import { MessageReader, MessageWriter } from "./transport.js";
 
@@ -133,6 +136,7 @@ export class FunScriptLspServer extends EventEmitter {
       const result: InitializeResult = {
         capabilities: {
           textDocumentSync: TextDocumentSyncKind.Full,
+          documentFormattingProvider: true,
         },
         serverInfo: {
           name: "funscript-lsp",
@@ -175,6 +179,59 @@ export class FunScriptLspServer extends EventEmitter {
         id: req.id,
         result: null,
       };
+    }
+
+    if (req.method === "textDocument/formatting") {
+      const params = req.params as DocumentFormattingParams;
+      const uri = params?.textDocument?.uri;
+      const doc = uri ? this.documents.get(uri) : undefined;
+      if (!doc) {
+        return {
+          jsonrpc: "2.0",
+          id: req.id,
+          result: null,
+        };
+      }
+
+      if (doc.text.trim().length === 0) {
+        return {
+          jsonrpc: "2.0",
+          id: req.id,
+          result: [],
+        };
+      }
+
+      try {
+        const indentSize =
+          typeof params?.options?.tabSize === "number" && params.options.tabSize > 0
+            ? params.options.tabSize
+            : undefined;
+        const formatted = format(doc.text, indentSize !== undefined ? { indentSize } : undefined);
+
+        const lines = doc.text.split("\n");
+        const lastLine = Math.max(0, lines.length - 1);
+        const lastChar = lines[lastLine].length;
+
+        const edit: TextEdit = {
+          range: {
+            start: { line: 0, character: 0 },
+            end: { line: lastLine, character: lastChar },
+          },
+          newText: formatted,
+        };
+
+        return {
+          jsonrpc: "2.0",
+          id: req.id,
+          result: [edit],
+        };
+      } catch {
+        return {
+          jsonrpc: "2.0",
+          id: req.id,
+          result: null,
+        };
+      }
     }
 
     return {
