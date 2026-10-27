@@ -6,6 +6,7 @@ import * as path from "node:path";
 import { fork } from "node:child_process";
 import { transformSync } from "esbuild";
 import { compileString, checkString } from "../compiler.js";
+import { startLspServer } from "../lsp/index.js";
 
 const readFile = (filePath: string) =>
   Effect.tryPromise({
@@ -84,17 +85,32 @@ const runCommand = (args: string[]) =>
     });
   });
 
+const lspCommand = (args: string[]) =>
+  Effect.async<void, Error>((resume) => {
+    const server = startLspServer({
+      reader: process.stdin,
+      writer: process.stdout,
+    });
+    server.onExit((code) => {
+      setImmediate(() => {
+        process.exit(code);
+      });
+    });
+  });
+
 const helpCommand = Console.log(`
 FunScript 0.1.0 — A functional notation for TypeScript and Effect
 
 Usage:
   funscript emit <file.fun> [--out <file.ts>]   Compile to TypeScript
   funscript check <file.fun>                   Parse and check syntax
+  funscript lsp [--stdio]                      Start Language Server Protocol server
   funscript version                            Display version
 
 Examples:
   funscript emit src/main.fun --out src/main.ts
   funscript check examples/shapes.fun
+  funscript lsp --stdio
 `);
 
 const program = Effect.gen(function* () {
@@ -109,6 +125,8 @@ const program = Effect.gen(function* () {
       return yield* emitCommand(commandArgs);
     case "check":
       return yield* checkCommand(commandArgs);
+    case "lsp":
+      return yield* lspCommand(commandArgs);
     case "version":
     case "-v":
     case "--version":
