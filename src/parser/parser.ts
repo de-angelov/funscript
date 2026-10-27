@@ -1052,6 +1052,14 @@ export class Parser {
         span: this.previous().span,
       };
     }
+    if (this.check(TokenType.STRING)) {
+      const lit = this.parseStringLiteral();
+      return {
+        kind: "LiteralPattern",
+        literal: lit,
+        span: lit.span,
+      };
+    }
     if (this.match(TokenType.TRUE, TokenType.FALSE)) {
       return {
         kind: "LiteralPattern",

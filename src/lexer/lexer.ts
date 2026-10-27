@@ -233,6 +233,11 @@ export class Lexer {
   }
 
   private handleIndentation(): void {
+    if (this.bracketLevel > 0) {
+      this.atLineStart = false;
+      return;
+    }
+
     let spaces = 0;
     const startPos = this.currentPosition();
 

@@ -57,6 +57,8 @@ const ARRAY_COMPANION_METHODS = new Set([
   "map",
   "filter",
   "reduce",
+  "append",
+  "prepend",
   "findFirst",
   "findLast",
   "filterMap",
