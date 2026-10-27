@@ -1,0 +1,5 @@
+node_modules/
+dist/
+.funscript-cache/
+*.tsbuildinfo
+.DS_Store

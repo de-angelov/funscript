@@ -1,0 +1,262 @@
+(* FunScript 0.1 Formal Grammar (EBNF) *)
+
+(* ========================================================================= *)
+(* 1. Lexical Grammar                                                        *)
+(* ========================================================================= *)
+
+whitespace           = " " | "\t" ;
+newline              = "\r\n" | "\n" | "\r" ;
+comment              = "#", { all_characters - newline }, (newline | EOF) ;
+
+(* Layout tokens emitted by indentation-aware lexer *)
+INDENT               = (* increase in indentation level (2 spaces) *) ;
+DEDENT               = (* decrease in indentation level *) ;
+NEWLINE              = (* significant newline terminating a statement *) ;
+
+lowercase_letter     = "a" ... "z" ;
+uppercase_letter     = "A" ... "Z" ;
+digit                = "0" ... "9" ;
+
+identifier           = lowercase_letter, { lowercase_letter | uppercase_letter | digit | "_" } ;
+upper_identifier     = uppercase_letter, { lowercase_letter | uppercase_letter | digit | "_" } ;
+
+keyword              = "and" | "effect" | "error" | "export" | "false"
+                     | "from" | "import" | "match" | "mut" | "not"
+                     | "or" | "schema" | "service" | "true" | "when" ;
+
+boolean_literal      = "true" | "false" ;
+int_literal          = digit, { digit } ;
+float_literal        = digit, { digit }, ".", digit, { digit } ;
+number_literal       = [ "-" ], ( float_literal | int_literal ) ;
+
+string_literal       = '"', { string_char | interpolation }, '"' ;
+string_char          = ( all_characters - ( '"' | "{" | "\" | newline ) )
+                     | ( "\", ( '"' | "\" | "n" | "t" | "r" | "{" ) ) ;
+interpolation        = "{", expression, "}" ;
+
+typed_hole           = "???", [ string_literal ] ;
+
+(* ========================================================================= *)
+(* 2. Modules & Top-Level Declarations                                       *)
+(* ========================================================================= *)
+
+program              = { top_level_item | NEWLINE }, EOF ;
+
+top_level_item       = [ "export" ], declaration ;
+
+declaration          = import_declaration
+                     | schema_declaration
+                     | error_declaration
+                     | service_declaration
+                     | binding_declaration ;
+
+import_declaration   = "import", ( named_imports | type_named_imports ), "from", string_literal, NEWLINE ;
+named_imports        = "{", [ import_specifier, { ",", import_specifier }, [ "," ] ], "}" ;
+type_named_imports   = "type", named_imports ;
+import_specifier     = [ "type" ], identifier_or_upper, [ "as", identifier_or_upper ] ;
+identifier_or_upper  = identifier | upper_identifier ;
+
+(* Schema declarations *)
+schema_declaration   = "schema", upper_identifier, [ type_params ], "=", schema_body, NEWLINE ;
+schema_body          = record_schema
+                     | tagged_union_schema
+                     | refinement_schema
+                     | type_signature_schema ;
+
+record_schema        = "{", [ NEWLINE, INDENT ], record_schema_fields, [ DEDENT ] "}" ;
+record_schema_fields = record_field, { ( "," | NEWLINE ), record_field }, [ "," | NEWLINE ] ;
+record_field         = identifier, ":", type_annotation, [ "=", expression ] ;
+
+tagged_union_schema  = [ NEWLINE, INDENT ], variant_decl, { ( "|" | NEWLINE ), variant_decl }, [ DEDENT ] ;
+variant_decl         = [ "|" ], upper_identifier, [ "(", [ variant_fields ], ")" ] ;
+variant_fields       = variant_field, { ",", variant_field }, [ "," ] ;
+variant_field        = identifier, ":", type_annotation ;
+
+refinement_schema    = type_annotation, "|>", expression ;
+type_signature_schema= function_type | effect_type ;
+
+(* Error declarations *)
+error_declaration    = "error", upper_identifier, [ "(", [ error_fields ], ")" ], NEWLINE ;
+error_fields         = error_field, { ",", error_field }, [ "," ] ;
+error_field          = identifier, ":", type_annotation ;
+
+(* Service declarations *)
+service_declaration  = "service", upper_identifier, [ string_literal ], NEWLINE,
+                       INDENT, service_member, { NEWLINE, service_member }, [ NEWLINE ], DEDENT ;
+service_member       = identifier, ":", function_type ;
+
+(* Binding declarations *)
+binding_declaration  = [ "mut" ], identifier, [ ":", type_annotation ], "=", expression, NEWLINE ;
+
+(* ========================================================================= *)
+(* 3. Types                                                                  *)
+(* ========================================================================= *)
+
+type_annotation      = union_type ;
+union_type           = primary_type, { "|", primary_type } ;
+primary_type         = type_identifier, [ type_args ]
+                     | function_type
+                     | effect_type
+                     | record_type
+                     | array_type
+                     | "(", type_annotation, ")" ;
+
+type_identifier      = upper_identifier | identifier ;
+type_args            = "<", type_annotation, { ",", type_annotation }, ">" ;
+type_params          = "<", upper_identifier, { ",", upper_identifier }, ">" ;
+
+function_type        = [ type_params ], "(", [ param_types ], ")", "->", type_annotation ;
+param_types          = param_type, { ",", param_type } ;
+param_type           = [ identifier, ":" ], type_annotation ;
+
+effect_type          = "Effect", "<", type_annotation, [ ",", type_annotation, [ ",", type_annotation ] ], ">" ;
+record_type          = "{", [ record_type_field, { ( "," | NEWLINE ), record_type_field } ], "}" ;
+record_type_field    = identifier, ":", type_annotation ;
+array_type           = "Array", "<", type_annotation, ">" | primary_type, "[", "]" ;
+
+(* ========================================================================= *)
+(* 4. Expressions & Precedence Ladder                                        *)
+(* ========================================================================= *)
+
+expression           = pipeline_expr ;
+
+(* Level 1: Pipeline |> *)
+pipeline_expr        = logical_or_expr, { "|>", pipeline_target } ;
+pipeline_target      = placeholder_expr
+                     | mut_block
+                     | logical_or_expr ;
+
+(* Level 2: Logical OR *)
+logical_or_expr      = logical_and_expr, { "or", logical_and_expr } ;
+
+(* Level 3: Logical AND *)
+logical_and_expr     = equality_expr, { "and", equality_expr } ;
+
+(* Level 4: Nullish Coalescing ?? *)
+equality_expr        = relational_expr, { "??", relational_expr } ;
+
+(* Level 5: Equality == / != *)
+relational_expr      = additive_expr, { ( "==" | "!=" ), additive_expr } ;
+
+(* Level 6: Additive + / - *)
+additive_expr        = multiplicative_expr, { ( "+" | "-" ), multiplicative_expr } ;
+
+(* Level 7: Multiplicative * / / / % *)
+multiplicative_expr  = exponent_expr, { ( "*" | "/" | "%" ), exponent_expr } ;
+
+(* Level 8: Exponent ** *)
+exponent_expr        = unary_expr, [ "**", exponent_expr ] ;
+
+(* Level 9: Unary Prefix *)
+unary_expr           = "not", unary_expr
+                     | "-", unary_expr
+                     | primary_expr ;
+
+(* Level 10: Postfix Call, Member Access, Index *)
+primary_expr         = atomic_expr, { call_suffix | member_suffix | index_suffix } ;
+call_suffix          = "(", [ argument_list ], ")" ;
+member_suffix        = ".", identifier ;
+index_suffix         = "[", expression, "]" ;
+
+argument_list        = argument, { ",", argument }, [ "," ] ;
+argument             = expression | placeholder ;
+placeholder          = "_" ;
+
+atomic_expr          = literal
+                     | identifier_or_upper
+                     | placeholder
+                     | typed_hole
+                     | record_expr
+                     | array_expr
+                     | function_expr
+                     | match_expr
+                     | effect_block
+                     | "(", expression, ")" ;
+
+literal              = number_literal | string_literal | boolean_literal ;
+
+(* Record Expression & Deep Dot-Path Spread *)
+record_expr          = "{", [ NEWLINE, INDENT ], [ record_entry, { ( "," | NEWLINE ), record_entry }, [ "," | NEWLINE ] ], [ DEDENT ], "}" ;
+record_entry         = spread_entry | field_entry | shorthand_entry ;
+spread_entry         = "...", expression ;
+field_entry          = ( identifier | dot_path ), ":", expression ;
+shorthand_entry      = identifier ;
+dot_path             = identifier, ".", identifier, { ".", identifier } ;
+
+(* Array Expression *)
+array_expr           = "[", [ argument_list ], "]" ;
+
+(* Function Expression *)
+function_expr        = [ type_params ], "(", [ param_list ], ")", [ ":", type_annotation ], "->", function_body
+                     | "->", function_body ;
+param_list           = param, { ",", param }, [ "," ] ;
+param                = identifier, [ ":", type_annotation ] ;
+function_body        = expression
+                     | NEWLINE, INDENT, block_body, DEDENT ;
+
+block_body           = { statement, NEWLINE }, expression ;
+statement            = binding_declaration
+                     | assignment_statement
+                     | expression ;
+
+assignment_statement = ( identifier | dot_path ), "=", expression ;
+
+(* Mutative Block *)
+mut_block            = "mut", "(", identifier, ")", "->", function_body ;
+
+(* ========================================================================= *)
+(* 5. Pattern Matching (`match`)                                             *)
+(* ========================================================================= *)
+
+match_expr           = value_match | boolean_match ;
+
+value_match          = "match", expression, ( inline_match_arms | block_match_arms ) ;
+boolean_match        = "match", ( inline_boolean_arms | block_boolean_arms ) ;
+
+inline_match_arms    = { "|", pattern, [ guard ], "->", expression } ;
+block_match_arms     = NEWLINE, INDENT, match_arm, { NEWLINE, match_arm }, [ NEWLINE ], DEDENT ;
+match_arm            = "|", pattern, [ guard ], "->", arm_body ;
+
+inline_boolean_arms  = { "|", expression, "->", expression }, [ "|", "_", "->", expression ] ;
+block_boolean_arms   = NEWLINE, INDENT, bool_arm, { NEWLINE, bool_arm }, [ NEWLINE ], DEDENT ;
+bool_arm             = "|", ( expression | "_" ), "->", arm_body ;
+
+guard                = "when", expression ;
+arm_body             = expression
+                     | NEWLINE, INDENT, block_body, DEDENT ;
+
+pattern              = or_pattern ;
+or_pattern           = primary_pattern, { "|", primary_pattern } ;
+primary_pattern      = wildcard_pattern
+                     | literal_pattern
+                     | constructor_pattern
+                     | record_pattern
+                     | array_pattern
+                     | variable_pattern ;
+
+wildcard_pattern     = "_" ;
+literal_pattern      = literal ;
+variable_pattern     = identifier ;
+constructor_pattern  = upper_identifier, [ "(", [ pattern_list ], ")" ] ;
+pattern_list         = pattern, { ",", pattern }, [ "," ] ;
+record_pattern       = "{", [ pattern_field, { ",", pattern_field } ], "}" ;
+pattern_field        = identifier, [ ":", pattern ] ;
+array_pattern        = "[", [ pattern_list ], "]" ;
+
+(* ========================================================================= *)
+(* 6. Effect Blocks                                                          *)
+(* ========================================================================= *)
+
+effect_block         = "effect", NEWLINE, INDENT, effect_body, DEDENT ;
+effect_body          = { effect_statement, NEWLINE }, expression ;
+
+effect_statement     = effect_bind
+                     | effect_discard
+                     | binding_declaration
+                     | assignment_statement
+                     | effect_control_flow ;
+
+effect_bind          = identifier, "<-", expression ;
+effect_discard       = "_", "<-", expression ;
+
+effect_control_flow  = match_expr ;
