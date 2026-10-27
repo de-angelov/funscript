@@ -152,7 +152,9 @@ export type Expression =
   | FunctionExpression
   | MutBlockExpression
   | MatchExpression
-  | EffectBlockExpression;
+  | EffectBlockExpression
+  | JSXElement
+  | JSXSelfClosingElement;
 
 export interface PipelineExpression extends NodeBase {
   kind: "PipelineExpression";
@@ -486,3 +488,57 @@ export interface UnionTypeNode extends NodeBase {
   kind: "UnionTypeNode";
   types: TypeNode[];
 }
+
+// --- JSX Nodes ---
+
+export type JSXTagName = Identifier | UpperIdentifier;
+
+export type JSXAttributeValue = StringLiteral | JSXExpressionContainer | Expression;
+
+export interface JSXAttribute extends NodeBase {
+  kind: "JSXAttribute";
+  name: Identifier | UpperIdentifier;
+  value?: JSXAttributeValue;
+}
+
+export interface JSXExpressionContainer extends NodeBase {
+  kind: "JSXExpressionContainer";
+  expression: Expression;
+}
+
+export interface JSXText extends NodeBase {
+  kind: "JSXText";
+  value: string;
+  raw?: string;
+}
+
+export type JSXChild =
+  | JSXElement
+  | JSXSelfClosingElement
+  | JSXText
+  | JSXExpressionContainer;
+
+export interface JSXOpeningElement extends NodeBase {
+  kind: "JSXOpeningElement";
+  name: JSXTagName;
+  attributes: JSXAttribute[];
+}
+
+export interface JSXClosingElement extends NodeBase {
+  kind: "JSXClosingElement";
+  name: JSXTagName;
+}
+
+export interface JSXSelfClosingElement extends NodeBase {
+  kind: "JSXSelfClosingElement";
+  name: JSXTagName;
+  attributes: JSXAttribute[];
+}
+
+export interface JSXElement extends NodeBase {
+  kind: "JSXElement";
+  openingElement: JSXOpeningElement;
+  children: JSXChild[];
+  closingElement: JSXClosingElement;
+}
+

@@ -934,6 +934,9 @@ export class Formatter {
       case "Identifier":
       case "UpperIdentifier":
         return expr.name;
+      case "JSXElement":
+      case "JSXSelfClosingElement":
+        throw new Error(`JSX formatting not yet implemented: ${(expr as any).kind}`);
     }
   }
 
