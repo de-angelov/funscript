@@ -80,7 +80,27 @@ export interface ServerCapabilities {
         openClose?: boolean;
         change?: TextDocumentSyncKind;
       };
+  documentFormattingProvider?: boolean;
   [key: string]: any;
+}
+
+export interface TextEdit {
+  range: Range;
+  newText: string;
+}
+
+export interface FormattingOptions {
+  tabSize: number;
+  insertSpaces: boolean;
+  trimTrailingWhitespace?: boolean;
+  insertFinalNewline?: boolean;
+  trimFinalNewlines?: boolean;
+  [key: string]: boolean | number | string | undefined;
+}
+
+export interface DocumentFormattingParams {
+  textDocument: TextDocumentIdentifier;
+  options?: FormattingOptions;
 }
 
 export interface InitializeParams {

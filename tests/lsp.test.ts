@@ -15,6 +15,8 @@ import {
   type NotificationMessage,
   type ResponseMessage,
   type PublishDiagnosticsParams,
+  type DocumentFormattingParams,
+  type TextEdit,
 } from "../src/lsp/index.js";
 
 describe("FunScript LSP Server", () => {
@@ -38,6 +40,7 @@ describe("FunScript LSP Server", () => {
       expect((response as ResponseMessage).result).toEqual({
         capabilities: {
           textDocumentSync: TextDocumentSyncKind.Full,
+          documentFormattingProvider: true,
         },
         serverInfo: {
           name: "funscript-lsp",
@@ -414,6 +417,256 @@ getUser = () ->
     });
   });
 
+  describe("Document Formatting (textDocument/formatting)", () => {
+    it("formats unformatted documents and returns a TextEdit replacing the whole document range", async () => {
+      const server = new FunScriptLspServer();
+      await server.handleMessage({ jsonrpc: "2.0", id: 1, method: "initialize", params: {} });
+
+      const uri = "file:///workspace/format-test.fun";
+      const source = 'name = "Ada"\nage =   36\nisActive = true';
+
+      await server.handleMessage({
+        jsonrpc: "2.0",
+        method: "textDocument/didOpen",
+        params: {
+          textDocument: {
+            uri,
+            languageId: "funscript",
+            version: 1,
+            text: source,
+          },
+        },
+      });
+
+      const response = (await server.handleMessage({
+        jsonrpc: "2.0",
+        id: 10,
+        method: "textDocument/formatting",
+        params: {
+          textDocument: { uri },
+          options: { tabSize: 2, insertSpaces: true },
+        },
+      })) as ResponseMessage;
+
+      expect(response.error).toBeUndefined();
+      expect(response.id).toBe(10);
+      expect(Array.isArray(response.result)).toBe(true);
+      expect(response.result).toHaveLength(1);
+
+      const edit: TextEdit = response.result[0];
+      expect(edit.range).toEqual({
+        start: { line: 0, character: 0 },
+        end: { line: 2, character: 15 },
+      });
+      expect(edit.newText).toBe('name = "Ada"\nage = 36\nisActive = true\n');
+    });
+
+    it("formats functions and schemas conforming to FunScript formatting rules", async () => {
+      const server = new FunScriptLspServer();
+      await server.handleMessage({ jsonrpc: "2.0", id: 1, method: "initialize", params: {} });
+
+      const uri = "file:///workspace/schema.fun";
+      const source = `
+export schema User = {
+    id: string
+    name: string
+}
+
+export greet = (user: User) ->
+    "Hello, {user.name}!"
+`.trim();
+
+      await server.handleMessage({
+        jsonrpc: "2.0",
+        method: "textDocument/didOpen",
+        params: {
+          textDocument: {
+            uri,
+            languageId: "funscript",
+            version: 1,
+            text: source,
+          },
+        },
+      });
+
+      const response = (await server.handleMessage({
+        jsonrpc: "2.0",
+        id: 20,
+        method: "textDocument/formatting",
+        params: {
+          textDocument: { uri },
+        },
+      })) as ResponseMessage;
+
+      expect(response.error).toBeUndefined();
+      expect(response.result).toHaveLength(1);
+      const edit: TextEdit = response.result[0];
+      expect(edit.newText).toBe(
+        'export schema User = {\n  id: string\n  name: string\n}\n\nexport greet = (user: User) ->\n  "Hello, {user.name}!"\n'
+      );
+    });
+
+    it("respects tabSize formatting option", async () => {
+      const server = new FunScriptLspServer();
+      await server.handleMessage({ jsonrpc: "2.0", id: 1, method: "initialize", params: {} });
+
+      const uri = "file:///workspace/indent.fun";
+      const source = `
+export schema Config = {
+  host: string
+}
+`.trim();
+
+      await server.handleMessage({
+        jsonrpc: "2.0",
+        method: "textDocument/didOpen",
+        params: {
+          textDocument: {
+            uri,
+            languageId: "funscript",
+            version: 1,
+            text: source,
+          },
+        },
+      });
+
+      const response = (await server.handleMessage({
+        jsonrpc: "2.0",
+        id: 30,
+        method: "textDocument/formatting",
+        params: {
+          textDocument: { uri },
+          options: { tabSize: 4, insertSpaces: true },
+        },
+      })) as ResponseMessage;
+
+      expect(response.error).toBeUndefined();
+      expect(response.result).toHaveLength(1);
+      const edit: TextEdit = response.result[0];
+      expect(edit.newText).toBe('export schema Config = {\n    host: string\n}\n');
+    });
+
+    it("returns null when formatting an unknown or unopened document", async () => {
+      const server = new FunScriptLspServer();
+      await server.handleMessage({ jsonrpc: "2.0", id: 1, method: "initialize", params: {} });
+
+      const response = (await server.handleMessage({
+        jsonrpc: "2.0",
+        id: 40,
+        method: "textDocument/formatting",
+        params: {
+          textDocument: { uri: "file:///workspace/nonexistent.fun" },
+        },
+      })) as ResponseMessage;
+
+      expect(response.id).toBe(40);
+      expect(response.result).toBeNull();
+    });
+
+    it("returns null when formatting document with syntax errors", async () => {
+      const server = new FunScriptLspServer();
+      await server.handleMessage({ jsonrpc: "2.0", id: 1, method: "initialize", params: {} });
+
+      const uri = "file:///workspace/syntax-error.fun";
+      await server.handleMessage({
+        jsonrpc: "2.0",
+        method: "textDocument/didOpen",
+        params: {
+          textDocument: {
+            uri,
+            languageId: "funscript",
+            version: 1,
+            text: "let invalid = 123\n",
+          },
+        },
+      });
+
+      const response = (await server.handleMessage({
+        jsonrpc: "2.0",
+        id: 50,
+        method: "textDocument/formatting",
+        params: {
+          textDocument: { uri },
+        },
+      })) as ResponseMessage;
+
+      expect(response.id).toBe(50);
+      expect(response.result).toBeNull();
+    });
+
+    it("returns empty array for empty documents", async () => {
+      const server = new FunScriptLspServer();
+      await server.handleMessage({ jsonrpc: "2.0", id: 1, method: "initialize", params: {} });
+
+      const uri = "file:///workspace/empty.fun";
+      await server.handleMessage({
+        jsonrpc: "2.0",
+        method: "textDocument/didOpen",
+        params: {
+          textDocument: {
+            uri,
+            languageId: "funscript",
+            version: 1,
+            text: "   \n\n  ",
+          },
+        },
+      });
+
+      const response = (await server.handleMessage({
+        jsonrpc: "2.0",
+        id: 60,
+        method: "textDocument/formatting",
+        params: {
+          textDocument: { uri },
+        },
+      })) as ResponseMessage;
+
+      expect(response.id).toBe(60);
+      expect(response.result).toEqual([]);
+    });
+
+    it("formats modified document after textDocument/didChange", async () => {
+      const server = new FunScriptLspServer();
+      await server.handleMessage({ jsonrpc: "2.0", id: 1, method: "initialize", params: {} });
+
+      const uri = "file:///workspace/change-and-format.fun";
+      await server.handleMessage({
+        jsonrpc: "2.0",
+        method: "textDocument/didOpen",
+        params: {
+          textDocument: {
+            uri,
+            languageId: "funscript",
+            version: 1,
+            text: "x = 1\n",
+          },
+        },
+      });
+
+      await server.handleMessage({
+        jsonrpc: "2.0",
+        method: "textDocument/didChange",
+        params: {
+          textDocument: { uri, version: 2 },
+          contentChanges: [{ text: "total =    100 +   200\n" }],
+        },
+      });
+
+      const response = (await server.handleMessage({
+        jsonrpc: "2.0",
+        id: 70,
+        method: "textDocument/formatting",
+        params: {
+          textDocument: { uri },
+        },
+      })) as ResponseMessage;
+
+      expect(response.id).toBe(70);
+      expect(response.result).toHaveLength(1);
+      expect(response.result[0].newText).toBe("total = 100 + 200\n");
+    });
+  });
+
   describe("Message Transport & Framing", () => {
     it("encodes and decodes messages over streams using Content-Length framing", async () => {
       const stream = new PassThrough();
@@ -507,6 +760,7 @@ getUser = () ->
 
       const initRes = responses.find((r) => r.id === 1);
       expect(initRes.result.capabilities.textDocumentSync).toBe(TextDocumentSyncKind.Full);
+      expect(initRes.result.capabilities.documentFormattingProvider).toBe(true);
 
       // 2. Open document with error
       writer.write({
@@ -533,7 +787,44 @@ getUser = () ->
       const diagNotif = responses.find((r) => r.method === "textDocument/publishDiagnostics");
       expect(diagNotif.params.diagnostics[0].message).toContain("FunScript has no 'let'");
 
-      // 3. Send shutdown
+      // 3. Open unformatted valid document and request formatting over stdio
+      writer.write({
+        jsonrpc: "2.0",
+        method: "textDocument/didOpen",
+        params: {
+          textDocument: {
+            uri: "file:///fmt-stdio.fun",
+            languageId: "funscript",
+            version: 1,
+            text: 'x =    42\ny = "hi"\n',
+          },
+        },
+      } as any);
+
+      writer.write({
+        jsonrpc: "2.0",
+        id: 100,
+        method: "textDocument/formatting",
+        params: {
+          textDocument: {
+            uri: "file:///fmt-stdio.fun",
+          },
+          options: {
+            tabSize: 2,
+            insertSpaces: true,
+          },
+        },
+      } as any);
+
+      await vi.waitFor(() => {
+        expect(responses.some((r) => r.id === 100)).toBe(true);
+      });
+
+      const fmtRes = responses.find((r) => r.id === 100);
+      expect(fmtRes.result).toHaveLength(1);
+      expect(fmtRes.result[0].newText).toBe('x = 42\ny = "hi"\n');
+
+      // 4. Send shutdown
       writer.write({
         jsonrpc: "2.0",
         id: 2,
