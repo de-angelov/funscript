@@ -29,7 +29,7 @@ export const compileString = (
       const tokens = lexer.tokenize();
 
       // 2. Parse AST
-      const parser = new Parser(tokens, filename);
+      const parser = new Parser(tokens, filename, source);
       const ast = parser.parse();
 
       // 3. Emit TypeScript
@@ -56,7 +56,7 @@ export const checkString = (
     try: () => {
       const lexer = new Lexer(source, filename);
       const tokens = lexer.tokenize();
-      const parser = new Parser(tokens, filename);
+      const parser = new Parser(tokens, filename, source);
       return parser.parse();
     },
     catch: (error: any) => new CompilerError(error.message, error),

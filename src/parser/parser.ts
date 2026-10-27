@@ -69,6 +69,10 @@ import {
   RecordTypeField,
   ArrayTypeNode,
   UnionTypeNode,
+  TsEscapeDeclaration,
+  JsExpression,
+  TsEscapeExpression,
+  TsEscapeTypeNode,
   Span,
   Position,
   JSXElement,
@@ -100,6 +104,7 @@ export class Parser {
   constructor(
     private tokens: Token[],
     private filename: string = "<anonymous>",
+    private source: string = "",
   ) {}
 
   public parse(): Program {
@@ -127,7 +132,8 @@ export class Parser {
   private parseTopLevelDeclaration(): TopLevelDeclaration {
     if (this.match(TokenType.EXPORT)) {
       const exportStart = this.previous().span.start;
-      const decl = this.parseDeclaration();
+      const isJs = this.match(TokenType.JS);
+      const decl = this.parseDeclaration(isJs);
       return {
         kind: "ExportDeclaration",
         declaration: decl as any,
@@ -137,9 +143,25 @@ export class Parser {
     return this.parseDeclaration();
   }
 
-  private parseDeclaration(): TopLevelDeclaration {
+  private parseDeclaration(isJs = false): TopLevelDeclaration {
     if (this.check(TokenType.IMPORT)) {
       return this.parseImportDeclaration();
+    }
+    if (this.match(TokenType.RAW_TICK)) {
+      const code = this.previous().value;
+      this.consumeNewlineOrEof("Expected newline after raw escape block");
+      return {
+        kind: "TsEscapeDeclaration",
+        code,
+        span: this.previous().span,
+      };
+    }
+    if (this.check(TokenType.TS)) {
+      this.advance();
+      return this.parseTsEscapeDeclaration();
+    }
+    if (this.match(TokenType.JS)) {
+      return this.parseBindingDeclaration(true);
     }
     if (this.check(TokenType.SCHEMA)) {
       return this.parseSchemaDeclaration();
@@ -150,7 +172,46 @@ export class Parser {
     if (this.check(TokenType.SERVICE)) {
       return this.parseServiceDeclaration();
     }
-    return this.parseBindingDeclaration();
+    return this.parseBindingDeclaration(isJs);
+  }
+
+  private isStringStart(): boolean {
+    return (
+      this.check(TokenType.STRING) ||
+      this.check(TokenType.STRING_PART) ||
+      this.check(TokenType.INTERPOLATION_START)
+    );
+  }
+
+  private extractRawString(lit: StringLiteral): string {
+    if (this.source && lit.span) {
+      return this.source.slice(lit.span.start.offset + 1, lit.span.end.offset - 1);
+    }
+    return lit.parts.map((p) => (p.kind === "StringRawPart" ? p.value : "")).join("");
+  }
+
+  private parseTsEscapeDeclaration(): TsEscapeDeclaration {
+    const start = this.previous().span.start;
+    if (this.match(TokenType.RAW_TICK)) {
+      const code = this.previous().value;
+      this.consumeNewlineOrEof("Expected newline after ts declaration");
+      return {
+        kind: "TsEscapeDeclaration",
+        code,
+        span: { start, end: this.previous().span.end },
+      };
+    }
+    if (this.isStringStart()) {
+      const lit = this.parseStringLiteral();
+      const code = this.extractRawString(lit);
+      this.consumeNewlineOrEof("Expected newline after ts declaration");
+      return {
+        kind: "TsEscapeDeclaration",
+        code,
+        span: { start, end: lit.span.end },
+      };
+    }
+    throw new ParseError("Expected string or backtick block after 'ts'", this.peek().span);
   }
 
   private parseImportDeclaration(): ImportDeclaration {
@@ -425,7 +486,7 @@ export class Parser {
     };
   }
 
-  private parseBindingDeclaration(): BindingDeclaration {
+  private parseBindingDeclaration(isJs = false): BindingDeclaration {
     const start = this.peek().span.start;
     const isMut = this.match(TokenType.MUT);
     const id = this.parseAnyIdentifier();
@@ -452,6 +513,7 @@ export class Parser {
     return {
       kind: "BindingDeclaration",
       isMut,
+      isJs,
       id,
       typeAnnotation,
       init,
@@ -869,6 +931,59 @@ export class Parser {
     // 10. Effect Block: effect ...
     if (this.match(TokenType.EFFECT)) {
       return this.parseEffectBlock();
+    }
+
+    // 11. JS Expression or bare 'js' pipeline stage
+    if (this.match(TokenType.JS)) {
+      const start = this.previous().span.start;
+      if (
+        this.isAtEnd() ||
+        this.check(TokenType.NEWLINE) ||
+        this.check(TokenType.EOF) ||
+        this.check(TokenType.DEDENT) ||
+        this.check(TokenType.RPAREN)
+      ) {
+        return {
+          kind: "Identifier",
+          name: "js",
+          span: this.previous().span,
+        };
+      }
+      const inner = this.parseExpression();
+      return {
+        kind: "JsExpression",
+        expression: inner,
+        span: { start, end: inner.span.end },
+      };
+    }
+
+    // 12. Bare backtick or TS Escape: `raw code` or ts `raw code` or ts "raw code"
+    if (this.match(TokenType.RAW_TICK)) {
+      return {
+        kind: "TsEscapeExpression",
+        code: this.previous().value,
+        span: this.previous().span,
+      };
+    }
+    if (this.match(TokenType.TS)) {
+      const start = this.previous().span.start;
+      if (this.match(TokenType.RAW_TICK)) {
+        return {
+          kind: "TsEscapeExpression",
+          code: this.previous().value,
+          span: { start, end: this.previous().span.end },
+        };
+      }
+      if (this.isStringStart()) {
+        const lit = this.parseStringLiteral();
+        const code = this.extractRawString(lit);
+        return {
+          kind: "TsEscapeExpression",
+          code,
+          span: { start, end: lit.span.end },
+        };
+      }
+      throw new ParseError("Expected string or backtick block after 'ts'", this.peek().span);
     }
 
     throw new ParseError(`Unexpected token '${this.peek().value}' (${this.peek().type})`, this.peek().span);
@@ -1334,6 +1449,34 @@ export class Parser {
       this.skipNewlines();
       const end = this.consume(TokenType.RBRACE, "Expected '}'").span.end;
       return { kind: "RecordTypeNode", fields, span: { start, end } };
+    }
+
+    if (this.match(TokenType.RAW_TICK)) {
+      return {
+        kind: "TsEscapeTypeNode",
+        code: this.previous().value,
+        span: this.previous().span,
+      };
+    }
+    if (this.match(TokenType.TS)) {
+      const start = this.previous().span.start;
+      if (this.match(TokenType.RAW_TICK)) {
+        return {
+          kind: "TsEscapeTypeNode",
+          code: this.previous().value,
+          span: { start, end: this.previous().span.end },
+        };
+      }
+      if (this.isStringStart()) {
+        const lit = this.parseStringLiteral();
+        const code = this.extractRawString(lit);
+        return {
+          kind: "TsEscapeTypeNode",
+          code,
+          span: { start, end: lit.span.end },
+        };
+      }
+      throw new ParseError("Expected string or backtick block after 'ts' in type", this.peek().span);
     }
 
     if (this.check(TokenType.UPPER_IDENTIFIER) && this.peek().value === "Effect") {

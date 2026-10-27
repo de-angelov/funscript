@@ -10,6 +10,7 @@ export enum TokenType {
   // Literals
   NUMBER = "NUMBER",
   STRING = "STRING",
+  RAW_TICK = "RAW_TICK",
   STRING_PART = "STRING_PART",
   INTERPOLATION_START = "INTERPOLATION_START",
   INTERPOLATION_END = "INTERPOLATION_END",
@@ -18,7 +19,7 @@ export enum TokenType {
   IDENTIFIER = "IDENTIFIER",
   UPPER_IDENTIFIER = "UPPER_IDENTIFIER",
 
-  // The 15 FunScript Keywords
+  // The 17 FunScript Keywords
   AND = "and",
   EFFECT = "effect",
   ERROR = "error",
@@ -26,6 +27,7 @@ export enum TokenType {
   FALSE = "false",
   FROM = "from",
   IMPORT = "import",
+  JS = "js",
   MATCH = "match",
   MUT = "mut",
   NOT = "not",
@@ -33,6 +35,7 @@ export enum TokenType {
   SCHEMA = "schema",
   SERVICE = "service",
   TRUE = "true",
+  TS = "ts",
   WHEN = "when",
 
   // Operators & Delimiters
@@ -96,6 +99,7 @@ export const KEYWORDS: Record<string, TokenType> = {
   false: TokenType.FALSE,
   from: TokenType.FROM,
   import: TokenType.IMPORT,
+  js: TokenType.JS,
   match: TokenType.MATCH,
   mut: TokenType.MUT,
   not: TokenType.NOT,
@@ -103,6 +107,7 @@ export const KEYWORDS: Record<string, TokenType> = {
   schema: TokenType.SCHEMA,
   service: TokenType.SERVICE,
   true: TokenType.TRUE,
+  ts: TokenType.TS,
   when: TokenType.WHEN,
 };
 

@@ -113,7 +113,7 @@ const runCommand = (args: string[]) =>
     const result = yield* compileString(source, filePath);
 
     let tsCode = result.typescript;
-    tsCode += `\nimport * as __effect from "effect";\nif (typeof main !== "undefined") {\n  if (__effect.Effect.isEffect(main)) {\n    await __effect.Effect.runPromise(main);\n  } else if (typeof main === "function") {\n    await main();\n  }\n}\n`;
+    tsCode += `\nimport * as __effect from "effect";\nif (typeof main !== "undefined") {\n  if (__effect.Effect.isEffect(main)) {\n    await __effect.Effect.runPromise(main);\n  } else if (typeof main === "function") {\n    const __res = await main();\n    if (__effect.Effect.isEffect(__res)) {\n      await __effect.Effect.runPromise(__res);\n    }\n  }\n}\n`;
 
     const transformed = transformSync(tsCode, { loader: "ts", format: "esm" });
     const cacheDir = path.resolve(".funscript-cache");

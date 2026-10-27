@@ -51,6 +51,10 @@ import {
   TypeReferenceNode,
   FunctionTypeNode,
   EffectTypeNode,
+  TsEscapeDeclaration,
+  JsExpression,
+  TsEscapeExpression,
+  TsEscapeTypeNode,
 } from "../ast/types.js";
 
 const ARRAY_COMPANION_METHODS = new Set([
@@ -183,6 +187,8 @@ export class Emitter {
         return this.emitServiceDeclaration(decl, isExport);
       case "BindingDeclaration":
         return this.emitBindingDeclaration(decl, isExport);
+      case "TsEscapeDeclaration":
+        return decl.code + "\n";
     }
   }
 
@@ -296,6 +302,29 @@ export class Emitter {
     const exp = isExport ? "export " : "";
     const keyword = decl.isMut ? "let" : "const";
     const typeAnn = decl.typeAnnotation ? `: ${this.emitTypeNode(decl.typeAnnotation)}` : "";
+
+    if (decl.isJs) {
+      this.effectImports.add("Effect");
+      if (decl.init.kind === "FunctionExpression") {
+        const fn = decl.init;
+        const params = fn.params
+          .map((p) => {
+            const t = p.typeAnnotation ? `: ${this.emitTypeNode(p.typeAnnotation)}` : "";
+            return `${p.name.name}${t}`;
+          })
+          .join(", ");
+        if (fn.body.kind === "BlockStatement") {
+          if (fn.body.statements.length === 0) {
+            return `${exp}${keyword} ${decl.id.name} = (${params}) => Effect.runPromise(${this.emitExpression(fn.body.finalExpression)});`;
+          }
+          const stmts = fn.body.statements.map((s) => "    " + this.emitStatement(s)).join("\n");
+          return `${exp}${keyword} ${decl.id.name} = (${params}) => Effect.runPromise(Effect.gen(function* () {\n${stmts}\n    return ${this.emitExpression(fn.body.finalExpression)};\n  }));`;
+        }
+        return `${exp}${keyword} ${decl.id.name} = (${params}) => Effect.runPromise(${this.emitExpression(fn.body)});`;
+      }
+      return `${exp}${keyword} ${decl.id.name}${typeAnn} = Effect.runPromise(${this.emitExpression(decl.init)});`;
+    }
+
     return `${exp}${keyword} ${decl.id.name}${typeAnn} = ${this.emitExpression(decl.init)};`;
   }
 
@@ -344,6 +373,11 @@ export class Emitter {
       case "JSXElement":
       case "JSXSelfClosingElement":
         throw new Error(`JSX emission not yet implemented: ${(expr as any).kind}`);
+      case "JsExpression":
+        this.effectImports.add("Effect");
+        return `Effect.tryPromise(() => ${this.emitExpression(expr.expression)})`;
+      case "TsEscapeExpression":
+        return expr.code;
     }
   }
 
@@ -395,6 +429,17 @@ export class Emitter {
   }
 
   private resolvePipelineStage(stage: Expression): Expression {
+    // 0. 'js' pipeline stage: eff |> js -> pipe(eff, Effect.runPromise)
+    if (stage.kind === "Identifier" && stage.name === "js") {
+      this.effectImports.add("Effect");
+      return {
+        kind: "MemberExpression",
+        object: { kind: "UpperIdentifier", name: "Effect", span: stage.span },
+        property: { kind: "Identifier", name: "runPromise", span: stage.span },
+        span: stage.span,
+      };
+    }
+
     // 1. Bare CallExpression: reduce(acc, f), map(f), lessThanOrEqualTo(0), orDie()
     if (stage.kind === "CallExpression" && stage.callee.kind === "Identifier") {
       const name = stage.callee.name;
@@ -666,6 +711,10 @@ export class Emitter {
   }
 
   private emitEffectCall(effectExpr: Expression): string {
+    if (effectExpr.kind === "JsExpression") {
+      this.effectImports.add("Effect");
+      return `Effect.tryPromise(() => ${this.emitExpression(effectExpr.expression)})`;
+    }
     // Check if this is a direct service call: Service.method(args)
     if (effectExpr.kind === "CallExpression" && effectExpr.callee.kind === "MemberExpression") {
       const obj = effectExpr.callee.object;
@@ -715,6 +764,8 @@ export class Emitter {
         return `ReadonlyArray<${this.emitTypeNode(node.elementType)}>`;
       case "UnionTypeNode":
         return node.types.map((t) => this.emitTypeNode(t)).join(" | ");
+      case "TsEscapeTypeNode":
+        return node.code;
     }
   }
 }

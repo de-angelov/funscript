@@ -50,6 +50,40 @@ export schema Shape =
     expect(res.typescript).toContain(`export const Point: Shape = $Shape.Point();`);
   });
 
+  it("compiles 'js' keyword for interop (export js, effect ingress, pipeline js)", async () => {
+    const code = `
+export js fetchUser = (id: string) ->
+  effect
+    res <- js fetch("https://api.com/users/" + id)
+    payload <- js res.json()
+    payload
+
+export runPromiseTest = fetchUser("123") |> js
+`.trim();
+
+    const res = await Effect.runPromise(compileString(code));
+    expect(res.typescript).toContain(`import { Effect, pipe } from "effect";`);
+    expect(res.typescript).toContain(`export const fetchUser = (id: string) => Effect.runPromise(`);
+    expect(res.typescript).toContain(`const res = yield* Effect.tryPromise(() => fetch(("https://api.com/users/" + id)));`);
+    expect(res.typescript).toContain(`const payload = yield* Effect.tryPromise(() => res.json());`);
+    expect(res.typescript).toContain(`Effect.runPromise`);
+  });
+
+  it("compiles 'ts' keyword for TypeScript escape hatches", async () => {
+    const code = `
+ts \`interface CustomBuffer { size: number }\`
+
+schema UserMap = ts "Record<string, unknown>"
+
+export createBuffer = ts "Buffer.from('hello')"
+`.trim();
+
+    const res = await Effect.runPromise(compileString(code));
+    expect(res.typescript).toContain(`interface CustomBuffer { size: number }`);
+    expect(res.typescript).toContain(`Record<string, unknown>`);
+    expect(res.typescript).toContain(`export const createBuffer = Buffer.from('hello');`);
+  });
+
   it("compiles effect blocks with direct service calls", async () => {
     const code = `
 export getUser = (id: string) ->

@@ -151,6 +151,12 @@ export class Lexer {
         continue;
       }
 
+      // Raw Backticks escape
+      if (char === "`") {
+        this.readRawTick();
+        continue;
+      }
+
       // Numbers
       if (this.isDigit(char)) {
         this.readNumber();
@@ -411,6 +417,28 @@ export class Lexer {
 
     this.tokens.push({
       type: TokenType.STRING,
+      value: buffer,
+      span: { start: startPos, end: this.currentPosition() },
+    });
+  }
+
+  private readRawTick(): void {
+    const startPos = this.currentPosition();
+    this.advance(); // consume opening '`'
+    let buffer = "";
+    while (!this.isAtEnd() && this.peek() !== "`") {
+      if (this.peek() === "\n") {
+        this.line++;
+        this.column = 1;
+      }
+      buffer += this.advance();
+    }
+    if (this.isAtEnd()) {
+      throw new LexerError("Unterminated raw escape block", { start: startPos, end: this.currentPosition() });
+    }
+    this.advance(); // consume closing '`'
+    this.tokens.push({
+      type: TokenType.RAW_TICK,
       value: buffer,
       span: { start: startPos, end: this.currentPosition() },
     });

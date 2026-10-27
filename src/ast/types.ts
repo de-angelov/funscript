@@ -28,7 +28,13 @@ export type TopLevelDeclaration =
   | SchemaDeclaration
   | ErrorDeclaration
   | ServiceDeclaration
-  | BindingDeclaration;
+  | BindingDeclaration
+  | TsEscapeDeclaration;
+
+export interface TsEscapeDeclaration extends NodeBase {
+  kind: "TsEscapeDeclaration";
+  code: string;
+}
 
 export interface ImportDeclaration extends NodeBase {
   kind: "ImportDeclaration";
@@ -52,6 +58,7 @@ export interface ExportDeclaration extends NodeBase {
 export interface BindingDeclaration extends NodeBase {
   kind: "BindingDeclaration";
   isMut: boolean;
+  isJs?: boolean;
   id: Identifier | UpperIdentifier;
   typeAnnotation?: TypeNode;
   init: Expression;
@@ -154,7 +161,19 @@ export type Expression =
   | MatchExpression
   | EffectBlockExpression
   | JSXElement
-  | JSXSelfClosingElement;
+  | JSXSelfClosingElement
+  | JsExpression
+  | TsEscapeExpression;
+
+export interface JsExpression extends NodeBase {
+  kind: "JsExpression";
+  expression: Expression;
+}
+
+export interface TsEscapeExpression extends NodeBase {
+  kind: "TsEscapeExpression";
+  code: string;
+}
 
 export interface PipelineExpression extends NodeBase {
   kind: "PipelineExpression";
@@ -429,7 +448,13 @@ export type TypeNode =
   | EffectTypeNode
   | RecordTypeNode
   | ArrayTypeNode
-  | UnionTypeNode;
+  | UnionTypeNode
+  | TsEscapeTypeNode;
+
+export interface TsEscapeTypeNode extends NodeBase {
+  kind: "TsEscapeTypeNode";
+  code: string;
+}
 
 export interface TypeReferenceNode extends NodeBase {
   kind: "TypeReferenceNode";
