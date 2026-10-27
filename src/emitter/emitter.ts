@@ -53,6 +53,68 @@ import {
   EffectTypeNode,
 } from "../ast/types.js";
 
+const ARRAY_COMPANION_METHODS = new Set([
+  "map",
+  "filter",
+  "reduce",
+  "findFirst",
+  "findLast",
+  "filterMap",
+  "take",
+  "drop",
+  "sortBy",
+  "sortWith",
+  "join",
+  "length",
+  "head",
+  "tail",
+  "reverse",
+  "flatMap",
+  "flatten",
+  "zip",
+  "every",
+  "some",
+  "compact",
+  "dedupe",
+  "partition",
+  "groupBy",
+]);
+
+const EFFECT_COMPANION_METHODS = new Set([
+  "orDie",
+  "retry",
+  "timeout",
+  "catchTag",
+  "catchAll",
+  "catchSome",
+  "provide",
+  "provideService",
+  "scoped",
+  "forkScoped",
+  "forever",
+  "repeat",
+  "tap",
+]);
+
+const OPTION_COMPANION_METHODS = new Set([
+  "getOrElse",
+  "getOrThrow",
+  "isSome",
+  "isNone",
+  "orElse",
+]);
+
+const NUMBER_COMPANION_METHODS = new Set([
+  "greaterThan",
+  "greaterThanOrEqualTo",
+  "lessThan",
+  "lessThanOrEqualTo",
+  "between",
+  "clamp",
+  "increment",
+  "decrement",
+]);
+
 const EFFECT_BUILTIN_MODULES = new Set([
   "Console",
   "Effect",
@@ -309,19 +371,67 @@ export class Emitter {
     const emittedStages = stages.map((s, idx) => {
       if (idx === 0) return this.emitExpression(s);
 
+      // Auto-namespace resolution for pipeline stage callee
+      const resolvedStage = this.resolvePipelineStage(s);
+
       // Check if stage has placeholder '_'
-      if (s.kind === "CallExpression" && s.args.some((a) => a.kind === "Placeholder")) {
+      if (resolvedStage.kind === "CallExpression" && resolvedStage.args.some((a) => a.kind === "Placeholder")) {
         const placeholderParam = "__p";
-        const callArgs = s.args
+        const callArgs = resolvedStage.args
           .map((a) => (a.kind === "Placeholder" ? placeholderParam : this.emitExpression(a)))
           .join(", ");
-        return `(${placeholderParam}) => ${this.emitExpression(s.callee)}(${callArgs})`;
+        return `(${placeholderParam}) => ${this.emitExpression(resolvedStage.callee)}(${callArgs})`;
       }
 
-      return this.emitExpression(s);
+      return this.emitExpression(resolvedStage);
     });
 
     return `pipe(\n  ${emittedStages.join(",\n  ")}\n)`;
+  }
+
+  private resolvePipelineStage(stage: Expression): Expression {
+    // 1. Bare CallExpression: reduce(acc, f), map(f), lessThanOrEqualTo(0), orDie()
+    if (stage.kind === "CallExpression" && stage.callee.kind === "Identifier") {
+      const name = stage.callee.name;
+      const companion = this.getCompanionModule(name);
+      if (companion) {
+        this.effectImports.add(companion);
+        return {
+          ...stage,
+          callee: {
+            kind: "MemberExpression",
+            object: { kind: "UpperIdentifier", name: companion, span: stage.callee.span },
+            property: stage.callee,
+            span: stage.callee.span,
+          },
+        };
+      }
+    }
+
+    // 2. Bare Identifier in pipeline: orDie, length, etc.
+    if (stage.kind === "Identifier") {
+      const name = stage.name;
+      const companion = this.getCompanionModule(name);
+      if (companion) {
+        this.effectImports.add(companion);
+        return {
+          kind: "MemberExpression",
+          object: { kind: "UpperIdentifier", name: companion, span: stage.span },
+          property: stage,
+          span: stage.span,
+        };
+      }
+    }
+
+    return stage;
+  }
+
+  private getCompanionModule(name: string): "Array" | "Effect" | "Option" | "Number" | undefined {
+    if (ARRAY_COMPANION_METHODS.has(name)) return "Array";
+    if (EFFECT_COMPANION_METHODS.has(name)) return "Effect";
+    if (OPTION_COMPANION_METHODS.has(name)) return "Option";
+    if (NUMBER_COMPANION_METHODS.has(name)) return "Number";
+    return undefined;
   }
 
   private emitBinaryExpression(expr: BinaryExpression): string {

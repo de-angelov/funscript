@@ -1,6 +1,6 @@
 # Program 02: Bank Account with Tagged Unions, Pattern Matching & Immutability
 
-import { Console, Array, pipe, Number } from "effect"
+import { Console } from "effect"
 
 export schema Account = {
   id: string
@@ -16,7 +16,7 @@ export schema Action =
 export applyAction = (acc: Account, action: Action): Account ->
   match action
     | Deposit(amount) -> { ...acc, balance: acc.balance + amount }
-    | Withdraw(amount) when acc.balance |> Number.greaterThanOrEqualTo(amount) ->
+    | Withdraw(amount) when acc.balance |> greaterThanOrEqualTo(amount) ->
         { ...acc, balance: acc.balance - amount }
     | Withdraw(amount) -> acc
     | Freeze -> acc
@@ -32,6 +32,6 @@ export initialAccount: Account = {
 
 export main =
   [Deposit(50), Withdraw(30), Deposit(200), Withdraw(500), Withdraw(20)]
-  |> Array.reduce(initialAccount, applyAction)
+  |> reduce(initialAccount, applyAction)
   |> formatAccount
   |> Console.log

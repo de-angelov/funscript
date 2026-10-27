@@ -59,8 +59,8 @@ export program =
     _ <- Console.log("--- Current Todo List ---")
     summary =
       todos
-      |> Array.map(formatTodo)
-      |> Array.join("\n")
+      |> map(formatTodo)
+      |> join("\n")
     _ <- Console.log(summary)
     todos
 

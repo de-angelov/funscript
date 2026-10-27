@@ -14,12 +14,12 @@ export area = (shape: Shape) ->
 
 export describe = (shape: Shape) ->
   match shape
-    | Circle(r) when r |> Number.greaterThan(10) -> "large circle ({r})"
+    | Circle(r) when r |> greaterThan(10) -> "large circle ({r})"
     | Circle(r) -> "circle ({r})"
     | Rect(w, h) -> "rectangle {w}x{h}"
 
 export main =
   [Circle(2), Rect(3, 4), Circle(12)]
-  |> Array.map(describe)
-  |> Array.join(" | ")
+  |> map(describe)
+  |> join(" | ")
   |> Console.log
