@@ -5,6 +5,7 @@ export * from "./protocol.js";
 export * from "./transport.js";
 export * from "./server.js";
 export * from "./docs.js";
+export * from "./definition.js";
 
 export interface StartLspServerOptions {
   reader?: Readable;

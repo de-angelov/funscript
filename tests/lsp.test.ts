@@ -17,6 +17,9 @@ import {
   type PublishDiagnosticsParams,
   type DocumentFormattingParams,
   type TextEdit,
+  type Location,
+  type LocationLink,
+  type DefinitionParams,
 } from "../src/lsp/index.js";
 
 describe("FunScript LSP Server", () => {
@@ -41,6 +44,7 @@ describe("FunScript LSP Server", () => {
         capabilities: {
           textDocumentSync: TextDocumentSyncKind.Full,
           documentFormattingProvider: true,
+          definitionProvider: true,
         },
         serverInfo: {
           name: "funscript-lsp",
@@ -667,6 +671,727 @@ export schema Config = {
     });
   });
 
+  describe("Go to Definition (textDocument/definition)", () => {
+    it("returns null when document is not open", async () => {
+      const server = new FunScriptLspServer();
+      await server.handleMessage({ jsonrpc: "2.0", id: 1, method: "initialize", params: {} });
+
+      const response = (await server.handleMessage({
+        jsonrpc: "2.0",
+        id: 10,
+        method: "textDocument/definition",
+        params: {
+          textDocument: { uri: "file:///nonexistent.fun" },
+          position: { line: 0, character: 0 },
+        },
+      })) as ResponseMessage;
+
+      expect(response.id).toBe(10);
+      expect(response.result).toBeNull();
+    });
+
+    it("returns null for empty documents", async () => {
+      const server = new FunScriptLspServer();
+      await server.handleMessage({ jsonrpc: "2.0", id: 1, method: "initialize", params: {} });
+
+      const uri = "file:///empty.fun";
+      await server.handleMessage({
+        jsonrpc: "2.0",
+        method: "textDocument/didOpen",
+        params: {
+          textDocument: { uri, languageId: "funscript", version: 1, text: "   \n\n  " },
+        },
+      });
+
+      const response = (await server.handleMessage({
+        jsonrpc: "2.0",
+        id: 11,
+        method: "textDocument/definition",
+        params: {
+          textDocument: { uri },
+          position: { line: 0, character: 1 },
+        },
+      })) as ResponseMessage;
+
+      expect(response.result).toBeNull();
+    });
+
+    it("returns null when cursor is on whitespace or non-identifier token", async () => {
+      const server = new FunScriptLspServer();
+      await server.handleMessage({ jsonrpc: "2.0", id: 1, method: "initialize", params: {} });
+
+      const uri = "file:///whitespace.fun";
+      await server.handleMessage({
+        jsonrpc: "2.0",
+        method: "textDocument/didOpen",
+        params: {
+          textDocument: { uri, languageId: "funscript", version: 1, text: "x = 42 + 10\n" },
+        },
+      });
+
+      // Cursor on '=' (character 2)
+      const resEqual = (await server.handleMessage({
+        jsonrpc: "2.0",
+        id: 12,
+        method: "textDocument/definition",
+        params: { textDocument: { uri }, position: { line: 0, character: 2 } },
+      })) as ResponseMessage;
+      expect(resEqual.result).toBeNull();
+
+      // Cursor on number literal '42' (character 4)
+      const resNum = (await server.handleMessage({
+        jsonrpc: "2.0",
+        id: 13,
+        method: "textDocument/definition",
+        params: { textDocument: { uri }, position: { line: 0, character: 4 } },
+      })) as ResponseMessage;
+      expect(resNum.result).toBeNull();
+    });
+
+    it("returns null for undefined / unresolved identifiers", async () => {
+      const server = new FunScriptLspServer();
+      await server.handleMessage({ jsonrpc: "2.0", id: 1, method: "initialize", params: {} });
+
+      const uri = "file:///undefined.fun";
+      await server.handleMessage({
+        jsonrpc: "2.0",
+        method: "textDocument/didOpen",
+        params: {
+          textDocument: { uri, languageId: "funscript", version: 1, text: "y = unknownVariable + 1\n" },
+        },
+      });
+
+      const response = (await server.handleMessage({
+        jsonrpc: "2.0",
+        id: 14,
+        method: "textDocument/definition",
+        params: {
+          textDocument: { uri },
+          position: { line: 0, character: 6 }, // on unknownVariable
+        },
+      })) as ResponseMessage;
+
+      expect(response.result).toBeNull();
+    });
+
+    it("resolves function calls to top-level function declaration range", async () => {
+      const server = new FunScriptLspServer();
+      await server.handleMessage({ jsonrpc: "2.0", id: 1, method: "initialize", params: {} });
+
+      const uri = "file:///fn.fun";
+      const source = [
+        "add = (a: number, b: number) -> a + b",
+        "result = add(10, 20)",
+      ].join("\n");
+
+      await server.handleMessage({
+        jsonrpc: "2.0",
+        method: "textDocument/didOpen",
+        params: {
+          textDocument: { uri, languageId: "funscript", version: 1, text: source },
+        },
+      });
+
+      // Cursor on 'add' at call site: line 1, character 9
+      const response = (await server.handleMessage({
+        jsonrpc: "2.0",
+        id: 20,
+        method: "textDocument/definition",
+        params: {
+          textDocument: { uri },
+          position: { line: 1, character: 9 },
+        },
+      })) as ResponseMessage;
+
+      expect(response.error).toBeUndefined();
+      const loc = response.result as Location;
+      expect(loc.uri).toBe(uri);
+      expect(loc.range).toEqual({
+        start: { line: 0, character: 0 },
+        end: { line: 0, character: 37 },
+      });
+    });
+
+    it("resolves function definition when cursor is directly on declaration identifier", async () => {
+      const server = new FunScriptLspServer();
+      await server.handleMessage({ jsonrpc: "2.0", id: 1, method: "initialize", params: {} });
+
+      const uri = "file:///fn-decl.fun";
+      const source = "add = (a: number, b: number) -> a + b\n";
+
+      await server.handleMessage({
+        jsonrpc: "2.0",
+        method: "textDocument/didOpen",
+        params: {
+          textDocument: { uri, languageId: "funscript", version: 1, text: source },
+        },
+      });
+
+      // Cursor on 'add' in 'add = ...': line 0, character 1
+      const response = (await server.handleMessage({
+        jsonrpc: "2.0",
+        id: 21,
+        method: "textDocument/definition",
+        params: {
+          textDocument: { uri },
+          position: { line: 0, character: 1 },
+        },
+      })) as ResponseMessage;
+
+      expect(response.error).toBeUndefined();
+      const loc = response.result as Location;
+      expect(loc.uri).toBe(uri);
+      expect(loc.range).toEqual({
+        start: { line: 0, character: 0 },
+        end: { line: 0, character: 37 },
+      });
+    });
+
+    it("resolves exported function declarations including the export statement range", async () => {
+      const server = new FunScriptLspServer();
+      await server.handleMessage({ jsonrpc: "2.0", id: 1, method: "initialize", params: {} });
+
+      const uri = "file:///export-fn.fun";
+      const source = [
+        "export multiply = (x: number, y: number) -> x * y",
+        "value = multiply(3, 4)",
+      ].join("\n");
+
+      await server.handleMessage({
+        jsonrpc: "2.0",
+        method: "textDocument/didOpen",
+        params: {
+          textDocument: { uri, languageId: "funscript", version: 1, text: source },
+        },
+      });
+
+      // Cursor on 'multiply' at call site: line 1, character 8
+      const response = (await server.handleMessage({
+        jsonrpc: "2.0",
+        id: 22,
+        method: "textDocument/definition",
+        params: {
+          textDocument: { uri },
+          position: { line: 1, character: 8 },
+        },
+      })) as ResponseMessage;
+
+      expect(response.error).toBeUndefined();
+      const loc = response.result as Location;
+      expect(loc.uri).toBe(uri);
+      expect(loc.range).toEqual({
+        start: { line: 0, character: 0 },
+        end: { line: 0, character: 49 },
+      });
+    });
+
+    it("resolves variable usages to top-level variable declaration range", async () => {
+      const server = new FunScriptLspServer();
+      await server.handleMessage({ jsonrpc: "2.0", id: 1, method: "initialize", params: {} });
+
+      const uri = "file:///var.fun";
+      const source = "total = 42\nnext = total + 1\n";
+
+      await server.handleMessage({
+        jsonrpc: "2.0",
+        method: "textDocument/didOpen",
+        params: {
+          textDocument: { uri, languageId: "funscript", version: 1, text: source },
+        },
+      });
+
+      // Cursor on 'total' in 'next = total + 1': line 1, character 8
+      const response = (await server.handleMessage({
+        jsonrpc: "2.0",
+        id: 23,
+        method: "textDocument/definition",
+        params: {
+          textDocument: { uri },
+          position: { line: 1, character: 8 },
+        },
+      })) as ResponseMessage;
+
+      expect(response.error).toBeUndefined();
+      const loc = response.result as Location;
+      expect(loc.uri).toBe(uri);
+      expect(loc.range).toEqual({
+        start: { line: 0, character: 0 },
+        end: { line: 0, character: 10 },
+      });
+    });
+
+    it("resolves function parameters inside function body", async () => {
+      const server = new FunScriptLspServer();
+      await server.handleMessage({ jsonrpc: "2.0", id: 1, method: "initialize", params: {} });
+
+      const uri = "file:///params.fun";
+      const source = "double = (count: number) -> count * 2\n";
+
+      await server.handleMessage({
+        jsonrpc: "2.0",
+        method: "textDocument/didOpen",
+        params: {
+          textDocument: { uri, languageId: "funscript", version: 1, text: source },
+        },
+      });
+
+      // Cursor on 'count' in 'count * 2': line 0, character 29
+      const response = (await server.handleMessage({
+        jsonrpc: "2.0",
+        id: 24,
+        method: "textDocument/definition",
+        params: {
+          textDocument: { uri },
+          position: { line: 0, character: 29 },
+        },
+      })) as ResponseMessage;
+
+      expect(response.error).toBeUndefined();
+      const loc = response.result as Location;
+      expect(loc.uri).toBe(uri);
+      // Parameter 'count: number' starts at character 10, ends at 15
+      expect(loc.range).toEqual({
+        start: { line: 0, character: 10 },
+        end: { line: 0, character: 15 },
+      });
+    });
+
+    it("resolves local variable bindings inside block statements", async () => {
+      const server = new FunScriptLspServer();
+      await server.handleMessage({ jsonrpc: "2.0", id: 1, method: "initialize", params: {} });
+
+      const uri = "file:///block.fun";
+      const source = [
+        "calculate = (n: number) ->",
+        "  subtotal = n * 10",
+        "  subtotal + 5",
+      ].join("\n");
+
+      await server.handleMessage({
+        jsonrpc: "2.0",
+        method: "textDocument/didOpen",
+        params: {
+          textDocument: { uri, languageId: "funscript", version: 1, text: source },
+        },
+      });
+
+      // Cursor on 'subtotal' on line 2, character 4
+      const response = (await server.handleMessage({
+        jsonrpc: "2.0",
+        id: 25,
+        method: "textDocument/definition",
+        params: {
+          textDocument: { uri },
+          position: { line: 2, character: 4 },
+        },
+      })) as ResponseMessage;
+
+      expect(response.error).toBeUndefined();
+      const loc = response.result as Location;
+      expect(loc.uri).toBe(uri);
+      // 'subtotal = n * 10' on line 1: characters 2 to 19
+      expect(loc.range).toEqual({
+        start: { line: 1, character: 2 },
+        end: { line: 1, character: 19 },
+      });
+    });
+
+    it("resolves type references to schema declaration range", async () => {
+      const server = new FunScriptLspServer();
+      await server.handleMessage({ jsonrpc: "2.0", id: 1, method: "initialize", params: {} });
+
+      const uri = "file:///schema.fun";
+      const source = [
+        "schema User = {",
+        "  id: string",
+        "  name: string",
+        "}",
+        "export getUserName = (user: User) -> user.name",
+      ].join("\n");
+
+      await server.handleMessage({
+        jsonrpc: "2.0",
+        method: "textDocument/didOpen",
+        params: {
+          textDocument: { uri, languageId: "funscript", version: 1, text: source },
+        },
+      });
+
+      // Cursor on 'User' in 'user: User': line 4, character 29
+      const response = (await server.handleMessage({
+        jsonrpc: "2.0",
+        id: 26,
+        method: "textDocument/definition",
+        params: {
+          textDocument: { uri },
+          position: { line: 4, character: 29 },
+        },
+      })) as ResponseMessage;
+
+      expect(response.error).toBeUndefined();
+      const loc = response.result as Location;
+      expect(loc.uri).toBe(uri);
+      expect(loc.range).toEqual({
+        start: { line: 0, character: 0 },
+        end: { line: 3, character: 1 },
+      });
+    });
+
+    it("resolves tagged union variant constructors to their variant declaration", async () => {
+      const server = new FunScriptLspServer();
+      await server.handleMessage({ jsonrpc: "2.0", id: 1, method: "initialize", params: {} });
+
+      const uri = "file:///variants.fun";
+      const source = [
+        "schema Shape =",
+        "  | Circle(radius: number)",
+        "  | Rectangle(w: number, h: number)",
+        "shape = Circle(15)",
+      ].join("\n");
+
+      await server.handleMessage({
+        jsonrpc: "2.0",
+        method: "textDocument/didOpen",
+        params: {
+          textDocument: { uri, languageId: "funscript", version: 1, text: source },
+        },
+      });
+
+      // Cursor on 'Circle' in 'Circle(15)': line 3, character 9
+      const response = (await server.handleMessage({
+        jsonrpc: "2.0",
+        id: 27,
+        method: "textDocument/definition",
+        params: {
+          textDocument: { uri },
+          position: { line: 3, character: 9 },
+        },
+      })) as ResponseMessage;
+
+      expect(response.error).toBeUndefined();
+      const loc = response.result as Location;
+      expect(loc.uri).toBe(uri);
+      expect(loc.range).toEqual({
+        start: { line: 1, character: 2 },
+        end: { line: 1, character: 26 },
+      });
+    });
+
+    it("resolves error declarations and service declarations", async () => {
+      const server = new FunScriptLspServer();
+      await server.handleMessage({ jsonrpc: "2.0", id: 1, method: "initialize", params: {} });
+
+      const uri = "file:///services.fun";
+      const source = [
+        "error NotFound(id: string)",
+        "service OrderService",
+        "  getOrder: (id: string) -> Effect<Order, NotFound>",
+        "result = OrderService",
+      ].join("\n");
+
+      await server.handleMessage({
+        jsonrpc: "2.0",
+        method: "textDocument/didOpen",
+        params: {
+          textDocument: { uri, languageId: "funscript", version: 1, text: source },
+        },
+      });
+
+      // Cursor on 'NotFound' in Service signature: line 2, character 43
+      const errRes = (await server.handleMessage({
+        jsonrpc: "2.0",
+        id: 28,
+        method: "textDocument/definition",
+        params: {
+          textDocument: { uri },
+          position: { line: 2, character: 43 },
+        },
+      })) as ResponseMessage;
+
+      expect(errRes.error).toBeUndefined();
+      expect((errRes.result as Location).range).toEqual({
+        start: { line: 0, character: 0 },
+        end: { line: 1, character: 0 },
+      });
+
+      // Cursor on 'OrderService' on line 3, character 12
+      const svcRes = (await server.handleMessage({
+        jsonrpc: "2.0",
+        id: 29,
+        method: "textDocument/definition",
+        params: {
+          textDocument: { uri },
+          position: { line: 3, character: 12 },
+        },
+      })) as ResponseMessage;
+
+      expect(svcRes.error).toBeUndefined();
+      expect((svcRes.result as Location).range).toEqual({
+        start: { line: 1, character: 0 },
+        end: { line: 3, character: 0 },
+      });
+    });
+
+    it("resolves effect-bound variables inside effect block expressions", async () => {
+      const server = new FunScriptLspServer();
+      await server.handleMessage({ jsonrpc: "2.0", id: 1, method: "initialize", params: {} });
+
+      const uri = "file:///effect.fun";
+      const source = [
+        "getAccount = () ->",
+        "  effect",
+        '    user <- findUser("123")',
+        "    user",
+      ].join("\n");
+
+      await server.handleMessage({
+        jsonrpc: "2.0",
+        method: "textDocument/didOpen",
+        params: {
+          textDocument: { uri, languageId: "funscript", version: 1, text: source },
+        },
+      });
+
+      // Cursor on 'user' on line 3, character 5
+      const response = (await server.handleMessage({
+        jsonrpc: "2.0",
+        id: 30,
+        method: "textDocument/definition",
+        params: {
+          textDocument: { uri },
+          position: { line: 3, character: 5 },
+        },
+      })) as ResponseMessage;
+
+      expect(response.error).toBeUndefined();
+      const loc = response.result as Location;
+      expect(loc.uri).toBe(uri);
+      // 'user <- findUser("123")' on line 2
+      expect(loc.range).toEqual({
+        start: { line: 2, character: 4 },
+        end: { line: 2, character: 27 },
+      });
+    });
+
+    it("resolves pattern variables inside match expression arms", async () => {
+      const server = new FunScriptLspServer();
+      await server.handleMessage({ jsonrpc: "2.0", id: 1, method: "initialize", params: {} });
+
+      const uri = "file:///match.fun";
+      const source = [
+        "schema Shape = | Circle(radius: number)",
+        "calc = (s: Shape) ->",
+        "  match s",
+        "    | Circle(radius) -> radius * 2",
+      ].join("\n");
+
+      await server.handleMessage({
+        jsonrpc: "2.0",
+        method: "textDocument/didOpen",
+        params: {
+          textDocument: { uri, languageId: "funscript", version: 1, text: source },
+        },
+      });
+
+      // Cursor on 'radius' in 'radius * 2': line 3, character 25
+      const response = (await server.handleMessage({
+        jsonrpc: "2.0",
+        id: 31,
+        method: "textDocument/definition",
+        params: {
+          textDocument: { uri },
+          position: { line: 3, character: 25 },
+        },
+      })) as ResponseMessage;
+
+      expect(response.error).toBeUndefined();
+      const loc = response.result as Location;
+      expect(loc.uri).toBe(uri);
+      expect(loc.range).toEqual({
+        start: { line: 3, character: 13 },
+        end: { line: 3, character: 19 },
+      });
+    });
+
+    it("resolves draft parameters inside mut block expressions", async () => {
+      const server = new FunScriptLspServer();
+      await server.handleMessage({ jsonrpc: "2.0", id: 1, method: "initialize", params: {} });
+
+      const uri = "file:///mut.fun";
+      const source = [
+        "appendTag = (p: Profile, tag: string) ->",
+        "  p",
+        "  |> mut (draft) ->",
+        "    draft.tags.push(tag)",
+        "    draft",
+      ].join("\n");
+
+      await server.handleMessage({
+        jsonrpc: "2.0",
+        method: "textDocument/didOpen",
+        params: {
+          textDocument: { uri, languageId: "funscript", version: 1, text: source },
+        },
+      });
+
+      // Cursor on 'draft' in 'draft.tags': line 3, character 4
+      const response = (await server.handleMessage({
+        jsonrpc: "2.0",
+        id: 32,
+        method: "textDocument/definition",
+        params: {
+          textDocument: { uri },
+          position: { line: 3, character: 4 },
+        },
+      })) as ResponseMessage;
+
+      expect(response.error).toBeUndefined();
+      const loc = response.result as Location;
+      expect(loc.uri).toBe(uri);
+      expect(loc.range).toEqual({
+        start: { line: 2, character: 10 },
+        end: { line: 2, character: 15 },
+      });
+    });
+
+    it("resolves imported specifiers to the import declaration", async () => {
+      const server = new FunScriptLspServer();
+      await server.handleMessage({ jsonrpc: "2.0", id: 1, method: "initialize", params: {} });
+
+      const uri = "file:///import.fun";
+      const source = [
+        'import { helper } from "./utils.js"',
+        "callHelper = () -> helper()",
+      ].join("\n");
+
+      await server.handleMessage({
+        jsonrpc: "2.0",
+        method: "textDocument/didOpen",
+        params: {
+          textDocument: { uri, languageId: "funscript", version: 1, text: source },
+        },
+      });
+
+      // Cursor on 'helper' at call site: line 1, character 20
+      const response = (await server.handleMessage({
+        jsonrpc: "2.0",
+        id: 33,
+        method: "textDocument/definition",
+        params: {
+          textDocument: { uri },
+          position: { line: 1, character: 20 },
+        },
+      })) as ResponseMessage;
+
+      expect(response.error).toBeUndefined();
+      const loc = response.result as Location;
+      expect(loc.uri).toBe(uri);
+      expect(loc.range).toEqual({
+        start: { line: 0, character: 9 },
+        end: { line: 0, character: 15 },
+      });
+    });
+
+    it("updates definitions after document changes via textDocument/didChange", async () => {
+      const server = new FunScriptLspServer();
+      await server.handleMessage({ jsonrpc: "2.0", id: 1, method: "initialize", params: {} });
+
+      const uri = "file:///change.fun";
+      await server.handleMessage({
+        jsonrpc: "2.0",
+        method: "textDocument/didOpen",
+        params: {
+          textDocument: { uri, languageId: "funscript", version: 1, text: "foo = 10\nbar = foo\n" },
+        },
+      });
+
+      // Change document: rename foo to newFoo
+      await server.handleMessage({
+        jsonrpc: "2.0",
+        method: "textDocument/didChange",
+        params: {
+          textDocument: { uri, version: 2 },
+          contentChanges: [{ text: "newFoo = 100\nbar = newFoo\n" }],
+        },
+      });
+
+      const response = (await server.handleMessage({
+        jsonrpc: "2.0",
+        id: 34,
+        method: "textDocument/definition",
+        params: {
+          textDocument: { uri },
+          position: { line: 1, character: 8 }, // on 'newFoo'
+        },
+      })) as ResponseMessage;
+
+      expect(response.error).toBeUndefined();
+      const loc = response.result as Location;
+      expect(loc.range).toEqual({
+        start: { line: 0, character: 0 },
+        end: { line: 0, character: 12 },
+      });
+    });
+
+    it("returns LocationLink array when client capability linkSupport is enabled", async () => {
+      const server = new FunScriptLspServer();
+      await server.handleMessage({
+        jsonrpc: "2.0",
+        id: 1,
+        method: "initialize",
+        params: {
+          capabilities: {
+            textDocument: {
+              definition: {
+                linkSupport: true,
+              },
+            },
+          },
+        },
+      });
+
+      const uri = "file:///link-support.fun";
+      const source = "export greet = () -> 42\nres = greet()\n";
+
+      await server.handleMessage({
+        jsonrpc: "2.0",
+        method: "textDocument/didOpen",
+        params: {
+          textDocument: { uri, languageId: "funscript", version: 1, text: source },
+        },
+      });
+
+      const response = (await server.handleMessage({
+        jsonrpc: "2.0",
+        id: 35,
+        method: "textDocument/definition",
+        params: {
+          textDocument: { uri },
+          position: { line: 1, character: 7 }, // on 'greet'
+        },
+      })) as ResponseMessage;
+
+      expect(response.error).toBeUndefined();
+      expect(Array.isArray(response.result)).toBe(true);
+      const links = response.result as LocationLink[];
+      expect(links).toHaveLength(1);
+      const link = links[0];
+      expect(link.targetUri).toBe(uri);
+      expect(link.targetRange).toEqual({
+        start: { line: 0, character: 0 },
+        end: { line: 0, character: 23 },
+      });
+      expect(link.targetSelectionRange).toEqual({
+        start: { line: 0, character: 7 },
+        end: { line: 0, character: 12 },
+      });
+      expect(link.originSelectionRange).toEqual({
+        start: { line: 1, character: 6 },
+        end: { line: 1, character: 11 },
+      });
+    });
+  });
+
   describe("Message Transport & Framing", () => {
     it("encodes and decodes messages over streams using Content-Length framing", async () => {
       const stream = new PassThrough();
@@ -761,6 +1486,7 @@ export schema Config = {
       const initRes = responses.find((r) => r.id === 1);
       expect(initRes.result.capabilities.textDocumentSync).toBe(TextDocumentSyncKind.Full);
       expect(initRes.result.capabilities.documentFormattingProvider).toBe(true);
+      expect(initRes.result.capabilities.definitionProvider).toBe(true);
 
       // 2. Open document with error
       writer.write({
@@ -824,7 +1550,44 @@ export schema Config = {
       expect(fmtRes.result).toHaveLength(1);
       expect(fmtRes.result[0].newText).toBe('x = 42\ny = "hi"\n');
 
-      // 4. Send shutdown
+      // 4. Open document and request definition over stdio
+      writer.write({
+        jsonrpc: "2.0",
+        method: "textDocument/didOpen",
+        params: {
+          textDocument: {
+            uri: "file:///def-stdio.fun",
+            languageId: "funscript",
+            version: 1,
+            text: "val = 42\nres = val + 1\n",
+          },
+        },
+      } as any);
+
+      writer.write({
+        jsonrpc: "2.0",
+        id: 101,
+        method: "textDocument/definition",
+        params: {
+          textDocument: { uri: "file:///def-stdio.fun" },
+          position: { line: 1, character: 7 }, // on 'val'
+        },
+      } as any);
+
+      await vi.waitFor(() => {
+        expect(responses.some((r) => r.id === 101)).toBe(true);
+      });
+
+      const defRes = responses.find((r) => r.id === 101);
+      expect(defRes.result).toEqual({
+        uri: "file:///def-stdio.fun",
+        range: {
+          start: { line: 0, character: 0 },
+          end: { line: 0, character: 8 },
+        },
+      });
+
+      // 5. Send shutdown
       writer.write({
         jsonrpc: "2.0",
         id: 2,

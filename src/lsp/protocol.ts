@@ -81,8 +81,30 @@ export interface ServerCapabilities {
         change?: TextDocumentSyncKind;
       };
   documentFormattingProvider?: boolean;
+  definitionProvider?: boolean;
   [key: string]: any;
 }
+
+export interface Location {
+  uri: string;
+  range: Range;
+}
+
+export interface LocationLink {
+  originSelectionRange?: Range;
+  targetUri: string;
+  targetRange: Range;
+  targetSelectionRange: Range;
+}
+
+export interface TextDocumentPositionParams {
+  textDocument: TextDocumentIdentifier;
+  position: Position;
+}
+
+export type DefinitionParams = TextDocumentPositionParams;
+
+export type Definition = Location | Location[] | LocationLink[] | null;
 
 export interface TextEdit {
   range: Range;

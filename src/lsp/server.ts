@@ -5,6 +5,7 @@ import { Parser } from "../parser/parser.js";
 import { format } from "../formatter/index.js";
 import type { Span } from "../ast/types.js";
 import {
+  DefinitionParams,
   Diagnostic,
   DiagnosticSeverity,
   DidCloseTextDocumentParams,
@@ -23,6 +24,7 @@ import {
   TextEdit,
 } from "./protocol.js";
 import { MessageReader, MessageWriter } from "./transport.js";
+import { findDefinition } from "./definition.js";
 
 export function toDiagnostic(error: any): Diagnostic {
   const span: Span | undefined = error.span;
@@ -93,6 +95,7 @@ export class FunScriptLspServer extends EventEmitter {
   private documents: Map<string, TextDocumentItem> = new Map();
   private isInitialized = false;
   private isShutdown = false;
+  private clientCapabilities: any = null;
   private reader: MessageReader | null = null;
   private writer: MessageWriter | null = null;
 
@@ -133,10 +136,12 @@ export class FunScriptLspServer extends EventEmitter {
   private handleRequest(req: RequestMessage): ResponseMessage {
     if (req.method === "initialize") {
       this.isInitialized = true;
+      this.clientCapabilities = req.params?.capabilities;
       const result: InitializeResult = {
         capabilities: {
           textDocumentSync: TextDocumentSyncKind.Full,
           documentFormattingProvider: true,
+          definitionProvider: true,
         },
         serverInfo: {
           name: "funscript-lsp",
@@ -232,6 +237,31 @@ export class FunScriptLspServer extends EventEmitter {
           result: null,
         };
       }
+    }
+
+    if (req.method === "textDocument/definition") {
+      const params = req.params as DefinitionParams;
+      const uri = params?.textDocument?.uri;
+      const doc = uri ? this.documents.get(uri) : undefined;
+      if (!doc || !params?.position) {
+        return {
+          jsonrpc: "2.0",
+          id: req.id,
+          result: null,
+        };
+      }
+
+      const clientSupportsLink = Boolean(
+        this.clientCapabilities?.textDocument?.definition?.linkSupport
+      );
+
+      const result = findDefinition(doc.text, uri, params.position, clientSupportsLink);
+
+      return {
+        jsonrpc: "2.0",
+        id: req.id,
+        result,
+      };
     }
 
     return {
