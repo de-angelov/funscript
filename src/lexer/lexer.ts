@@ -17,6 +17,10 @@ export class LexerError extends Error {
   }
 }
 
+export interface LexerOptions {
+  jsx?: boolean;
+}
+
 export class Lexer {
   private offset = 0;
   private line = 1;
@@ -24,14 +28,25 @@ export class Lexer {
   private indentStack: number[] = [0];
   private parenLevel = 0;
   private bracketLevel = 0;
-  private braceStack: ("record" | "interpolation")[] = [];
+  private braceStack: ("record" | "interpolation" | "jsx_expr")[] = [];
+  private jsxStack: Array<{ kind: "tag" | "closing_tag" | "children" | "expr"; hasTagName?: boolean }> = [];
+  private isFunx: boolean;
   private tokens: Token[] = [];
   private atLineStart = true;
 
   constructor(
     private source: string,
     private filename: string = "<anonymous>",
-  ) {}
+    options?: LexerOptions | boolean,
+  ) {
+    if (typeof options === "boolean") {
+      this.isFunx = options;
+    } else if (options && typeof options.jsx === "boolean") {
+      this.isFunx = options.jsx;
+    } else {
+      this.isFunx = this.filename.endsWith(".funx");
+    }
+  }
 
   public tokenize(): Token[] {
     while (!this.isAtEnd()) {
@@ -40,6 +55,17 @@ export class Lexer {
       }
 
       if (this.isAtEnd()) break;
+
+      if (this.isFunx && this.jsxStack.length > 0) {
+        const top = this.jsxStack[this.jsxStack.length - 1];
+        if (top.kind === "children") {
+          this.readJsxChildren();
+          continue;
+        } else if (top.kind === "tag" || top.kind === "closing_tag") {
+          this.readJsxTag(top);
+          continue;
+        }
+      }
 
       const char = this.peek();
 
@@ -194,13 +220,27 @@ export class Lexer {
             this.braceStack.pop();
             this.emitToken(TokenType.INTERPOLATION_END, "}", 1);
             this.continueStringAfterInterpolation();
+          } else if (this.braceStack.length > 0 && this.braceStack[this.braceStack.length - 1] === "jsx_expr") {
+            this.braceStack.pop();
+            if (this.jsxStack.length > 0 && this.jsxStack[this.jsxStack.length - 1].kind === "expr") {
+              this.jsxStack.pop();
+            }
+            this.emitToken(TokenType.RBRACE, "}", 1);
           } else {
             if (this.braceStack.length > 0) this.braceStack.pop();
             this.emitToken(TokenType.RBRACE, "}", 1);
           }
           break;
         case "<":
-          this.emitToken(TokenType.LT, "<", 1);
+          if (this.isFunx && this.matchAhead("</")) {
+            this.emitToken(TokenType.JSX_CLOSING_TAG_OPEN, "</", 2);
+            this.jsxStack.push({ kind: "closing_tag", hasTagName: false });
+          } else if (this.isJsxTagStart()) {
+            this.emitToken(TokenType.JSX_TAG_OPEN, "<", 1);
+            this.jsxStack.push({ kind: "tag", hasTagName: false });
+          } else {
+            this.emitToken(TokenType.LT, "<", 1);
+          }
           break;
         case ">":
           this.emitToken(TokenType.GT, ">", 1);
@@ -233,7 +273,7 @@ export class Lexer {
   }
 
   private handleIndentation(): void {
-    if (this.bracketLevel > 0) {
+    if (this.bracketLevel > 0 || this.isInJsxChildrenOrTag()) {
       this.atLineStart = false;
       return;
     }
@@ -565,5 +605,232 @@ export class Lexer {
         offset: this.offset + length,
       },
     };
+  }
+
+  private isInJsxChildrenOrTag(): boolean {
+    if (this.jsxStack.length === 0) return false;
+    const top = this.jsxStack[this.jsxStack.length - 1];
+    return top.kind === "tag" || top.kind === "closing_tag" || top.kind === "children";
+  }
+
+  private isJsxTagStart(): boolean {
+    if (!this.isFunx) return false;
+    if (this.peek() !== "<") return false;
+
+    // Followed by tag name start, or / for closing tag, or > for fragment
+    const next = this.peekAhead(1);
+    if (!this.isAlpha(next) && next !== "_" && next !== "/" && next !== ">") {
+      return false;
+    }
+
+    if (next === "/") return true;
+
+    // Disambiguate from comparison operator (<) and generics
+    const prevToken = this.tokens.length > 0 ? this.tokens[this.tokens.length - 1] : null;
+    if (!prevToken) {
+      return true;
+    }
+
+    const exprEndingTokens = new Set<TokenType>([
+      TokenType.IDENTIFIER,
+      TokenType.UPPER_IDENTIFIER,
+      TokenType.NUMBER,
+      TokenType.STRING,
+      TokenType.RPAREN,
+      TokenType.RBRACKET,
+      TokenType.RBRACE,
+      TokenType.TRUE,
+      TokenType.FALSE,
+      TokenType.UNDERSCORE,
+    ]);
+
+    if (exprEndingTokens.has(prevToken.type)) {
+      return false;
+    }
+
+    return true;
+  }
+
+  private advanceWhitespaceNewline(): void {
+    if (this.peek() === "\r") this.advance();
+    if (this.peek() === "\n") this.advance();
+    this.line++;
+    this.column = 1;
+    this.atLineStart = true;
+  }
+
+  private readJsxChildren(): void {
+    const char = this.peek();
+
+    if (char === "<") {
+      if (this.matchAhead("</")) {
+        this.emitToken(TokenType.JSX_CLOSING_TAG_OPEN, "</", 2);
+        this.jsxStack.push({ kind: "closing_tag", hasTagName: false });
+      } else {
+        this.emitToken(TokenType.JSX_TAG_OPEN, "<", 1);
+        this.jsxStack.push({ kind: "tag", hasTagName: false });
+      }
+      return;
+    }
+
+    if (char === "{") {
+      this.emitToken(TokenType.LBRACE, "{", 1);
+      this.braceStack.push("jsx_expr");
+      this.jsxStack.push({ kind: "expr" });
+      return;
+    }
+
+    const startPos = this.currentPosition();
+    let text = "";
+    while (!this.isAtEnd() && this.peek() !== "<" && this.peek() !== "{") {
+      const c = this.advance();
+      if (c === "\r") {
+        if (this.peek() === "\n") {
+          this.advance();
+        }
+        this.line++;
+        this.column = 1;
+        text += "\n";
+      } else if (c === "\n") {
+        this.line++;
+        this.column = 1;
+        text += "\n";
+      } else {
+        text += c;
+      }
+    }
+
+    if (text.length > 0) {
+      this.tokens.push({
+        type: TokenType.JSX_TEXT,
+        value: text,
+        span: { start: startPos, end: this.currentPosition() },
+      });
+    }
+  }
+
+  private readJsxTag(top: { kind: "tag" | "closing_tag" | "children" | "expr"; hasTagName?: boolean }): void {
+    const char = this.peek();
+
+    // Whitespace (inline)
+    if (char === " " || char === "\t") {
+      this.advance();
+      return;
+    }
+
+    // Newlines within tags
+    if (char === "\r" || char === "\n") {
+      this.advanceWhitespaceNewline();
+      return;
+    }
+
+    // Comments within tags
+    if (char === "#") {
+      this.skipComment();
+      return;
+    }
+
+    // Tag name
+    if (!top.hasTagName) {
+      if (char === ">") {
+        // Empty fragment tag: <> or </>
+        this.emitToken(TokenType.JSX_TAG_CLOSE, ">", 1);
+        if (top.kind === "tag") {
+          top.kind = "children";
+        } else {
+          this.jsxStack.pop();
+          if (this.jsxStack.length > 0 && this.jsxStack[this.jsxStack.length - 1].kind === "children") {
+            this.jsxStack.pop();
+          }
+        }
+        return;
+      }
+
+      if (this.isAlpha(char) || char === "_") {
+        const startPos = this.currentPosition();
+        let name = "";
+        while (!this.isAtEnd() && (this.isAlphaNumeric(this.peek()) || this.peek() === "_" || this.peek() === "-")) {
+          name += this.advance();
+        }
+        top.hasTagName = true;
+        const type = name[0] >= "A" && name[0] <= "Z" ? TokenType.UPPER_IDENTIFIER : TokenType.IDENTIFIER;
+        this.tokens.push({
+          type,
+          value: name,
+          span: { start: startPos, end: this.currentPosition() },
+        });
+        return;
+      }
+
+      throw new LexerError(`Expected tag name after '<', found '${char}'`, this.currentSpan(1));
+    }
+
+    // Member access in tag name (e.g. <Namespace.Component />)
+    if (char === ".") {
+      this.emitToken(TokenType.DOT, ".", 1);
+      top.hasTagName = false;
+      return;
+    }
+
+    // Self-closing slash close: '/>'
+    if (this.matchAhead("/>")) {
+      this.emitToken(TokenType.JSX_SLASH_CLOSE, "/>", 2);
+      this.jsxStack.pop();
+      return;
+    }
+
+    // Tag close: '>'
+    if (char === ">") {
+      this.emitToken(TokenType.JSX_TAG_CLOSE, ">", 1);
+      if (top.kind === "tag") {
+        top.kind = "children";
+      } else {
+        this.jsxStack.pop();
+        if (this.jsxStack.length > 0 && this.jsxStack[this.jsxStack.length - 1].kind === "children") {
+          this.jsxStack.pop();
+        }
+      }
+      return;
+    }
+
+    // Equals: '='
+    if (char === "=") {
+      this.emitToken(TokenType.EQ, "=", 1);
+      return;
+    }
+
+    // String attribute value: '"..."'
+    if (char === '"') {
+      this.readString();
+      return;
+    }
+
+    // Embedded expression attribute value: '{...}'
+    if (char === "{") {
+      this.emitToken(TokenType.LBRACE, "{", 1);
+      this.braceStack.push("jsx_expr");
+      this.jsxStack.push({ kind: "expr" });
+      return;
+    }
+
+    // Attribute name
+    if (this.isAlpha(char) || char === "_" || char === "-") {
+      const startPos = this.currentPosition();
+      let attrName = "";
+      while (
+        !this.isAtEnd() &&
+        (this.isAlphaNumeric(this.peek()) || this.peek() === "_" || this.peek() === "-" || this.peek() === ":")
+      ) {
+        attrName += this.advance();
+      }
+      this.tokens.push({
+        type: TokenType.JSX_ATTRIBUTE_NAME,
+        value: attrName,
+        span: { start: startPos, end: this.currentPosition() },
+      });
+      return;
+    }
+
+    throw new LexerError(`Unexpected character '${char}' in JSX tag`, this.currentSpan(1));
   }
 }
