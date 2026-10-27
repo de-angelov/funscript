@@ -29,11 +29,10 @@ export const reduceTodos = (todos: Array<Todo>, action: Action) => {
   .with({ _tag: "AddTodo" }, ($matched) => {
     const { _tag: _, ...__fields } = $matched as any;
     const [title, priority] = Object.values(__fields) as any[];
-  const newId = (todos.length + 1);
-  const newTodo: Todo = { id: newId, title: title, completed: false, priority: priority };
+
   return pipe(
   todos,
-  Array.append(newTodo)
+  Array.append({ id: (todos.length + 1), title, priority, completed: false })
 );
   })
   .with({ _tag: "ToggleTodo" }, ($matched) => {
@@ -42,10 +41,7 @@ export const reduceTodos = (todos: Array<Todo>, action: Action) => {
 
   return pipe(
   todos,
-  Array.map((t: Todo) => {
-
-  return ((t.id === id) ? { ...t, completed: (!t.completed) } : t);
-})
+  Array.map((t) => ((t.id === id) ? { ...t, completed: (!t.completed) } : t))
 );
   })
   .with({ _tag: "RemoveTodo" }, ($matched) => {
@@ -54,14 +50,14 @@ export const reduceTodos = (todos: Array<Todo>, action: Action) => {
 
   return pipe(
   todos,
-  Array.filter((t: Todo) => (t.id !== id))
+  Array.filter((t) => (t.id !== id))
 );
   })
   .with({ _tag: "ClearCompleted" }, () => {
 
   return pipe(
   todos,
-  Array.filter((t: Todo) => (!t.completed))
+  Array.filter((t) => (!t.completed))
 );
 })
   .exhaustive();
@@ -72,11 +68,11 @@ export const getVisibleTodos = (todos: Array<Todo>, filterName: string) => {
   return match(filterName)
   .with("active", () => pipe(
   todos,
-  Array.filter((t: Todo) => (!t.completed))
+  Array.filter((t) => (!t.completed))
 ))
   .with("completed", () => pipe(
   todos,
-  Array.filter((t: Todo) => t.completed)
+  Array.filter((t) => t.completed)
 ))
   .otherwise(() => todos);
 };
