@@ -964,7 +964,8 @@ export class Formatter {
       return p.typeAnnotation ? `${p.name.name}: ${this.formatType(p.typeAnnotation)}` : p.name.name;
     }).join(", ");
     const ret = expr.returnType ? `: ${this.formatType(expr.returnType)}` : "";
-    const sig = `${typeParams}(${params})${ret} ->`;
+    const isArrowOnly = expr.params.length === 0 && !expr.returnType && expr.span && this.source.slice(expr.span.start.offset, expr.span.start.offset + 2) === "->";
+    const sig = isArrowOnly ? `->` : `${typeParams}(${params})${ret} ->`;
 
     if (expr.body.kind === "BlockStatement") {
       const body = this.formatBlockStatement(expr.body, indent + this.indentSize);
