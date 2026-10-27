@@ -71,6 +71,16 @@ import {
   UnionTypeNode,
   Span,
   Position,
+  JSXElement,
+  JSXSelfClosingElement,
+  JSXOpeningElement,
+  JSXClosingElement,
+  JSXAttribute,
+  JSXAttributeValue,
+  JSXExpressionContainer,
+  JSXText,
+  JSXChild,
+  JSXTagName,
 } from "../ast/types.js";
 import { Token, TokenType } from "../lexer/tokens.js";
 
@@ -678,6 +688,11 @@ export class Parser {
   }
 
   private parsePrimary(): Expression {
+    // 0. JSX Element: <tag ...> or <tag ... />
+    if (this.check(TokenType.JSX_TAG_OPEN)) {
+      return this.parseJsxElement();
+    }
+
     // 1. Placeholder _
     if (this.match(TokenType.UNDERSCORE)) {
       return {
@@ -1378,6 +1393,201 @@ export class Parser {
     } while (this.match(TokenType.COMMA) && !this.check(TokenType.GT));
     this.consume(TokenType.GT, "Expected '>'");
     return params;
+  }
+
+  // --- JSX Parsing ---
+
+  public parseJsxElement(): JSXElement | JSXSelfClosingElement {
+    const start = this.consume(TokenType.JSX_TAG_OPEN, "Expected '<'").span.start;
+    const tagName = this.parseJsxTagName();
+
+    const attributes: JSXAttribute[] = [];
+    while (
+      !this.check(TokenType.JSX_TAG_CLOSE) &&
+      !this.check(TokenType.JSX_SLASH_CLOSE) &&
+      !this.isAtEnd()
+    ) {
+      this.skipNewlines();
+      if (this.check(TokenType.JSX_TAG_CLOSE) || this.check(TokenType.JSX_SLASH_CLOSE)) break;
+      attributes.push(this.parseJsxAttribute());
+      this.skipNewlines();
+    }
+
+    if (this.match(TokenType.JSX_SLASH_CLOSE)) {
+      const slashClose = this.previous();
+      return {
+        kind: "JSXSelfClosingElement",
+        name: tagName,
+        attributes,
+        span: { start, end: slashClose.span.end },
+      };
+    }
+
+    const tagClose = this.consume(TokenType.JSX_TAG_CLOSE, "Expected '>' or '/>' after JSX attributes");
+    const openingElement: JSXOpeningElement = {
+      kind: "JSXOpeningElement",
+      name: tagName,
+      attributes,
+      span: { start, end: tagClose.span.end },
+    };
+
+    const children: JSXChild[] = [];
+    while (!this.check(TokenType.JSX_CLOSING_TAG_OPEN) && !this.isAtEnd()) {
+      if (this.check(TokenType.JSX_TAG_OPEN)) {
+        children.push(this.parseJsxElement());
+      } else if (this.check(TokenType.LBRACE)) {
+        children.push(this.parseJsxExpressionContainer());
+      } else if (this.check(TokenType.JSX_TEXT)) {
+        const textTok = this.advance();
+        const raw = textTok.value;
+        // Skip whitespace-only formatting lines between tags
+        if (/^\s*[\r\n]\s*$/.test(raw)) {
+          continue;
+        }
+        // Normalize leading and trailing newlines from multiline text, preserving inline spacing
+        const value = raw.replace(/^\s*[\r\n]+\s*/, "").replace(/\s*[\r\n]+\s*$/, "");
+        children.push({
+          kind: "JSXText",
+          value,
+          raw,
+          span: textTok.span,
+        });
+      } else {
+        throw new ParseError(`Unexpected token '${this.peek().value}' in JSX children`, this.peek().span);
+      }
+    }
+
+    const closingStart = this.consume(
+      TokenType.JSX_CLOSING_TAG_OPEN,
+      `Expected closing tag for <${this.formatTagName(tagName)}>`,
+    ).span.start;
+    const closingName = this.parseJsxTagName();
+    const closingGt = this.consume(TokenType.JSX_TAG_CLOSE, "Expected '>' to close tag");
+
+    if (!this.areTagNamesEqual(tagName, closingName)) {
+      throw new ParseError(
+        `Expected closing tag </${this.formatTagName(tagName)}>, found </${this.formatTagName(closingName)}>`,
+        closingName.span,
+      );
+    }
+
+    const closingElement: JSXClosingElement = {
+      kind: "JSXClosingElement",
+      name: closingName,
+      span: { start: closingStart, end: closingGt.span.end },
+    };
+
+    return {
+      kind: "JSXElement",
+      openingElement,
+      children,
+      closingElement,
+      span: { start: openingElement.span.start, end: closingElement.span.end },
+    };
+  }
+
+  private parseJsxTagName(): JSXTagName {
+    if (this.check(TokenType.JSX_TAG_CLOSE)) {
+      // Empty fragment tag (<> or </>)
+      const pos = this.peek().span.start;
+      return {
+        kind: "Identifier",
+        name: "",
+        span: { start: pos, end: pos },
+      };
+    }
+
+    if (!this.check(TokenType.IDENTIFIER) && !this.check(TokenType.UPPER_IDENTIFIER)) {
+      throw new ParseError(`Expected JSX tag name, found '${this.peek().value}'`, this.peek().span);
+    }
+
+    let name: JSXTagName = this.parseAnyIdentifier();
+    while (this.match(TokenType.DOT)) {
+      const prop = this.parseAnyIdentifier();
+      name = {
+        kind: "MemberExpression",
+        object: name as Expression,
+        property: prop as any,
+        span: { start: name.span.start, end: prop.span.end },
+      };
+    }
+    return name;
+  }
+
+  private parseJsxAttribute(): JSXAttribute {
+    let nameTok: Token;
+    if (this.check(TokenType.JSX_ATTRIBUTE_NAME)) {
+      nameTok = this.advance();
+    } else if (this.check(TokenType.IDENTIFIER) || this.check(TokenType.UPPER_IDENTIFIER)) {
+      nameTok = this.advance();
+    } else {
+      throw new ParseError(`Expected attribute name, found '${this.peek().value}'`, this.peek().span);
+    }
+
+    const nameNode: Identifier | UpperIdentifier =
+      nameTok.type === TokenType.UPPER_IDENTIFIER
+        ? { kind: "UpperIdentifier", name: nameTok.value, span: nameTok.span }
+        : { kind: "Identifier", name: nameTok.value, span: nameTok.span };
+
+    if (this.match(TokenType.EQ)) {
+      let value: JSXAttributeValue;
+      if (this.check(TokenType.STRING) || this.check(TokenType.STRING_PART)) {
+        value = this.parseStringLiteral();
+      } else if (this.check(TokenType.LBRACE)) {
+        value = this.parseJsxExpressionContainer();
+      } else {
+        throw new ParseError(
+          `Expected attribute value (string or expression container), found '${this.peek().value}'`,
+          this.peek().span,
+        );
+      }
+      return {
+        kind: "JSXAttribute",
+        name: nameNode,
+        value,
+        span: { start: nameNode.span.start, end: value.span.end },
+      };
+    }
+
+    return {
+      kind: "JSXAttribute",
+      name: nameNode,
+      span: nameNode.span,
+    };
+  }
+
+  private parseJsxExpressionContainer(): JSXExpressionContainer {
+    const start = this.consume(TokenType.LBRACE, "Expected '{'").span.start;
+    this.skipNewlines();
+    const hasIndent = this.match(TokenType.INDENT);
+    this.skipNewlines();
+    const expression = this.parseExpression();
+    this.skipNewlines();
+    if (hasIndent) {
+      this.match(TokenType.DEDENT);
+      this.skipNewlines();
+    }
+    const end = this.consume(TokenType.RBRACE, "Expected '}' after JSX expression").span.end;
+    return {
+      kind: "JSXExpressionContainer",
+      expression,
+      span: { start, end },
+    };
+  }
+
+  private formatTagName(name: JSXTagName): string {
+    if (name.kind === "Identifier" || name.kind === "UpperIdentifier") {
+      return name.name;
+    }
+    if (name.kind === "MemberExpression") {
+      const obj = this.formatTagName(name.object as JSXTagName);
+      return `${obj}.${name.property.name}`;
+    }
+    return "";
+  }
+
+  private areTagNamesEqual(a: JSXTagName, b: JSXTagName): boolean {
+    return this.formatTagName(a) === this.formatTagName(b);
   }
 
   // --- Helpers ---

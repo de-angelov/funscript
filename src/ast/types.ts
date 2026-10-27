@@ -491,7 +491,7 @@ export interface UnionTypeNode extends NodeBase {
 
 // --- JSX Nodes ---
 
-export type JSXTagName = Identifier | UpperIdentifier;
+export type JSXTagName = Identifier | UpperIdentifier | MemberExpression;
 
 export type JSXAttributeValue = StringLiteral | JSXExpressionContainer | Expression;
 
