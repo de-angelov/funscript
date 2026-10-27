@@ -341,6 +341,9 @@ export class Emitter {
         return this.emitMatchExpression(expr);
       case "EffectBlockExpression":
         return this.emitEffectBlockExpression(expr);
+      case "JSXElement":
+      case "JSXSelfClosingElement":
+        throw new Error(`JSX emission not yet implemented: ${(expr as any).kind}`);
     }
   }
 
