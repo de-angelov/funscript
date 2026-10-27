@@ -7,6 +7,7 @@ import { fork } from "node:child_process";
 import { transformSync } from "esbuild";
 import { compileString, checkString } from "../compiler.js";
 import { startLspServer } from "../lsp/index.js";
+import { format } from "../formatter/index.js";
 
 const readFile = (filePath: string) =>
   Effect.tryPromise({
@@ -54,6 +55,51 @@ const checkCommand = (args: string[]) =>
     const source = yield* readFile(filePath);
     yield* checkString(source, filePath);
     yield* Console.log(`✓ ${filePath} checked successfully (0 errors)`);
+  });
+
+const fmtCommand = (args: string[]) =>
+  Effect.gen(function* () {
+    const isCheck = args.includes("--check");
+    const fileArgs = args.filter((a) => a !== "--check");
+
+    if (fileArgs.length === 0) {
+      process.exitCode = 1;
+      return yield* Console.error("Usage: funscript fmt <file.fun...> [--check]");
+    }
+
+    let hasDiff = false;
+    for (const filePath of fileArgs) {
+      const source = yield* readFile(filePath);
+      let formatted: string;
+      try {
+        formatted = format(source);
+      } catch (err: any) {
+        process.exitCode = 1;
+        hasDiff = true;
+        yield* Console.error(`Format error in '${filePath}': ${err.message}`);
+        continue;
+      }
+
+      if (isCheck) {
+        if (source !== formatted) {
+          hasDiff = true;
+          yield* Console.error(`✗ '${filePath}' is not formatted`);
+        } else {
+          yield* Console.log(`✓ '${filePath}' is clean`);
+        }
+      } else {
+        if (source !== formatted) {
+          yield* writeFile(filePath, formatted);
+          yield* Console.log(`✓ Formatted '${filePath}'`);
+        } else {
+          yield* Console.log(`✓ '${filePath}' already formatted`);
+        }
+      }
+    }
+
+    if (isCheck && hasDiff) {
+      process.exitCode = 1;
+    }
   });
 
 const runCommand = (args: string[]) =>
@@ -105,12 +151,14 @@ Usage:
   funscript emit <file.fun> [--out <file.ts>]   Compile to TypeScript
   funscript check <file.fun>                   Parse and check syntax
   funscript lsp [--stdio]                      Start Language Server Protocol server
+  funscript fmt <file.fun> [--check]           Format FunScript source code
   funscript version                            Display version
 
 Examples:
   funscript emit src/main.fun --out src/main.ts
   funscript check examples/shapes.fun
   funscript lsp --stdio
+  funscript fmt examples/hello.fun --check
 `);
 
 const program = Effect.gen(function* () {
@@ -127,6 +175,8 @@ const program = Effect.gen(function* () {
       return yield* checkCommand(commandArgs);
     case "lsp":
       return yield* lspCommand(commandArgs);
+    case "fmt":
+      return yield* fmtCommand(commandArgs);
     case "version":
     case "-v":
     case "--version":
@@ -138,9 +188,10 @@ const program = Effect.gen(function* () {
       return yield* helpCommand;
   }
 }).pipe(
-  Effect.catchAll((err: any) =>
-    Console.error(`\x1b[31merror\x1b[0m: ${err.message || err}`)
-  )
+  Effect.catchAll((err: any) => {
+    process.exitCode = 1;
+    return Console.error(`\x1b[31merror\x1b[0m: ${err.message || err}`);
+  })
 );
 
 // Execute Effect program

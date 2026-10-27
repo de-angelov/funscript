@@ -36,7 +36,7 @@ export TodoRepoLive =
             _ = store.splice(idx, 1, updated)
             Effect.succeed(updated)
 
-    all: ->
+    all: () ->
       Effect.succeed(store)
   })
 

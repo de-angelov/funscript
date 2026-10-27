@@ -6,3 +6,6 @@ export * from "./emitter/emitter.js";
 export * from "./compiler.js";
 export * as lsp from "./lsp/index.js";
 export { FunScriptLspServer, startLspServer, validateFunScript } from "./lsp/index.js";
+export * from "./formatter/index.js";
+export * as prettierPlugin from "./formatter/prettier.js";
+export { default as prettierPluginFunscript } from "./formatter/prettier.js";

@@ -8,10 +8,18 @@
   },
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
+  "exports": {
+    ".": "./dist/index.js",
+    "./prettier": "./dist/formatter/prettier.js",
+    "./prettier-plugin-funscript": "./dist/formatter/prettier.js"
+  },
   "scripts": {
     "build": "tsc",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "fmt": "node ./dist/cli/index.js fmt",
+    "fmt:check": "node ./dist/cli/index.js fmt --check examples/*.fun programs/*.fun",
+    "prettier:check": "prettier --check \"**/*.fun\""
   },
   "keywords": [
     "funscript",
@@ -31,6 +39,7 @@
   },
   "devDependencies": {
     "@types/node": "^20.17.0",
+    "prettier": "^3.9.10",
     "typescript": "^5.6.3",
     "vitest": "^2.1.3"
   }
