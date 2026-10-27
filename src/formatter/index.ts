@@ -536,8 +536,7 @@ export class Formatter {
     if (init.kind === "RecordExpression") {
       const isMultiline = init.entries.length > 0 &&
         (init.entries[0].span.start.line > init.span.start.line ||
-         init.entries.some(e => e.span.end.line > e.span.start.line) ||
-         init.entries.length > 3);
+         init.entries.some(e => e.span.end.line > e.span.start.line));
       if (isMultiline) {
         return ` ${this.formatRecordExpression(init, indent)}`;
       }
@@ -772,8 +771,7 @@ export class Formatter {
 
     const isMultiline = expr.entries.length > 0 &&
       (expr.entries[0].span.start.line > expr.span.start.line ||
-       expr.entries.some(e => e.span.end.line > e.span.start.line) ||
-       expr.entries.length > 3);
+       expr.entries.some(e => e.span.end.line > e.span.start.line));
 
     if (!isMultiline) {
       const entriesStr = expr.entries.map(e => this.formatRecordEntry(e, indent)).join(", ");
@@ -877,6 +875,20 @@ export class Formatter {
       callee = `(${this.formatExpression(expr.callee, indent)})`;
     } else {
       callee = this.formatExpression(expr.callee, indent);
+    }
+
+    if (expr.args.length === 0) return `${callee}()`;
+
+    const lastArg = expr.args[expr.args.length - 1];
+    const isMultilineBlock = lastArg.kind === "FunctionExpression" &&
+      (lastArg.body.kind === "BlockStatement" || lastArg.body.kind === "MatchExpression");
+
+    if (isMultilineBlock) {
+      if (expr.args.length === 1) {
+        return `${callee}(${this.formatExpression(lastArg, indent)}\n${this.spaces(indent)})`;
+      }
+      const otherArgs = expr.args.slice(0, -1).map(a => this.formatExpression(a, indent)).join(", ");
+      return `${callee}(${otherArgs}, ${this.formatExpression(lastArg, indent)}\n${this.spaces(indent)})`;
     }
 
     const args = expr.args.map(a => this.formatExpression(a, indent)).join(", ");
