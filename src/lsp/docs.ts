@@ -316,6 +316,39 @@ export const DOC_CATALOG: Record<string, DocItem> = {
     seeAlso: ["import", "export"],
   },
 
+  js: {
+    name: "js",
+    category: "keyword",
+    signature: "res <- js promiseFn()\nexport js fn = (...) -> ...\neff |> js",
+    summary: "JavaScript and npm interop keyword for seamless async interop.",
+    description:
+      "Lifts JS Promises into Effects inside effect blocks (`res <- js promiseFn()`), " +
+      "compiles exported functions to Promise-returning JS functions (`export js fn`), " +
+      "or pipes Effects to JS Promises (`eff |> js`).",
+    snippet:
+      "fetchData = (url: string) ->\n" +
+      "  effect\n" +
+      "    res <- js fetch(url)\n" +
+      "    data <- js res.json()\n" +
+      "    data",
+    seeAlso: ["ts", "effect", "export"],
+  },
+
+  ts: {
+    name: "ts",
+    category: "keyword",
+    signature: "schema Dict = ts \"Record<string, unknown>\"\ntype Position = ts \"import('vscode-languageserver').Position\"",
+    summary: "TypeScript type system escape hatch for complex types.",
+    description:
+      "Allows embedding arbitrary TypeScript types without expanding FunScript's core grammar. " +
+      "Useful for generics, utility types, and third-party library types.",
+    snippet:
+      "schema Options = {\n" +
+      "  metadata: ts \"Record<string, unknown>\"\n" +
+      "}",
+    seeAlso: ["js", "schema"],
+  },
+
   // ==========================================
   // Standard Primitives & Built-in Types
   // ==========================================

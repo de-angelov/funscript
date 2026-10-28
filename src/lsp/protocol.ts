@@ -20,6 +20,9 @@ export type {
   TextDocumentPositionParams,
   DefinitionParams,
   Definition,
+  Hover,
+  HoverParams,
+  MarkupContent,
   TextEdit,
   FormattingOptions,
   DocumentFormattingParams,
@@ -36,4 +39,5 @@ export {
   TextDocumentSyncKind,
   ErrorCodes,
   ResponseError,
+  MarkupKind,
 } from "vscode-languageserver/node";

@@ -20,6 +20,9 @@ import {
   type Location,
   type LocationLink,
   type DefinitionParams,
+  type Hover,
+  type HoverParams,
+  MarkupKind,
 } from "../src/lsp/index.js";
 
 describe("FunScript LSP Server", () => {
@@ -45,6 +48,7 @@ describe("FunScript LSP Server", () => {
           textDocumentSync: TextDocumentSyncKind.Full,
           documentFormattingProvider: true,
           definitionProvider: true,
+          hoverProvider: true,
         },
         serverInfo: {
           name: "funscript-lsp",
@@ -1392,6 +1396,483 @@ export schema Config = {
     });
   });
 
+  describe("Hover Provider (textDocument/hover)", () => {
+    it("returns null when document is not open", async () => {
+      const server = new FunScriptLspServer();
+      await server.handleMessage({ jsonrpc: "2.0", id: 1, method: "initialize", params: {} });
+
+      const response = (await server.handleMessage({
+        jsonrpc: "2.0",
+        id: 10,
+        method: "textDocument/hover",
+        params: {
+          textDocument: { uri: "file:///notfound.fun" },
+          position: { line: 0, character: 0 },
+        },
+      })) as ResponseMessage;
+
+      expect(response.id).toBe(10);
+      expect(response.result).toBeNull();
+    });
+
+    it("returns null for empty documents", async () => {
+      const server = new FunScriptLspServer();
+      await server.handleMessage({ jsonrpc: "2.0", id: 1, method: "initialize", params: {} });
+
+      const uri = "file:///empty.fun";
+      await server.handleMessage({
+        jsonrpc: "2.0",
+        method: "textDocument/didOpen",
+        params: {
+          textDocument: { uri, languageId: "funscript", version: 1, text: "   \n  " },
+        },
+      });
+
+      const response = (await server.handleMessage({
+        jsonrpc: "2.0",
+        id: 11,
+        method: "textDocument/hover",
+        params: {
+          textDocument: { uri },
+          position: { line: 0, character: 1 },
+        },
+      })) as ResponseMessage;
+
+      expect(response.result).toBeNull();
+    });
+
+    it("returns null when cursor is on whitespace or undocumented user identifier", async () => {
+      const server = new FunScriptLspServer();
+      await server.handleMessage({ jsonrpc: "2.0", id: 1, method: "initialize", params: {} });
+
+      const uri = "file:///code.fun";
+      await server.handleMessage({
+        jsonrpc: "2.0",
+        method: "textDocument/didOpen",
+        params: {
+          textDocument: { uri, languageId: "funscript", version: 1, text: "myCustomVar = 123\n" },
+        },
+      });
+
+      // Cursor on whitespace
+      const wsRes = (await server.handleMessage({
+        jsonrpc: "2.0",
+        id: 12,
+        method: "textDocument/hover",
+        params: {
+          textDocument: { uri },
+          position: { line: 0, character: 11 }, // on space
+        },
+      })) as ResponseMessage;
+      expect(wsRes.result).toBeNull();
+
+      // Cursor on custom variable
+      const varRes = (await server.handleMessage({
+        jsonrpc: "2.0",
+        id: 13,
+        method: "textDocument/hover",
+        params: {
+          textDocument: { uri },
+          position: { line: 0, character: 4 }, // on 'myCustomVar'
+        },
+      })) as ResponseMessage;
+      expect(varRes.result).toBeNull();
+    });
+
+    it("returns rich Markdown hover documentation for language keywords (service, effect, match, mut)", async () => {
+      const server = new FunScriptLspServer();
+      await server.handleMessage({ jsonrpc: "2.0", id: 1, method: "initialize", params: {} });
+
+      const uri = "file:///keywords.fun";
+      const text = [
+        "export service UserRepo",
+        "  find: (id: string) -> Effect<User, NotFound>",
+        "",
+        "getUser = (id: string) ->",
+        "  effect",
+        "    mut count = 0",
+        "    user <- UserRepo.find(id)",
+        "    match user",
+        "      | Some(u) -> u",
+        "      | None -> fail(NotFound(id))",
+      ].join("\n");
+
+      await server.handleMessage({
+        jsonrpc: "2.0",
+        method: "textDocument/didOpen",
+        params: {
+          textDocument: { uri, languageId: "funscript", version: 1, text },
+        },
+      });
+
+      // 1. Hover on 'service'
+      const serviceRes = (await server.handleMessage({
+        jsonrpc: "2.0",
+        id: 20,
+        method: "textDocument/hover",
+        params: {
+          textDocument: { uri },
+          position: { line: 0, character: 9 }, // 'service'
+        },
+      })) as ResponseMessage;
+
+      const serviceHover = serviceRes.result as Hover;
+      expect(serviceHover).toBeDefined();
+      expect(serviceHover.contents).toEqual(
+        expect.objectContaining({
+          kind: MarkupKind.Markdown,
+        })
+      );
+      expect((serviceHover.contents as any).value).toContain("Context.Service");
+      expect((serviceHover.contents as any).value).toContain("```funscript");
+      expect(serviceHover.range).toBeDefined();
+
+      // 2. Hover on 'effect'
+      const effectRes = (await server.handleMessage({
+        jsonrpc: "2.0",
+        id: 21,
+        method: "textDocument/hover",
+        params: {
+          textDocument: { uri },
+          position: { line: 4, character: 4 }, // 'effect'
+        },
+      })) as ResponseMessage;
+      const effectHover = effectRes.result as Hover;
+      expect((effectHover.contents as any).value).toContain("Effect.gen");
+
+      // 3. Hover on 'mut'
+      const mutRes = (await server.handleMessage({
+        jsonrpc: "2.0",
+        id: 22,
+        method: "textDocument/hover",
+        params: {
+          textDocument: { uri },
+          position: { line: 5, character: 5 }, // 'mut'
+        },
+      })) as ResponseMessage;
+      const mutHover = mutRes.result as Hover;
+      expect((mutHover.contents as any).value).toContain("Mutative");
+
+      // 4. Hover on 'match'
+      const matchRes = (await server.handleMessage({
+        jsonrpc: "2.0",
+        id: 23,
+        method: "textDocument/hover",
+        params: {
+          textDocument: { uri },
+          position: { line: 7, character: 6 }, // 'match'
+        },
+      })) as ResponseMessage;
+      const matchHover = matchRes.result as Hover;
+      expect((matchHover.contents as any).value).toContain("ts-pattern");
+
+      // 5. Hover on 'fail'
+      const failRes = (await server.handleMessage({
+        jsonrpc: "2.0",
+        id: 24,
+        method: "textDocument/hover",
+        params: {
+          textDocument: { uri },
+          position: { line: 9, character: 17 }, // 'fail'
+        },
+      })) as ResponseMessage;
+      const failHover = failRes.result as Hover;
+      expect((failHover.contents as any).value).toContain("Effect.fail");
+    });
+
+    it("returns rich Markdown hover documentation for interop keywords (js, ts)", async () => {
+      const server = new FunScriptLspServer();
+      await server.handleMessage({ jsonrpc: "2.0", id: 1, method: "initialize", params: {} });
+
+      const uri = "file:///interop.fun";
+      const text = [
+        "schema Config = {",
+        "  options: ts \"Record<string, unknown>\"",
+        "}",
+        "",
+        "fetchData = (url: string) ->",
+        "  effect",
+        "    res <- js fetch(url)",
+        "    res",
+      ].join("\n");
+
+      await server.handleMessage({
+        jsonrpc: "2.0",
+        method: "textDocument/didOpen",
+        params: {
+          textDocument: { uri, languageId: "funscript", version: 1, text },
+        },
+      });
+
+      // Hover on 'ts'
+      const tsRes = (await server.handleMessage({
+        jsonrpc: "2.0",
+        id: 30,
+        method: "textDocument/hover",
+        params: {
+          textDocument: { uri },
+          position: { line: 1, character: 12 }, // 'ts'
+        },
+      })) as ResponseMessage;
+      const tsHover = tsRes.result as Hover;
+      expect((tsHover.contents as any).value).toContain("TypeScript type system escape hatch");
+
+      // Hover on 'js'
+      const jsRes = (await server.handleMessage({
+        jsonrpc: "2.0",
+        id: 31,
+        method: "textDocument/hover",
+        params: {
+          textDocument: { uri },
+          position: { line: 6, character: 12 }, // 'js'
+        },
+      })) as ResponseMessage;
+      const jsHover = jsRes.result as Hover;
+      expect((jsHover.contents as any).value).toContain("JavaScript and npm interop");
+    });
+
+    it("returns rich Markdown hover documentation for primitives and built-in types", async () => {
+      const server = new FunScriptLspServer();
+      await server.handleMessage({ jsonrpc: "2.0", id: 1, method: "initialize", params: {} });
+
+      const uri = "file:///types.fun";
+      const text = "fn = (name: string, count: number, flag: boolean) -> Option<Array<string>>\n";
+
+      await server.handleMessage({
+        jsonrpc: "2.0",
+        method: "textDocument/didOpen",
+        params: {
+          textDocument: { uri, languageId: "funscript", version: 1, text },
+        },
+      });
+
+      // Hover on 'string'
+      const stringRes = (await server.handleMessage({
+        jsonrpc: "2.0",
+        id: 40,
+        method: "textDocument/hover",
+        params: {
+          textDocument: { uri },
+          position: { line: 0, character: 14 }, // 'string'
+        },
+      })) as ResponseMessage;
+      const stringHover = stringRes.result as Hover;
+      expect((stringHover.contents as any).value).toContain("UTF-16 text string primitive");
+
+      // Hover on 'Option'
+      const optionRes = (await server.handleMessage({
+        jsonrpc: "2.0",
+        id: 41,
+        method: "textDocument/hover",
+        params: {
+          textDocument: { uri },
+          position: { line: 0, character: 54 }, // 'Option'
+        },
+      })) as ResponseMessage;
+      const optionHover = optionRes.result as Hover;
+      expect((optionHover.contents as any).value).toContain("Option");
+    });
+
+    it("returns rich Markdown hover documentation for syntax operators (<- , |> , -> , ???)", async () => {
+      const server = new FunScriptLspServer();
+      await server.handleMessage({ jsonrpc: "2.0", id: 1, method: "initialize", params: {} });
+
+      const uri = "file:///operators.fun";
+      const text = [
+        "pipeline = (x: number) ->",
+        "  x |> double",
+        "",
+        "run = () ->",
+        "  effect",
+        "    v <- doWork()",
+        "    v",
+        "",
+        "stub = ???",
+      ].join("\n");
+
+      await server.handleMessage({
+        jsonrpc: "2.0",
+        method: "textDocument/didOpen",
+        params: {
+          textDocument: { uri, languageId: "funscript", version: 1, text },
+        },
+      });
+
+      // 1. Hover on '|>'
+      const pipeRes = (await server.handleMessage({
+        jsonrpc: "2.0",
+        id: 50,
+        method: "textDocument/hover",
+        params: {
+          textDocument: { uri },
+          position: { line: 1, character: 5 }, // '|>'
+        },
+      })) as ResponseMessage;
+      const pipeHover = pipeRes.result as Hover;
+      expect((pipeHover.contents as any).value).toContain("|>");
+
+      // 2. Hover on '<-'
+      const arrowRes = (await server.handleMessage({
+        jsonrpc: "2.0",
+        id: 51,
+        method: "textDocument/hover",
+        params: {
+          textDocument: { uri },
+          position: { line: 5, character: 7 }, // '<-'
+        },
+      })) as ResponseMessage;
+      const arrowHover = arrowRes.result as Hover;
+      expect((arrowHover.contents as any).value).toContain("<-");
+
+      // 3. Hover on '->'
+      const fnArrowRes = (await server.handleMessage({
+        jsonrpc: "2.0",
+        id: 52,
+        method: "textDocument/hover",
+        params: {
+          textDocument: { uri },
+          position: { line: 0, character: 24 }, // '->'
+        },
+      })) as ResponseMessage;
+      const fnArrowHover = fnArrowRes.result as Hover;
+      expect((fnArrowHover.contents as any).value).toContain("->");
+
+      // 4. Hover on '???'
+      const holeRes = (await server.handleMessage({
+        jsonrpc: "2.0",
+        id: 53,
+        method: "textDocument/hover",
+        params: {
+          textDocument: { uri },
+          position: { line: 8, character: 8 }, // '???'
+        },
+      })) as ResponseMessage;
+      const holeHover = holeRes.result as Hover;
+      expect((holeHover.contents as any).value).toContain("???");
+    });
+
+    it("returns rich Markdown hover documentation for Effect methods and Layer methods", async () => {
+      const server = new FunScriptLspServer();
+      await server.handleMessage({ jsonrpc: "2.0", id: 1, method: "initialize", params: {} });
+
+      const uri = "file:///effect-members.fun";
+      const text = [
+        "val = Effect.succeed(42)",
+        "layer = Layer.succeed(Service, impl)",
+      ].join("\n");
+
+      await server.handleMessage({
+        jsonrpc: "2.0",
+        method: "textDocument/didOpen",
+        params: {
+          textDocument: { uri, languageId: "funscript", version: 1, text },
+        },
+      });
+
+      // Hover on 'succeed' in Effect.succeed
+      const succeedRes = (await server.handleMessage({
+        jsonrpc: "2.0",
+        id: 60,
+        method: "textDocument/hover",
+        params: {
+          textDocument: { uri },
+          position: { line: 0, character: 15 }, // 'succeed'
+        },
+      })) as ResponseMessage;
+      const succeedHover = succeedRes.result as Hover;
+      expect(succeedHover).toBeDefined();
+      expect((succeedHover.contents as any).value).toContain("Effect.succeed");
+
+      // Hover on 'Effect' in Effect.succeed
+      const effectRes = (await server.handleMessage({
+        jsonrpc: "2.0",
+        id: 61,
+        method: "textDocument/hover",
+        params: {
+          textDocument: { uri },
+          position: { line: 0, character: 8 }, // 'Effect'
+        },
+      })) as ResponseMessage;
+      const effectHover = effectRes.result as Hover;
+      expect(effectHover).toBeDefined();
+      expect((effectHover.contents as any).value).toContain("Effect");
+
+      // Hover on 'succeed' in Layer.succeed
+      const layerSucceedRes = (await server.handleMessage({
+        jsonrpc: "2.0",
+        id: 62,
+        method: "textDocument/hover",
+        params: {
+          textDocument: { uri },
+          position: { line: 1, character: 15 }, // 'succeed'
+        },
+      })) as ResponseMessage;
+      const layerSucceedHover = layerSucceedRes.result as Hover;
+      expect(layerSucceedHover).toBeDefined();
+      expect((layerSucceedHover.contents as any).value).toContain("Layer.succeed");
+    });
+
+    it("returns helpful disallowed keyword explanation when hovering over banned keywords", async () => {
+      const server = new FunScriptLspServer();
+      await server.handleMessage({ jsonrpc: "2.0", id: 1, method: "initialize", params: {} });
+
+      const uri = "file:///banned.fun";
+      const text = "let x = 10\nvar y = 20\nconst z = 30\n";
+
+      await server.handleMessage({
+        jsonrpc: "2.0",
+        method: "textDocument/didOpen",
+        params: {
+          textDocument: { uri, languageId: "funscript", version: 1, text },
+        },
+      });
+
+      const letRes = (await server.handleMessage({
+        jsonrpc: "2.0",
+        id: 70,
+        method: "textDocument/hover",
+        params: {
+          textDocument: { uri },
+          position: { line: 0, character: 1 }, // 'let'
+        },
+      })) as ResponseMessage;
+
+      const letHover = letRes.result as Hover;
+      expect(letHover).toBeDefined();
+      expect((letHover.contents as any).value).toContain("FunScript has no 'let'");
+    });
+
+    it("resiliently provides hover documentation even in files with parse errors", async () => {
+      const server = new FunScriptLspServer();
+      await server.handleMessage({ jsonrpc: "2.0", id: 1, method: "initialize", params: {} });
+
+      const uri = "file:///syntax-error.fun";
+      const text = "service BadService\n  !@#$ invalid syntax error\n";
+
+      await server.handleMessage({
+        jsonrpc: "2.0",
+        method: "textDocument/didOpen",
+        params: {
+          textDocument: { uri, languageId: "funscript", version: 1, text },
+        },
+      });
+
+      const serviceRes = (await server.handleMessage({
+        jsonrpc: "2.0",
+        id: 80,
+        method: "textDocument/hover",
+        params: {
+          textDocument: { uri },
+          position: { line: 0, character: 2 }, // on 'service'
+        },
+      })) as ResponseMessage;
+
+      const serviceHover = serviceRes.result as Hover;
+      expect(serviceHover).toBeDefined();
+      expect((serviceHover.contents as any).value).toContain("Context.Service");
+    });
+  });
+
   describe("Message Transport & Framing", () => {
     it("encodes and decodes messages over streams using Content-Length framing", async () => {
       const stream = new PassThrough();
@@ -1481,12 +1962,13 @@ export schema Config = {
 
       await vi.waitFor(() => {
         expect(responses.some((r) => r.id === 1)).toBe(true);
-      });
+      }, { timeout: 5000 });
 
       const initRes = responses.find((r) => r.id === 1);
       expect(initRes.result.capabilities.textDocumentSync).toBe(TextDocumentSyncKind.Full);
       expect(initRes.result.capabilities.documentFormattingProvider).toBe(true);
       expect(initRes.result.capabilities.definitionProvider).toBe(true);
+      expect(initRes.result.capabilities.hoverProvider).toBe(true);
 
       // 2. Open document with error
       writer.write({
@@ -1508,7 +1990,7 @@ export schema Config = {
             (r) => r.method === "textDocument/publishDiagnostics" && r.params.diagnostics.length > 0
           )
         ).toBe(true);
-      });
+      }, { timeout: 5000 });
 
       const diagNotif = responses.find((r) => r.method === "textDocument/publishDiagnostics");
       expect(diagNotif.params.diagnostics[0].message).toContain("FunScript has no 'let'");
@@ -1544,7 +2026,7 @@ export schema Config = {
 
       await vi.waitFor(() => {
         expect(responses.some((r) => r.id === 100)).toBe(true);
-      });
+      }, { timeout: 5000 });
 
       const fmtRes = responses.find((r) => r.id === 100);
       expect(fmtRes.result).toHaveLength(1);
@@ -1576,7 +2058,7 @@ export schema Config = {
 
       await vi.waitFor(() => {
         expect(responses.some((r) => r.id === 101)).toBe(true);
-      });
+      }, { timeout: 5000 });
 
       const defRes = responses.find((r) => r.id === 101);
       expect(defRes.result).toEqual({
@@ -1587,7 +2069,39 @@ export schema Config = {
         },
       });
 
-      // 5. Send shutdown
+      // 5. Open document and request hover over stdio
+      writer.write({
+        jsonrpc: "2.0",
+        method: "textDocument/didOpen",
+        params: {
+          textDocument: {
+            uri: "file:///hover-stdio.fun",
+            languageId: "funscript",
+            version: 1,
+            text: "service UserService\n",
+          },
+        },
+      } as any);
+
+      writer.write({
+        jsonrpc: "2.0",
+        id: 102,
+        method: "textDocument/hover",
+        params: {
+          textDocument: { uri: "file:///hover-stdio.fun" },
+          position: { line: 0, character: 2 }, // on 'service'
+        },
+      } as any);
+
+      await vi.waitFor(() => {
+        expect(responses.some((r) => r.id === 102)).toBe(true);
+      }, { timeout: 5000 });
+
+      const hoverRes = responses.find((r) => r.id === 102);
+      expect(hoverRes.result).toBeDefined();
+      expect(hoverRes.result.contents.value).toContain("Context.Service");
+
+      // 6. Send shutdown
       writer.write({
         jsonrpc: "2.0",
         id: 2,
@@ -1596,7 +2110,7 @@ export schema Config = {
 
       await vi.waitFor(() => {
         expect(responses.some((r) => r.id === 2)).toBe(true);
-      });
+      }, { timeout: 5000 });
 
       // 4. Send exit
       const exitPromise = new Promise<number>((resolve) => {
