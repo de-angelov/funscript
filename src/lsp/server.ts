@@ -1,29 +1,35 @@
 import { EventEmitter } from "node:events";
 import type { Readable, Writable } from "node:stream";
+import {
+  createConnection,
+  type Connection,
+  StreamMessageReader,
+  StreamMessageWriter,
+  DiagnosticSeverity,
+  ErrorCodes,
+  TextDocumentSyncKind,
+  type Diagnostic,
+  type DidCloseTextDocumentParams,
+  type DidChangeTextDocumentParams,
+  type DidOpenTextDocumentParams,
+  type DocumentFormattingParams,
+  type DefinitionParams,
+  type InitializeParams,
+  type InitializeResult,
+  type Message,
+  type NotificationMessage,
+  type PublishDiagnosticsParams,
+  type RequestMessage,
+  type ResponseMessage,
+  type TextDocumentItem,
+  type TextEdit,
+  type Location,
+  type LocationLink,
+} from "vscode-languageserver/node";
 import { Lexer } from "../lexer/lexer.js";
 import { Parser } from "../parser/parser.js";
 import { format } from "../formatter/index.js";
 import type { Span } from "../ast/types.js";
-import {
-  DefinitionParams,
-  Diagnostic,
-  DiagnosticSeverity,
-  DidCloseTextDocumentParams,
-  DidChangeTextDocumentParams,
-  DidOpenTextDocumentParams,
-  DocumentFormattingParams,
-  ErrorCodes,
-  InitializeResult,
-  Message,
-  NotificationMessage,
-  PublishDiagnosticsParams,
-  RequestMessage,
-  ResponseMessage,
-  TextDocumentItem,
-  TextDocumentSyncKind,
-  TextEdit,
-} from "./protocol.js";
-import { MessageReader, MessageWriter } from "./transport.js";
 import { findDefinition } from "./definition.js";
 
 export function toDiagnostic(error: any): Diagnostic {
@@ -45,7 +51,10 @@ export function toDiagnostic(error: any): Diagnostic {
       endChar = startChar + 1;
     }
 
-    if (endLine < startLine || (endLine === startLine && endChar <= startChar)) {
+    if (
+      endLine < startLine ||
+      (endLine === startLine && endChar <= startChar)
+    ) {
       endLine = startLine;
       endChar = startChar + 1;
     }
@@ -56,7 +65,8 @@ export function toDiagnostic(error: any): Diagnostic {
     endChar = 1;
   }
 
-  let rawMessage = typeof error.message === "string" ? error.message : String(error);
+  let rawMessage =
+    typeof error.message === "string" ? error.message : String(error);
   rawMessage = rawMessage.replace(/\s+at line \d+, col \d+$/, "");
 
   return {
@@ -70,7 +80,10 @@ export function toDiagnostic(error: any): Diagnostic {
   };
 }
 
-export function validateFunScript(source: string, uri: string = "<anonymous>"): Diagnostic[] {
+export function validateFunScript(
+  source: string,
+  uri: string = "<anonymous>",
+): Diagnostic[] {
   const diagnostics: Diagnostic[] = [];
 
   try {
@@ -91,36 +104,204 @@ export function validateFunScript(source: string, uri: string = "<anonymous>"): 
   return diagnostics;
 }
 
+class NormalizingMessageReader extends StreamMessageReader {
+  public override listen(callback: (value: any) => void) {
+    return super.listen((msg: any) => {
+      if (msg && msg.method === "initialize") {
+        if (!msg.params) msg.params = {};
+        if (!msg.params.capabilities) msg.params.capabilities = {};
+      }
+      callback(msg);
+    });
+  }
+}
+
 export class FunScriptLspServer extends EventEmitter {
   private documents: Map<string, TextDocumentItem> = new Map();
   private isInitialized = false;
   private isShutdown = false;
   private clientCapabilities: any = null;
-  private reader: MessageReader | null = null;
-  private writer: MessageWriter | null = null;
+  private connection: Connection | null = null;
 
   constructor() {
     super();
   }
 
-  public listen(readerStream: Readable, writerStream: Writable): void {
-    this.reader = new MessageReader(readerStream);
-    this.writer = new MessageWriter(writerStream);
+  public listen(readerStream?: Readable, writerStream?: Writable): Connection {
+    const reader = readerStream
+      ? new NormalizingMessageReader(readerStream)
+      : undefined;
+    const writer = writerStream
+      ? new StreamMessageWriter(writerStream)
+      : undefined;
 
-    this.reader.on("message", async (msg: Message) => {
-      const response = await this.handleMessage(msg);
-      if (response && this.writer) {
-        this.writer.write(response);
-      }
+    const connection =
+      reader && writer
+        ? createConnection(reader, writer)
+        : createConnection(process.stdin, process.stdout);
+
+    this.connection = connection;
+    this.setupConnection(connection);
+    connection.listen();
+    return connection;
+  }
+
+  private setupConnection(connection: Connection): void {
+    connection.onInitialize((params) => this.onInitializeHandler(params));
+    connection.onInitialized(() => {
+      this.emit("initialized");
+    });
+    connection.onShutdown(() => {
+      this.onShutdownHandler();
+    });
+    connection.onExit(() => {
+      this.onExitHandler();
     });
 
-    this.reader.on("error", (err: Error) => {
-      this.emit("error", err);
+    connection.onDidOpenTextDocument((params) => {
+      this.onDidOpenHandler(params);
+    });
+    connection.onDidChangeTextDocument((params) => {
+      this.onDidChangeHandler(params);
+    });
+    connection.onDidCloseTextDocument((params) => {
+      this.onDidCloseHandler(params);
     });
 
-    this.reader.on("close", () => {
-      this.emit("close");
-    });
+    connection.onDocumentFormatting((params) =>
+      this.onFormattingHandler(params),
+    );
+    connection.onDefinition((params) => this.onDefinitionHandler(params));
+  }
+
+  public onInitializeHandler(params: InitializeParams): InitializeResult {
+    this.isInitialized = true;
+    this.clientCapabilities = params?.capabilities;
+    return {
+      capabilities: {
+        textDocumentSync: TextDocumentSyncKind.Full,
+        documentFormattingProvider: true,
+        definitionProvider: true,
+      },
+      serverInfo: {
+        name: "funscript-lsp",
+        version: "0.1.0",
+      },
+    };
+  }
+
+  public onShutdownHandler(): null {
+    this.isShutdown = true;
+    return null;
+  }
+
+  public onExitHandler(): void {
+    const exitCode = this.isShutdown ? 0 : 1;
+    this.emit("exit", exitCode);
+  }
+
+  public onDidOpenHandler(params: DidOpenTextDocumentParams): void {
+    if (params?.textDocument) {
+      this.documents.set(params.textDocument.uri, params.textDocument);
+      const diagnostics = this.validateSource(
+        params.textDocument.text,
+        params.textDocument.uri,
+      );
+      this.publishDiagnostics(
+        params.textDocument.uri,
+        params.textDocument.version,
+        diagnostics,
+      );
+    }
+  }
+
+  public onDidChangeHandler(params: DidChangeTextDocumentParams): void {
+    if (params?.textDocument && Array.isArray(params.contentChanges)) {
+      const doc = this.documents.get(params.textDocument.uri);
+      const lastChange =
+        params.contentChanges[params.contentChanges.length - 1];
+      const newText = lastChange ? lastChange.text : (doc?.text ?? "");
+      const updatedVersion =
+        params.textDocument.version ?? (doc ? doc.version + 1 : 1);
+      const updatedDoc: TextDocumentItem = {
+        uri: params.textDocument.uri,
+        languageId: doc?.languageId ?? "funscript",
+        version: updatedVersion,
+        text: newText,
+      };
+      this.documents.set(params.textDocument.uri, updatedDoc);
+      const diagnostics = this.validateSource(newText, params.textDocument.uri);
+      this.publishDiagnostics(
+        params.textDocument.uri,
+        updatedVersion,
+        diagnostics,
+      );
+    }
+  }
+
+  public onDidCloseHandler(params: DidCloseTextDocumentParams): void {
+    if (params?.textDocument) {
+      this.documents.delete(params.textDocument.uri);
+      this.publishDiagnostics(params.textDocument.uri, undefined, []);
+    }
+  }
+
+  public onFormattingHandler(
+    params: DocumentFormattingParams,
+  ): TextEdit[] | null {
+    const uri = params?.textDocument?.uri;
+    const doc = uri ? this.documents.get(uri) : undefined;
+    if (!doc) {
+      return null;
+    }
+
+    if (doc.text.trim().length === 0) {
+      return [];
+    }
+
+    try {
+      const indentSize =
+        typeof params?.options?.tabSize === "number" &&
+        params.options.tabSize > 0
+          ? params.options.tabSize
+          : undefined;
+      const formatted = format(
+        doc.text,
+        indentSize !== undefined ? { indentSize } : undefined,
+      );
+
+      const lines = doc.text.split("\n");
+      const lastLine = Math.max(0, lines.length - 1);
+      const lastChar = lines[lastLine].length;
+
+      const edit: TextEdit = {
+        range: {
+          start: { line: 0, character: 0 },
+          end: { line: lastLine, character: lastChar },
+        },
+        newText: formatted,
+      };
+
+      return [edit];
+    } catch {
+      return null;
+    }
+  }
+
+  public onDefinitionHandler(
+    params: DefinitionParams,
+  ): Location | Location[] | LocationLink[] | null {
+    const uri = params?.textDocument?.uri;
+    const doc = uri ? this.documents.get(uri) : undefined;
+    if (!doc || !params?.position) {
+      return null;
+    }
+
+    const clientSupportsLink = Boolean(
+      this.clientCapabilities?.textDocument?.definition?.linkSupport,
+    );
+
+    return findDefinition(doc.text, uri, params.position, clientSupportsLink);
   }
 
   public async handleMessage(msg: Message): Promise<ResponseMessage | void> {
@@ -135,19 +316,7 @@ export class FunScriptLspServer extends EventEmitter {
 
   private handleRequest(req: RequestMessage): ResponseMessage {
     if (req.method === "initialize") {
-      this.isInitialized = true;
-      this.clientCapabilities = req.params?.capabilities;
-      const result: InitializeResult = {
-        capabilities: {
-          textDocumentSync: TextDocumentSyncKind.Full,
-          documentFormattingProvider: true,
-          definitionProvider: true,
-        },
-        serverInfo: {
-          name: "funscript-lsp",
-          version: "0.1.0",
-        },
-      };
+      const result = this.onInitializeHandler(req.params as InitializeParams);
       return {
         jsonrpc: "2.0",
         id: req.id,
@@ -178,85 +347,27 @@ export class FunScriptLspServer extends EventEmitter {
     }
 
     if (req.method === "shutdown") {
-      this.isShutdown = true;
+      const result = this.onShutdownHandler();
       return {
         jsonrpc: "2.0",
         id: req.id,
-        result: null,
+        result,
       };
     }
 
     if (req.method === "textDocument/formatting") {
-      const params = req.params as DocumentFormattingParams;
-      const uri = params?.textDocument?.uri;
-      const doc = uri ? this.documents.get(uri) : undefined;
-      if (!doc) {
-        return {
-          jsonrpc: "2.0",
-          id: req.id,
-          result: null,
-        };
-      }
-
-      if (doc.text.trim().length === 0) {
-        return {
-          jsonrpc: "2.0",
-          id: req.id,
-          result: [],
-        };
-      }
-
-      try {
-        const indentSize =
-          typeof params?.options?.tabSize === "number" && params.options.tabSize > 0
-            ? params.options.tabSize
-            : undefined;
-        const formatted = format(doc.text, indentSize !== undefined ? { indentSize } : undefined);
-
-        const lines = doc.text.split("\n");
-        const lastLine = Math.max(0, lines.length - 1);
-        const lastChar = lines[lastLine].length;
-
-        const edit: TextEdit = {
-          range: {
-            start: { line: 0, character: 0 },
-            end: { line: lastLine, character: lastChar },
-          },
-          newText: formatted,
-        };
-
-        return {
-          jsonrpc: "2.0",
-          id: req.id,
-          result: [edit],
-        };
-      } catch {
-        return {
-          jsonrpc: "2.0",
-          id: req.id,
-          result: null,
-        };
-      }
+      const result = this.onFormattingHandler(
+        req.params as DocumentFormattingParams,
+      );
+      return {
+        jsonrpc: "2.0",
+        id: req.id,
+        result,
+      };
     }
 
     if (req.method === "textDocument/definition") {
-      const params = req.params as DefinitionParams;
-      const uri = params?.textDocument?.uri;
-      const doc = uri ? this.documents.get(uri) : undefined;
-      if (!doc || !params?.position) {
-        return {
-          jsonrpc: "2.0",
-          id: req.id,
-          result: null,
-        };
-      }
-
-      const clientSupportsLink = Boolean(
-        this.clientCapabilities?.textDocument?.definition?.linkSupport
-      );
-
-      const result = findDefinition(doc.text, uri, params.position, clientSupportsLink);
-
+      const result = this.onDefinitionHandler(req.params as DefinitionParams);
       return {
         jsonrpc: "2.0",
         id: req.id,
@@ -281,47 +392,22 @@ export class FunScriptLspServer extends EventEmitter {
     }
 
     if (notif.method === "exit") {
-      const exitCode = this.isShutdown ? 0 : 1;
-      this.emit("exit", exitCode);
+      this.onExitHandler();
       return;
     }
 
     if (notif.method === "textDocument/didOpen") {
-      const params = notif.params as DidOpenTextDocumentParams;
-      if (params?.textDocument) {
-        this.documents.set(params.textDocument.uri, params.textDocument);
-        const diagnostics = this.validateSource(params.textDocument.text, params.textDocument.uri);
-        this.publishDiagnostics(params.textDocument.uri, params.textDocument.version, diagnostics);
-      }
+      this.onDidOpenHandler(notif.params as DidOpenTextDocumentParams);
       return;
     }
 
     if (notif.method === "textDocument/didChange") {
-      const params = notif.params as DidChangeTextDocumentParams;
-      if (params?.textDocument && Array.isArray(params.contentChanges)) {
-        const doc = this.documents.get(params.textDocument.uri);
-        const lastChange = params.contentChanges[params.contentChanges.length - 1];
-        const newText = lastChange ? lastChange.text : doc?.text ?? "";
-        const updatedVersion = params.textDocument.version ?? (doc ? doc.version + 1 : 1);
-        const updatedDoc: TextDocumentItem = {
-          uri: params.textDocument.uri,
-          languageId: doc?.languageId ?? "funscript",
-          version: updatedVersion,
-          text: newText,
-        };
-        this.documents.set(params.textDocument.uri, updatedDoc);
-        const diagnostics = this.validateSource(newText, params.textDocument.uri);
-        this.publishDiagnostics(params.textDocument.uri, updatedVersion, diagnostics);
-      }
+      this.onDidChangeHandler(notif.params as DidChangeTextDocumentParams);
       return;
     }
 
     if (notif.method === "textDocument/didClose") {
-      const params = notif.params as DidCloseTextDocumentParams;
-      if (params?.textDocument) {
-        this.documents.delete(params.textDocument.uri);
-        this.publishDiagnostics(params.textDocument.uri, undefined, []);
-      }
+      this.onDidCloseHandler(notif.params as DidCloseTextDocumentParams);
       return;
     }
   }
@@ -330,23 +416,21 @@ export class FunScriptLspServer extends EventEmitter {
     return validateFunScript(source, uri);
   }
 
-  public publishDiagnostics(uri: string, version: number | undefined, diagnostics: Diagnostic[]): void {
+  public publishDiagnostics(
+    uri: string,
+    version: number | undefined,
+    diagnostics: Diagnostic[],
+  ): void {
     const params: PublishDiagnosticsParams = {
       uri,
       ...(version !== undefined ? { version } : {}),
       diagnostics,
     };
 
-    const notif: NotificationMessage = {
-      jsonrpc: "2.0",
-      method: "textDocument/publishDiagnostics",
-      params,
-    };
-
     this.emit("diagnostics", params);
 
-    if (this.writer) {
-      this.writer.write(notif);
+    if (this.connection) {
+      this.connection.sendDiagnostics(params);
     }
   }
 
@@ -363,14 +447,14 @@ export class FunScriptLspServer extends EventEmitter {
     return Array.from(this.documents.values());
   }
 
+  public getConnection(): Connection | null {
+    return this.connection;
+  }
+
   public dispose(): void {
-    if (this.reader) {
-      this.reader.dispose();
-      this.reader = null;
-    }
-    if (this.writer) {
-      this.writer.dispose();
-      this.writer = null;
+    if (this.connection) {
+      this.connection.dispose();
+      this.connection = null;
     }
     this.documents.clear();
     this.removeAllListeners();
