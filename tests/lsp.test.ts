@@ -4,9 +4,8 @@ import { spawn } from "node:child_process";
 import * as path from "node:path";
 import {
   FunScriptLspServer,
-  MessageReader,
-  MessageWriter,
-  formatLspMessage,
+  StreamMessageReader,
+  StreamMessageWriter,
   validateFunScript,
   DiagnosticSeverity,
   ErrorCodes,
@@ -1876,11 +1875,11 @@ export schema Config = {
   describe("Message Transport & Framing", () => {
     it("encodes and decodes messages over streams using Content-Length framing", async () => {
       const stream = new PassThrough();
-      const reader = new MessageReader(stream);
-      const writer = new MessageWriter(stream);
+      const reader = new StreamMessageReader(stream);
+      const writer = new StreamMessageWriter(stream);
 
       const received: any[] = [];
-      reader.on("message", (msg) => received.push(msg));
+      reader.listen((msg) => received.push(msg));
 
       const message: RequestMessage = {
         jsonrpc: "2.0",
@@ -1901,15 +1900,20 @@ export schema Config = {
 
     it("handles multiple messages chunked together in a single stream write", async () => {
       const stream = new PassThrough();
-      const reader = new MessageReader(stream);
+      const reader = new StreamMessageReader(stream);
 
       const received: any[] = [];
-      reader.on("message", (msg) => received.push(msg));
+      reader.listen((msg) => received.push(msg));
 
       const msg1 = { jsonrpc: "2.0", id: 1, method: "msg1" };
       const msg2 = { jsonrpc: "2.0", id: 2, method: "msg2" };
 
-      const chunk = formatLspMessage(msg1 as any) + formatLspMessage(msg2 as any);
+      const formatMessage = (msg: any) => {
+        const json = JSON.stringify(msg);
+        return `Content-Length: ${Buffer.byteLength(json, "utf-8")}\r\n\r\n${json}`;
+      };
+
+      const chunk = formatMessage(msg1) + formatMessage(msg2);
       stream.write(chunk);
 
       await new Promise((resolve) => setTimeout(resolve, 50));
@@ -1922,10 +1926,10 @@ export schema Config = {
 
     it("handles headers with extra fields such as Content-Type", async () => {
       const stream = new PassThrough();
-      const reader = new MessageReader(stream);
+      const reader = new StreamMessageReader(stream);
 
       const received: any[] = [];
-      reader.on("message", (msg) => received.push(msg));
+      reader.listen((msg) => received.push(msg));
 
       const payload = JSON.stringify({ jsonrpc: "2.0", id: 7, method: "test/extraHeaders" });
       const byteLength = Buffer.byteLength(payload, "utf-8");
@@ -1947,10 +1951,10 @@ export schema Config = {
       const child = spawn("node", [cliPath, "lsp", "--stdio"]);
 
       const responses: any[] = [];
-      const reader = new MessageReader(child.stdout);
-      reader.on("message", (msg) => responses.push(msg));
+      const reader = new StreamMessageReader(child.stdout);
+      reader.listen((msg) => responses.push(msg));
 
-      const writer = new MessageWriter(child.stdin);
+      const writer = new StreamMessageWriter(child.stdin);
 
       // 1. Send initialize
       writer.write({

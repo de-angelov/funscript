@@ -1036,7 +1036,8 @@ export class Formatter {
       }
       case "FunctionTypeNode": {
         const params = node.params.map(p => {
-          return p.name ? `${p.name.name}: ${this.formatType(p.typeAnnotation, indent)}` : this.formatType(p.typeAnnotation, indent);
+          const typeStr = p.typeAnnotation ? this.formatType(p.typeAnnotation, indent) : "any";
+          return p.name ? `${p.name.name}: ${typeStr}` : typeStr;
         }).join(", ");
         return `(${params}) -> ${this.formatType(node.returnType, indent)}`;
       }

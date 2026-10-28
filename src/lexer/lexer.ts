@@ -1,4 +1,5 @@
 import { Position, Span } from "../ast/types.js";
+import { FunScriptError } from "../errors.js";
 import {
   Token,
   TokenType,
@@ -7,12 +8,9 @@ import {
   BANNED_SYMBOLS,
 } from "./tokens.js";
 
-export class LexerError extends Error {
-  constructor(
-    message: string,
-    public span: Span,
-  ) {
-    super(`${message} at line ${span.start.line}, col ${span.start.column}`);
+export class LexerError extends FunScriptError {
+  constructor(message: string, span: Span) {
+    super(message, span);
     this.name = "LexerError";
   }
 }
@@ -152,14 +150,6 @@ export class Lexer {
       if (char === '"') {
         this.readString();
         continue;
-      }
-
-      // Backticks are not part of FunScript; 'ts' is the single escape hatch
-      if (char === "`") {
-        throw new LexerError(
-          "FunScript has no backtick escape; use ts \"...\" for inline TypeScript or an indented 'ts' block.",
-          this.currentSpan(1),
-        );
       }
 
       // Numbers

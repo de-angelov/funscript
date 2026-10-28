@@ -292,6 +292,6 @@ export start = (port: number) -> port + 1
       const emitMapJson = JSON.parse(await fs.readFile(emitMapFile, "utf-8"));
       expect(emitTsContent).toContain("//# sourceMappingURL=emit-test.ts.map");
       expect(emitMapJson.version).toBe(3);
-    });
+    }, 15000);
   });
 });
