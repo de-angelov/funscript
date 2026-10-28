@@ -3,7 +3,7 @@ import {
   type Position,
   type Range,
   MarkupKind,
-} from "./protocol.js";
+} from "vscode-languageserver/node";
 import { Lexer } from "../lexer/lexer.js";
 import {
   TokenType,

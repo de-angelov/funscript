@@ -899,7 +899,7 @@ export class Emitter {
         const params = node.params
           .map((p) => {
             const name = p.name ? p.name.name : "_";
-            return `${name}: ${this.emitTypeNode(p.typeAnnotation)}`;
+            return p.typeAnnotation ? `${name}: ${this.emitTypeNode(p.typeAnnotation)}` : name;
           })
           .join(", ");
         return `(${params}) => ${this.emitTypeNode(node.returnType)}`;

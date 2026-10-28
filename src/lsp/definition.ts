@@ -67,7 +67,7 @@ import type {
 } from "../ast/types.js";
 import { Lexer } from "../lexer/lexer.js";
 import { Parser } from "../parser/parser.js";
-import type { Position, Range, Location, LocationLink } from "./protocol.js";
+import type { Position, Range, Location, LocationLink } from "vscode-languageserver/node";
 
 export function isPositionInSpan(
   posLine: number,
@@ -966,7 +966,9 @@ export class DefinitionFinder {
           }
         }
         for (const param of typeNode.params) {
-          this.visitTypeNode(param.typeAnnotation, fnTypeScope);
+          if (param.typeAnnotation) {
+            this.visitTypeNode(param.typeAnnotation, fnTypeScope);
+          }
         }
         this.visitTypeNode(typeNode.returnType, fnTypeScope);
         break;

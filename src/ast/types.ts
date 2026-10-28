@@ -493,14 +493,8 @@ export interface Parameter extends NodeBase {
 export interface FunctionTypeNode extends NodeBase {
   kind: "FunctionTypeNode";
   typeParams?: TypeParameter[];
-  params: ParameterType[];
+  params: Parameter[];
   returnType: TypeNode;
-}
-
-export interface ParameterType extends NodeBase {
-  kind: "ParameterType";
-  name?: Identifier;
-  typeAnnotation: TypeNode;
 }
 
 export interface EffectTypeNode extends NodeBase {

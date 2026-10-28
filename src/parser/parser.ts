@@ -89,13 +89,11 @@ import {
   JSXTagName,
 } from "../ast/types.js";
 import { Token, TokenType } from "../lexer/tokens.js";
+import { FunScriptError } from "../errors.js";
 
-export class ParseError extends Error {
-  constructor(
-    message: string,
-    public span: Span,
-  ) {
-    super(`${message} at line ${span.start.line}, col ${span.start.column}`);
+export class ParseError extends FunScriptError {
+  constructor(message: string, span: Span) {
+    super(message, span);
     this.name = "ParseError";
   }
 }
@@ -1835,7 +1833,7 @@ export class Parser {
       const ret = this.parsePrimaryType();
       return {
         kind: "FunctionTypeNode",
-        params: params as any,
+        params,
         returnType: ret,
         span: { start, end: ret.span.end },
       };

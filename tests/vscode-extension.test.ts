@@ -2,7 +2,7 @@ import { describe, it, expect, vi } from "vitest";
 import * as fs from "node:fs/promises";
 import * as path from "node:path";
 import { spawn } from "node:child_process";
-import { MessageReader, MessageWriter } from "../src/lsp/index.js";
+import { StreamMessageReader, StreamMessageWriter } from "../src/lsp/index.js";
 
 // Mock 'vscode' and 'vscode-languageclient/node' for extension entry point tests
 vi.mock("vscode", () => {
@@ -353,11 +353,11 @@ describe("VS Code Extension Package (TASK-018)", () => {
       const cliPath = path.resolve(__dirname, "../dist/cli/index.js");
       const child = spawn("node", [cliPath, "lsp", "--stdio"]);
 
-      const reader = new MessageReader(child.stdout);
-      const writer = new MessageWriter(child.stdin);
+      const reader = new StreamMessageReader(child.stdout);
+      const writer = new StreamMessageWriter(child.stdin);
 
       const messages: any[] = [];
-      reader.on("message", (msg) => messages.push(msg));
+      reader.listen((msg) => messages.push(msg));
 
       // 1. Initialize
       writer.write({

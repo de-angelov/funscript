@@ -4,6 +4,7 @@ import { Lexer, LexerError } from "./lexer/lexer.js";
 import { Parser, ParseError } from "./parser/parser.js";
 import { Emitter } from "./emitter/emitter.js";
 import { Program } from "./ast/types.js";
+import { FunScriptError } from "./errors.js";
 
 export interface CompileOptions {
   sourcemap?: boolean;
@@ -19,9 +20,16 @@ export interface CompileResult {
   sourcemap?: SourceMap;
 }
 
-export class CompilerError {
+export class CompilerError extends FunScriptError {
   readonly _tag = "CompilerError";
-  constructor(public readonly message: string, public readonly error: LexerError | ParseError | Error) {}
+  constructor(
+    public readonly message: string,
+    public readonly error: LexerError | ParseError | Error,
+  ) {
+    const span = "span" in error ? (error as any).span : undefined;
+    super(message, span);
+    this.name = "CompilerError";
+  }
 }
 
 /**
