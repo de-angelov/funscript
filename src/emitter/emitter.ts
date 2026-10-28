@@ -155,6 +155,7 @@ export class Emitter {
   private needsTsPattern = false;
   private needsMutative = false;
   private primitiveIdentifiers = new Set<string>();
+  private currentPlaceholderParam: string | null = null;
 
   constructor(private program?: Program) {}
 
@@ -392,7 +393,7 @@ export class Emitter {
       case "UpperIdentifier":
         return expr.name;
       case "Placeholder":
-        return "__placeholder";
+        return this.currentPlaceholderParam ?? "__placeholder";
       case "TypedHole":
         return `(() => { throw new Error("Typed hole reached: ${expr.label || "???"}"); })()`;
       case "PipelineExpression":
@@ -465,18 +466,55 @@ export class Emitter {
       const resolvedStage = this.resolvePipelineStage(s);
 
       // Check if stage has placeholder '_'
-      if (resolvedStage.kind === "CallExpression" && resolvedStage.args.some((a) => a.kind === "Placeholder")) {
+      if (this.hasPlaceholder(resolvedStage)) {
         const placeholderParam = "__p";
-        const callArgs = resolvedStage.args
-          .map((a) => (a.kind === "Placeholder" ? placeholderParam : this.emitExpression(a)))
-          .join(", ");
-        return `(${placeholderParam}) => ${this.emitExpression(resolvedStage.callee)}(${callArgs})`;
+        const prevPlaceholderParam = this.currentPlaceholderParam;
+        this.currentPlaceholderParam = placeholderParam;
+        try {
+          const body = this.emitExpression(resolvedStage);
+          const formattedBody = resolvedStage.kind === "RecordExpression" ? `(${body})` : body;
+          return `(${placeholderParam}) => ${formattedBody}`;
+        } finally {
+          this.currentPlaceholderParam = prevPlaceholderParam;
+        }
       }
 
       return this.emitExpression(resolvedStage);
     });
 
     return `pipe(\n  ${emittedStages.join(",\n  ")}\n)`;
+  }
+
+  private hasPlaceholder(expr: Expression): boolean {
+    switch (expr.kind) {
+      case "Placeholder":
+        return true;
+      case "BinaryExpression":
+        return this.hasPlaceholder(expr.left) || this.hasPlaceholder(expr.right);
+      case "UnaryExpression":
+        return this.hasPlaceholder(expr.argument);
+      case "CallExpression":
+        return this.hasPlaceholder(expr.callee) || expr.args.some((a) => this.hasPlaceholder(a));
+      case "MemberExpression":
+        return this.hasPlaceholder(expr.object);
+      case "IndexExpression":
+        return this.hasPlaceholder(expr.object) || this.hasPlaceholder(expr.index);
+      case "RecordExpression":
+        return expr.entries.some((e) => {
+          if (e.kind === "SpreadEntry") return this.hasPlaceholder(e.argument);
+          if (e.kind === "FieldEntry") return this.hasPlaceholder(e.value);
+          if (e.kind === "DotPathEntry") return this.hasPlaceholder(e.value);
+          return false;
+        });
+      case "ArrayExpression":
+        return expr.elements.some((e) => this.hasPlaceholder(e));
+      case "PipelineExpression":
+        return this.hasPlaceholder(expr.left) || this.hasPlaceholder(expr.right);
+      case "JsExpression":
+        return this.hasPlaceholder(expr.expression);
+      default:
+        return false;
+    }
   }
 
   private resolvePipelineStage(stage: Expression): Expression {

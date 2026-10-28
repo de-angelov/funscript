@@ -28,6 +28,34 @@ export res = 5 |> add(10, _)
     expect(res.typescript).toContain(`(__p) => add(10, __p)`);
   });
 
+  it("compiles pipeline placeholder binary, member, unary, and logical expressions", async () => {
+    const code = `
+export resAdd = 5 |> (_ + 1)
+export resMember = user |> _.profile.name
+export resUnary = true |> not _
+export resLogical = 7 |> (_ == 7 and _ != 0)
+export resChained = 5 |> (_ + 1) |> (_ * 2)
+`.trim();
+
+    const res = await Effect.runPromise(compileString(code));
+    expect(res.typescript).toContain(`import { pipe } from "effect";`);
+    expect(res.typescript).toContain(`pipe(\n  5,\n  (__p) => (__p + 1)\n)`);
+    expect(res.typescript).toContain(`pipe(\n  user,\n  (__p) => __p.profile.name\n)`);
+    expect(res.typescript).toContain(`pipe(\n  true,\n  (__p) => (!__p)\n)`);
+    expect(res.typescript).toContain(`pipe(\n  7,\n  (__p) => ((__p === 7) && (__p !== 0))\n)`);
+    expect(res.typescript).toContain(`pipe(\n  5,\n  (__p) => (__p + 1),\n  (__p) => (__p * 2)\n)`);
+
+    const { pipe } = await import("effect");
+    const evalCode = res.typescript.replace(/import .*\n/g, "").replace(/export const /g, "const ");
+    const fn = new Function("pipe", "user", `${evalCode}; return { resAdd, resMember, resUnary, resLogical, resChained };`);
+    const evaluated = fn(pipe, { profile: { name: "Alice" } });
+    expect(evaluated.resAdd).toBe(6);
+    expect(evaluated.resMember).toBe("Alice");
+    expect(evaluated.resUnary).toBe(false);
+    expect(evaluated.resLogical).toBe(true);
+    expect(evaluated.resChained).toBe(12);
+  });
+
   it("compiles record schemas and tagged union schemas", async () => {
     const code = `
 export schema User = {
