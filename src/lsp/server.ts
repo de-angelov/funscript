@@ -14,6 +14,8 @@ import {
   type DidOpenTextDocumentParams,
   type DocumentFormattingParams,
   type DefinitionParams,
+  type HoverParams,
+  type Hover,
   type InitializeParams,
   type InitializeResult,
   type Message,
@@ -31,6 +33,7 @@ import { Parser } from "../parser/parser.js";
 import { format } from "../formatter/index.js";
 import type { Span } from "../ast/types.js";
 import { findDefinition } from "./definition.js";
+import { findHover } from "./hover.js";
 
 export function toDiagnostic(error: any): Diagnostic {
   const span: Span | undefined = error.span;
@@ -172,6 +175,7 @@ export class FunScriptLspServer extends EventEmitter {
       this.onFormattingHandler(params),
     );
     connection.onDefinition((params) => this.onDefinitionHandler(params));
+    connection.onHover((params) => this.onHoverHandler(params));
   }
 
   public onInitializeHandler(params: InitializeParams): InitializeResult {
@@ -182,6 +186,7 @@ export class FunScriptLspServer extends EventEmitter {
         textDocumentSync: TextDocumentSyncKind.Full,
         documentFormattingProvider: true,
         definitionProvider: true,
+        hoverProvider: true,
       },
       serverInfo: {
         name: "funscript-lsp",
@@ -304,6 +309,16 @@ export class FunScriptLspServer extends EventEmitter {
     return findDefinition(doc.text, uri, params.position, clientSupportsLink);
   }
 
+  public onHoverHandler(params: HoverParams): Hover | null {
+    const uri = params?.textDocument?.uri;
+    const doc = uri ? this.documents.get(uri) : undefined;
+    if (!doc || !params?.position) {
+      return null;
+    }
+
+    return findHover(doc.text, uri, params.position);
+  }
+
   public async handleMessage(msg: Message): Promise<ResponseMessage | void> {
     if ("id" in msg && msg.id !== undefined && msg.id !== null) {
       return this.handleRequest(msg as RequestMessage);
@@ -368,6 +383,15 @@ export class FunScriptLspServer extends EventEmitter {
 
     if (req.method === "textDocument/definition") {
       const result = this.onDefinitionHandler(req.params as DefinitionParams);
+      return {
+        jsonrpc: "2.0",
+        id: req.id,
+        result,
+      };
+    }
+
+    if (req.method === "textDocument/hover") {
+      const result = this.onHoverHandler(req.params as HoverParams);
       return {
         jsonrpc: "2.0",
         id: req.id,
