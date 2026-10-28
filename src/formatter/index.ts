@@ -53,6 +53,7 @@ import {
   EffectBindStatement,
   EffectDiscardStatement,
   EffectControlFlowStatement,
+  WhenStatement,
   TypeNode,
   TypeReferenceNode,
   TypeParameter,
@@ -175,6 +176,8 @@ const PRECEDENCE: Record<string, number> = {
   "??": 3,
   "==": 4,
   "!=": 4,
+  "===": 4,
+  "!==": 4,
   "+": 5,
   "-": 5,
   "*": 6,
@@ -267,16 +270,16 @@ export class Formatter {
       case "ServiceDeclaration":
         return node.members;
       case "BlockStatement":
-        return [...node.statements, node.finalExpression];
+        return [...node.statements, ...(node.finalExpression ? [node.finalExpression] : [])];
       case "EffectBlockExpression":
-        return [...node.body, node.finalExpression];
+        return [...node.body, ...(node.finalExpression ? [node.finalExpression] : [])];
       case "MatchExpression":
         return node.arms;
       case "MatchArm":
         return [node.body];
       case "FunctionExpression":
         if (node.body.kind === "BlockStatement") {
-          return [...node.body.statements, node.body.finalExpression];
+          return [...node.body.statements, ...(node.body.finalExpression ? [node.body.finalExpression] : [])];
         }
         return [node.body];
       case "RecordExpression":
@@ -398,12 +401,14 @@ export class Formatter {
         return this.formatServiceDeclaration(decl, 0);
       case "BindingDeclaration":
         return this.formatBindingDeclaration(decl, 0);
+      case "WhenStatement":
+        return this.formatStatement(decl, 0);
       case "TsEscapeDeclaration":
         return `ts "${decl.code}"`;
     }
   }
 
-  private formatDeclaration(decl: SchemaDeclaration | ErrorDeclaration | ServiceDeclaration | BindingDeclaration): string {
+  private formatDeclaration(decl: SchemaDeclaration | ErrorDeclaration | ServiceDeclaration | BindingDeclaration | WhenStatement): string {
     switch (decl.kind) {
       case "SchemaDeclaration":
         return this.formatSchemaDeclaration(decl, 0);
@@ -413,6 +418,8 @@ export class Formatter {
         return this.formatServiceDeclaration(decl, 0);
       case "BindingDeclaration":
         return this.formatBindingDeclaration(decl, 0);
+      case "WhenStatement":
+        return this.formatStatement(decl, 0);
     }
   }
 
@@ -614,6 +621,13 @@ export class Formatter {
         return `${this.formatTarget(stmt.target)} = ${this.formatExpression(stmt.value, indent)}`;
       case "ExpressionStatement":
         return this.formatExpression(stmt.expression, indent);
+      case "ReturnStatement":
+        return `=> ${this.formatExpression(stmt.argument, indent)}`;
+      case "WhenStatement":
+        if (stmt.isEarlyReturn) {
+          return `when (${this.formatExpression(stmt.condition, indent)}) => ${this.formatExpression(stmt.consequent as Expression, indent)}`;
+        }
+        return `when (${this.formatExpression(stmt.condition, indent)}) {\n${this.formatBlockStatement(stmt.consequent as BlockStatement, indent + this.indentSize)}\n${this.spaces(indent)}}`;
     }
   }
 
@@ -638,16 +652,18 @@ export class Formatter {
       }
     }
 
-    if (stmt.statements.length > 0) {
-      const last = stmt.statements[stmt.statements.length - 1];
-      if (stmt.finalExpression.span && last.span && stmt.finalExpression.span.start.line - last.span.end.line > 1) {
-        lines.push("");
+    if (stmt.finalExpression) {
+      if (stmt.statements.length > 0) {
+        const last = stmt.statements[stmt.statements.length - 1];
+        if (stmt.finalExpression.span && last.span && stmt.finalExpression.span.start.line - last.span.end.line > 1) {
+          lines.push("");
+        }
       }
-    }
 
-    const leadingFinal = this.formatLeadingComments(stmt.finalExpression, lineIndent);
-    const trailingFinal = this.getTrailingComment(stmt.finalExpression.span.end.line);
-    lines.push(`${leadingFinal}${lineIndent}${this.formatExpression(stmt.finalExpression, indent)}${trailingFinal}`);
+      const leadingFinal = this.formatLeadingComments(stmt.finalExpression, lineIndent);
+      const trailingFinal = this.getTrailingComment(stmt.finalExpression.span.end.line);
+      lines.push(`${leadingFinal}${lineIndent}${this.formatExpression(stmt.finalExpression, indent)}${trailingFinal}`);
+    }
 
     return lines.join("\n");
   }
@@ -696,6 +712,8 @@ export class Formatter {
         return `${this.formatTarget(stmt.target)} = ${this.formatExpression(stmt.value, indent)}`;
       case "EffectControlFlowStatement":
         return this.formatExpression(stmt.statement, indent);
+      case "WhenStatement":
+        return this.formatStatement(stmt, indent);
     }
   }
 

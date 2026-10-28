@@ -45,6 +45,8 @@ import {
   Statement,
   AssignmentStatement,
   ExpressionStatement,
+  ReturnStatement,
+  WhenStatement,
   MutBlockExpression,
   MatchExpression,
   MatchArm,
@@ -101,6 +103,8 @@ export class ParseError extends Error {
 export class Parser {
   private current = 0;
   public diagnostics: ParseError[] = [];
+  private functionDepth = 0;
+  private mutableVariables = new Set<string>();
 
   constructor(
     private tokens: Token[],
@@ -117,7 +121,8 @@ export class Parser {
       if (this.peek().type === TokenType.DEDENT) {
         return;
       }
-      if (this.advance().type === TokenType.NEWLINE) {
+      const tok = this.advance();
+      if (tok.type === TokenType.NEWLINE || tok.type === TokenType.RBRACE) {
         return;
       }
     }
@@ -197,6 +202,9 @@ export class Parser {
       };
     }
     if (this.match(TokenType.JS)) {
+      if (this.check(TokenType.IDENTIFIER) && this.peek().value === "fn") {
+        return this.parseFunctionDeclaration(true);
+      }
       return this.parseBindingDeclaration(true);
     }
     if (this.check(TokenType.SCHEMA)) {
@@ -207,6 +215,12 @@ export class Parser {
     }
     if (this.check(TokenType.SERVICE)) {
       return this.parseServiceDeclaration();
+    }
+    if (this.check(TokenType.WHEN)) {
+      return this.parseWhenStatement();
+    }
+    if (this.check(TokenType.IDENTIFIER) && this.peek().value === "fn") {
+      return this.parseFunctionDeclaration(isJs);
     }
     return this.parseBindingDeclaration(isJs);
   }
@@ -492,6 +506,9 @@ export class Parser {
     const start = this.peek().span.start;
     const isMut = this.match(TokenType.MUT);
     const id = this.parseAnyIdentifier();
+    if (isMut) {
+      this.mutableVariables.add(id.name);
+    }
     let typeAnnotation: TypeNode | undefined;
 
     if (this.match(TokenType.COLON)) {
@@ -521,6 +538,134 @@ export class Parser {
       init,
       span: { start, end: init.span.end },
     };
+  }
+
+  private parseFunctionDeclaration(isJs = false): BindingDeclaration {
+    const start = this.peek().span.start;
+    this.advance(); // consume 'fn'
+
+    const id = this.parseIdentifier();
+
+    this.consume(TokenType.LPAREN, "Expected '(' after function name");
+    const params: Parameter[] = [];
+    if (!this.check(TokenType.RPAREN)) {
+      do {
+        const pName = this.parseIdentifier();
+        let pType: TypeNode | undefined;
+        if (this.match(TokenType.COLON)) {
+          pType = this.parseTypeNode();
+        }
+        params.push({
+          kind: "Parameter",
+          name: pName,
+          typeAnnotation: pType,
+          span: { start: pName.span.start, end: pType ? pType.span.end : pName.span.end },
+        });
+      } while (this.match(TokenType.COMMA) && !this.check(TokenType.RPAREN));
+    }
+    this.consume(TokenType.RPAREN, "Expected ')' after parameters");
+
+    let returnType: TypeNode | undefined;
+    if (this.match(TokenType.COLON)) {
+      returnType = this.parseTypeNode();
+    }
+
+    let body: FunctionBody;
+    if (this.match(TokenType.FAT_ARROW) || this.match(TokenType.ARROW)) {
+      if (
+        !returnType &&
+        (this.check(TokenType.UPPER_IDENTIFIER) || this.check(TokenType.IDENTIFIER)) &&
+        (this.peekAhead(1).type === TokenType.LBRACE ||
+          this.peekAhead(1).type === TokenType.NEWLINE ||
+          this.peekAhead(1).type === TokenType.FAT_ARROW ||
+          this.peekAhead(1).type === TokenType.ARROW)
+      ) {
+        returnType = this.parseTypeNode();
+        if (this.match(TokenType.FAT_ARROW) || this.match(TokenType.ARROW)) {
+          // consumed arrow before expression body
+        }
+        body = this.parseFunctionBody();
+      } else {
+        body = this.parseFunctionBody();
+      }
+    } else if (this.check(TokenType.LBRACE)) {
+      this.consume(TokenType.LBRACE, "Expected '{'");
+      body = this.parseBraceBlock();
+    } else if (this.match(TokenType.NEWLINE)) {
+      this.consume(TokenType.INDENT, "Expected indent for function body block");
+      body = this.parseIndentedBlock();
+    } else {
+      throw new ParseError("Expected '=>', '{', or newline for function body", this.peek().span);
+    }
+
+    this.skipNewlines();
+
+    return {
+      kind: "BindingDeclaration",
+      isMut: false,
+      isJs,
+      id,
+      init: {
+        kind: "FunctionExpression",
+        params,
+        returnType,
+        body,
+        span: { start, end: body.span.end },
+      },
+      span: { start, end: body.span.end },
+    };
+  }
+
+  private parseWhenStatement(): WhenStatement {
+    const start = this.consume(TokenType.WHEN, "Expected 'when'").span.start;
+    let condition: Expression;
+    if (this.match(TokenType.LPAREN)) {
+      condition = this.parseExpression();
+      this.consume(TokenType.RPAREN, "Expected ')' after when condition");
+    } else {
+      condition = this.parseExpression();
+    }
+
+    if (this.match(TokenType.FAT_ARROW) || this.match(TokenType.ARROW)) {
+      if (this.functionDepth === 0) {
+        throw new ParseError("Early return 'when (...) =>' is rejected outside function context", this.previous().span);
+      }
+      const earlyExpr = this.parseExpression();
+      this.consumeNewlineOrEof();
+      return {
+        kind: "WhenStatement",
+        condition,
+        consequent: earlyExpr,
+        isEarlyReturn: true,
+        span: { start, end: earlyExpr.span.end },
+      };
+    }
+
+    if (this.check(TokenType.LBRACE)) {
+      this.consume(TokenType.LBRACE, "Expected '{'");
+      const blockBody = this.parseBraceBlock();
+      return {
+        kind: "WhenStatement",
+        condition,
+        consequent: blockBody,
+        isEarlyReturn: false,
+        span: { start, end: blockBody.span.end },
+      };
+    }
+
+    if (this.match(TokenType.NEWLINE)) {
+      this.consume(TokenType.INDENT, "Expected indent for when block");
+      const blockBody = this.parseIndentedBlock();
+      return {
+        kind: "WhenStatement",
+        condition,
+        consequent: blockBody,
+        isEarlyReturn: false,
+        span: { start, end: blockBody.span.end },
+      };
+    }
+
+    throw new ParseError("Expected '=>' or conditional block '{ ... }' after when condition", this.peek().span);
   }
 
   // --- Expressions & Pratt Parser ---
@@ -575,7 +720,9 @@ export class Parser {
     this.consume(TokenType.LPAREN, "Expected '(' after 'mut'");
     const draftParam = this.parseIdentifier();
     this.consume(TokenType.RPAREN, "Expected ')' after draft param");
-    this.consume(TokenType.ARROW, "Expected '->' in mut block");
+    if (!this.match(TokenType.ARROW) && !this.match(TokenType.FAT_ARROW)) {
+      throw new ParseError("Expected '->' or '=>' in mut block", this.peek().span);
+    }
 
     const body = this.parseFunctionBody();
     return {
@@ -633,8 +780,8 @@ export class Parser {
 
   private parseEquality(): Expression {
     let expr = this.parseAdditive();
-    while (this.match(TokenType.EQEQ, TokenType.NEQ)) {
-      const op = this.previous().value as "==" | "!=";
+    while (this.match(TokenType.EQEQ, TokenType.NEQ, TokenType.EQEQEQ, TokenType.NEQEQ)) {
+      const op = this.previous().value as "==" | "!=" | "===" | "!==";
       const right = this.parseAdditive();
       expr = {
         kind: "BinaryExpression",
@@ -823,8 +970,8 @@ export class Parser {
     if (this.match(TokenType.LPAREN)) {
       const start = this.previous().span.start;
       if (this.match(TokenType.RPAREN)) {
-        // Zero-arg lambda: () -> ...
-        if (this.match(TokenType.ARROW)) {
+        // Zero-arg lambda: () -> ... or () => ...
+        if (this.match(TokenType.ARROW) || this.match(TokenType.FAT_ARROW)) {
           const body = this.parseFunctionBody();
           return {
             kind: "FunctionExpression",
@@ -833,7 +980,7 @@ export class Parser {
             span: { start, end: body.span.end },
           };
         }
-        throw new ParseError("Empty parentheses '()' must be followed by '->'", this.previous().span);
+        throw new ParseError("Empty parentheses '()' must be followed by '->' or '=>'", this.previous().span);
       }
 
       // Check if this looks like function params (param: Type, ...) ->
@@ -870,8 +1017,19 @@ export class Parser {
         let returnType: TypeNode | undefined;
         if (this.match(TokenType.COLON)) {
           returnType = this.parseTypeNode();
+        } else if (
+          this.check(TokenType.FAT_ARROW) &&
+          (this.peekAhead(1).type === TokenType.UPPER_IDENTIFIER || this.peekAhead(1).type === TokenType.IDENTIFIER) &&
+          (this.peekAhead(2).type === TokenType.FAT_ARROW ||
+            this.peekAhead(2).type === TokenType.LBRACE ||
+            this.peekAhead(2).type === TokenType.NEWLINE)
+        ) {
+          this.advance(); // consume '=>'
+          returnType = this.parseTypeNode();
         }
-        this.consume(TokenType.ARROW, "Expected '->' after parameters");
+        if (!this.match(TokenType.ARROW) && !this.match(TokenType.FAT_ARROW)) {
+          throw new ParseError("Expected '=>' or '->' after parameters", this.peek().span);
+        }
         const body = this.parseFunctionBody();
         return {
           kind: "FunctionExpression",
@@ -887,9 +1045,18 @@ export class Parser {
       let singleReturnType: TypeNode | undefined;
       if (this.match(TokenType.COLON)) {
         singleReturnType = this.parseTypeNode();
+      } else if (
+        this.check(TokenType.FAT_ARROW) &&
+        (this.peekAhead(1).type === TokenType.UPPER_IDENTIFIER || this.peekAhead(1).type === TokenType.IDENTIFIER) &&
+        (this.peekAhead(2).type === TokenType.FAT_ARROW ||
+          this.peekAhead(2).type === TokenType.LBRACE ||
+          this.peekAhead(2).type === TokenType.NEWLINE)
+      ) {
+        this.advance(); // consume '=>'
+        singleReturnType = this.parseTypeNode();
       }
 
-      if (this.match(TokenType.ARROW)) {
+      if (this.match(TokenType.ARROW) || this.match(TokenType.FAT_ARROW)) {
         const body = this.parseFunctionBody();
         return {
           kind: "FunctionExpression",
@@ -903,8 +1070,8 @@ export class Parser {
       return firstExpr;
     }
 
-    // 6. Zero-arg function: -> body
-    if (this.match(TokenType.ARROW)) {
+    // 6. Zero-arg function: -> body or => body
+    if (this.match(TokenType.ARROW) || this.match(TokenType.FAT_ARROW)) {
       const start = this.previous().span.start;
       const body = this.parseFunctionBody();
       return {
@@ -1112,7 +1279,9 @@ export class Parser {
         guard = this.parseExpression();
       }
 
-      this.consume(TokenType.ARROW, "Expected '->' in match arm");
+      if (!this.match(TokenType.ARROW) && !this.match(TokenType.FAT_ARROW)) {
+        throw new ParseError("Expected '->' or '=>' in match arm", this.peek().span);
+      }
       const body = this.parseFunctionBody();
 
       arms.push({
@@ -1249,6 +1418,19 @@ export class Parser {
           effect: eff,
           span: { start: id.span.start, end: eff.span.end },
         });
+      } else if (this.check(TokenType.IDENTIFIER) && this.peekAhead(1).type === TokenType.EQ && this.mutableVariables.has(this.peek().value)) {
+        const target = this.parseIdentifier();
+        this.consume(TokenType.EQ, "Expected '=' in assignment");
+        const val = this.parseExpression();
+        this.consumeNewlineOrEof();
+        body.push({
+          kind: "AssignmentStatement",
+          target,
+          value: val,
+          span: { start: target.span.start, end: val.span.end },
+        });
+        this.skipNewlines();
+        continue;
       } else if (
         this.check(TokenType.MUT) ||
         (this.check(TokenType.IDENTIFIER) && (this.peekAhead(1).type === TokenType.EQ || this.peekAhead(1).type === TokenType.COLON)) ||
@@ -1300,85 +1482,297 @@ export class Parser {
     };
   }
 
+  private isBraceBlock(): boolean {
+    if (!this.check(TokenType.LBRACE)) return false;
+    let i = 1;
+    while (this.current + i < this.tokens.length) {
+      const t = this.tokens[this.current + i].type;
+      if (t === TokenType.NEWLINE || t === TokenType.INDENT) {
+        i++;
+      } else {
+        break;
+      }
+    }
+    if (this.current + i >= this.tokens.length) return false;
+    const firstTok = this.tokens[this.current + i];
+    if (firstTok.type === TokenType.DOTDOTDOT) return false;
+    if (firstTok.type === TokenType.RBRACE) return false;
+    if (firstTok.type === TokenType.WHEN || firstTok.type === TokenType.MUT || firstTok.type === TokenType.FAT_ARROW) return true;
+    if (firstTok.type === TokenType.IDENTIFIER && firstTok.value === "fn") return true;
+    if (this.current + i + 1 < this.tokens.length && this.tokens[this.current + i + 1].type === TokenType.EQ) return true;
+
+    while (this.current + i < this.tokens.length) {
+      const tok = this.tokens[this.current + i];
+      if (tok.type === TokenType.RBRACE || tok.type === TokenType.DEDENT) break;
+      if (tok.type === TokenType.FAT_ARROW || tok.type === TokenType.ARROW) return true;
+      if (tok.type === TokenType.WHEN || tok.type === TokenType.MUT) return true;
+      if (tok.type === TokenType.DOTDOTDOT) return false;
+      if (tok.type === TokenType.COLON) {
+        let j = i + 1;
+        let hasEq = false;
+        while (this.current + j < this.tokens.length) {
+          const t = this.tokens[this.current + j];
+          if (t.type === TokenType.NEWLINE || t.type === TokenType.COMMA || t.type === TokenType.RBRACE || t.type === TokenType.DEDENT) break;
+          if (t.type === TokenType.EQ) {
+            hasEq = true;
+            break;
+          }
+          j++;
+        }
+        if (!hasEq) return false;
+      }
+      if (tok.type === TokenType.NEWLINE) break;
+      i++;
+    }
+    return true;
+  }
+
   private parseFunctionBody(): FunctionBody {
-    if (this.match(TokenType.NEWLINE)) {
-      this.consume(TokenType.INDENT, "Expected indent for function body block");
-      const statements: Statement[] = [];
-      let finalExpression: Expression | undefined;
+    this.functionDepth++;
+    try {
+      if (this.isBraceBlock()) {
+        this.consume(TokenType.LBRACE, "Expected '{'");
+        return this.parseBraceBlock();
+      }
+      if (this.match(TokenType.NEWLINE)) {
+        this.consume(TokenType.INDENT, "Expected indent for function body block");
+        return this.parseIndentedBlock();
+      }
+      return this.parseExpression();
+    } finally {
+      this.functionDepth--;
+    }
+  }
 
-      while (!this.check(TokenType.DEDENT) && !this.isAtEnd()) {
+  private parseBraceBlock(): BlockStatement {
+    const start = this.previous().span.start;
+    const statements: Statement[] = [];
+    let finalExpression: Expression | undefined;
+
+    this.skipNewlines();
+    const hasIndent = this.match(TokenType.INDENT);
+
+    while (!this.check(TokenType.RBRACE) && !this.check(TokenType.DEDENT) && !this.isAtEnd()) {
+      this.skipNewlines();
+      if (this.check(TokenType.RBRACE) || this.check(TokenType.DEDENT)) break;
+
+      try {
+        if (this.check(TokenType.WHEN)) {
+          statements.push(this.parseWhenStatement());
+          this.skipNewlines();
+          continue;
+        }
+
+        if (this.match(TokenType.FAT_ARROW)) {
+          const retStart = this.previous().span.start;
+          const retExpr = this.parseExpression();
+          this.consumeNewlineOrEof();
+          statements.push({
+            kind: "ReturnStatement",
+            argument: retExpr,
+            span: { start: retStart, end: retExpr.span.end },
+          });
+          this.skipNewlines();
+          continue;
+        }
+
+        if (this.check(TokenType.IDENTIFIER) && this.peek().value === "fn") {
+          statements.push(this.parseFunctionDeclaration(false));
+          this.skipNewlines();
+          continue;
+        }
+
+        if (this.check(TokenType.IDENTIFIER) && this.peekAhead(1).type === TokenType.EQ && this.mutableVariables.has(this.peek().value)) {
+          const target = this.parseIdentifier();
+          this.consume(TokenType.EQ, "Expected '=' in assignment");
+          const val = this.parseExpression();
+          this.consumeNewlineOrEof();
+          statements.push({
+            kind: "AssignmentStatement",
+            target,
+            value: val,
+            span: { start: target.span.start, end: val.span.end },
+          });
+          this.skipNewlines();
+          continue;
+        }
+
+        if (
+          this.check(TokenType.MUT) ||
+          (this.check(TokenType.IDENTIFIER) && (this.peekAhead(1).type === TokenType.EQ || this.peekAhead(1).type === TokenType.COLON)) ||
+          (this.check(TokenType.UNDERSCORE) && this.peekAhead(1).type === TokenType.EQ)
+        ) {
+          if (this.check(TokenType.UNDERSCORE)) {
+            this.advance(); // consume '_'
+            this.advance(); // consume '='
+            const discardExpr = this.parseExpression();
+            this.consumeNewlineOrEof("Expected newline");
+            statements.push({
+              kind: "BindingDeclaration",
+              isMut: false,
+              id: { kind: "Identifier", name: "_", span: discardExpr.span },
+              init: discardExpr,
+              span: discardExpr.span,
+            });
+          } else {
+            const bind = this.parseBindingDeclaration();
+            statements.push(bind);
+          }
+          this.skipNewlines();
+          continue;
+        }
+
+        const expr = this.parseExpression();
         this.skipNewlines();
-        if (this.check(TokenType.DEDENT)) break;
 
-        try {
-          if (
-            this.check(TokenType.MUT) ||
-            (this.check(TokenType.IDENTIFIER) && (this.peekAhead(1).type === TokenType.EQ || this.peekAhead(1).type === TokenType.COLON)) ||
-            (this.check(TokenType.UNDERSCORE) && this.peekAhead(1).type === TokenType.EQ)
-          ) {
-            if (this.check(TokenType.UNDERSCORE)) {
-              this.advance(); // consume '_'
-              this.advance(); // consume '='
-              const discardExpr = this.parseExpression();
-              this.consumeNewlineOrEof("Expected newline");
-              statements.push({
-                kind: "BindingDeclaration",
-                isMut: false,
-                id: { kind: "Identifier", name: "_", span: discardExpr.span },
-                init: discardExpr,
-                span: discardExpr.span,
-              });
-            } else {
-              const bind = this.parseBindingDeclaration();
-              this.skipNewlines();
-              if (this.check(TokenType.DEDENT)) {
-                statements.push(bind);
-                finalExpression = bind.id;
-                break;
-              } else {
-                statements.push(bind);
-              }
-            }
-          } else {
-            const expr = this.parseExpression();
-            this.skipNewlines();
-
-            if (this.check(TokenType.DEDENT)) {
-              finalExpression = expr;
-              break;
-            } else {
-              statements.push({
-                kind: "ExpressionStatement",
-                expression: expr,
-                span: expr.span,
-              });
-            }
-          }
-        } catch (err: any) {
-          if (err instanceof ParseError) {
-            this.diagnostics.push(err);
-            this.synchronize();
-          } else {
-            throw err;
-          }
+        if (this.check(TokenType.RBRACE) || this.check(TokenType.DEDENT)) {
+          finalExpression = expr;
+          break;
+        } else {
+          statements.push({
+            kind: "ExpressionStatement",
+            expression: expr,
+            span: expr.span,
+          });
+        }
+      } catch (err: any) {
+        if (err instanceof ParseError) {
+          this.diagnostics.push(err);
+          this.synchronize();
+        } else {
+          throw err;
         }
       }
-
-      this.consume(TokenType.DEDENT, "Expected unindent after function body");
-      const fallbackExpr: Expression = {
-        kind: "Identifier",
-        name: "_error",
-        span: { start: this.previous().span.start, end: this.previous().span.end },
-      };
-      return {
-        kind: "BlockStatement",
-        statements,
-        finalExpression: finalExpression ?? fallbackExpr,
-        span: { start: statements[0]?.span.start || this.previous().span.start, end: (finalExpression ?? fallbackExpr).span.end },
-      };
     }
 
-    return this.parseExpression();
+    if (hasIndent) {
+      this.consume(TokenType.DEDENT, "Expected unindent after brace block");
+    }
+    this.skipNewlines();
+    const end = this.consume(TokenType.RBRACE, "Expected '}' after block").span.end;
+    return {
+      kind: "BlockStatement",
+      statements,
+      finalExpression,
+      span: { start, end },
+    };
+  }
+
+  private parseIndentedBlock(): BlockStatement {
+    const start = this.previous().span.start;
+    const statements: Statement[] = [];
+    let finalExpression: Expression | undefined;
+
+    while (!this.check(TokenType.DEDENT) && !this.isAtEnd()) {
+      this.skipNewlines();
+      if (this.check(TokenType.DEDENT)) break;
+
+      try {
+        if (this.check(TokenType.WHEN)) {
+          statements.push(this.parseWhenStatement());
+          this.skipNewlines();
+          continue;
+        }
+
+        if (this.match(TokenType.FAT_ARROW)) {
+          const retStart = this.previous().span.start;
+          const retExpr = this.parseExpression();
+          this.consumeNewlineOrEof();
+          statements.push({
+            kind: "ReturnStatement",
+            argument: retExpr,
+            span: { start: retStart, end: retExpr.span.end },
+          });
+          this.skipNewlines();
+          continue;
+        }
+
+        if (this.check(TokenType.IDENTIFIER) && this.peek().value === "fn") {
+          statements.push(this.parseFunctionDeclaration(false));
+          this.skipNewlines();
+          continue;
+        }
+
+        if (this.check(TokenType.IDENTIFIER) && this.peekAhead(1).type === TokenType.EQ && this.mutableVariables.has(this.peek().value)) {
+          const target = this.parseIdentifier();
+          this.consume(TokenType.EQ, "Expected '=' in assignment");
+          const val = this.parseExpression();
+          this.consumeNewlineOrEof();
+          statements.push({
+            kind: "AssignmentStatement",
+            target,
+            value: val,
+            span: { start: target.span.start, end: val.span.end },
+          });
+          this.skipNewlines();
+          continue;
+        }
+
+        if (
+          this.check(TokenType.MUT) ||
+          (this.check(TokenType.IDENTIFIER) && (this.peekAhead(1).type === TokenType.EQ || this.peekAhead(1).type === TokenType.COLON)) ||
+          (this.check(TokenType.UNDERSCORE) && this.peekAhead(1).type === TokenType.EQ)
+        ) {
+          if (this.check(TokenType.UNDERSCORE)) {
+            this.advance(); // consume '_'
+            this.advance(); // consume '='
+            const discardExpr = this.parseExpression();
+            this.consumeNewlineOrEof("Expected newline");
+            statements.push({
+              kind: "BindingDeclaration",
+              isMut: false,
+              id: { kind: "Identifier", name: "_", span: discardExpr.span },
+              init: discardExpr,
+              span: discardExpr.span,
+            });
+          } else {
+            const bind = this.parseBindingDeclaration();
+            this.skipNewlines();
+            if (this.check(TokenType.DEDENT)) {
+              statements.push(bind);
+              finalExpression = bind.id;
+              break;
+            } else {
+              statements.push(bind);
+            }
+          }
+        } else {
+          const expr = this.parseExpression();
+          this.skipNewlines();
+
+          if (this.check(TokenType.DEDENT)) {
+            finalExpression = expr;
+            break;
+          } else {
+            statements.push({
+              kind: "ExpressionStatement",
+              expression: expr,
+              span: expr.span,
+            });
+          }
+        }
+      } catch (err: any) {
+        if (err instanceof ParseError) {
+          this.diagnostics.push(err);
+          this.synchronize();
+        } else {
+          throw err;
+        }
+      }
+    }
+
+    this.consume(TokenType.DEDENT, "Expected unindent after function body");
+    const fallbackExpr: Expression = {
+      kind: "Identifier",
+      name: "_error",
+      span: { start: this.previous().span.start, end: this.previous().span.end },
+    };
+    return {
+      kind: "BlockStatement",
+      statements,
+      finalExpression: finalExpression ?? (statements.length === 0 ? fallbackExpr : undefined),
+      span: { start: statements[0]?.span.start || this.previous().span.start, end: (finalExpression ?? fallbackExpr).span.end },
+    };
   }
 
   // --- Types ---
@@ -1405,7 +1799,9 @@ export class Parser {
         } while (this.match(TokenType.COMMA) && !this.check(TokenType.RPAREN));
       }
       this.consume(TokenType.RPAREN, "Expected ')'");
-      this.consume(TokenType.ARROW, "Expected '->' in function type");
+      if (!this.match(TokenType.ARROW) && !this.match(TokenType.FAT_ARROW)) {
+        throw new ParseError("Expected '->' or '=>' in function type", this.peek().span);
+      }
       const ret = this.parsePrimaryType();
       return {
         kind: "FunctionTypeNode",
@@ -1766,11 +2162,13 @@ export class Parser {
     while (this.match(TokenType.NEWLINE)) {}
   }
 
-  private consumeNewlineOrEof(message: string): void {
+  private consumeNewlineOrEof(message = "Expected newline"): void {
     if (
       this.isAtEnd() ||
       this.check(TokenType.DEDENT) ||
+      this.check(TokenType.RBRACE) ||
       this.previous().type === TokenType.DEDENT ||
+      this.previous().type === TokenType.RBRACE ||
       this.previous().type === TokenType.NEWLINE
     ) {
       return;

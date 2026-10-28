@@ -40,6 +40,7 @@ export enum TokenType {
 
   // Operators & Delimiters
   ARROW = "->",
+  FAT_ARROW = "=>",
   LARROW = "<-",
   PIPE = "|>",
   BAR = "|",
@@ -47,7 +48,9 @@ export enum TokenType {
   TYPED_HOLE = "???",
   EQ = "=",
   EQEQ = "==",
+  EQEQEQ = "===",
   NEQ = "!=",
+  NEQEQ = "!==",
   PLUS = "+",
   MINUS = "-",
   STAR = "*",
@@ -137,12 +140,9 @@ export const BANNED_KEYWORDS: Record<string, string> = {
 };
 
 export const BANNED_SYMBOLS: Record<string, string> = {
-  "===": "FunScript strict equality is '=='.",
-  "!==": "FunScript strict inequality is '!='.",
   "&&": "FunScript logical AND is 'and'.",
   "||": "FunScript logical OR is 'or'.",
   "!": "FunScript logical NOT is 'not'.",
-  "=>": "FunScript function arrow is '->'.",
 };
 
 // JSX token constants for direct imports
