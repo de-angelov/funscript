@@ -9,3 +9,5 @@ export { FunScriptLspServer, startLspServer, validateFunScript } from "./lsp/ind
 export * from "./formatter/index.js";
 export * as prettierPlugin from "./formatter/prettier.js";
 export { default as prettierPluginFunscript } from "./formatter/prettier.js";
+export * as vitePlugin from "./plugins/vite.js";
+export { funscriptPlugin } from "./plugins/vite.js";
