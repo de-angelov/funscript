@@ -8,6 +8,7 @@ export interface CompileResult {
   source: string;
   ast: Program;
   typescript: string;
+  targetExtension: string;
 }
 
 export class CompilerError {
@@ -35,11 +36,13 @@ export const compileString = (
       // 3. Emit TypeScript
       const emitter = new Emitter(ast);
       const typescript = emitter.emit();
+      const targetExtension = filename.endsWith(".funx") ? ".tsx" : ".ts";
 
       return {
         source,
         ast,
         typescript,
+        targetExtension,
       };
     },
     catch: (error: any) => new CompilerError(error.message, error),
