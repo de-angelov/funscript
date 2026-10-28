@@ -318,6 +318,7 @@ export interface TypedHole extends NodeBase {
 export interface MatchExpression extends NodeBase {
   kind: "MatchExpression";
   scrutinee?: Expression;
+  isPipeline?: boolean;
   arms: MatchArm[];
 }
 

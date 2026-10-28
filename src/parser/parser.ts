@@ -712,6 +712,9 @@ export class Parser {
     if (this.match(TokenType.MUT)) {
       return this.parseMutBlock();
     }
+    if (this.match(TokenType.MATCH)) {
+      return this.parseMatchExpression(true);
+    }
     return this.parseLogicalOr();
   }
 
@@ -778,11 +781,37 @@ export class Parser {
     return expr;
   }
 
+  private isPrimitiveLiteral(expr: Expression): boolean {
+    if (
+      expr.kind === "NumberLiteral" ||
+      expr.kind === "StringLiteral" ||
+      expr.kind === "BooleanLiteral"
+    ) {
+      return true;
+    }
+    if (expr.kind === "UnaryExpression" && this.isPrimitiveLiteral(expr.argument)) {
+      return true;
+    }
+    if (expr.kind === "BinaryExpression") {
+      return true;
+    }
+    return false;
+  }
+
   private parseEquality(): Expression {
     let expr = this.parseAdditive();
     while (this.match(TokenType.EQEQ, TokenType.NEQ, TokenType.EQEQEQ, TokenType.NEQEQ)) {
-      const op = this.previous().value as "==" | "!=" | "===" | "!==";
+      const opTok = this.previous();
+      const op = opTok.value as "==" | "!=" | "===" | "!==";
       const right = this.parseAdditive();
+      if (op === "===" || op === "!==") {
+        if (this.isPrimitiveLiteral(expr) || this.isPrimitiveLiteral(right)) {
+          throw new ParseError(
+            `Reference identity operator '${op}' cannot be used with primitive types; use '==' or '!=' for structural/value equality`,
+            opTok.span
+          );
+        }
+      }
       expr = {
         kind: "BinaryExpression",
         operator: op,
@@ -1235,12 +1264,12 @@ export class Parser {
 
   // --- Match & Patterns ---
 
-  private parseMatchExpression(): MatchExpression {
+  private parseMatchExpression(isPipeline = false): MatchExpression {
     const start = this.previous().span.start;
     let scrutinee: Expression | undefined;
 
     // Check if scrutinee is present or if it's a subjectless boolean match
-    if (!this.check(TokenType.BAR) && !this.check(TokenType.NEWLINE) && !this.check(TokenType.INDENT)) {
+    if (!isPipeline && !this.check(TokenType.BAR) && !this.check(TokenType.NEWLINE) && !this.check(TokenType.INDENT)) {
       scrutinee = this.parseExpression();
     }
 
@@ -1248,7 +1277,7 @@ export class Parser {
     const hasIndent = this.match(TokenType.INDENT);
     const arms: MatchArm[] = [];
 
-    const isSubjectless = scrutinee === undefined;
+    const isSubjectless = !isPipeline && scrutinee === undefined;
     while (this.match(TokenType.BAR)) {
       const armStart = this.previous().span.start;
       let pattern: Pattern;
@@ -1303,6 +1332,7 @@ export class Parser {
     return {
       kind: "MatchExpression",
       scrutinee,
+      isPipeline: isPipeline ? true : undefined,
       arms,
       span: { start, end: arms[arms.length - 1]?.span.end || start },
     };
