@@ -20,7 +20,9 @@
     "test:watch": "vitest",
     "fmt": "node ./dist/cli/index.js fmt",
     "fmt:check": "node ./dist/cli/index.js fmt --check examples/*.fun programs/*.fun",
-    "prettier:check": "prettier --check \"**/*.fun\""
+    "prettier:check": "prettier --check \"**/*.fun\"",
+    "verify": "npm run build && npm run fmt:check && npm test",
+    "pr:check": "node scripts/validate-pr.js"
   },
   "keywords": [
     "funscript",

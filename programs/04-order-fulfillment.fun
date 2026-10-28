@@ -221,9 +221,9 @@ export processOrderWorkflow = (order: Order, method: PaymentMethod, tier: Delive
 export processOrderSafely = (order: Order, method: PaymentMethod, tier: DeliveryTier) ->
   processOrderWorkflow(order, method, tier)
   |> Effect.catchAll((err) ->
-      effect
-        _ <- Console.log("  [Workflow Recovery] Caught domain error: {err}")
-        Failed(order.id, err)
+    effect
+      _ <- Console.log("  [Workflow Recovery] Caught domain error: {err}")
+      Failed(order.id, err)
   )
 
 # --- Initial Demo State & Main Entrypoint ---
