@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { Effect, Equal, Data } from "effect";
+import { Effect, Equal, Data, pipe } from "effect";
 import { Lexer } from "../src/lexer/lexer.js";
 import { TokenType } from "../src/lexer/tokens.js";
 import { compileString, CompilerError } from "../src/compiler.js";
@@ -302,6 +302,63 @@ export fn threshold(x) => {
       const fn = new Function(`${res.typescript.replace(/export /g, "")}; return threshold;`)();
       expect(fn(50)).toBe(50);
       expect(fn(100)).toBe(150);
+    });
+  });
+
+  describe("5. Pipeline Placeholder Expression Wrapping", () => {
+    it("wraps placeholder binary expressions in generated arrow lambdas and evaluates", async () => {
+      const code = `
+export fn compute(x) => {
+  res = x |> (_ + 1)
+  => res
+}
+`.trim();
+
+      const res = await Effect.runPromise(compileString(code));
+      expect(res.typescript).toContain(`import { pipe } from "effect";`);
+      expect(res.typescript).toContain(`pipe(\n  x,\n  (__p) => (__p + 1)\n)`);
+
+      const fn = new Function("pipe", `${res.typescript.replace(/import .*\n/g, "").replace(/export /g, "")}; return compute;`)(pipe);
+      expect(fn(5)).toBe(6);
+      expect(fn(41)).toBe(42);
+    });
+
+    it("wraps placeholder member expressions in generated arrow lambdas and evaluates", async () => {
+      const code = `
+export fn getName(user) => {
+  res = user |> _.profile.name
+  => res
+}
+`.trim();
+
+      const res = await Effect.runPromise(compileString(code));
+      expect(res.typescript).toContain(`pipe(\n  user,\n  (__p) => __p.profile.name\n)`);
+
+      const fn = new Function("pipe", `${res.typescript.replace(/import .*\n/g, "").replace(/export /g, "")}; return getName;`)(pipe);
+      expect(fn({ profile: { name: "Antigravity" } })).toBe("Antigravity");
+    });
+
+    it("handles placeholder in unary, logical and equality expressions", async () => {
+      const code = `
+export fn isNotZero(x) => {
+  => x |> not (_ == 0)
+}
+export fn checkInRange(x) => {
+  => x |> (_ != 0 and _ != 100)
+}
+`.trim();
+
+      const res = await Effect.runPromise(compileString(code));
+      expect(res.typescript).toContain(`(__p) => (!(__p === 0))`);
+      expect(res.typescript).toContain(`(__p) => ((__p !== 0) && (__p !== 100))`);
+
+      const getFns = new Function("pipe", `${res.typescript.replace(/import .*\n/g, "").replace(/export /g, "")}; return { isNotZero, checkInRange };`);
+      const { isNotZero, checkInRange } = getFns(pipe);
+      expect(isNotZero(0)).toBe(false);
+      expect(isNotZero(5)).toBe(true);
+      expect(checkInRange(0)).toBe(false);
+      expect(checkInRange(100)).toBe(false);
+      expect(checkInRange(50)).toBe(true);
     });
   });
 });
