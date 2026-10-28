@@ -217,7 +217,7 @@ describe("FunScript LSP Server", () => {
       const diagEvents: PublishDiagnosticsParams[] = [];
       server.on("diagnostics", (p) => diagEvents.push(p));
 
-      const code = 'name = "Ada"\nage === 30\n';
+      const code = 'name = "Ada"\nage && 30\n';
       await server.handleMessage({
         jsonrpc: "2.0",
         method: "textDocument/didOpen",
@@ -233,10 +233,10 @@ describe("FunScript LSP Server", () => {
 
       expect(diagEvents).toHaveLength(1);
       const diag = diagEvents[0].diagnostics[0];
-      expect(diag.message).toContain("FunScript strict equality is '=='");
+      expect(diag.message).toContain("FunScript logical AND is 'and'");
       expect(diag.range).toEqual({
         start: { line: 1, character: 4 },
-        end: { line: 1, character: 7 },
+        end: { line: 1, character: 6 },
       });
     });
 

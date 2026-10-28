@@ -35,6 +35,8 @@ import {
   Statement,
   AssignmentStatement,
   ExpressionStatement,
+  ReturnStatement,
+  WhenStatement,
   MutBlockExpression,
   MatchExpression,
   MatchArm,
@@ -152,6 +154,7 @@ export class Emitter {
   private effectImports = new Set<string>();
   private needsTsPattern = false;
   private needsMutative = false;
+  private primitiveIdentifiers = new Set<string>();
 
   constructor(private program?: Program) {}
 
@@ -198,6 +201,8 @@ export class Emitter {
         return this.emitServiceDeclaration(decl, isExport);
       case "BindingDeclaration":
         return this.emitBindingDeclaration(decl, isExport);
+      case "WhenStatement":
+        return this.emitWhenStatement(decl);
       case "TsEscapeDeclaration":
         return decl.code + "\n";
     }
@@ -309,7 +314,35 @@ export class Emitter {
     return `${exp}class ${name} extends Context.Tag(${tag})<${name}, {\n${members}\n}>() {}`;
   }
 
+  private isPrimitiveType(type?: TypeNode): boolean {
+    if (!type) return false;
+    if (type.kind === "TypeReferenceNode") {
+      const name = type.name.name.toLowerCase();
+      return name === "number" || name === "string" || name === "boolean" || name === "int" || name === "float";
+    }
+    return false;
+  }
+
+  private isPrimitive(expr: Expression): boolean {
+    if (expr.kind === "NumberLiteral" || expr.kind === "StringLiteral" || expr.kind === "BooleanLiteral") {
+      return true;
+    }
+    if (expr.kind === "UnaryExpression") {
+      return true;
+    }
+    if (expr.kind === "BinaryExpression") {
+      return true;
+    }
+    if (expr.kind === "Identifier" && this.primitiveIdentifiers.has(expr.name)) {
+      return true;
+    }
+    return false;
+  }
+
   private emitBindingDeclaration(decl: BindingDeclaration, isExport = false): string {
+    if (this.isPrimitiveType(decl.typeAnnotation) || this.isPrimitive(decl.init)) {
+      this.primitiveIdentifiers.add(decl.id.name);
+    }
     const exp = isExport ? "export " : "";
     const keyword = decl.isMut ? "let" : "const";
     const typeAnn = decl.typeAnnotation ? `: ${this.emitTypeNode(decl.typeAnnotation)}` : "";
@@ -516,10 +549,22 @@ export class Emitter {
         return `(${left} && ${right})`;
       case "or":
         return `(${left} || ${right})`;
-      case "==":
+      case "===":
         return `(${left} === ${right})`;
-      case "!=":
+      case "!==":
         return `(${left} !== ${right})`;
+      case "==":
+        if (this.isPrimitive(expr.left) || this.isPrimitive(expr.right)) {
+          return `(${left} === ${right})`;
+        }
+        this.effectImports.add("Equal");
+        return `Equal.equals(${left}, ${right})`;
+      case "!=":
+        if (this.isPrimitive(expr.left) || this.isPrimitive(expr.right)) {
+          return `(${left} !== ${right})`;
+        }
+        this.effectImports.add("Equal");
+        return `(!Equal.equals(${left}, ${right}))`;
       default:
         return `(${left} ${expr.operator} ${right})`;
     }
@@ -565,24 +610,33 @@ export class Emitter {
   }
 
   private emitFunctionExpression(expr: FunctionExpression): string {
+    for (const p of expr.params) {
+      if (this.isPrimitiveType(p.typeAnnotation)) {
+        this.primitiveIdentifiers.add(p.name.name);
+      }
+    }
     const params = expr.params
       .map((p) => {
         const typeAnn = p.typeAnnotation ? `: ${this.emitTypeNode(p.typeAnnotation)}` : "";
         return `${p.name.name}${typeAnn}`;
       })
       .join(", ");
+    const retType = expr.returnType ? `: ${this.emitTypeNode(expr.returnType)}` : "";
 
     if (expr.body.kind === "BlockStatement") {
-      return `(${params}) => {\n${this.emitFunctionBody(expr.body)}\n}`;
+      return `(${params})${retType} => {\n${this.emitFunctionBody(expr.body)}\n}`;
     }
-    return `(${params}) => ${this.emitExpression(expr.body)}`;
+    return `(${params})${retType} => ${this.emitExpression(expr.body)}`;
   }
 
   private emitFunctionBody(body: FunctionBody): string {
     if (body.kind === "BlockStatement") {
       const stmts = body.statements.map((s) => "  " + this.emitStatement(s)).join("\n");
-      const ret = `  return ${this.emitExpression(body.finalExpression)};`;
-      return `${stmts}\n${ret}`;
+      const ret = body.finalExpression ? `  return ${this.emitExpression(body.finalExpression)};` : "";
+      if (stmts && ret) return `${stmts}\n${ret}`;
+      if (stmts) return stmts;
+      if (ret) return ret;
+      return "";
     }
     return `  return ${this.emitExpression(body)};`;
   }
@@ -595,7 +649,31 @@ export class Emitter {
       const target = stmt.target.kind === "Identifier" ? stmt.target.name : stmt.target.path.map((p) => p.name).join(".");
       return `${target} = ${this.emitExpression(stmt.value)};`;
     }
+    if (stmt.kind === "ReturnStatement") {
+      const arg = this.emitExpression(stmt.argument);
+      if (arg.startsWith("(") && arg.endsWith(")")) {
+        return `return ${arg};`;
+      }
+      return `return (${arg});`;
+    }
+    if (stmt.kind === "WhenStatement") {
+      return this.emitWhenStatement(stmt);
+    }
     return `${this.emitExpression(stmt.expression)};`;
+  }
+
+  private emitWhenStatement(stmt: WhenStatement): string {
+    const cond = this.emitExpression(stmt.condition);
+    if (stmt.isEarlyReturn) {
+      return `if (${cond}) return ${this.emitExpression(stmt.consequent as Expression)};`;
+    }
+    const body = stmt.consequent as BlockStatement;
+    const stmts = body.statements.map((s) => "  " + this.emitStatement(s)).join("\n");
+    const ret = body.finalExpression && (body.finalExpression.kind !== "Identifier" || (body.finalExpression as Identifier).name !== "_error")
+      ? `  ${this.emitExpression(body.finalExpression)};`
+      : "";
+    const allStmts = [stmts, ret].filter(Boolean).join("\n");
+    return `if (${cond}) {\n${allStmts}\n}`;
   }
 
   private emitMatchExpression(expr: MatchExpression): string {
@@ -725,6 +803,9 @@ export class Emitter {
         }
         if (s.kind === "BindingDeclaration") {
           return `    ${this.emitBindingDeclaration(s)}`;
+        }
+        if (s.kind === "WhenStatement") {
+          return `    ${this.emitWhenStatement(s)}`;
         }
         return "";
       })

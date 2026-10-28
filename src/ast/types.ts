@@ -29,7 +29,8 @@ export type TopLevelDeclaration =
   | ErrorDeclaration
   | ServiceDeclaration
   | BindingDeclaration
-  | TsEscapeDeclaration;
+  | TsEscapeDeclaration
+  | WhenStatement;
 
 export interface TsEscapeDeclaration extends NodeBase {
   kind: "TsEscapeDeclaration";
@@ -183,7 +184,7 @@ export interface PipelineExpression extends NodeBase {
 
 export interface BinaryExpression extends NodeBase {
   kind: "BinaryExpression";
-  operator: "or" | "and" | "??" | "==" | "!=" | "+" | "-" | "*" | "/" | "%" | "**";
+  operator: "or" | "and" | "??" | "==" | "!=" | "===" | "!==" | "+" | "-" | "*" | "/" | "%" | "**";
   left: Expression;
   right: Expression;
 }
@@ -265,13 +266,27 @@ export type FunctionBody =
 export interface BlockStatement extends NodeBase {
   kind: "BlockStatement";
   statements: Statement[];
-  finalExpression: Expression;
+  finalExpression?: Expression;
 }
 
 export type Statement =
   | BindingDeclaration
   | AssignmentStatement
-  | ExpressionStatement;
+  | ExpressionStatement
+  | ReturnStatement
+  | WhenStatement;
+
+export interface ReturnStatement extends NodeBase {
+  kind: "ReturnStatement";
+  argument: Expression;
+}
+
+export interface WhenStatement extends NodeBase {
+  kind: "WhenStatement";
+  condition: Expression;
+  consequent: Expression | BlockStatement;
+  isEarlyReturn: boolean;
+}
 
 export interface AssignmentStatement extends NodeBase {
   kind: "AssignmentStatement";
@@ -374,7 +389,8 @@ export type EffectStatement =
   | EffectDiscardStatement
   | BindingDeclaration
   | AssignmentStatement
-  | EffectControlFlowStatement;
+  | EffectControlFlowStatement
+  | WhenStatement;
 
 export interface EffectBindStatement extends NodeBase {
   kind: "EffectBindStatement";

@@ -268,9 +268,9 @@ export unfinished = () -> ??? "implement later"
     });
 
     it("fails with CompilerError diagnostic when encountering banned symbols", async () => {
-      const failure1 = await Effect.runPromise(Effect.flip(compileString(`res = a === b`)));
+      const failure1 = await Effect.runPromise(Effect.flip(compileString(`res = a && b`)));
       expect(failure1).toBeInstanceOf(CompilerError);
-      expect(failure1.message).toContain("FunScript strict equality is '=='");
+      expect(failure1.message).toContain("FunScript logical AND is 'and'");
 
       const failure2 = await Effect.runPromise(Effect.flip(compileString(`res = !a`)));
       expect(failure2).toBeInstanceOf(CompilerError);

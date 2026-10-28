@@ -688,6 +688,13 @@ export class DefinitionFinder {
             this.visitExpression(stmt.effect, effectScope);
           } else if (stmt.kind === "EffectControlFlowStatement") {
             this.visitExpression(stmt.statement, effectScope);
+          } else if (stmt.kind === "WhenStatement") {
+            this.visitExpression(stmt.condition, effectScope);
+            if (stmt.isEarlyReturn) {
+              this.visitExpression(stmt.consequent as Expression, effectScope);
+            } else {
+              this.visitBlock(stmt.consequent as BlockStatement, effectScope);
+            }
           }
           if (this.found) return;
         }
@@ -833,11 +840,22 @@ export class DefinitionFinder {
         this.visitExpression(stmt.value, blockScope);
       } else if (stmt.kind === "ExpressionStatement") {
         this.visitExpression(stmt.expression, blockScope);
+      } else if (stmt.kind === "ReturnStatement") {
+        this.visitExpression(stmt.argument, blockScope);
+      } else if (stmt.kind === "WhenStatement") {
+        this.visitExpression(stmt.condition, blockScope);
+        if (stmt.isEarlyReturn) {
+          this.visitExpression(stmt.consequent as Expression, blockScope);
+        } else {
+          this.visitBlock(stmt.consequent as BlockStatement, blockScope);
+        }
       }
       if (this.found) return;
     }
 
-    this.visitExpression(block.finalExpression, blockScope);
+    if (block.finalExpression) {
+      this.visitExpression(block.finalExpression, blockScope);
+    }
   }
 
   private collectAndVisitPattern(pattern: Pattern, scope: Scope): void {

@@ -91,23 +91,26 @@ export class Lexer {
       }
 
       // Banned multi-character operators check
-      if (this.matchAhead("===")) {
-        throw new LexerError(BANNED_SYMBOLS["==="], this.currentSpan(3));
-      }
-      if (this.matchAhead("!==")) {
-        throw new LexerError(BANNED_SYMBOLS["!=="], this.currentSpan(3));
-      }
       if (this.matchAhead("&&")) {
         throw new LexerError(BANNED_SYMBOLS["&&"], this.currentSpan(2));
       }
       if (this.matchAhead("||")) {
         throw new LexerError(BANNED_SYMBOLS["||"], this.currentSpan(2));
       }
-      if (this.matchAhead("=>")) {
-        throw new LexerError(BANNED_SYMBOLS["=>"], this.currentSpan(2));
-      }
 
       // Multi-character operators
+      if (this.matchAhead("===")) {
+        this.emitToken(TokenType.EQEQEQ, "===", 3);
+        continue;
+      }
+      if (this.matchAhead("!==")) {
+        this.emitToken(TokenType.NEQEQ, "!==", 3);
+        continue;
+      }
+      if (this.matchAhead("=>")) {
+        this.emitToken(TokenType.FAT_ARROW, "=>", 2);
+        continue;
+      }
       if (this.matchAhead("???")) {
         this.emitToken(TokenType.TYPED_HOLE, "???", 3);
         continue;
