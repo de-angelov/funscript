@@ -16,6 +16,7 @@ export interface CompileResult {
   typescript: string;
   targetExtension: string;
   map?: SourceMap;
+  sourcemap?: SourceMap;
 }
 
 export class CompilerError {
@@ -122,6 +123,7 @@ export const compileString = (
         typescript,
         targetExtension,
         map,
+        sourcemap: map,
       };
     },
     catch: (error: any) => new CompilerError(error.message, error),

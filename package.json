@@ -11,7 +11,8 @@
   "exports": {
     ".": "./dist/index.js",
     "./prettier": "./dist/formatter/prettier.js",
-    "./prettier-plugin-funscript": "./dist/formatter/prettier.js"
+    "./prettier-plugin-funscript": "./dist/formatter/prettier.js",
+    "./vite": "./dist/plugins/vite.js"
   },
   "scripts": {
     "build": "tsc && tsc -p editors/vscode",
