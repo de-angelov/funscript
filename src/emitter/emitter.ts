@@ -152,8 +152,19 @@ export class Emitter {
   private effectImports = new Set<string>();
   private needsTsPattern = false;
   private needsMutative = false;
+  private schemas = new Set<string>();
 
-  constructor(private program?: Program) {}
+  constructor(private program?: Program) {
+    if (this.program) {
+      for (const decl of this.program.body) {
+        if (decl.kind === "SchemaDeclaration") {
+          this.schemas.add(decl.id.name);
+        } else if (decl.kind === "ExportDeclaration" && decl.declaration.kind === "SchemaDeclaration") {
+          this.schemas.add(decl.declaration.id.name);
+        }
+      }
+    }
+  }
 
   public emit(): string {
     let bodyCode = "";
@@ -226,7 +237,7 @@ export class Emitter {
         const schemaFields = decl.body.fields
           .map((f) => `  ${f.name.name}: ${this.emitSchemaTypeField(f.typeAnnotation)}`)
           .join(",\n");
-        return `${exp}const ${name} = Schema.Struct({\n${schemaFields}\n});\n${exp}type ${name} = typeof ${name}.Type;`;
+        return `${exp}const ${name} = Object.assign(\n  Schema.Struct({\n${schemaFields}\n  }),\n  {\n    decode: (data: unknown) => Schema.decodeUnknown(${name})(data),\n    parse: (data: unknown) => Schema.decodeUnknownSync(${name})(data),\n  }\n);\n${exp}type ${name} = typeof ${name}.Type;`;
       }
       case "TaggedUnionSchema": {
         this.effectImports.add("Data");
@@ -742,12 +753,18 @@ export class Emitter {
     // Check if this is a direct service call: Service.method(args)
     if (effectExpr.kind === "CallExpression" && effectExpr.callee.kind === "MemberExpression") {
       const obj = effectExpr.callee.object;
+      const prop = effectExpr.callee.property.name;
       if (obj.kind === "UpperIdentifier") {
-        if (EFFECT_BUILTIN_MODULES.has(obj.name)) {
-          return `${obj.name}.${effectExpr.callee.property.name}(${effectExpr.args.map((a) => this.emitExpression(a)).join(", ")})`;
+        if (
+          EFFECT_BUILTIN_MODULES.has(obj.name) ||
+          prop === "decode" ||
+          prop === "parse" ||
+          this.schemas.has(obj.name)
+        ) {
+          return `${obj.name}.${prop}(${effectExpr.args.map((a) => this.emitExpression(a)).join(", ")})`;
         }
         // Direct Service Call: Service.method(...) -> (yield* Service).method(...)
-        return `(yield* ${obj.name}).${effectExpr.callee.property.name}(${effectExpr.args.map((a) => this.emitExpression(a)).join(", ")})`;
+        return `(yield* ${obj.name}).${prop}(${effectExpr.args.map((a) => this.emitExpression(a)).join(", ")})`;
       }
     }
     return this.emitExpression(effectExpr);

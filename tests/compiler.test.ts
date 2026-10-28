@@ -43,7 +43,8 @@ export schema Shape =
 
     const res = await Effect.runPromise(compileString(code));
     expect(res.typescript).toContain(`import { Data, Schema } from "effect";`);
-    expect(res.typescript).toContain(`export const User = Schema.Struct({`);
+    expect(res.typescript).toContain(`export const User = Object.assign(`);
+    expect(res.typescript).toContain(`Schema.Struct({`);
     expect(res.typescript).toContain(`id: Schema.String`);
     expect(res.typescript).toContain(`export type Shape = Data.TaggedEnum<{`);
     expect(res.typescript).toContain(`Circle: { readonly radius: number }`);
