@@ -53,6 +53,7 @@ import {
   EffectBindStatement,
   EffectDiscardStatement,
   EffectControlFlowStatement,
+  WhenStatement,
   TypeNode,
   TypeReferenceNode,
   TypeParameter,
@@ -400,12 +401,14 @@ export class Formatter {
         return this.formatServiceDeclaration(decl, 0);
       case "BindingDeclaration":
         return this.formatBindingDeclaration(decl, 0);
+      case "WhenStatement":
+        return this.formatStatement(decl, 0);
       case "TsEscapeDeclaration":
         return `ts "${decl.code}"`;
     }
   }
 
-  private formatDeclaration(decl: SchemaDeclaration | ErrorDeclaration | ServiceDeclaration | BindingDeclaration): string {
+  private formatDeclaration(decl: SchemaDeclaration | ErrorDeclaration | ServiceDeclaration | BindingDeclaration | WhenStatement): string {
     switch (decl.kind) {
       case "SchemaDeclaration":
         return this.formatSchemaDeclaration(decl, 0);
@@ -415,6 +418,8 @@ export class Formatter {
         return this.formatServiceDeclaration(decl, 0);
       case "BindingDeclaration":
         return this.formatBindingDeclaration(decl, 0);
+      case "WhenStatement":
+        return this.formatStatement(decl, 0);
     }
   }
 
@@ -707,6 +712,8 @@ export class Formatter {
         return `${this.formatTarget(stmt.target)} = ${this.formatExpression(stmt.value, indent)}`;
       case "EffectControlFlowStatement":
         return this.formatExpression(stmt.statement, indent);
+      case "WhenStatement":
+        return this.formatStatement(stmt, indent);
     }
   }
 

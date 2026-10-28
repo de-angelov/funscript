@@ -693,7 +693,7 @@ export class DefinitionFinder {
             if (stmt.isEarlyReturn) {
               this.visitExpression(stmt.consequent as Expression, effectScope);
             } else {
-              this.visitBlock(stmt.consequent as BlockStatement, effectScope);
+              this.visitBlockStatement(stmt.consequent as BlockStatement, effectScope);
             }
           }
           if (this.found) return;
@@ -847,7 +847,7 @@ export class DefinitionFinder {
         if (stmt.isEarlyReturn) {
           this.visitExpression(stmt.consequent as Expression, blockScope);
         } else {
-          this.visitBlock(stmt.consequent as BlockStatement, blockScope);
+          this.visitBlockStatement(stmt.consequent as BlockStatement, blockScope);
         }
       }
       if (this.found) return;

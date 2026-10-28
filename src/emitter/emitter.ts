@@ -358,11 +358,12 @@ export class Emitter {
           })
           .join(", ");
         if (fn.body.kind === "BlockStatement") {
+          const retExpr = fn.body.finalExpression ? this.emitExpression(fn.body.finalExpression) : "undefined";
           if (fn.body.statements.length === 0) {
-            return `${exp}${keyword} ${decl.id.name} = (${params}) => Effect.runPromise(${this.emitExpression(fn.body.finalExpression)});`;
+            return `${exp}${keyword} ${decl.id.name} = (${params}) => Effect.runPromise(${retExpr});`;
           }
           const stmts = fn.body.statements.map((s) => "    " + this.emitStatement(s)).join("\n");
-          return `${exp}${keyword} ${decl.id.name} = (${params}) => Effect.runPromise(Effect.gen(function* () {\n${stmts}\n    return ${this.emitExpression(fn.body.finalExpression)};\n  }));`;
+          return `${exp}${keyword} ${decl.id.name} = (${params}) => Effect.runPromise(Effect.gen(function* () {\n${stmts}\n    return ${retExpr};\n  }));`;
         }
         return `${exp}${keyword} ${decl.id.name} = (${params}) => Effect.runPromise(${this.emitExpression(fn.body)});`;
       }
