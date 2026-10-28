@@ -9,6 +9,7 @@ import { compileString, checkString } from "../compiler.js";
 import { typeCheckFiles } from "../compiler/check.js";
 import { startLspServer } from "../lsp/index.js";
 import { format } from "../formatter/index.js";
+import { startRepl } from "./repl.js";
 
 const readFile = (filePath: string) =>
   Effect.tryPromise({
@@ -311,6 +312,14 @@ const lspCommand = (args: string[]) =>
     });
   });
 
+const replCommand = (args: string[]) =>
+  Effect.async<void, Error>((resume) => {
+    const server = startRepl();
+    server.on("exit", () => {
+      resume(Effect.void);
+    });
+  });
+
 const helpCommand = Console.log(`
 FunScript 0.1.0 — A functional notation for TypeScript and Effect
 
@@ -319,11 +328,13 @@ Usage:
   funscript emit <file.fun|file.funx> [--out <file>] [--sourcemap]                       Compile to TypeScript / TSX
   funscript check <file.fun|file.funx...>                                                Static type-check via TypeScript API
   funscript run <file.fun|file.funx>                                                     Compile and run with Node
+  funscript repl                                                                         Start interactive REPL
   funscript lsp [--stdio]                                                                Start Language Server Protocol server
   funscript fmt <file.fun...> [--check]                                                  Format FunScript source code
   funscript version                                                                      Display version
 
 Examples:
+  funscript repl
   funscript build src/Button.funx --sourcemap
   funscript emit src/main.fun --out src/main.ts --sourcemap
   funscript check examples/shapes.fun
@@ -341,6 +352,8 @@ const program = Effect.gen(function* () {
       return yield* buildCommand(commandArgs);
     case "run":
       return yield* runCommand(commandArgs);
+    case "repl":
+      return yield* replCommand(commandArgs);
     case "emit":
       return yield* emitCommand(commandArgs);
     case "check":
