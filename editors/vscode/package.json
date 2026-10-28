@@ -1,0 +1,89 @@
+{
+  "name": "funscript-vscode",
+  "displayName": "FunScript",
+  "description": "FunScript language support with syntax highlighting and LSP integration",
+  "version": "0.1.0",
+  "publisher": "funscript",
+  "engines": {
+    "vscode": "^1.80.0"
+  },
+  "categories": [
+    "Programming Languages"
+  ],
+  "main": "./dist/extension.js",
+  "activationEvents": [
+    "onLanguage:funscript",
+    "onLanguage:funscriptx"
+  ],
+  "contributes": {
+    "languages": [
+      {
+        "id": "funscript",
+        "aliases": [
+          "FunScript",
+          "funscript"
+        ],
+        "extensions": [
+          ".fun"
+        ],
+        "configuration": "./language-configuration.json"
+      },
+      {
+        "id": "funscriptx",
+        "aliases": [
+          "FunScript JSX",
+          "funscriptx"
+        ],
+        "extensions": [
+          ".funx"
+        ],
+        "configuration": "./language-configuration.json"
+      }
+    ],
+    "grammars": [
+      {
+        "language": "funscript",
+        "scopeName": "source.fun",
+        "path": "./syntaxes/funscript.tmLanguage.json"
+      },
+      {
+        "language": "funscriptx",
+        "scopeName": "source.funx",
+        "path": "./syntaxes/funscript.tmLanguage.json"
+      }
+    ],
+    "configuration": {
+      "type": "object",
+      "title": "FunScript",
+      "properties": {
+        "funscript.serverPath": {
+          "type": "string",
+          "default": "funscript",
+          "description": "Path to the funscript executable for the LSP server"
+        },
+        "funscript.trace.server": {
+          "type": "string",
+          "enum": [
+            "off",
+            "messages",
+            "verbose"
+          ],
+          "default": "off",
+          "description": "Traces the communication between VS Code and the FunScript language server."
+        }
+      }
+    }
+  },
+  "scripts": {
+    "build": "tsc -p ./",
+    "watch": "tsc -watch -p ./"
+  },
+  "dependencies": {
+    "vscode-languageclient": "^11.0.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.17.0",
+    "@types/vscode": "^1.80.0",
+    "typescript": "^5.6.3"
+  }
+}

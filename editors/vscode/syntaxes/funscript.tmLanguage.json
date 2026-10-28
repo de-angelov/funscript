@@ -1,0 +1,355 @@
+{
+  "$schema": "https://raw.githubusercontent.com/martinring/tmlanguage/master/tmlanguage.json",
+  "name": "FunScript",
+  "scopeName": "source.fun",
+  "patterns": [
+    {
+      "include": "#comments"
+    },
+    {
+      "include": "#strings"
+    },
+    {
+      "include": "#ts-escape"
+    },
+    {
+      "include": "#jsx"
+    },
+    {
+      "include": "#keywords"
+    },
+    {
+      "include": "#booleans"
+    },
+    {
+      "include": "#types"
+    },
+    {
+      "include": "#pipeline"
+    },
+    {
+      "include": "#operators"
+    },
+    {
+      "include": "#numbers"
+    },
+    {
+      "include": "#identifiers"
+    }
+  ],
+  "repository": {
+    "comments": {
+      "patterns": [
+        {
+          "name": "comment.line.number-sign.funscript",
+          "match": "#.*$"
+        }
+      ]
+    },
+    "strings": {
+      "patterns": [
+        {
+          "name": "string.quoted.double.funscript",
+          "begin": "\"",
+          "end": "\"",
+          "beginCaptures": {
+            "0": {
+              "name": "punctuation.definition.string.begin.funscript"
+            }
+          },
+          "endCaptures": {
+            "0": {
+              "name": "punctuation.definition.string.end.funscript"
+            }
+          },
+          "patterns": [
+            {
+              "name": "constant.character.escape.funscript",
+              "match": "\\\\."
+            },
+            {
+              "name": "meta.interpolation.funscript",
+              "begin": "\\{",
+              "end": "\\}",
+              "beginCaptures": {
+                "0": {
+                  "name": "punctuation.section.embedded.begin.funscript"
+                }
+              },
+              "endCaptures": {
+                "0": {
+                  "name": "punctuation.section.embedded.end.funscript"
+                }
+              },
+              "patterns": [
+                {
+                  "include": "$self"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "name": "string.quoted.single.funscript",
+          "begin": "'",
+          "end": "'",
+          "beginCaptures": {
+            "0": {
+              "name": "punctuation.definition.string.begin.funscript"
+            }
+          },
+          "endCaptures": {
+            "0": {
+              "name": "punctuation.definition.string.end.funscript"
+            }
+          },
+          "patterns": [
+            {
+              "name": "constant.character.escape.funscript",
+              "match": "\\\\."
+            }
+          ]
+        }
+      ]
+    },
+    "ts-escape": {
+      "patterns": [
+        {
+          "name": "meta.ts-escape.funscript",
+          "match": "\\b(ts)\\s+(\"([^\"\\\\]|\\\\.)*\")",
+          "captures": {
+            "1": {
+              "name": "keyword.other.ts.funscript"
+            },
+            "2": {
+              "name": "string.quoted.ts.funscript"
+            }
+          }
+        }
+      ]
+    },
+    "keywords": {
+      "patterns": [
+        {
+          "name": "keyword.control.funscript",
+          "match": "\\b(effect|match|mut|schema|service|error|export|import|from|when)\\b"
+        },
+        {
+          "name": "keyword.other.funscript",
+          "match": "\\b(js|ts)\\b"
+        },
+        {
+          "name": "keyword.operator.logical.funscript",
+          "match": "\\b(and|or|not)\\b"
+        },
+        {
+          "name": "invalid.illegal.funscript",
+          "match": "\\b(let|var|const|function|class|return|throw|try|catch|finally|async|await|switch|case|break|continue|for|while|do|yield|void|typeof|instanceof|new|delete|debugger)\\b"
+        }
+      ]
+    },
+    "booleans": {
+      "patterns": [
+        {
+          "name": "constant.language.boolean.funscript",
+          "match": "\\b(true|false)\\b"
+        }
+      ]
+    },
+    "types": {
+      "patterns": [
+        {
+          "name": "support.type.primitive.funscript",
+          "match": "\\b(number|string|boolean|unknown|never|void|any|Record|Array|Effect|Option|Either)\\b"
+        },
+        {
+          "name": "entity.name.type.funscript",
+          "match": "\\b[A-Z][a-zA-Z0-9_]*\\b"
+        }
+      ]
+    },
+    "pipeline": {
+      "patterns": [
+        {
+          "name": "keyword.operator.pipeline.funscript",
+          "match": "\\|>"
+        },
+        {
+          "name": "keyword.operator.arrow.left.funscript",
+          "match": "<-"
+        },
+        {
+          "name": "keyword.operator.arrow.right.funscript",
+          "match": "->"
+        },
+        {
+          "name": "keyword.operator.typed-hole.funscript",
+          "match": "\\?\\?\\?"
+        }
+      ]
+    },
+    "operators": {
+      "patterns": [
+        {
+          "name": "keyword.operator.comparison.funscript",
+          "match": "(==|!=|<=|>=|<|>)"
+        },
+        {
+          "name": "keyword.operator.arithmetic.funscript",
+          "match": "(\\+|-|\\*\\*|\\*|/|%)"
+        },
+        {
+          "name": "keyword.operator.assignment.funscript",
+          "match": "="
+        },
+        {
+          "name": "keyword.operator.rest.funscript",
+          "match": "\\.\\.\\."
+        },
+        {
+          "name": "keyword.operator.nullish.funscript",
+          "match": "\\?\\?"
+        },
+        {
+          "name": "keyword.operator.type-union.funscript",
+          "match": "\\|"
+        },
+        {
+          "name": "punctuation.separator.funscript",
+          "match": "[:,.]"
+        }
+      ]
+    },
+    "numbers": {
+      "patterns": [
+        {
+          "name": "constant.numeric.hex.funscript",
+          "match": "\\b0[xX][0-9a-fA-F]+\\b"
+        },
+        {
+          "name": "constant.numeric.binary.funscript",
+          "match": "\\b0[bB][01]+\\b"
+        },
+        {
+          "name": "constant.numeric.octal.funscript",
+          "match": "\\b0[oO][0-7]+\\b"
+        },
+        {
+          "name": "constant.numeric.decimal.funscript",
+          "match": "\\b[0-9]+(\\.[0-9]+)?([eE][+-]?[0-9]+)?\\b"
+        }
+      ]
+    },
+    "jsx": {
+      "patterns": [
+        {
+          "name": "meta.jsx.tag.closing.funscript",
+          "begin": "(</)([a-zA-Z0-9_$.-]+)",
+          "end": ">",
+          "beginCaptures": {
+            "1": {
+              "name": "punctuation.definition.tag.begin.funscript"
+            },
+            "2": {
+              "name": "entity.name.tag.funscript"
+            }
+          },
+          "endCaptures": {
+            "0": {
+              "name": "punctuation.definition.tag.end.funscript"
+            }
+          }
+        },
+        {
+          "name": "meta.jsx.tag.funscript",
+          "begin": "(<)([A-Z][a-zA-Z0-9_$.-]*)",
+          "end": "(/?>)",
+          "beginCaptures": {
+            "1": {
+              "name": "punctuation.definition.tag.begin.funscript"
+            },
+            "2": {
+              "name": "support.class.component.funscript"
+            }
+          },
+          "endCaptures": {
+            "1": {
+              "name": "punctuation.definition.tag.end.funscript"
+            }
+          },
+          "patterns": [
+            {
+              "include": "#jsx-attributes"
+            }
+          ]
+        },
+        {
+          "name": "meta.jsx.tag.funscript",
+          "begin": "(<)([a-z][a-zA-Z0-9_$.-]*)",
+          "end": "(/?>)",
+          "beginCaptures": {
+            "1": {
+              "name": "punctuation.definition.tag.begin.funscript"
+            },
+            "2": {
+              "name": "entity.name.tag.funscript"
+            }
+          },
+          "endCaptures": {
+            "1": {
+              "name": "punctuation.definition.tag.end.funscript"
+            }
+          },
+          "patterns": [
+            {
+              "include": "#jsx-attributes"
+            }
+          ]
+        }
+      ]
+    },
+    "jsx-attributes": {
+      "patterns": [
+        {
+          "name": "entity.other.attribute-name.funscript",
+          "match": "\\b([a-zA-Z0-9_-]+)(?=\\s*=)"
+        },
+        {
+          "name": "keyword.operator.assignment.jsx.funscript",
+          "match": "="
+        },
+        {
+          "include": "#strings"
+        },
+        {
+          "name": "meta.jsx.expression.funscript",
+          "begin": "\\{",
+          "end": "\\}",
+          "beginCaptures": {
+            "0": {
+              "name": "punctuation.section.embedded.begin.funscript"
+            }
+          },
+          "endCaptures": {
+            "0": {
+              "name": "punctuation.section.embedded.end.funscript"
+            }
+          },
+          "patterns": [
+            {
+              "include": "$self"
+            }
+          ]
+        }
+      ]
+    },
+    "identifiers": {
+      "patterns": [
+        {
+          "name": "variable.other.funscript",
+          "match": "\\b[a-z_][a-zA-Z0-9_]*\\b"
+        }
+      ]
+    }
+  }
+}
