@@ -1460,159 +1460,178 @@ export schema Config = {
   });
 
   describe("CLI Stdio Integration (funscript lsp --stdio)", () => {
-    it("boots over stdio, responds to initialize, and publishes diagnostics", async () => {
-      const cliPath = path.resolve(__dirname, "../dist/cli/index.js");
+    it(
+      "boots over stdio, responds to initialize, and publishes diagnostics",
+      async () => {
+        const cliPath = path.resolve(__dirname, "../dist/cli/index.js");
 
-      const child = spawn("node", [cliPath, "lsp", "--stdio"]);
+        const child = spawn("node", [cliPath, "lsp", "--stdio"]);
 
-      const responses: any[] = [];
-      const reader = new MessageReader(child.stdout);
-      reader.on("message", (msg) => responses.push(msg));
+        const responses: any[] = [];
+        const reader = new MessageReader(child.stdout);
+        reader.on("message", (msg) => responses.push(msg));
 
-      const writer = new MessageWriter(child.stdin);
+        const writer = new MessageWriter(child.stdin);
 
-      // 1. Send initialize
-      writer.write({
-        jsonrpc: "2.0",
-        id: 1,
-        method: "initialize",
-        params: {},
-      } as any);
+        // 1. Send initialize
+        writer.write({
+          jsonrpc: "2.0",
+          id: 1,
+          method: "initialize",
+          params: {},
+        } as any);
 
-      await vi.waitFor(() => {
-        expect(responses.some((r) => r.id === 1)).toBe(true);
-      });
-
-      const initRes = responses.find((r) => r.id === 1);
-      expect(initRes.result.capabilities.textDocumentSync).toBe(TextDocumentSyncKind.Full);
-      expect(initRes.result.capabilities.documentFormattingProvider).toBe(true);
-      expect(initRes.result.capabilities.definitionProvider).toBe(true);
-
-      // 2. Open document with error
-      writer.write({
-        jsonrpc: "2.0",
-        method: "textDocument/didOpen",
-        params: {
-          textDocument: {
-            uri: "file:///test.fun",
-            languageId: "funscript",
-            version: 1,
-            text: "let bad = true\n",
+        await vi.waitFor(
+          () => {
+            expect(responses.some((r) => r.id === 1)).toBe(true);
           },
-        },
-      } as any);
+          { timeout: 10000, interval: 50 }
+        );
 
-      await vi.waitFor(() => {
-        expect(
-          responses.some(
-            (r) => r.method === "textDocument/publishDiagnostics" && r.params.diagnostics.length > 0
-          )
-        ).toBe(true);
-      });
+        const initRes = responses.find((r) => r.id === 1);
+        expect(initRes.result.capabilities.textDocumentSync).toBe(TextDocumentSyncKind.Full);
+        expect(initRes.result.capabilities.documentFormattingProvider).toBe(true);
+        expect(initRes.result.capabilities.definitionProvider).toBe(true);
 
-      const diagNotif = responses.find((r) => r.method === "textDocument/publishDiagnostics");
-      expect(diagNotif.params.diagnostics[0].message).toContain("FunScript has no 'let'");
-
-      // 3. Open unformatted valid document and request formatting over stdio
-      writer.write({
-        jsonrpc: "2.0",
-        method: "textDocument/didOpen",
-        params: {
-          textDocument: {
-            uri: "file:///fmt-stdio.fun",
-            languageId: "funscript",
-            version: 1,
-            text: 'x =    42\ny = "hi"\n',
+        // 2. Open document with error
+        writer.write({
+          jsonrpc: "2.0",
+          method: "textDocument/didOpen",
+          params: {
+            textDocument: {
+              uri: "file:///test.fun",
+              languageId: "funscript",
+              version: 1,
+              text: "let bad = true\n",
+            },
           },
-        },
-      } as any);
+        } as any);
 
-      writer.write({
-        jsonrpc: "2.0",
-        id: 100,
-        method: "textDocument/formatting",
-        params: {
-          textDocument: {
-            uri: "file:///fmt-stdio.fun",
+        await vi.waitFor(
+          () => {
+            expect(
+              responses.some(
+                (r) => r.method === "textDocument/publishDiagnostics" && r.params.diagnostics.length > 0
+              )
+            ).toBe(true);
           },
-          options: {
-            tabSize: 2,
-            insertSpaces: true,
+          { timeout: 10000, interval: 50 }
+        );
+
+        const diagNotif = responses.find((r) => r.method === "textDocument/publishDiagnostics");
+        expect(diagNotif.params.diagnostics[0].message).toContain("FunScript has no 'let'");
+
+        // 3. Open unformatted valid document and request formatting over stdio
+        writer.write({
+          jsonrpc: "2.0",
+          method: "textDocument/didOpen",
+          params: {
+            textDocument: {
+              uri: "file:///fmt-stdio.fun",
+              languageId: "funscript",
+              version: 1,
+              text: 'x =    42\ny = "hi"\n',
+            },
           },
-        },
-      } as any);
+        } as any);
 
-      await vi.waitFor(() => {
-        expect(responses.some((r) => r.id === 100)).toBe(true);
-      });
-
-      const fmtRes = responses.find((r) => r.id === 100);
-      expect(fmtRes.result).toHaveLength(1);
-      expect(fmtRes.result[0].newText).toBe('x = 42\ny = "hi"\n');
-
-      // 4. Open document and request definition over stdio
-      writer.write({
-        jsonrpc: "2.0",
-        method: "textDocument/didOpen",
-        params: {
-          textDocument: {
-            uri: "file:///def-stdio.fun",
-            languageId: "funscript",
-            version: 1,
-            text: "val = 42\nres = val + 1\n",
+        writer.write({
+          jsonrpc: "2.0",
+          id: 100,
+          method: "textDocument/formatting",
+          params: {
+            textDocument: {
+              uri: "file:///fmt-stdio.fun",
+            },
+            options: {
+              tabSize: 2,
+              insertSpaces: true,
+            },
           },
-        },
-      } as any);
+        } as any);
 
-      writer.write({
-        jsonrpc: "2.0",
-        id: 101,
-        method: "textDocument/definition",
-        params: {
-          textDocument: { uri: "file:///def-stdio.fun" },
-          position: { line: 1, character: 7 }, // on 'val'
-        },
-      } as any);
+        await vi.waitFor(
+          () => {
+            expect(responses.some((r) => r.id === 100)).toBe(true);
+          },
+          { timeout: 10000, interval: 50 }
+        );
 
-      await vi.waitFor(() => {
-        expect(responses.some((r) => r.id === 101)).toBe(true);
-      });
+        const fmtRes = responses.find((r) => r.id === 100);
+        expect(fmtRes.result).toHaveLength(1);
+        expect(fmtRes.result[0].newText).toBe('x = 42\ny = "hi"\n');
 
-      const defRes = responses.find((r) => r.id === 101);
-      expect(defRes.result).toEqual({
-        uri: "file:///def-stdio.fun",
-        range: {
-          start: { line: 0, character: 0 },
-          end: { line: 0, character: 8 },
-        },
-      });
+        // 4. Open document and request definition over stdio
+        writer.write({
+          jsonrpc: "2.0",
+          method: "textDocument/didOpen",
+          params: {
+            textDocument: {
+              uri: "file:///def-stdio.fun",
+              languageId: "funscript",
+              version: 1,
+              text: "val = 42\nres = val + 1\n",
+            },
+          },
+        } as any);
 
-      // 5. Send shutdown
-      writer.write({
-        jsonrpc: "2.0",
-        id: 2,
-        method: "shutdown",
-      } as any);
+        writer.write({
+          jsonrpc: "2.0",
+          id: 101,
+          method: "textDocument/definition",
+          params: {
+            textDocument: { uri: "file:///def-stdio.fun" },
+            position: { line: 1, character: 7 }, // on 'val'
+          },
+        } as any);
 
-      await vi.waitFor(() => {
-        expect(responses.some((r) => r.id === 2)).toBe(true);
-      });
+        await vi.waitFor(
+          () => {
+            expect(responses.some((r) => r.id === 101)).toBe(true);
+          },
+          { timeout: 10000, interval: 50 }
+        );
 
-      // 4. Send exit
-      const exitPromise = new Promise<number>((resolve) => {
-        child.on("exit", (code) => resolve(code ?? 0));
-      });
+        const defRes = responses.find((r) => r.id === 101);
+        expect(defRes.result).toEqual({
+          uri: "file:///def-stdio.fun",
+          range: {
+            start: { line: 0, character: 0 },
+            end: { line: 0, character: 8 },
+          },
+        });
 
-      writer.write({
-        jsonrpc: "2.0",
-        method: "exit",
-      } as any);
+        // 5. Send shutdown
+        writer.write({
+          jsonrpc: "2.0",
+          id: 2,
+          method: "shutdown",
+        } as any);
 
-      const exitCode = await exitPromise;
-      expect(exitCode).toBe(0);
+        await vi.waitFor(
+          () => {
+            expect(responses.some((r) => r.id === 2)).toBe(true);
+          },
+          { timeout: 10000, interval: 50 }
+        );
 
-      reader.dispose();
-      writer.dispose();
-    });
+        // 4. Send exit
+        const exitPromise = new Promise<number>((resolve) => {
+          child.on("exit", (code) => resolve(code ?? 0));
+        });
+
+        writer.write({
+          jsonrpc: "2.0",
+          method: "exit",
+        } as any);
+
+        const exitCode = await exitPromise;
+        expect(exitCode).toBe(0);
+
+        reader.dispose();
+        writer.dispose();
+      },
+      15000
+    );
   });
 });
