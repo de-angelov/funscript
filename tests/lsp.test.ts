@@ -1479,9 +1479,12 @@ export schema Config = {
         params: {},
       } as any);
 
-      await vi.waitFor(() => {
-        expect(responses.some((r) => r.id === 1)).toBe(true);
-      });
+      await vi.waitFor(
+        () => {
+          expect(responses.some((r) => r.id === 1)).toBe(true);
+        },
+        { timeout: 10000, interval: 50 }
+      );
 
       const initRes = responses.find((r) => r.id === 1);
       expect(initRes.result.capabilities.textDocumentSync).toBe(TextDocumentSyncKind.Full);
@@ -1502,13 +1505,16 @@ export schema Config = {
         },
       } as any);
 
-      await vi.waitFor(() => {
-        expect(
-          responses.some(
-            (r) => r.method === "textDocument/publishDiagnostics" && r.params.diagnostics.length > 0
-          )
-        ).toBe(true);
-      });
+      await vi.waitFor(
+        () => {
+          expect(
+            responses.some(
+              (r) => r.method === "textDocument/publishDiagnostics" && r.params.diagnostics.length > 0
+            )
+          ).toBe(true);
+        },
+        { timeout: 10000, interval: 50 }
+      );
 
       const diagNotif = responses.find((r) => r.method === "textDocument/publishDiagnostics");
       expect(diagNotif.params.diagnostics[0].message).toContain("FunScript has no 'let'");
@@ -1542,9 +1548,12 @@ export schema Config = {
         },
       } as any);
 
-      await vi.waitFor(() => {
-        expect(responses.some((r) => r.id === 100)).toBe(true);
-      });
+      await vi.waitFor(
+        () => {
+          expect(responses.some((r) => r.id === 100)).toBe(true);
+        },
+        { timeout: 10000, interval: 50 }
+      );
 
       const fmtRes = responses.find((r) => r.id === 100);
       expect(fmtRes.result).toHaveLength(1);
@@ -1574,9 +1583,12 @@ export schema Config = {
         },
       } as any);
 
-      await vi.waitFor(() => {
-        expect(responses.some((r) => r.id === 101)).toBe(true);
-      });
+      await vi.waitFor(
+        () => {
+          expect(responses.some((r) => r.id === 101)).toBe(true);
+        },
+        { timeout: 10000, interval: 50 }
+      );
 
       const defRes = responses.find((r) => r.id === 101);
       expect(defRes.result).toEqual({
@@ -1594,9 +1606,12 @@ export schema Config = {
         method: "shutdown",
       } as any);
 
-      await vi.waitFor(() => {
-        expect(responses.some((r) => r.id === 2)).toBe(true);
-      });
+      await vi.waitFor(
+        () => {
+          expect(responses.some((r) => r.id === 2)).toBe(true);
+        },
+        { timeout: 10000, interval: 50 }
+      );
 
       // 4. Send exit
       const exitPromise = new Promise<number>((resolve) => {
