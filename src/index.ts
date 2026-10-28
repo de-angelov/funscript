@@ -4,6 +4,7 @@ export * from "./lexer/lexer.js";
 export * from "./parser/parser.js";
 export * from "./emitter/emitter.js";
 export * from "./compiler.js";
+export * from "./compiler/check.js";
 export * as lsp from "./lsp/index.js";
 export { FunScriptLspServer, startLspServer, validateFunScript } from "./lsp/index.js";
 export * from "./formatter/index.js";

@@ -34,21 +34,23 @@
   "author": "",
   "license": "MIT",
   "dependencies": {
+    "@babel/code-frame": "^7.29.7",
+    "@jridgewell/trace-mapping": "^0.3.31",
     "effect": "^3.10.16",
     "magic-string": "^1.4.5",
     "mutative": "^1.1.0",
     "ts-pattern": "^5.5.0",
+    "typescript": "^5.6.3",
     "vscode-languageclient": "^11.0.0",
     "vscode-languageserver": "^11.0.0",
     "vscode-languageserver-textdocument": "^1.0.16"
   },
   "devDependencies": {
-    "@jridgewell/trace-mapping": "^0.3.31",
+    "@types/babel__code-frame": "^7.27.0",
     "@types/node": "^20.17.0",
     "@types/vscode": "^1.140.0",
     "jest-mock-vscode": "^4.8.2",
     "prettier": "^3.9.10",
-    "typescript": "^5.6.3",
     "vitest": "^2.1.3"
   }
 }
