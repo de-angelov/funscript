@@ -3,7 +3,7 @@
 import { Effect, Console } from "effect"
 
 # 1. 'ts' escape hatch for raw TypeScript types
-ts `type Timestamp = number;`
+ts "type Timestamp = number;"
 
 export schema Settings = ts "Record<string, string>"
 

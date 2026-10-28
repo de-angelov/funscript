@@ -398,6 +398,8 @@ export class Formatter {
         return this.formatServiceDeclaration(decl, 0);
       case "BindingDeclaration":
         return this.formatBindingDeclaration(decl, 0);
+      case "TsEscapeDeclaration":
+        return `ts "${decl.code}"`;
     }
   }
 
@@ -937,6 +939,10 @@ export class Formatter {
       case "JSXElement":
       case "JSXSelfClosingElement":
         throw new Error(`JSX formatting not yet implemented: ${(expr as any).kind}`);
+      case "JsExpression":
+        return `js ${this.formatExpression(expr.expression, indent)}`;
+      case "TsEscapeExpression":
+        return `ts "${expr.code}"`;
     }
   }
 
@@ -1031,6 +1037,8 @@ export class Formatter {
         return `Array<${this.formatType(node.elementType, indent)}>`;
       case "UnionTypeNode":
         return node.types.map(t => this.formatType(t, indent)).join(" | ");
+      case "TsEscapeTypeNode":
+        return `ts "${node.code}"`;
     }
   }
 }

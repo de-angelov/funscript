@@ -71,7 +71,7 @@ export runPromiseTest = fetchUser("123") |> js
 
   it("compiles 'ts' keyword for TypeScript escape hatches", async () => {
     const code = `
-ts \`interface CustomBuffer { size: number }\`
+ts "interface CustomBuffer { size: number }"
 
 schema UserMap = ts "Record<string, unknown>"
 
@@ -82,6 +82,23 @@ export createBuffer = ts "Buffer.from('hello')"
     expect(res.typescript).toContain(`interface CustomBuffer { size: number }`);
     expect(res.typescript).toContain(`Record<string, unknown>`);
     expect(res.typescript).toContain(`export const createBuffer = Buffer.from('hello');`);
+  });
+
+  it("compiles indented 'ts' block escape hatch", async () => {
+    const code = `
+ts
+  interface MultiLineConfig {
+    readonly host: string;
+    readonly port: number;
+  }
+
+export host = "localhost"
+`.trim();
+
+    const res = await Effect.runPromise(compileString(code));
+    expect(res.typescript).toContain(`interface MultiLineConfig {`);
+    expect(res.typescript).toContain(`readonly host: string;`);
+    expect(res.typescript).toContain(`readonly port: number;`);
   });
 
   it("compiles effect blocks with direct service calls", async () => {

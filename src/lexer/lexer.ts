@@ -151,10 +151,12 @@ export class Lexer {
         continue;
       }
 
-      // Raw Backticks escape
+      // Backticks are not part of FunScript; 'ts' is the single escape hatch
       if (char === "`") {
-        this.readRawTick();
-        continue;
+        throw new LexerError(
+          "FunScript has no backtick escape; use ts \"...\" for inline TypeScript or an indented 'ts' block.",
+          this.currentSpan(1),
+        );
       }
 
       // Numbers
@@ -422,26 +424,78 @@ export class Lexer {
     });
   }
 
-  private readRawTick(): void {
+  /**
+   * Reads the verbatim TypeScript payload that follows the 'ts' keyword.
+   *
+   * Two forms are supported:
+   *   ts "Record<string, { a: number }>"      inline: raw string, no interpolation
+   *   ts                                      block: every following line indented
+   *     interface Foo { a: number }           deeper than the 'ts' line, dedented
+   */
+  private readTsCode(): void {
+    while (this.peek() === " ") this.advance();
     const startPos = this.currentPosition();
-    this.advance(); // consume opening '`'
-    let buffer = "";
-    while (!this.isAtEnd() && this.peek() !== "`") {
-      if (this.peek() === "\n") {
+
+    // Inline form: ts "..."
+    if (this.peek() === '"') {
+      this.advance(); // opening '"'
+      let buffer = "";
+      while (!this.isAtEnd() && this.peek() !== '"') {
+        const c = this.peek();
+        if (c === "\n" || c === "\r") {
+          throw new LexerError("Unterminated ts string; use an indented 'ts' block for multi-line TypeScript", {
+            start: startPos,
+            end: this.currentPosition(),
+          });
+        }
+        if (c === "\\" && (this.peekAhead(1) === '"' || this.peekAhead(1) === "\\")) {
+          this.advance();
+        }
+        buffer += this.advance();
+      }
+      if (this.isAtEnd()) {
+        throw new LexerError("Unterminated ts string", { start: startPos, end: this.currentPosition() });
+      }
+      this.advance(); // closing '"'
+      this.tokens.push({ type: TokenType.TS_CODE, value: buffer, span: { start: startPos, end: this.currentPosition() } });
+      return;
+    }
+
+    // Block form: 'ts' at end of line, followed by deeper-indented lines
+    if (this.peek() === "\n" || this.peek() === "\r" || this.peek() === "#") {
+      while (!this.isAtEnd() && this.peek() !== "\n") this.advance(); // skip rest of line / comment
+      const baseIndent = this.indentStack[this.indentStack.length - 1];
+      const lines: string[] = [];
+
+      while (!this.isAtEnd()) {
+        // Look at the next line without consuming it
+        let i = this.offset + 1; // skip '\n'
+        let spaces = 0;
+        while (this.source[i] === " ") { spaces++; i++; }
+        const lineEnd = this.source.indexOf("\n", i) === -1 ? this.source.length : this.source.indexOf("\n", i);
+        const content = this.source.slice(i, lineEnd).replace(/\r$/, "");
+        const blank = content.trim() === "";
+        if (!blank && spaces <= baseIndent) break;
+
+        // Consume the line
+        this.advance(); // '\n'
         this.line++;
         this.column = 1;
+        while (this.offset < lineEnd) this.advance();
+        lines.push(blank ? "" : " ".repeat(spaces) + content);
       }
-      buffer += this.advance();
+
+      while (lines.length > 0 && lines[lines.length - 1] === "") lines.pop();
+      if (lines.length === 0) {
+        throw new LexerError("Empty 'ts' block; indent the TypeScript code under 'ts'", { start: startPos, end: this.currentPosition() });
+      }
+      const minIndent = Math.min(...lines.filter((l) => l !== "").map((l) => l.length - l.trimStart().length));
+      const code = lines.map((l) => l.slice(minIndent)).join("\n");
+      this.tokens.push({ type: TokenType.TS_CODE, value: code, span: { start: startPos, end: this.currentPosition() } });
+      return;
     }
-    if (this.isAtEnd()) {
-      throw new LexerError("Unterminated raw escape block", { start: startPos, end: this.currentPosition() });
-    }
-    this.advance(); // consume closing '`'
-    this.tokens.push({
-      type: TokenType.RAW_TICK,
-      value: buffer,
-      span: { start: startPos, end: this.currentPosition() },
-    });
+
+    throw new LexerError("Expected \"...\" or an indented block after 'ts'", this.currentSpan(1));
   }
 
   private continueStringAfterInterpolation(): void {
@@ -528,6 +582,9 @@ export class Lexer {
         value: raw,
         span,
       });
+      if (raw === "ts") {
+        this.readTsCode();
+      }
       return;
     }
 
