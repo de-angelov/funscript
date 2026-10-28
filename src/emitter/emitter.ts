@@ -51,6 +51,15 @@ import {
   TypeReferenceNode,
   FunctionTypeNode,
   EffectTypeNode,
+  JSXElement,
+  JSXSelfClosingElement,
+  JSXOpeningElement,
+  JSXClosingElement,
+  JSXAttribute,
+  JSXExpressionContainer,
+  JSXText,
+  JSXChild,
+  JSXTagName,
 } from "../ast/types.js";
 
 const ARRAY_COMPANION_METHODS = new Set([
@@ -140,13 +149,15 @@ export class Emitter {
   private needsTsPattern = false;
   private needsMutative = false;
 
-  constructor(private program: Program) {}
+  constructor(private program?: Program) {}
 
   public emit(): string {
     let bodyCode = "";
 
-    for (const decl of this.program.body) {
-      bodyCode += this.emitTopLevelDeclaration(decl) + "\n\n";
+    if (this.program) {
+      for (const decl of this.program.body) {
+        bodyCode += this.emitTopLevelDeclaration(decl) + "\n\n";
+      }
     }
 
     // Generate header imports
@@ -342,8 +353,9 @@ export class Emitter {
       case "EffectBlockExpression":
         return this.emitEffectBlockExpression(expr);
       case "JSXElement":
+        return this.emitJsxElement(expr);
       case "JSXSelfClosingElement":
-        throw new Error(`JSX emission not yet implemented: ${(expr as any).kind}`);
+        return this.emitJsxSelfClosingElement(expr);
     }
   }
 
@@ -410,6 +422,18 @@ export class Emitter {
             span: stage.callee.span,
           },
         };
+      }
+    }
+
+    // 1b. CallExpression with MemberExpression companion call: Array.map(f), Option.getOrElse(f), etc.
+    if (stage.kind === "CallExpression" && stage.callee.kind === "MemberExpression") {
+      const obj = stage.callee.object;
+      const prop = stage.callee.property;
+      if (obj.kind === "UpperIdentifier") {
+        const companion = this.getCompanionModule(prop.name);
+        if (companion === obj.name) {
+          this.effectImports.add(companion);
+        }
       }
     }
 
@@ -715,6 +739,80 @@ export class Emitter {
         return `ReadonlyArray<${this.emitTypeNode(node.elementType)}>`;
       case "UnionTypeNode":
         return node.types.map((t) => this.emitTypeNode(t)).join(" | ");
+    }
+  }
+
+  // --- JSX ---
+
+  public emitJsxElement(el: JSXElement): string {
+    const tagName = this.emitJsxTagName(el.openingElement.name);
+    const attrs = el.openingElement.attributes.map((a) => this.emitJsxAttribute(a)).join(" ");
+    const attrsStr = attrs.length > 0 ? ` ${attrs}` : "";
+    const openTag = tagName === "" ? "<>" : `<${tagName}${attrsStr}>`;
+    const closeTag = tagName === "" ? "</>" : `</${tagName}>`;
+    const childrenStr = el.children.map((c) => this.emitJsxChild(c)).join("");
+    return `${openTag}${childrenStr}${closeTag}`;
+  }
+
+  public emitJsxSelfClosingElement(el: JSXSelfClosingElement): string {
+    const tagName = this.emitJsxTagName(el.name);
+    const attrs = el.attributes.map((a) => this.emitJsxAttribute(a)).join(" ");
+    const attrsStr = attrs.length > 0 ? ` ${attrs}` : "";
+    if (tagName === "") {
+      return `<${attrsStr} />`;
+    }
+    return `<${tagName}${attrsStr} />`;
+  }
+
+  public emitJsxTagName(name: JSXTagName): string {
+    switch (name.kind) {
+      case "Identifier":
+      case "UpperIdentifier":
+        return name.name;
+      case "MemberExpression":
+        return `${this.emitJsxTagName(name.object as JSXTagName)}.${name.property.name}`;
+      default:
+        return "";
+    }
+  }
+
+  public emitJsxAttribute(attr: JSXAttribute): string {
+    const name = attr.name.name;
+    if (attr.value === undefined) {
+      return name;
+    }
+    if (attr.value.kind === "StringLiteral") {
+      const isSimple = attr.value.parts.every((p) => p.kind === "StringRawPart");
+      if (isSimple) {
+        const rawVal = attr.value.parts.map((p) => (p as any).value).join("");
+        return `${name}=${JSON.stringify(rawVal)}`;
+      }
+      return `${name}={${this.emitStringLiteral(attr.value)}}`;
+    }
+    if (attr.value.kind === "JSXExpressionContainer") {
+      return `${name}={${this.emitExpression(attr.value.expression)}}`;
+    }
+    return `${name}={${this.emitExpression(attr.value)}}`;
+  }
+
+  public emitJsxExpressionContainer(container: JSXExpressionContainer): string {
+    return `{${this.emitExpression(container.expression)}}`;
+  }
+
+  public emitJsxText(text: JSXText): string {
+    return text.value;
+  }
+
+  public emitJsxChild(child: JSXChild): string {
+    switch (child.kind) {
+      case "JSXText":
+        return this.emitJsxText(child);
+      case "JSXExpressionContainer":
+        return this.emitJsxExpressionContainer(child);
+      case "JSXElement":
+        return this.emitJsxElement(child);
+      case "JSXSelfClosingElement":
+        return this.emitJsxSelfClosingElement(child);
     }
   }
 }

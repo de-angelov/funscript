@@ -56,7 +56,7 @@ export class Lexer {
 
       if (this.isAtEnd()) break;
 
-      if (this.isFunx && this.jsxStack.length > 0) {
+      if (this.isFunx && this.jsxStack.length > 0 && !this.braceStack.includes("interpolation")) {
         const top = this.jsxStack[this.jsxStack.length - 1];
         if (top.kind === "children") {
           this.readJsxChildren();
@@ -379,6 +379,10 @@ export class Lexer {
 
       if (c === "{") {
         // Start of interpolation
+        const inJsxTag = this.isFunx && this.jsxStack.length > 0 && this.jsxStack[this.jsxStack.length - 1].kind === "tag";
+        if (inJsxTag && buffer.endsWith("$")) {
+          buffer = buffer.slice(0, -1);
+        }
         if (buffer.length > 0) {
           this.tokens.push({
             type: TokenType.STRING_PART,
@@ -423,6 +427,10 @@ export class Lexer {
     while (!this.isAtEnd() && this.peek() !== '"') {
       const c = this.peek();
       if (c === "{" && this.peekPrev() !== "\\") {
+        const inJsxTag = this.isFunx && this.jsxStack.length > 0 && this.jsxStack[this.jsxStack.length - 1].kind === "tag";
+        if (inJsxTag && buffer.endsWith("$")) {
+          buffer = buffer.slice(0, -1);
+        }
         if (buffer.length > 0) {
           this.tokens.push({
             type: TokenType.STRING_PART,
