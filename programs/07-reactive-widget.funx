@@ -1,0 +1,152 @@
+# Program 07: Reactive UI Widget Component (.funx)
+# Demonstrates:
+# 1. Native JSX elements and TSX code generation
+# 2. Typed component props with Schema.Struct
+# 3. Pattern matching returning JSX branches (ts-pattern integration)
+# 4. JSX attribute string interpolation: className="btn-${variant}"
+# 5. Conditional JSX rendering and child expression containers
+# 6. Event callbacks and functional event handler bindings
+
+import { Console } from "effect"
+
+# --- TypeScript & JSX Environment Types ---
+
+ts
+  declare global {
+    namespace JSX {
+      interface IntrinsicElements {
+        [elem: string]: any;
+      }
+    }
+  }
+
+  // Lightweight standalone JSX element factory for Node execution
+  export const React = {
+    createElement: (tag: any, props: any, ...children: any[]) => ({
+      tag,
+      props: props || {},
+      children: children.flat().filter((c) => c !== null && c !== undefined && c !== false)
+    })
+  };
+
+# --- Component Schemas & Tagged Unions ---
+
+export schema WidgetProps = {
+  title: string
+  initialCount: number
+  step: number
+  min: number
+  max: number
+  variant: string
+}
+
+export schema WidgetState =
+  | Idle
+  | Active(current: number)
+  | LimitReached(limit: number)
+
+# --- Pattern Matching View Helper ---
+
+export renderStatusBadge = (state: WidgetState) =>
+  match state
+    | Idle =>
+        <span className="badge badge-idle">Status: Idle</span>
+    | Active(current) =>
+        <span className="badge badge-active">Active: {current}</span>
+    | LimitReached(limit) =>
+        <span className="badge badge-limit">Warning: Max Limit {limit} Reached</span>
+
+# --- Reactive Widget Component ---
+
+export CounterWidget = (props: WidgetProps) =>
+  <div className="widget-card variant-${props.variant}">
+    <header className="widget-header">
+      <h3 className="widget-title">{props.title}</h3>
+      <span className="step-indicator">Step: {props.step}</span>
+    </header>
+
+    <div className="widget-body">
+      <div className="counter-display">
+        <span className="count-label">Current Value:</span>
+        <strong className="count-value">{props.initialCount}</strong>
+      </div>
+
+      <div className="badge-wrapper">
+        {renderStatusBadge(Active(props.initialCount))}
+      </div>
+
+      <div className="widget-controls">
+        <button
+          className="btn btn-decrement"
+          disabled={props.initialCount == props.min}
+          onClick={() => Console.log("Decrement clicked")}
+        >
+          - Decrement
+        </button>
+
+        <button
+          className="btn btn-increment"
+          disabled={props.initialCount == props.max}
+          onClick={() => Console.log("Increment clicked")}
+        >
+          + Increment
+        </button>
+
+        <button
+          className="btn btn-reset"
+          onClick={() => Console.log("Reset clicked")}
+        >
+          Reset
+        </button>
+      </div>
+
+      {props.initialCount == props.max and <p className="alert alert-warning">Maximum boundary reached!</p>}
+      {props.initialCount == props.min and <p className="alert alert-info">Minimum boundary reached.</p>}
+    </div>
+
+    <footer className="widget-footer">
+      <small>Range: [{props.min} .. {props.max}]</small>
+    </footer>
+  </div>
+
+# --- Main Demonstration Runner ---
+
+export main =
+  effect
+    _ <- Console.log("=== Reactive Widget (.funx) Starting ===")
+
+    # 1. Render Normal Counter Widget
+    p1: WidgetProps = {
+      title: "Task Queue Throughput",
+      initialCount: 5,
+      step: 1,
+      min: 0,
+      max: 10,
+      variant: "primary"
+    }
+    w1 = CounterWidget(p1)
+    _ <- Console.log("[Widget] Rendered root tag: <" + w1.tag + " className=\"" + w1.props.className + "\">")
+    _ <- Console.log("[Widget] Child elements: " + w1.children.length)
+
+    # 2. Render Widget at boundary
+    p2: WidgetProps = {
+      title: "CPU Utilization Alert",
+      initialCount: 100,
+      step: 5,
+      min: 0,
+      max: 100,
+      variant: "danger"
+    }
+    w2 = CounterWidget(p2)
+    _ <- Console.log("[Widget] Boundary root tag: <" + w2.tag + " className=\"" + w2.props.className + "\">")
+
+    # 3. Test Pattern Matching Badges
+    b1 = renderStatusBadge(Idle)
+    b2 = renderStatusBadge(Active(42))
+    b3 = renderStatusBadge(LimitReached(100))
+    _ <- Console.log("[Badge] Rendered Idle badge: <" + b1.tag + ">")
+    _ <- Console.log("[Badge] Rendered Active badge: <" + b2.tag + ">")
+    _ <- Console.log("[Badge] Rendered Limit badge: <" + b3.tag + ">")
+
+    _ <- Console.log("=== Reactive Widget (.funx) Completed Successfully ===")
+    0
