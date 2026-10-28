@@ -717,8 +717,17 @@ export class Formatter {
     }
   }
 
+  private getMatchArmArrow(arm: MatchArm): string {
+    if (this.source && arm.span && arm.body.span) {
+      const between = this.source.slice(arm.span.start.offset, arm.body.span.start.offset);
+      if (between.includes("=>")) return "=>";
+      if (between.includes("->")) return "->";
+    }
+    return "=>";
+  }
+
   private formatMatchExpression(expr: MatchExpression, indent = 0): string {
-    const isSubjectless = expr.scrutinee === undefined;
+    const isSubjectless = expr.scrutinee === undefined && !expr.isPipeline;
     const isSingleLine = expr.arms.length > 0 &&
       expr.arms[0].span.start.line === expr.span.start.line &&
       expr.arms.every(a => a.body.kind !== "BlockStatement");
@@ -740,24 +749,26 @@ export class Formatter {
     const trailing = this.getTrailingComment(arm.span.end.line);
     const pat = this.formatPattern(arm.pattern, isSubjectless);
     const guard = arm.guard ? ` when ${this.formatExpression(arm.guard, indent)}` : "";
+    const arrow = this.getMatchArmArrow(arm);
 
     if (arm.body.kind === "BlockStatement") {
       const bodyIndent = indent + this.indentSize * 2;
       const body = this.formatBlockStatement(arm.body, bodyIndent);
-      return `${leading}${armIndent}| ${pat}${guard} ->\n${body}${trailing}`;
+      return `${leading}${armIndent}| ${pat}${guard} ${arrow}\n${body}${trailing}`;
     } else {
       const body = this.formatExpression(arm.body, indent);
-      return `${leading}${armIndent}| ${pat}${guard} -> ${body}${trailing}`;
+      return `${leading}${armIndent}| ${pat}${guard} ${arrow} ${body}${trailing}`;
     }
   }
 
   private formatMatchArmInline(arm: MatchArm, isSubjectless: boolean): string {
     const pat = this.formatPattern(arm.pattern, isSubjectless);
     const guard = arm.guard ? ` when ${this.formatExpression(arm.guard, 0)}` : "";
+    const arrow = this.getMatchArmArrow(arm);
     const body = arm.body.kind === "BlockStatement"
       ? this.formatBlockStatement(arm.body, 0)
       : this.formatExpression(arm.body, 0);
-    return `| ${pat}${guard} -> ${body}`;
+    return `| ${pat}${guard} ${arrow} ${body}`;
   }
 
   private formatPattern(pat: Pattern, isSubjectless = false): string {

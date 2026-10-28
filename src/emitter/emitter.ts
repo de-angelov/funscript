@@ -351,6 +351,11 @@ export class Emitter {
       this.effectImports.add("Effect");
       if (decl.init.kind === "FunctionExpression") {
         const fn = decl.init;
+        for (const p of fn.params) {
+          if (this.isPrimitiveType(p.typeAnnotation)) {
+            this.primitiveIdentifiers.add(p.name.name);
+          }
+        }
         const params = fn.params
           .map((p) => {
             const t = p.typeAnnotation ? `: ${this.emitTypeNode(p.typeAnnotation)}` : "";
@@ -551,9 +556,13 @@ export class Emitter {
       case "or":
         return `(${left} || ${right})`;
       case "===":
-        return `(${left} === ${right})`;
       case "!==":
-        return `(${left} !== ${right})`;
+        if (this.isPrimitive(expr.left) || this.isPrimitive(expr.right)) {
+          throw new Error(
+            `Reference identity operator '${expr.operator}' cannot be used with primitive types; use '==' or '!=' for structural/value equality`
+          );
+        }
+        return `(${left} ${expr.operator} ${right})`;
       case "==":
         if (this.isPrimitive(expr.left) || this.isPrimitive(expr.right)) {
           return `(${left} === ${right})`;
@@ -678,7 +687,7 @@ export class Emitter {
   }
 
   private emitMatchExpression(expr: MatchExpression): string {
-    if (!expr.scrutinee) {
+    if (!expr.scrutinee && !expr.isPipeline) {
       // Subjectless boolean match -> ? : ternary or if / else
       let code = "";
       for (let i = 0; i < expr.arms.length; i++) {
@@ -697,9 +706,10 @@ export class Emitter {
       return `(${code})`;
     }
 
-    // Scrutinee match -> ts-pattern
+    // Scrutinee match or pipeline match -> ts-pattern
     this.needsTsPattern = true;
-    let code = `match(${this.emitExpression(expr.scrutinee)})`;
+    const isPipe = Boolean(expr.isPipeline);
+    let code = isPipe ? `(($v) => match($v)` : `match(${this.emitExpression(expr.scrutinee!)})`;
 
     for (const arm of expr.arms) {
       if (arm.pattern.kind === "WildcardPattern") {
@@ -725,6 +735,10 @@ export class Emitter {
 
     if (!expr.arms.some((a) => a.pattern.kind === "WildcardPattern")) {
       code += `\n  .exhaustive()`;
+    }
+
+    if (isPipe) {
+      code += `)`;
     }
 
     return code;
@@ -761,6 +775,20 @@ export class Emitter {
       // Tagged union positional pattern matches fields
       return `{ _tag: "${pat.constructorName.name}" }`;
     }
+    if (pat.kind === "OrPattern") {
+      const sub = pat.patterns.map((p) => this.emitPattern(p)).join(", ");
+      return `P.union(${sub})`;
+    }
+    if (pat.kind === "RecordPattern") {
+      const fields = pat.fields
+        .map((f) => (f.pattern ? `${f.key.name}: ${this.emitPattern(f.pattern)}` : `${f.key.name}: P._`))
+        .join(", ");
+      return `{ ${fields} }`;
+    }
+    if (pat.kind === "ArrayPattern") {
+      const elements = pat.elements.map((e) => this.emitPattern(e)).join(", ");
+      return `[${elements}]`;
+    }
     return "P._";
   }
 
@@ -786,6 +814,27 @@ export class Emitter {
       const vars: string[] = [];
       for (const a of pat.args) {
         vars.push(...this.collectPatternVariables(a));
+      }
+      return vars;
+    }
+    if (pat.kind === "OrPattern") {
+      return pat.patterns.length > 0 ? this.collectPatternVariables(pat.patterns[0]) : [];
+    }
+    if (pat.kind === "RecordPattern") {
+      const vars: string[] = [];
+      for (const f of pat.fields) {
+        if (!f.pattern) {
+          vars.push(f.key.name);
+        } else {
+          vars.push(...this.collectPatternVariables(f.pattern));
+        }
+      }
+      return vars;
+    }
+    if (pat.kind === "ArrayPattern") {
+      const vars: string[] = [];
+      for (const el of pat.elements) {
+        vars.push(...this.collectPatternVariables(el));
       }
       return vars;
     }

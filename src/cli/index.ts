@@ -6,6 +6,7 @@ import * as path from "node:path";
 import { fork } from "node:child_process";
 import { transformSync } from "esbuild";
 import { compileString, checkString } from "../compiler.js";
+import { typeCheckFiles } from "../compiler/check.js";
 import { startLspServer } from "../lsp/index.js";
 import { format } from "../formatter/index.js";
 import { startRepl } from "./repl.js";
@@ -171,14 +172,54 @@ const emitCommand = (args: string[]) =>
 
 const checkCommand = (args: string[]) =>
   Effect.gen(function* () {
-    const filePath = args[0];
-    if (!filePath) {
-      return yield* Console.error("Usage: funscript check <file.fun|file.funx>");
+    const rawFileArgs = args.filter((a) => !a.startsWith("--"));
+
+    let filesToCheck: string[] = [];
+    if (rawFileArgs.length === 0) {
+      const hasSrc = yield* Effect.tryPromise({
+        try: async () => {
+          const s = await fs.stat("src");
+          return s.isDirectory();
+        },
+        catch: () => false,
+      });
+      const searchDir = hasSrc ? "src" : ".";
+      filesToCheck = yield* Effect.tryPromise({
+        try: () => findFunFiles(searchDir),
+        catch: (error: any) => new Error(`Failed to scan files in '${searchDir}': ${error.message}`),
+      });
+      if (filesToCheck.length === 0) {
+        return yield* Console.error("Usage: funscript check <file.fun|file.funx...>");
+      }
+    } else {
+      for (const target of rawFileArgs) {
+        const stat = yield* Effect.tryPromise({
+          try: () => fs.stat(target),
+          catch: (error: any) => new Error(`File or directory '${target}' not found: ${error.message}`),
+        });
+        if (stat.isDirectory()) {
+          const nested = yield* Effect.tryPromise({
+            try: () => findFunFiles(target),
+            catch: (error: any) => new Error(`Failed to scan files in '${target}': ${error.message}`),
+          });
+          filesToCheck.push(...nested);
+        } else {
+          filesToCheck.push(target);
+        }
+      }
     }
 
-    const source = yield* readFile(filePath);
-    yield* checkString(source, filePath);
-    yield* Console.log(`✓ ${filePath} checked successfully (0 errors)`);
+    const result = yield* typeCheckFiles(filesToCheck);
+    if (!result.success) {
+      process.exitCode = 1;
+      yield* Console.error(result.formattedOutput);
+    } else {
+      if (filesToCheck.length === 1) {
+        yield* Console.log(`✓ ${filesToCheck[0]} checked successfully (0 errors)`);
+      } else {
+        yield* Console.log(`✓ Checked ${filesToCheck.length} files successfully (0 errors)`);
+      }
+    }
   });
 
 const fmtCommand = (args: string[]) =>
@@ -285,7 +326,7 @@ FunScript 0.1.0 — A functional notation for TypeScript and Effect
 Usage:
   funscript build <file.fun|file.funx...> [--out <file>] [--outDir <dir>] [--sourcemap]  Build to TypeScript / TSX
   funscript emit <file.fun|file.funx> [--out <file>] [--sourcemap]                       Compile to TypeScript / TSX
-  funscript check <file.fun|file.funx>                                                   Parse and check syntax
+  funscript check <file.fun|file.funx...>                                                Static type-check via TypeScript API
   funscript run <file.fun|file.funx>                                                     Compile and run with Node
   funscript repl                                                                         Start interactive REPL
   funscript lsp [--stdio]                                                                Start Language Server Protocol server
