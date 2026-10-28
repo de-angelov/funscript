@@ -229,8 +229,8 @@ export start = (port: number) -> port + 1
         "--sourcemap",
       ]);
 
-      expect(stdout).toContain(`✓ Emitted ${mapFile}`);
-      expect(stdout).toContain(`✓ Emitted ${tsFile}`);
+      expect(stdout).toContain(`✓ Built ${mapFile}`);
+      expect(stdout).toContain(`✓ Built ${tsFile}`);
 
       const tsContent = await fs.readFile(tsFile, "utf-8");
       const mapContent = await fs.readFile(mapFile, "utf-8");

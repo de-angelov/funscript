@@ -14,6 +14,7 @@ export interface CompileResult {
   source: string;
   ast: Program;
   typescript: string;
+  targetExtension: string;
   map?: SourceMap;
 }
 
@@ -43,6 +44,7 @@ export const compileString = (
       // 3. Emit TypeScript
       const emitter = new Emitter(ast);
       const typescript = emitter.emit();
+      const targetExtension = filename.endsWith(".funx") ? ".tsx" : ".ts";
 
       // 4. Source map generation using magic-string
       let map: SourceMap | undefined;
@@ -118,6 +120,7 @@ export const compileString = (
         source,
         ast,
         typescript,
+        targetExtension,
         map,
       };
     },
