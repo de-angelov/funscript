@@ -26,22 +26,94 @@ const writeFile = (filePath: string, content: string) =>
 
 const emitCommand = (args: string[]) =>
   Effect.gen(function* () {
-    const filePath = args[0];
-    if (!filePath) {
-      return yield* Console.error("Usage: funscript emit <file.fun> [--out <file.ts>]");
-    }
-
+    const isSourcemap = args.includes("--sourcemap");
     const outIndex = args.indexOf("--out");
     const outPath = outIndex !== -1 ? args[outIndex + 1] : undefined;
+    const fileArgs = args.filter((a, idx) => {
+      if (a === "--sourcemap") return false;
+      if (a === "--out" || (outIndex !== -1 && idx === outIndex + 1)) return false;
+      return true;
+    });
+
+    const filePath = fileArgs[0];
+    if (!filePath) {
+      return yield* Console.error("Usage: funscript emit <file.fun> [--out <file.ts>] [--sourcemap]");
+    }
 
     const source = yield* readFile(filePath);
-    const result = yield* compileString(source, filePath);
+    const result = yield* compileString(source, filePath, {
+      sourcemap: isSourcemap,
+      outputFile: outPath ? path.basename(outPath) : undefined,
+    });
 
+    let tsCode = result.typescript;
     if (outPath) {
-      yield* writeFile(outPath, result.typescript);
+      if (isSourcemap && result.map) {
+        const mapFileName = `${path.basename(outPath)}.map`;
+        const mapPath = `${outPath}.map`;
+        tsCode += `\n//# sourceMappingURL=${mapFileName}\n`;
+        yield* writeFile(mapPath, result.map.toString());
+        yield* Console.log(`✓ Emitted ${mapPath}`);
+      }
+      yield* writeFile(outPath, tsCode);
       yield* Console.log(`✓ Emitted ${outPath}`);
     } else {
-      yield* Console.log(result.typescript);
+      if (isSourcemap && result.map) {
+        yield* Console.log(result.map.toString());
+      } else {
+        yield* Console.log(tsCode);
+      }
+    }
+  });
+
+const buildCommand = (args: string[]) =>
+  Effect.gen(function* () {
+    const isSourcemap = args.includes("--sourcemap");
+    const outIndex = args.indexOf("--out");
+    const outPath = outIndex !== -1 ? args[outIndex + 1] : undefined;
+    const outDirIndex = args.indexOf("--outDir");
+    const outDir = outDirIndex !== -1 ? args[outDirIndex + 1] : undefined;
+
+    const fileArgs = args.filter((a, idx) => {
+      if (a === "--sourcemap") return false;
+      if (a === "--out" || (outIndex !== -1 && idx === outIndex + 1)) return false;
+      if (a === "--outDir" || (outDirIndex !== -1 && idx === outDirIndex + 1)) return false;
+      return true;
+    });
+
+    if (fileArgs.length === 0) {
+      return yield* Console.error("Usage: funscript build <file.fun...> [--out <file.ts>] [--outDir <dir>] [--sourcemap]");
+    }
+
+    for (const filePath of fileArgs) {
+      const source = yield* readFile(filePath);
+
+      let targetTsPath: string;
+      if (outPath && fileArgs.length === 1) {
+        targetTsPath = outPath;
+      } else if (outDir) {
+        const baseName = path.basename(filePath).replace(/\.funx?$/, (ext) => ext === ".funx" ? ".tsx" : ".ts");
+        targetTsPath = path.join(outDir, baseName);
+      } else {
+        targetTsPath = filePath.replace(/\.funx?$/, (ext) => ext === ".funx" ? ".tsx" : ".ts");
+      }
+
+      const result = yield* compileString(source, filePath, {
+        sourcemap: isSourcemap,
+        outputFile: path.basename(targetTsPath),
+      });
+
+      let tsCode = result.typescript;
+      if (isSourcemap && result.map) {
+        const mapFileName = `${path.basename(targetTsPath)}.map`;
+        const mapPath = `${targetTsPath}.map`;
+        tsCode += `\n//# sourceMappingURL=${mapFileName}\n`;
+        yield* writeFile(mapPath, result.map.toString());
+        yield* Console.log(`✓ Emitted ${mapPath}`);
+      }
+
+      yield* writeFile(targetTsPath, tsCode);
+      yield* Console.log(`✓ Emitted ${targetTsPath}`);
     }
   });
 
@@ -148,13 +220,15 @@ const helpCommand = Console.log(`
 FunScript 0.1.0 — A functional notation for TypeScript and Effect
 
 Usage:
-  funscript emit <file.fun> [--out <file.ts>]   Compile to TypeScript
+  funscript build <file.fun> [--out <file.ts>] [--sourcemap]   Build FunScript to TypeScript
+  funscript emit <file.fun> [--out <file.ts>] [--sourcemap]    Compile to TypeScript
   funscript check <file.fun>                   Parse and check syntax
   funscript lsp [--stdio]                      Start Language Server Protocol server
   funscript fmt <file.fun> [--check]           Format FunScript source code
   funscript version                            Display version
 
 Examples:
+  funscript build src/main.fun --out src/main.ts --sourcemap
   funscript emit src/main.fun --out src/main.ts
   funscript check examples/shapes.fun
   funscript lsp --stdio
@@ -169,6 +243,8 @@ const program = Effect.gen(function* () {
   switch (command) {
     case "run":
       return yield* runCommand(commandArgs);
+    case "build":
+      return yield* buildCommand(commandArgs);
     case "emit":
       return yield* emitCommand(commandArgs);
     case "check":
