@@ -513,9 +513,10 @@ export class Formatter {
   }
 
   private formatBindingDeclaration(decl: BindingDeclaration, indent = 0): string {
+    const js = decl.isJs ? "js " : "";
     const mut = decl.isMut ? "mut " : "";
     const typeAnn = decl.typeAnnotation ? `: ${this.formatType(decl.typeAnnotation)}` : "";
-    const prefix = `${mut}${decl.id.name}${typeAnn} =`;
+    const prefix = `${js}${mut}${decl.id.name}${typeAnn} =`;
     const init = this.formatBindingInit(decl, indent);
     return `${prefix}${init}`;
   }
