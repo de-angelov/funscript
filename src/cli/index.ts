@@ -41,12 +41,14 @@ const findFunFiles = async (dir: string): Promise<string[]> => {
 
 const buildCommand = (args: string[]) =>
   Effect.gen(function* () {
+    const isSourcemap = args.includes("--sourcemap");
     const outIndex = args.indexOf("--out");
     const outPath = outIndex !== -1 ? args[outIndex + 1] : undefined;
     const outDirIndex = args.indexOf("--outDir");
     const outDir = outDirIndex !== -1 ? args[outDirIndex + 1] : undefined;
 
     const rawFileArgs = args.filter((arg, i) => {
+      if (arg === "--sourcemap") return false;
       if (arg === "--out" || (outIndex !== -1 && i === outIndex + 1)) return false;
       if (arg === "--outDir" || (outDirIndex !== -1 && i === outDirIndex + 1)) return false;
       return true;
@@ -91,7 +93,6 @@ const buildCommand = (args: string[]) =>
 
     for (const filePath of filesToBuild) {
       const source = yield* readFile(filePath);
-      const result = yield* compileString(source, filePath);
 
       let targetOut: string;
       if (outPath && filesToBuild.length === 1) {
@@ -106,29 +107,64 @@ const buildCommand = (args: string[]) =>
         }
       }
 
-      yield* writeFile(targetOut, result.typescript);
+      const result = yield* compileString(source, filePath, {
+        sourcemap: isSourcemap,
+        outputFile: path.basename(targetOut),
+      });
+
+      let tsCode = result.typescript;
+      if (isSourcemap && result.map) {
+        const mapFileName = `${path.basename(targetOut)}.map`;
+        const mapPath = `${targetOut}.map`;
+        tsCode += `\n//# sourceMappingURL=${mapFileName}\n`;
+        yield* writeFile(mapPath, result.map.toString());
+        yield* Console.log(`✓ Built ${mapPath}`);
+      }
+
+      yield* writeFile(targetOut, tsCode);
       yield* Console.log(`✓ Built ${targetOut}`);
     }
   });
 
 const emitCommand = (args: string[]) =>
   Effect.gen(function* () {
-    const filePath = args[0];
-    if (!filePath) {
-      return yield* Console.error("Usage: funscript emit <file.fun|file.funx> [--out <file.ts|file.tsx>]");
-    }
-
+    const isSourcemap = args.includes("--sourcemap");
     const outIndex = args.indexOf("--out");
     const outPath = outIndex !== -1 ? args[outIndex + 1] : undefined;
+    const fileArgs = args.filter((a, idx) => {
+      if (a === "--sourcemap") return false;
+      if (a === "--out" || (outIndex !== -1 && idx === outIndex + 1)) return false;
+      return true;
+    });
+
+    const filePath = fileArgs[0];
+    if (!filePath) {
+      return yield* Console.error("Usage: funscript emit <file.fun|file.funx> [--out <file.ts|file.tsx>] [--sourcemap]");
+    }
 
     const source = yield* readFile(filePath);
-    const result = yield* compileString(source, filePath);
+    const result = yield* compileString(source, filePath, {
+      sourcemap: isSourcemap,
+      outputFile: outPath ? path.basename(outPath) : undefined,
+    });
 
+    let tsCode = result.typescript;
     if (outPath) {
-      yield* writeFile(outPath, result.typescript);
+      if (isSourcemap && result.map) {
+        const mapFileName = `${path.basename(outPath)}.map`;
+        const mapPath = `${outPath}.map`;
+        tsCode += `\n//# sourceMappingURL=${mapFileName}\n`;
+        yield* writeFile(mapPath, result.map.toString());
+        yield* Console.log(`✓ Emitted ${mapPath}`);
+      }
+      yield* writeFile(outPath, tsCode);
       yield* Console.log(`✓ Emitted ${outPath}`);
     } else {
-      yield* Console.log(result.typescript);
+      if (isSourcemap && result.map) {
+        yield* Console.log(result.map.toString());
+      } else {
+        yield* Console.log(tsCode);
+      }
     }
   });
 
@@ -200,7 +236,7 @@ const runCommand = (args: string[]) =>
     const result = yield* compileString(source, filePath);
 
     let tsCode = result.typescript;
-    tsCode += `\nimport * as __effect from "effect";\nif (typeof main !== "undefined") {\n  if (__effect.Effect.isEffect(main)) {\n    await __effect.Effect.runPromise(main);\n  } else if (typeof main === "function") {\n    const __res = await main();\n    if (__effect.Effect.isEffect(__res)) {\n      await __effect.Effect.runPromise(__res);\n    }\n  }\n}\n`;
+    tsCode += `\nimport * as __effect from "effect";\nif (typeof main !== "undefined") {\n  if (__effect.Effect.isEffect(main)) {\n    await __effect.Effect.runPromise(main);\n  } else if (typeof main === "function") {\n    await main();\n  }\n}\n`;
 
     const isFunx = filePath.endsWith(".funx");
     const loader = isFunx ? "tsx" : "ts";
@@ -238,17 +274,17 @@ const helpCommand = Console.log(`
 FunScript 0.1.0 — A functional notation for TypeScript and Effect
 
 Usage:
-  funscript build <file.fun|file.funx...> [--out <file>] [--outDir <dir>]  Build to TypeScript / TSX
-  funscript emit <file.fun|file.funx> [--out <file>]                       Compile to TypeScript / TSX
-  funscript check <file.fun|file.funx>                                     Parse and check syntax
-  funscript run <file.fun|file.funx>                                       Compile and run with Node
-  funscript lsp [--stdio]                                                  Start Language Server Protocol server
-  funscript fmt <file.fun...> [--check]                                    Format FunScript source code
-  funscript version                                                        Display version
+  funscript build <file.fun|file.funx...> [--out <file>] [--outDir <dir>] [--sourcemap]  Build to TypeScript / TSX
+  funscript emit <file.fun|file.funx> [--out <file>] [--sourcemap]                       Compile to TypeScript / TSX
+  funscript check <file.fun|file.funx>                                                   Parse and check syntax
+  funscript run <file.fun|file.funx>                                                     Compile and run with Node
+  funscript lsp [--stdio]                                                                Start Language Server Protocol server
+  funscript fmt <file.fun...> [--check]                                                  Format FunScript source code
+  funscript version                                                                      Display version
 
 Examples:
-  funscript build src/Button.funx
-  funscript emit src/main.fun --out src/main.ts
+  funscript build src/Button.funx --sourcemap
+  funscript emit src/main.fun --out src/main.ts --sourcemap
   funscript check examples/shapes.fun
   funscript lsp --stdio
   funscript fmt examples/hello.fun --check
