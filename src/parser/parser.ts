@@ -100,6 +100,7 @@ export class ParseError extends Error {
 
 export class Parser {
   private current = 0;
+  public diagnostics: ParseError[] = [];
 
   constructor(
     private tokens: Token[],
@@ -107,18 +108,56 @@ export class Parser {
     private source: string = "",
   ) {}
 
-  public parse(): Program {
+  public getDiagnostics(): ParseError[] {
+    return this.diagnostics;
+  }
+
+  private synchronize(): void {
+    while (!this.isAtEnd()) {
+      if (this.peek().type === TokenType.DEDENT) {
+        return;
+      }
+      if (this.advance().type === TokenType.NEWLINE) {
+        return;
+      }
+    }
+  }
+
+  public parse(optionsOrThrowOnError: boolean | { throwOnError?: boolean } = true): Program {
+    const throwOnError =
+      typeof optionsOrThrowOnError === "boolean"
+        ? optionsOrThrowOnError
+        : (optionsOrThrowOnError?.throwOnError ?? true);
+
     const start = this.peek().span.start;
     const body: TopLevelDeclaration[] = [];
 
     this.skipNewlines();
 
     while (!this.isAtEnd()) {
-      body.push(this.parseTopLevelDeclaration());
+      if (this.match(TokenType.DEDENT)) {
+        continue;
+      }
+      try {
+        body.push(this.parseTopLevelDeclaration());
+      } catch (err: any) {
+        if (err instanceof ParseError) {
+          this.diagnostics.push(err);
+          this.synchronize();
+        } else {
+          throw err;
+        }
+      }
       this.skipNewlines();
     }
 
     const end = this.previous().span.end;
+
+    if (throwOnError && this.diagnostics.length > 0) {
+      const err = this.diagnostics[0];
+      (err as any).diagnostics = this.diagnostics;
+      throw err;
+    }
 
     return {
       kind: "Program",
@@ -1271,57 +1310,71 @@ export class Parser {
         this.skipNewlines();
         if (this.check(TokenType.DEDENT)) break;
 
-        if (
-          this.check(TokenType.MUT) ||
-          (this.check(TokenType.IDENTIFIER) && (this.peekAhead(1).type === TokenType.EQ || this.peekAhead(1).type === TokenType.COLON)) ||
-          (this.check(TokenType.UNDERSCORE) && this.peekAhead(1).type === TokenType.EQ)
-        ) {
-          if (this.check(TokenType.UNDERSCORE)) {
-            this.advance(); // consume '_'
-            this.advance(); // consume '='
-            const discardExpr = this.parseExpression();
-            this.consumeNewlineOrEof("Expected newline");
-            statements.push({
-              kind: "BindingDeclaration",
-              isMut: false,
-              id: { kind: "Identifier", name: "_", span: discardExpr.span },
-              init: discardExpr,
-              span: discardExpr.span,
-            });
+        try {
+          if (
+            this.check(TokenType.MUT) ||
+            (this.check(TokenType.IDENTIFIER) && (this.peekAhead(1).type === TokenType.EQ || this.peekAhead(1).type === TokenType.COLON)) ||
+            (this.check(TokenType.UNDERSCORE) && this.peekAhead(1).type === TokenType.EQ)
+          ) {
+            if (this.check(TokenType.UNDERSCORE)) {
+              this.advance(); // consume '_'
+              this.advance(); // consume '='
+              const discardExpr = this.parseExpression();
+              this.consumeNewlineOrEof("Expected newline");
+              statements.push({
+                kind: "BindingDeclaration",
+                isMut: false,
+                id: { kind: "Identifier", name: "_", span: discardExpr.span },
+                init: discardExpr,
+                span: discardExpr.span,
+              });
+            } else {
+              const bind = this.parseBindingDeclaration();
+              this.skipNewlines();
+              if (this.check(TokenType.DEDENT)) {
+                statements.push(bind);
+                finalExpression = bind.id;
+                break;
+              } else {
+                statements.push(bind);
+              }
+            }
           } else {
-            const bind = this.parseBindingDeclaration();
+            const expr = this.parseExpression();
             this.skipNewlines();
+
             if (this.check(TokenType.DEDENT)) {
-              statements.push(bind);
-              finalExpression = bind.id;
+              finalExpression = expr;
               break;
             } else {
-              statements.push(bind);
+              statements.push({
+                kind: "ExpressionStatement",
+                expression: expr,
+                span: expr.span,
+              });
             }
           }
-        } else {
-          const expr = this.parseExpression();
-          this.skipNewlines();
-
-          if (this.check(TokenType.DEDENT)) {
-            finalExpression = expr;
-            break;
+        } catch (err: any) {
+          if (err instanceof ParseError) {
+            this.diagnostics.push(err);
+            this.synchronize();
           } else {
-            statements.push({
-              kind: "ExpressionStatement",
-              expression: expr,
-              span: expr.span,
-            });
+            throw err;
           }
         }
       }
 
       this.consume(TokenType.DEDENT, "Expected unindent after function body");
+      const fallbackExpr: Expression = {
+        kind: "Identifier",
+        name: "_error",
+        span: { start: this.previous().span.start, end: this.previous().span.end },
+      };
       return {
         kind: "BlockStatement",
         statements,
-        finalExpression: finalExpression!,
-        span: { start: statements[0]?.span.start || finalExpression!.span.start, end: finalExpression!.span.end },
+        finalExpression: finalExpression ?? fallbackExpr,
+        span: { start: statements[0]?.span.start || this.previous().span.start, end: (finalExpression ?? fallbackExpr).span.end },
       };
     }
 
