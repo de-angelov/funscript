@@ -189,7 +189,7 @@ const checkCommand = (args: string[]) =>
         catch: (error: any) => new Error(`Failed to scan files in '${searchDir}': ${error.message}`),
       });
       if (filesToCheck.length === 0) {
-        return yield* Console.error("Usage: funscript check <file.fun|file.funx...>");
+        return yield* Console.error("Usage: funscript check [file.fun|file.funx...]");
       }
     } else {
       for (const target of rawFileArgs) {
@@ -326,7 +326,7 @@ FunScript 0.1.0 — A functional notation for TypeScript and Effect
 Usage:
   funscript build <file.fun|file.funx...> [--out <file>] [--outDir <dir>] [--sourcemap]  Build to TypeScript / TSX
   funscript emit <file.fun|file.funx> [--out <file>] [--sourcemap]                       Compile to TypeScript / TSX
-  funscript check <file.fun|file.funx...>                                                Static type-check via TypeScript API
+  funscript check [file.fun|file.funx...]                                               Static type-check via TypeScript API (defaults to src/)
   funscript run <file.fun|file.funx>                                                     Compile and run with Node
   funscript repl                                                                         Start interactive REPL
   funscript lsp [--stdio]                                                                Start Language Server Protocol server
@@ -340,6 +340,9 @@ Examples:
   funscript check examples/shapes.fun
   funscript lsp --stdio
   funscript fmt examples/hello.fun --check
+
+Project scaffolding and dev/preview/test/add/doctor wrappers are not currently available.
+Use standard project tools such as Vite, Vitest, and npm/pnpm/Bun directly.
 `);
 
 const program = Effect.gen(function* () {

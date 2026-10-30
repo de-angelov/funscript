@@ -104,29 +104,26 @@ spelling stays in emitted output or `ts "..."` escapes. Functions use
 
 ## Toolchain
 
-The following is the tooling design; use the installed CLI help for available commands.
-
-Go-like batteries included, TypeScript ecosystem underneath. One command, one default per
-concern:
+The CLI currently supports `build`, `emit`, `check`, `run`, `fmt`, `repl`, `lsp`, and
+`version`. `funscript --help` shows the installed command syntax. Project scaffolding and
+`dev`, `preview`, `test`, `add`, and `doctor` wrappers are planned, not implemented.
+Use standard project files and ecosystem tools directly: Vite for web development/builds,
+Vitest for JavaScript/TypeScript tests, and npm, pnpm, or Bun for dependencies.
 
 ```text
-funscript new       scaffold a Vite + Vitest + TypeScript project
-funscript dev       Vite dev server + typecheck
-funscript build     check + Vite production build
-funscript preview   serve the production build
-funscript test      Vitest, discovers *.test.fun
-funscript check     parse + resolve + tsc + project checks
-funscript fmt       canonical formatter
-funscript run       compile and execute a script
-funscript add       delegate to npm/pnpm/bun
-funscript emit      emit readable TypeScript
-funscript lsp       language server
-funscript doctor    diagnose the toolchain
+funscript build <file.fun|file.funx...>
+funscript emit <file.fun|file.funx>
+funscript check [file.fun|file.funx...]
+funscript run <file.fun|file.funx>
+funscript fmt <file.fun...> [--check]
+funscript repl
+funscript lsp [--stdio]
+funscript version
 ```
 
-Vite is the default build/dev engine, Vitest the test runner, `tsc` the type checker, and
-`funscript fmt` the only formatter. There is no FunScript runtime and no separate FunScript
-stdlib; **Effect TS is the standard library**.
+See [docs/tooling.md](docs/tooling.md) for a minimal project workflow and supported
+alternatives. There is no FunScript runtime and no separate FunScript standard library;
+**Effect TS is the standard library**.
 
 ## Documents
 
@@ -136,8 +133,8 @@ stdlib; **Effect TS is the standard library**.
   grammar sketch, and syntax review decisions.
 - **[docs/pit-of-success.md](docs/pit-of-success.md)** — how the grammar and toolchain
   make the safe path the default, and where the guardrails stop.
-- **[docs/tooling.md](docs/tooling.md)** — the Go-like toolchain: Vite, Vitest, `tsc`,
-  formatter, LSP, scaffolding, and CI.
+- **[docs/tooling.md](docs/tooling.md)** — supported CLI commands and a minimal workflow
+  using standard project tools such as Vite and Vitest.
 - **[docs/rejected-syntax.md](docs/rejected-syntax.md)** — the one-way surface: what the
   parser rejects, why, and the Effect-first replacement.
 
@@ -155,7 +152,7 @@ packages/
   compiler/         # lexer, parser, AST, emitter; the source-to-source core
   vite-plugin/      # @funscript/vite, the default build/dev integration
   formatter/        # canonical formatter
-  cli/              # funscript new / dev / build / test / check / fmt / run / lsp
+  cli/              # funscript build / emit / check / fmt / run / repl / lsp
   language-server/  # LSP built on the TypeScript language service
   vscode/           # editor integration
 tests/
