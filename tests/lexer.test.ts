@@ -362,6 +362,34 @@ block
         TokenType.IDENTIFIER,
         TokenType.EOF,
       ]);
+
+      // < vs <= vs <-
+      const ltCode = `a < b <= c <- d`;
+      const ltTokens = new Lexer(ltCode).tokenize();
+      expect(ltTokens.map((t) => t.type)).toEqual([
+        TokenType.IDENTIFIER,
+        TokenType.LT,
+        TokenType.IDENTIFIER,
+        TokenType.LTE,
+        TokenType.IDENTIFIER,
+        TokenType.LARROW,
+        TokenType.IDENTIFIER,
+        TokenType.EOF,
+      ]);
+
+      // > vs >= vs =>
+      const gtCode = `a > b >= c => d`;
+      const gtTokens = new Lexer(gtCode).tokenize();
+      expect(gtTokens.map((t) => t.type)).toEqual([
+        TokenType.IDENTIFIER,
+        TokenType.GT,
+        TokenType.IDENTIFIER,
+        TokenType.GTE,
+        TokenType.IDENTIFIER,
+        TokenType.FAT_ARROW,
+        TokenType.IDENTIFIER,
+        TokenType.EOF,
+      ]);
     });
   });
 

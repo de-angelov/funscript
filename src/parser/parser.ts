@@ -797,11 +797,11 @@ export class Parser {
   }
 
   private parseEquality(): Expression {
-    let expr = this.parseAdditive();
+    let expr = this.parseRelational();
     while (this.match(TokenType.EQEQ, TokenType.NEQ, TokenType.EQEQEQ, TokenType.NEQEQ)) {
       const opTok = this.previous();
       const op = opTok.value as "==" | "!=" | "===" | "!==";
-      const right = this.parseAdditive();
+      const right = this.parseRelational();
       if (op === "===" || op === "!==") {
         if (this.isPrimitiveLiteral(expr) || this.isPrimitiveLiteral(right)) {
           throw new ParseError(
@@ -810,6 +810,23 @@ export class Parser {
           );
         }
       }
+      expr = {
+        kind: "BinaryExpression",
+        operator: op,
+        left: expr,
+        right,
+        span: { start: expr.span.start, end: right.span.end },
+      };
+    }
+    return expr;
+  }
+
+  private parseRelational(): Expression {
+    let expr = this.parseAdditive();
+    while (this.match(TokenType.LT, TokenType.GT, TokenType.LTE, TokenType.GTE)) {
+      const opTok = this.previous();
+      const op = opTok.value as "<" | ">" | "<=" | ">=";
+      const right = this.parseAdditive();
       expr = {
         kind: "BinaryExpression",
         operator: op,

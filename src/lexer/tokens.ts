@@ -70,6 +70,8 @@ export enum TokenType {
   RBRACKET = "]",
   LT = "<",
   GT = ">",
+  LTE = "<=",
+  GTE = ">=",
 
   // JSX Tokens
   JSX_TAG_OPEN = "JSX_TAG_OPEN",

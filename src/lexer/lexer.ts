@@ -137,6 +137,14 @@ export class Lexer {
         this.emitToken(TokenType.NEQ, "!=", 2);
         continue;
       }
+      if (this.matchAhead("<=")) {
+        this.emitToken(TokenType.LTE, "<=", 2);
+        continue;
+      }
+      if (this.matchAhead(">=")) {
+        this.emitToken(TokenType.GTE, ">=", 2);
+        continue;
+      }
       if (this.matchAhead("**")) {
         this.emitToken(TokenType.STARSTAR, "**", 2);
         continue;
@@ -728,6 +736,7 @@ export class Lexer {
       TokenType.TRUE,
       TokenType.FALSE,
       TokenType.UNDERSCORE,
+      TokenType.TYPED_HOLE,
     ]);
 
     if (exprEndingTokens.has(prevToken.type)) {

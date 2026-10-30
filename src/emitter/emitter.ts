@@ -613,6 +613,11 @@ export class Emitter {
         }
         this.effectImports.add("Equal");
         return `(!Equal.equals(${left}, ${right}))`;
+      case "<":
+      case ">":
+      case "<=":
+      case ">=":
+        return `(${left} ${expr.operator} ${right})`;
       default:
         return `(${left} ${expr.operator} ${right})`;
     }

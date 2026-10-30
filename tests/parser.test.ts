@@ -329,6 +329,40 @@ mut flag: boolean = true
       expect(binding.init.kind).toBe("BinaryExpression");
     });
 
+    it("parses relational operators with precedence between equality and additive", () => {
+      // a + b < c * d parses as (a + b) < (c * d)
+      const ast1 = parse(`res = a + b < c * d`);
+      const bin1 = (ast1.body[0] as BindingDeclaration).init as BinaryExpression;
+      expect(bin1.kind).toBe("BinaryExpression");
+      expect(bin1.operator).toBe("<");
+      expect((bin1.left as BinaryExpression).operator).toBe("+");
+      expect((bin1.right as BinaryExpression).operator).toBe("*");
+
+      // a < b == c > d parses as (a < b) == (c > d)
+      const ast2 = parse(`res = a < b == c > d`);
+      const bin2 = (ast2.body[0] as BindingDeclaration).init as BinaryExpression;
+      expect(bin2.kind).toBe("BinaryExpression");
+      expect(bin2.operator).toBe("==");
+      expect((bin2.left as BinaryExpression).operator).toBe("<");
+      expect((bin2.right as BinaryExpression).operator).toBe(">");
+
+      // <= and >=
+      const ast3 = parse(`res = x <= 10 and y >= 20`);
+      const bin3 = (ast3.body[0] as BindingDeclaration).init as BinaryExpression;
+      expect(bin3.kind).toBe("BinaryExpression");
+      expect(bin3.operator).toBe("and");
+      expect((bin3.left as BinaryExpression).operator).toBe("<=");
+      expect((bin3.right as BinaryExpression).operator).toBe(">=");
+
+      // left-associative: a < b < c parses as (a < b) < c
+      const ast4 = parse(`res = a < b < c`);
+      const bin4 = (ast4.body[0] as BindingDeclaration).init as BinaryExpression;
+      expect(bin4.kind).toBe("BinaryExpression");
+      expect(bin4.operator).toBe("<");
+      expect((bin4.left as BinaryExpression).operator).toBe("<");
+      expect(bin4.right.kind).toBe("Identifier");
+    });
+
     it("parses unary expressions (not, -)", () => {
       const ast = parse(`
 a = not active

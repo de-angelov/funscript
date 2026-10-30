@@ -361,4 +361,118 @@ export fn checkInRange(x) => {
       expect(checkInRange(50)).toBe(true);
     });
   });
+
+  describe("6. Relational Comparison Operators in Expressions and 'when' Conditions (TASK-035)", () => {
+    it("emits standard JS comparison expressions (left < right), (left > right), (left <= right), (left >= right)", async () => {
+      const code = `
+export checkLt = (x: number, max: number) => x < max
+export checkGt = (x: number, min: number) => x > min
+export checkLte = (x: number, max: number) => x <= max
+export checkGte = (x: number, min: number) => x >= min
+`.trim();
+
+      const res = await Effect.runPromise(compileString(code));
+      expect(res.typescript).toContain("(x < max)");
+      expect(res.typescript).toContain("(x > min)");
+      expect(res.typescript).toContain("(x <= max)");
+      expect(res.typescript).toContain("(x >= min)");
+    });
+
+    it("supports relational comparisons in 'when' early returns", async () => {
+      const code = `
+export fn clampPositive(x: number) => number {
+  when (x <= 0) => 0
+  => x
+}
+export fn checkMax(x: number, max: number) => number {
+  when (x > max) => max
+  => x
+}
+`.trim();
+
+      const res = await Effect.runPromise(compileString(code));
+      expect(res.typescript).toContain("if ((x <= 0)) return 0;");
+      expect(res.typescript).toContain("if ((x > max)) return max;");
+
+      const getFns = new Function(`${res.typescript.replace(/export /g, "")}; return { clampPositive, checkMax };`);
+      const { clampPositive, checkMax } = getFns();
+      expect(clampPositive(-5)).toBe(0);
+      expect(clampPositive(0)).toBe(0);
+      expect(clampPositive(10)).toBe(10);
+      expect(checkMax(25, 20)).toBe(20);
+      expect(checkMax(15, 20)).toBe(15);
+    });
+
+    it("supports relational comparisons in 'when' conditional execution blocks", async () => {
+      const code = `
+export fn scoreBonus(score: number) => number {
+  mut bonus = 0
+  when (score >= 100) {
+    bonus = 50
+  }
+  when (score < 50) {
+    bonus = -10
+  }
+  => score + bonus
+}
+`.trim();
+
+      const res = await Effect.runPromise(compileString(code));
+      expect(res.typescript).toContain("if ((score >= 100)) {");
+      expect(res.typescript).toContain("if ((score < 50)) {");
+
+      const fn = new Function(`${res.typescript.replace(/export /g, "")}; return scoreBonus;`)();
+      expect(fn(120)).toBe(170);
+      expect(fn(80)).toBe(80);
+      expect(fn(30)).toBe(20);
+    });
+
+    it("evaluates relational operators in subjectless matches and match guards", async () => {
+      const code = `
+export fn classify(x: number) => string {
+  => match
+    | x > 100 => "high"
+    | x >= 50 => "medium"
+    | x > 0 => "low"
+    | _ => "zero-or-negative"
+}
+`.trim();
+
+      const res = await Effect.runPromise(compileString(code));
+      const fn = new Function(`${res.typescript.replace(/export /g, "")}; return classify;`)();
+      expect(fn(150)).toBe("high");
+      expect(fn(50)).toBe("medium");
+      expect(fn(10)).toBe("low");
+      expect(fn(-5)).toBe("zero-or-negative");
+    });
+
+    it("evaluates combined arithmetic, relational and logical precedence", async () => {
+      const code = `
+export fn testPrecedence(a: number, b: number, c: number, d: number) => boolean {
+  # (a + 1 < b * 2) and (c >= d - 5)
+  => a + 1 < b * 2 and c >= d - 5
+}
+`.trim();
+
+      const res = await Effect.runPromise(compileString(code));
+      expect(res.typescript).toContain("(((a + 1) < (b * 2)) && (c >= (d - 5)))");
+
+      const fn = new Function(`${res.typescript.replace(/export /g, "")}; return testPrecedence;`)();
+      // a=1, b=3: a+1=2 < b*2=6 (true). c=10, d=12: c=10 >= d-5=7 (true) -> true
+      expect(fn(1, 3, 10, 12)).toBe(true);
+      // a=10, b=3: a+1=11 < b*2=6 (false) -> false
+      expect(fn(10, 3, 10, 12)).toBe(false);
+    });
+
+    it("works with pipeline placeholder expressions", async () => {
+      const code = `
+export fn filterPositive(list) => {
+  => list |> Array.filter((x) => x > 0)
+}
+`.trim();
+
+      const res = await Effect.runPromise(compileString(code));
+      expect(res.typescript).toContain("(x > 0)");
+    });
+  });
 });
