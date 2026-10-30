@@ -13,6 +13,14 @@ describe("FunScript Code Formatter", () => {
     expect(format(formatted)).toBe(formatted);
   });
 
+  it("formats .funx JSX punctuation with the source filename enabled", () => {
+    const source = `export Message = () => <p>Done!</p>`;
+    const formatted = format(source, { filename: "message.funx" });
+
+    expect(formatted).toBe(`export Message = () -> <p>Done!</p>\n`);
+    expect(checkFormat(formatted, { filename: "message.funx" }).isFormatted).toBe(true);
+  });
+
   it("normalizes indentation to 2 spaces", () => {
     const unformatted = `
 export greet = (name: String) ->
