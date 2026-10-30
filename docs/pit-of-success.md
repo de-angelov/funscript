@@ -18,32 +18,32 @@ easily supported way to write a program**.
 The language exposes one notation per job. The alternatives are rejected by the parser or
 flagged by `funscript check`, not left as style advice.
 
-| Job | The only FunScript way | Not supported |
-| --- | --- | --- |
-| Effects | `effect` + `<-` | `async`/`await`, Promise chains |
-| Errors | `error` + `Effect.catch*` | `throw`, `try`/`catch`, `finally` |
-| Dependencies | `service` + `Layer` | globals, singletons |
-| Configuration | `Config.*` / `Schema.Config` | `process.env`, `import.meta.env` |
-| Time & randomness | `Clock`, `DateTime`, `Random` | `Date.now()`, `new Date()`, `Math.random()`, `performance.now()` |
-| Running effects | `export main` in an entry module (`runMain`) | `Effect.runPromise` / `runSync` / `runFork` in library code |
-| Validated values | schema constructors `UUID("1")` / `Schema.decodeUnknown` | `x as T` casts |
-| Default data & bindings | immutable `=` and `readonly` fields | `let`, `var`, unannotated reassignment |
-| Copy-on-write & local `mut` | `{ ...x, a.b: 1 }` or explicit `mut` + `=` (Mutative) | implicit mutation, `:=`, `with`, `++`, `--`, top-level `mut` |
-| Shared/concurrent state | `Effect.Ref` / `SynchronizedRef` / `Queue` | closure-captured `mut`, module globals |
-| Concurrency | Effect fibers (`Effect.all`/`forEach` with `concurrency`, `forkScoped`, `Queue`, `Effect.race`) | `Promise`, `setTimeout`, detached fibers |
-| Pure iteration | Effect `Array`/`Record` pipelines | `for`, `while`, `forEach`, comprehensions |
-| Effectful iteration | `Effect.forEach` | `for await`, `Promise.all` |
-| Data schemas, tagged unions, & aliases | `schema` (`Schema`, `\| Variant(...)`, or TS `type`) | classes, `new`, `type`, `data`, `interface`, `enum` |
-| Typed errors | `error` | error classes written by hand |
-| Primitive numbers | `Int` / `Float` / `Decimal` / `BigInt` | loose `number` (rejects `NaN`, float drift) |
-| Nullable values | `Option` | `null`, `undefined`, `any` |
-| Equality & comparisons | `==` / `!=` (strict); comparisons are functions (`Number.greaterThan`) | coercing equality; `<`, `<=`, `>`, `>=` operators |
-| Booleans | `and` / `or` / `not` | `&&`, `||`, `!` |
-| Runtime reflection | `Schema.is(MyType)` / `match` | `typeof`, `instanceof`, `eval` |
-| Functions | `->` lambda (implicit final expression) | `function`, `return`, method shorthand |
-| Branching & conditionals | `match` (structural or subjectless boolean) | `if`, `then`, `else`, ternary, `switch` |
-| Modules | ESM named exports, `export` prefix, `export { ... } from` | CommonJS, default exports, local `export { ... }` |
-| Build / test | Vite / Vitest via `funscript` | a second bundler or test runner by default |
+| Job                                    | The only FunScript way                                                                          | Not supported                                                    |
+| -------------------------------------- | ----------------------------------------------------------------------------------------------- | ---------------------------------------------------------------- |
+| Effects                                | `effect` + `<-`                                                                                 | `async`/`await`, Promise chains                                  |
+| Errors                                 | `error` + `Effect.catch*`                                                                       | `throw`, `try`/`catch`, `finally`                                |
+| Dependencies                           | `service` + `Layer`                                                                             | globals, singletons                                              |
+| Configuration                          | `Config.*` / `Schema.Config`                                                                    | `process.env`, `import.meta.env`                                 |
+| Time & randomness                      | `Clock`, `DateTime`, `Random`                                                                   | `Date.now()`, `new Date()`, `Math.random()`, `performance.now()` |
+| Running effects                        | `export main` in an entry module (`runMain`)                                                    | `Effect.runPromise` / `runSync` / `runFork` in library code      |
+| Validated values                       | schema constructors `UUID("1")` / `Schema.decodeUnknown`                                        | `x as T` casts                                                   |
+| Default data & bindings                | immutable `=` and `readonly` fields                                                             | `let`, `var`, unannotated reassignment                           |
+| Copy-on-write & local `mut`            | `{ ...x, a.b: 1 }` or explicit `mut` + `=` (Mutative)                                           | implicit mutation, `:=`, `with`, `++`, `--`, top-level `mut`     |
+| Shared/concurrent state                | `Effect.Ref` / `SynchronizedRef` / `Queue`                                                      | closure-captured `mut`, module globals                           |
+| Concurrency                            | Effect fibers (`Effect.all`/`forEach` with `concurrency`, `forkScoped`, `Queue`, `Effect.race`) | `Promise`, `setTimeout`, detached fibers                         |
+| Pure iteration                         | Effect `Array`/`Record` pipelines                                                               | `for`, `while`, `forEach`, comprehensions                        |
+| Effectful iteration                    | `Effect.forEach`                                                                                | `for await`, `Promise.all`                                       |
+| Data schemas, tagged unions, & aliases | `schema` (`Schema`, `\| Variant(...)`, or TS `type`)                                            | classes, `new`, `type`, `data`, `interface`, `enum`              |
+| Typed errors                           | `error`                                                                                         | error classes written by hand                                    |
+| Primitive numbers                      | `Number`, refined with `Int` / `Float` / `Decimal` when needed                                  | unchecked external numeric input                                 |
+| Nullable values                        | `Option`                                                                                        | `null`, `undefined`, `any`                                       |
+| Equality & comparisons                 | value `==` / `!=`, reference `===` / `!==`; primitive comparisons or Effect companion functions | coercing equality                                                |
+| Booleans                               | `and` / `or` / `not`                                                                            | `&&`, `                                                          |     | `, `!` |
+| Runtime reflection                     | `Schema.is(MyType)` / `match`                                                                   | `typeof`, `instanceof`, `eval`                                   |
+| Functions                              | `=>` lambda (implicit final expression)                                                         | `function`, `return`, method shorthand                           |
+| Branching & conditionals               | `match` (structural or subjectless boolean), `when` for conditional execution and early returns | `if`, `then`, `else`, ternary, `switch`                          |
+| Modules                                | ESM named exports, `export` prefix, `export { ... } from`                                       | CommonJS, default exports, local `export { ... }`                |
+| Build / test                           | Vite / Vitest via `funscript`                                                                   | a second bundler or test runner by default                       |
 
 If a feature is not in the left column, it is not part of the supported programming model.
 Raw TypeScript (backticks) is the only escape, and it is visible in every code review. The
@@ -66,13 +66,13 @@ chain of `if`s. TypeScript may not notice; the bug ships.
 
 ```funscript
 export schema Shape =
-  | Circle(radius: number)
-  | Rect(width: number, height: number)
+  | Circle(radius: Number)
+  | Rect(width: Number, height: Number)
 
-export area = (shape: Shape) ->
+export area = (shape: Shape) =>
   match shape
-    | Circle(r) -> Math.PI * r * r
-    | Rect(w, h) -> w * h
+    | Circle(r) => Math.PI * r * r
+    | Rect(w, h) => w * h
 ```
 
 **The mechanism:** `match` without `_` compiles to ts-pattern's `.exhaustive()`. When a
@@ -84,7 +84,7 @@ back to the `match` expression.
 ```text
 main.fun:9:3  error  match is not exhaustive
   missing: Triangle
-  add a `| Triangle(...) -> ...` arm, or opt out with `| _ -> ...`
+  add a `| Triangle(...) => ...` arm, or opt out with `| _ => ...`
 ```
 
 **The escape hatch:** `_` is explicit. A wildcard arm is a deliberate statement that the
@@ -155,9 +155,9 @@ Tests become order-dependent, and production wiring is invisible.
 
 ```funscript
 export service UserRepo
-  find: (id: string) -> Effect<User, NotFound>
+  find: (id: String) => Effect<User, NotFound>
 
-export findUser = (id: string) ->
+export findUser = (id: String) =>
   effect
     user <- UserRepo.find(id)
     user
@@ -168,7 +168,7 @@ The requirement is in the type: `Effect<User, NotFound, UserRepo>`. Direct servi
 `UserRepo` tracked in the `R` channel without requiring an intermediate service binding. If you
 forget to provide `UserRepoLive`, the program does not typecheck.
 
-**The mechanism:** `service` lowers to `Context.Service`. The requirement stays in
+**The mechanism:** `service` lowers to `Context.Tag`. The requirement stays in
 Effect's `R` channel. Layers are values; there is no global registry to fall back on.
 
 **The feedback:**
@@ -193,13 +193,13 @@ see it in the signature, `catch` is easy to forget, and the error channel is a l
 **The FunScript path:**
 
 ```funscript
-export error NotFound(id: string)
+export error NotFound(id: String)
 
-export findUser = (id: string) ->
+export findUser = (id: String) =>
   effect
     user <- UserRepo.find(id)
     user
-  |> Effect.catchTag("NotFound", (e) -> Effect.succeed(anonymous(e.id)))
+  |> Effect.catchTag("NotFound", (e) => Effect.succeed(anonymous(e.id)))
 ```
 
 **The mechanism:** there is no `throw`, `try`, or `catch` syntax. Recoverable failures
@@ -235,32 +235,33 @@ mutable variable captured across a closure or fiber.
 
 ```funscript
 export schema Counter = {
-  id: string
+  id: String
   count: NonNegativeInt
 }
 
 older = { ...user, age: user.age + 1, address.city: "Paris" }
 
-bump = (c: Counter) ->
+bump = (c: Counter) =>
   mut draft = c
   draft.count = draft.count + 1
   draft
 
 effect
   shared <- Ref.make(0)
-  _ <- Ref.update(shared, (n) -> n + 1)
+  _ <- Ref.update(shared, (n) => n + 1)
   Ref.get(shared)
 ```
 
 **The mechanism:** FunScript is **immutable-first, explicit copy-on-write**:
+
 - Bindings (`x = 1`) are `const` and all records, arrays, and `type`/`error` values are
   deeply `readonly` at rest.
 - Concise deep record spreads (`{ ...user, address.city: "Paris" }`) and imperative `mut`
-  drafts (`mut draft = c` or `c |> mut (draft) -> ...`) compile to Mutative's
+  drafts (`mut draft = c` or `c |> mut (draft) => ...`) compile to Mutative's
   structural-sharing `create(...)` — producing a new immutable value without mutating the
   input reference.
 - Without `mut`, `=` is only for new declarations; reassigning with `=` is only permitted
-  on a `mut` binding (`mut x = 0`) or `|> mut (draft) ->` draft, and path updates on a
+  on a `mut` binding (`mut x = 0`) or `|> mut (draft) =>` draft, and path updates on a
   local `mut` binding lower to `create(...)`.
 - `mut` bindings are strictly local to a function or `effect` block: they are rejected at
   module top-level and cannot be mutated inside an escaping closure.
@@ -294,13 +295,13 @@ export schema User = {
   name: NonEmptyString |> Schema.trimmed
 }
 
-schema Lookup = (id: UUID) -> Effect<User, NotFound>
+schema Lookup = (id: UUID) => Effect<User, NotFound>
 
-export lookup: Lookup = (id) ->
+export lookup: Lookup = (id) =>
   effect
     repo <- UserRepo
     raw <- repo.findRaw(id)
-    raw |> Schema.decode(User)
+    raw |> Schema.decodeUnknown(User)
 ```
 
 **The mechanism:** declaring a data `schema` emits both `export const User = Schema.Struct(...)`
@@ -317,7 +318,7 @@ errors at runtime boundaries, mapped back to `.fun` spans. `strict` is the defau
 **The escape hatch:** raw TypeScript is explicit and greppable (`as T` casts are not in the
 surface; see §1.12). `any`
 from an npm package is still `any`; FunScript cannot fix a bad dependency, so decode it at the
-boundary with `raw |> Schema.decode(MyType)`.
+boundary with `raw |> Schema.decodeUnknown(MyType)`.
 
 **Enforced by:** `Schema` emitter + `tsc` + `funscript check`.
 
@@ -336,11 +337,14 @@ a supported exit.
 ```funscript
 names =
   users
-  |> Array.map((u) -> u.name)
+  |> Array.map((u) => u.name)
 ```
 
 ```ts
-const names = pipe(users, Array.map((u) => u.name));
+const names = pipe(
+  users,
+  Array.map((u) => u.name),
+);
 ```
 
 **The mechanism:** golden tests review emitted TypeScript. The compiler does not minify,
@@ -403,7 +407,7 @@ bugs cannot be replayed.
 ```funscript
 import { Clock, DateTime, Effect, Random } from "effect"
 
-export isExpired = (token: Token) ->
+export isExpired = (token: Token) =>
   effect
     now <- DateTime.now
     DateTime.greaterThan(now, token.expiresAt)
@@ -417,7 +421,7 @@ export rollDice =
 import { expect, it } from "@effect/vitest"
 import { Effect, TestClock } from "effect"
 
-it.effect("expires after one hour", ->
+it.effect("expires after one hour", () =>
   effect
     token <- issueToken(user)
     _ <- TestClock.adjust("61 minutes")
@@ -454,7 +458,7 @@ It looks harmless, but it escapes everything Effect gives you: the typed error b
 rejected `Promise` or a thrown exception, interruption stops propagating, the caller's
 layers and services are silently ignored, and `runSync` crashes on any async step.
 
-**The FunScript path:** library code only *describes* effects. Running happens once, at the
+**The FunScript path:** library code only _describes_ effects. Running happens once, at the
 edge, in an **entry module**:
 
 ```funscript
@@ -497,7 +501,7 @@ src/users.fun:18:5  error  `Effect.runPromise` outside an entry module
 
 ### 1.11 You cannot read configuration from globals
 
-**The failure:** `process.env.DATABASE_URL` is `string | undefined`, read at an arbitrary
+**The failure:** `process.env.DATABASE_URL` is `String | undefined`, read at an arbitrary
 moment, parsed by hand (`Number(process.env.PORT)` is `NaN` when it is missing), impossible
 to override in a test without mutating global state, and easy to log by accident.
 
@@ -506,7 +510,7 @@ to override in a test without mutating global state, and easy to log by accident
 ```funscript
 import { Config, Console, Effect, LogLevel, Schema } from "effect"
 
-export schema Port = Int |> Schema.between(1, 65535)
+export schema Port = Int | Schema.between(1, 65535)
 
 export AppConfig =
   Config.all({
@@ -569,7 +573,7 @@ export schema User = {
 ada = User({ id: UserId("0b9e…"), name: NonEmptyString("Ada"), age: 36 })
 
 # Untrusted values: decode, with a typed ParseError in the E channel.
-load = (raw: unknown) -> raw |> Schema.decode(User)
+load = (raw: Unknown) => raw |> Schema.decodeUnknown(User)
 ```
 
 **The mechanism:**
@@ -623,7 +627,7 @@ export pipeline =
     jobs <- Queue.bounded<Job>(100)
     _ <- Effect.forkScoped(producer(jobs))
     _ <- Effect.forkScoped(worker(jobs))
-    Effect.never
+    Effect.Never
   |> Effect.scoped
 ```
 
@@ -690,11 +694,12 @@ src/calc.fun:5:12  error  `<` is not a FunScript comparison operator
 
 ### 1.15 You cannot use fragile JavaScript primitives
 
-**The failure:** JavaScript's `number` allows `NaN`, `Infinity`, and precision loss; `Date`
+**The failure:** JavaScript's `Number` allows `NaN`, `Infinity`, and precision loss; `Date`
 is mutable and timezone-dependent; `Map`/`Set` compare by reference, not value equality.
 
 **The FunScript path:** Effect TS data types are the defaults:
-- `Int`, `Float` (`Finite`), `Decimal` (`BigDecimal`) replace `number`;
+
+- `Number` is the numeric primitive; `Int`, `Float` (`Finite`), and `Decimal` (`BigDecimal`) add domain constraints;
 - `DateTimeUtc` replaces `Date`;
 - `ReadonlyArray`, `HashMap`, `HashSet` replace mutable JS collections.
 
@@ -707,14 +712,14 @@ export schema Order = {
 }
 ```
 
-**The mechanism:** `funscript check` flags bare `number` and suggests `Int`, `Float`, or
-`Decimal`; `Date` is banned. All collections are immutable at rest.
+**The mechanism:** Use refined schemas at boundaries when `Number` alone is too
+permissive. Runtime decoding checks the refinement. Collections are immutable at rest.
 
 **The feedback:**
 
 ```text
-src/order.fun:3:11  warning  bare `number` allows NaN and precision loss
-  use `Int` for integers, `Float` for finite floats, or `Decimal` for exact math
+A domain schema can use Int for integers, Float for finite floats,
+or Decimal for exact math; invalid external input fails schema decoding.
 ```
 
 **Enforced by:** `funscript check` + Effect `Schema` scalar types.
@@ -723,32 +728,32 @@ src/order.fun:3:11  warning  bare `number` allows NaN and precision loss
 
 ## 2. Failure modes at a glance
 
-| Failure mode | Raw TypeScript + Effect | FunScript guardrail | Caught by |
-| --- | --- | --- | --- |
-| Missing union case | `switch`/`if` chain, no exhaustiveness | `match` without `_` is exhaustive | ts-pattern + `tsc` |
-| Effect created but not run | bare `Effect` expression | non-final bare expressions rejected; nested-return warning | parser + type pass |
-| Missing service | runtime “service not found” | requirement in `R` channel | `tsc` |
-| Thrown exception | invisible in signature | `error` declarations + `E` channel | parser + `tsc` |
-| Accidental mutation | `let`, `++`, mutable fields/arrays | immutable by default; `{ ...x, a.b: 1 }`, explicit local `mut`, or `Effect.Ref` | parser + resolver + `tsc` |
-| Type/validator drift | separate TS `type` and runtime schema | data & tagged-union `type` compile to both `Schema` and TS `type` | emitter + `tsc` |
-| Loose equality | coercing `==` | `==` emits `===` | emitter |
-| Null/`undefined`/`any` soup | `null`/`undefined` checks, `any` | `Option`; `unknown` + `Schema.decodeUnknown(MyType)` | parser + `tsc` |
-| Ad-hoc OOP | `class`, `new`, `this` | records, `type`, `service` | parser |
-| Promise concurrency | `async`/`await`, `Promise.all` | Effect fibers | parser |
-| Loop smorgasbord | `for`, `while`, `forEach`, comprehensions | `Array` pipelines or `Effect.forEach` | parser + check |
-| Multiple function forms | `function`, methods, class methods | `->` only | parser |
-| Old boolean/equality spelling | `===`, `&&`, `!` | `==`, `and`, `not` | parser |
-| Stringly-typed tags | `_tag: string` | tagged-union `type` constructors + exhaustive match | `type` generator + `tsc` |
-| Global singleton | module-level mutable state | `service` + layers | `tsc` |
-| Flaky time/random logic | `Date.now()`, `Math.random()` | `Clock` / `DateTime` / `Random` + `TestClock` | `funscript check` |
-| Effect run mid-program | `Effect.runPromise` in a helper | `run*` only in `entry` modules; `export main` + `runMain` | `funscript check` |
-| Missing/malformed config | `process.env.X` (`string \| undefined`) | `Config` + `Schema` + `Redacted` | `funscript check` + `ConfigError` |
-| Unvalidated brand/cast | `"1" as UUID`, `input as User` | schema constructors `UUID("1")` + `Schema.decodeUnknown` | parser + compile-time literal check |
-| Leaked goroutine / fire-and-forget | detached promises, goroutines without `ctx` | `Effect.forEach`/`all` with `concurrency`, `forkScoped`; `forkDetach` flagged | Effect supervision + `funscript check` |
-| Bad formatting | Prettier/ESLint/config drift | one canonical formatter | `funscript fmt --check` |
-| Vite/Vitest setup drift | per-project config | `funscript new` + `funscript dev/test/build` | CLI |
-| Unreadable generated code | macros/IR | readable TypeScript + `funscript emit` | golden tests |
-| Runtime lock-in | custom runtime | no runtime | design |
+| Failure mode                       | Raw TypeScript + Effect                     | FunScript guardrail                                                                    | Caught by                              |
+| ---------------------------------- | ------------------------------------------- | -------------------------------------------------------------------------------------- | -------------------------------------- |
+| Missing union case                 | `switch`/`if` chain, no exhaustiveness      | `match` without `_` is exhaustive                                                      | ts-pattern + `tsc`                     |
+| Effect created but not run         | bare `Effect` expression                    | non-final bare expressions rejected; nested-return warning                             | parser + type pass                     |
+| Missing service                    | runtime “service not found”                 | requirement in `R` channel                                                             | `tsc`                                  |
+| Thrown exception                   | invisible in signature                      | `error` declarations + `E` channel                                                     | parser + `tsc`                         |
+| Accidental mutation                | `let`, `++`, mutable fields/arrays          | immutable by default; `{ ...x, a.b: 1 }`, explicit local `mut`, or `Effect.Ref`        | parser + resolver + `tsc`              |
+| Type/validator drift               | separate TS `type` and runtime schema       | data & tagged-union `schema` compile to both `Schema` and TS `type`                    | emitter + `tsc`                        |
+| Loose equality                     | coercing `==`                               | value equality via `Equal.equals` for structures and strict JS equality for primitives | emitter                                |
+| Null/`undefined`/`any` soup        | `null`/`undefined` checks, `any`            | `Option`; `Unknown` + `Schema.decodeUnknown(MyType)`                                   | parser + `tsc`                         |
+| Ad-hoc OOP                         | `class`, `new`, `this`                      | records, `type`, `service`                                                             | parser                                 |
+| Promise concurrency                | `async`/`await`, `Promise.all`              | Effect fibers                                                                          | parser                                 |
+| Loop smorgasbord                   | `for`, `while`, `forEach`, comprehensions   | `Array` pipelines or `Effect.forEach`                                                  | parser + check                         |
+| Multiple function forms            | `function`, methods, class methods          | `=>` only                                                                              | parser                                 |
+| Boolean symbol spelling            | `&&`, `!`                                   | `and`, `not`                                                                           | parser                                 |
+| Stringly-typed tags                | `_tag: String`                              | tagged-union `schema` constructors + exhaustive match                                  | `type` generator + `tsc`               |
+| Global singleton                   | module-level mutable state                  | `service` + layers                                                                     | `tsc`                                  |
+| Flaky time/random logic            | `Date.now()`, `Math.random()`               | `Clock` / `DateTime` / `Random` + `TestClock`                                          | `funscript check`                      |
+| Effect run mid-program             | `Effect.runPromise` in a helper             | `run*` only in `entry` modules; `export main` + `runMain`                              | `funscript check`                      |
+| Missing/malformed config           | `process.env.X` (`String \| undefined`)     | `Config` + `Schema` + `Redacted`                                                       | `funscript check` + `ConfigError`      |
+| Unvalidated brand/cast             | `"1" as UUID`, `input as User`              | schema constructors `UUID("1")` + `Schema.decodeUnknown`                               | parser + compile-time literal check    |
+| Leaked goroutine / fire-and-forget | detached promises, goroutines without `ctx` | `Effect.forEach`/`all` with `concurrency`, `forkScoped`; `forkDetach` flagged          | Effect supervision + `funscript check` |
+| Bad formatting                     | Prettier/ESLint/config drift                | one canonical formatter                                                                | `funscript fmt --check`                |
+| Vite/Vitest setup drift            | per-project config                          | `funscript new` + `funscript dev/test/build`                                           | CLI                                    |
+| Unreadable generated code          | macros/IR                                   | readable TypeScript + `funscript emit`                                                 | golden tests                           |
+| Runtime lock-in                    | custom runtime                              | no runtime                                                                             | design                                 |
 
 ---
 
@@ -771,7 +776,7 @@ A language is not just its grammar. The toolchain decides what is easy.
      position;
    - duplicate `service` tags across the project;
    - `_tag` field collisions;
-   - constructor names that collide across tagged-union `type` and `error`;
+   - constructor names that collide across tagged-union `schema` and `error`;
    - variant names that collide with their union `type`;
    - nullary variant values called as functions, or `error` constructors used as bare values;
    - explicit `any` in FunScript-authored types, and `as` in all forms (`as const`, `as T`);
@@ -822,7 +827,7 @@ A test file looks like normal FunScript:
 import { expect, test } from "vitest"
 import { Circle, area } from "../src/shapes.fun"
 
-test("area of a circle", ->
+test("area of a circle", () =>
   expect(area(Circle(2))).toBeCloseTo(12.566)
 )
 ```
@@ -883,16 +888,16 @@ The editor should show the same errors as `funscript check`, not a parallel univ
 
 A pit of success is not a prison. These are the deliberate exits:
 
-| Exit | What it allows | How to audit |
-| --- | --- | --- |
-| `_` match arm | opt out of exhaustiveness | search for wildcard arms |
-| raw TypeScript (backticks) | anything TypeScript can do, including `new`, classes, `any`, `Promise` | search for backticks |
-| `entry` modules in `funscript.json` | `Effect.run*` / `ManagedRuntime` at a runtime boundary | review the `entry` list |
-| `Effect.die` | defects outside the typed error channel | search for `die` |
-| `Effect.tryPromise` | Promise interop at a boundary | search for `tryPromise` |
-| `vite.config.ts` | custom build behavior | normal code review |
-| `tsconfig.json` | custom typechecking | normal code review |
-| `--no-check` | skip the type gate in an emergency | CI should forbid it |
+| Exit                                | What it allows                                                         | How to audit             |
+| ----------------------------------- | ---------------------------------------------------------------------- | ------------------------ |
+| `_` match arm                       | opt out of exhaustiveness                                              | search for wildcard arms |
+| raw TypeScript (backticks)          | anything TypeScript can do, including `new`, classes, `any`, `Promise` | search for backticks     |
+| `entry` modules in `funscript.json` | `Effect.run*` / `ManagedRuntime` at a runtime boundary                 | review the `entry` list  |
+| `Effect.die`                        | defects outside the typed error channel                                | search for `die`         |
+| `Effect.tryPromise`                 | Promise interop at a boundary                                          | search for `tryPromise`  |
+| `vite.config.ts`                    | custom build behavior                                                  | normal code review       |
+| `tsconfig.json`                     | custom typechecking                                                    | normal code review       |
+| `--no-check`                        | skip the type gate in an emergency                                     | CI should forbid it      |
 
 The rule is not “never escape.” The rule is **escape visibly**. Every exit is syntax or
 config a reviewer can search for.
@@ -945,18 +950,18 @@ matter, so teams can spend their decisions on the problem.
 
 FunScript borrows that posture:
 
-| Go | FunScript |
-| --- | --- |
-| `gofmt` | `funscript fmt` |
-| `go build` | `funscript build` (Vite) |
-| `go test` | `funscript test` (Vitest) |
-| `go vet` | `funscript check` |
-| `go run` | `funscript run` |
+| Go                       | FunScript                               |
+| ------------------------ | --------------------------------------- |
+| `gofmt`                  | `funscript fmt`                         |
+| `go build`               | `funscript build` (Vite)                |
+| `go test`                | `funscript test` (Vitest)               |
+| `go vet`                 | `funscript check`                       |
+| `go run`                 | `funscript run`                         |
 | `go mod init` / `go get` | `funscript new` / `funscript add` (npm) |
-| `gopls` | `funscript lsp` |
-| one standard library | **Effect TS** |
-| one build tool | **Vite** |
-| one test runner | **Vitest** |
+| `gopls`                  | `funscript lsp`                         |
+| one standard library     | **Effect TS**                           |
+| one build tool           | **Vite**                                |
+| one test runner          | **Vitest**                              |
 
 The difference is the ecosystem. Go owns its runtime and standard library. FunScript owns
 neither. It owns the notation and the integrated developer experience, and delegates the

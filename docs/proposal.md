@@ -9,14 +9,32 @@
 **File extension:** `.fun`
 **CLI:** `funscript`
 **Target runtime:** Node.js 20+, Bun, Deno, browsers (where Effect runs)
-**Target libraries:** Effect 4.x, ts-pattern 5.x, Mutative 1.x
+**Target libraries:** Effect 3.x, ts-pattern 5.x, Mutative 1.x
 **Standard library:** Effect TS (there is no separate FunScript standard library)
-**Type checker:** TypeScript 7.x (5.9+ compatibility goal)
+**Type checker:** TypeScript 5.6+
 
 **Companion documents:** [syntax.md](syntax.md) · [pit-of-success.md](pit-of-success.md) ·
 [tooling.md](tooling.md) · [rejected-syntax.md](rejected-syntax.md)
 
 ---
+
+## Current strictness contract
+
+The implementation targets the Effect 3.x and TypeScript 5.6+ dependencies in
+`package.json`. Examples use PascalCase FunScript types and unified `=>` arrows;
+functions are immutable bindings (`name = (params) => ...`), with `() =>` for no
+arguments. `fn` and `function` are not function declaration forms.
+
+Static checking protects calls inside FunScript. `run` and `build` gate on that
+check and exit non-zero on errors; `--no-check` is an explicit prototyping escape.
+Foreign values still require runtime validation: `export js` validates annotated
+parameters, schema constructors validate their inputs, and HTTP/CLI/file/database
+adapters decode `Unknown` with `Schema.decodeUnknown`, `Schema.decodeUnknownEither`,
+or `Schema.decodeUnknownSync`. Static aliases and raw `ts` types do not create
+validators. See [syntax.md](syntax.md#123-static-guarantees-and-runtime-boundaries)
+and [tooling.md](tooling.md).
+
+The sections below also describe planned tooling and ecosystem integrations.
 
 ## 1. The itch
 
@@ -37,9 +55,12 @@ class NotFound extends Schema.TaggedError<NotFound>()("NotFound", {
   id: Schema.String,
 }) {}
 
-class UserRepo extends Context.Service<UserRepo, {
-  readonly find: (id: string) => Effect.Effect<User, NotFound>;
-}>()("UserRepo") {}
+class UserRepo extends Context.Tag("app/UserRepo")<
+  UserRepo,
+  {
+    readonly find: (id: string) => Effect.Effect<User, NotFound>;
+  }
+>() {}
 
 const UserRepoLive = Layer.succeed(UserRepo, {
   find: (id) =>
@@ -62,7 +83,7 @@ intent to ceremony is poor, and the ceremony repeats in every file:
 
 - `Effect.gen(function* () { ... yield* ... })` for every effectful sequence.
 - `match(value).with(...).with(...).exhaustive()` for every decision.
-- `Context.Service` plus a tag string plus a payload interface for every service.
+- `Context.Tag` plus a tag string plus a payload interface for every service.
 - `Schema.TaggedError` plus a payload schema plus `new` for every typed error.
 - `pipe(...)` or nested calls for every transformation chain.
 - Type annotations repeated in both the service declaration and its implementation.
@@ -72,18 +93,21 @@ FunScript removes the notation, not the semantics.
 ```funscript
 import { Effect, Layer } from "effect"
 
-schema User = { id: string, name: string }
+schema User = {
+  id: String
+  name: String
+}
 
-error NotFound(id: string)
+error NotFound(id: String)
 
 service UserRepo
-  find: (id: string) -> Effect<User, NotFound>
+  find: (id: String) => Effect<User, NotFound>
 
 UserRepoLive = Layer.succeed(UserRepo, {
-  find: (id) ->
+  find: (id) =>
     match
-      | id == "1" -> Effect.succeed({ id, name: "Ada" })
-      | _ -> Effect.fail(NotFound(id))
+      | id == "1" => Effect.succeed({ id, name: "Ada" })
+      | _ => Effect.fail(NotFound(id))
 })
 
 export main =
@@ -185,17 +209,17 @@ That constraint drives almost every decision in this document.
 - **No own runtime or VM.** No bytecode, no interpreter, no garbage collector.
 - **No OOP.** No classes, inheritance, `this`, `super`, prototypes, or `new` in the
   language. Data + functions + services cover the same ground. `interface`, `enum`,
-  `namespace`, and `data` are not FunScript declarations; use `type` and modules.
+  `namespace`, and `data` are not FunScript declarations; use `schema` and modules.
 - **No general JavaScript/TypeScript surface.** The compiler rejects `let`/`var`,
   unannotated reassignment, loops, `throw`/`try`/`catch`, `return`, `async`/`await`,
   `Promise` as a FunScript-authored effect type, `null`, `undefined`, explicit `any`, `switch`,
   ternary, `function`, runtime `typeof`/`instanceof`/`in`/`delete`/`eval`, semicolons, and
-  the symbol spellings `&&`/`||`/`!`/`===`/`!==`. Raw TypeScript is the only escape hatch.
-- **No JSX or UI framework.** FunScript is for programs, not components.
+  the symbol spellings `&&`/`||`/`!`. Raw TypeScript is the only escape hatch.
+- **Native JSX through `.funx`.** Components emit standard TSX for downstream frameworks.
 - **No macros or metaprogramming in V1.** Raw TypeScript is the escape hatch.
 - **No async/await syntax.** Effect is the concurrency model. Promise interop goes
   through `Effect.tryPromise` and friends.
-- **No separate standard library.** Effect TS *is* the standard library. FunScript adds no
+- **No separate standard library.** Effect TS _is_ the standard library. FunScript adds no
   runtime utilities, no collection types, no date library, and no HTTP layer of its own.
   Small helpers belong in user code or upstream in Effect.
 - **No null or undefined literals.** Use `Option` (`Option.none()`, `Option.fromNullable`,
@@ -304,15 +328,15 @@ The obvious way to write a program should be the safe way. In FunScript that mea
   synchronous mutation, and `Effect.Ref`/`Queue` for shared or concurrent state; there are
   no loops, pure iteration is Effect `Array`/`Record`, and effectful iteration is
   `Effect.forEach`;
-- data-shape and tagged-union `type` declarations compile directly to Effect `Schema`
+- data-shape and tagged-union `schema` declarations compile directly to Effect `Schema`
   values plus static TypeScript types, so static types and runtime validators never drift
   apart;
-- there is one function form (`->`), one type/schema/tagged-union form (`type`), one error
+- there is one function form (`=>`), one type/schema/tagged-union form (`schema`), one error
   form (`error`), one dependency form (`service` + `Layer`), and one concurrency model
   (Effect);
 - there are no classes, `new`, `interface`, `enum`, `namespace`, or `data`;
 - `null` and `undefined` are not expression literals; absence is `Option`;
-- explicit `any` is rejected; boundaries use `unknown` + `Schema.decodeUnknown(MyType)`;
+- explicit `any` is rejected; boundaries use `Unknown` + `Schema.decodeUnknown(MyType)`;
 - `as` is eliminated entirely; known values use validating schema constructors (`UUID("1")`, `Pair([1, "ok"])`);
 - time and randomness are services (`Clock`, `DateTime`, `Random`), not `Date.now()` /
   `Math.random()`, so tests control them;
@@ -336,9 +360,9 @@ That means:
 
 - **One loop story:** there are no loop statements or comprehensions. Pure iteration is
   an Effect `Array`/`Record`/`HashMap` pipeline; effectful iteration is `Effect.forEach`.
-- **One function form:** `->`. No `function`, `return`, method shorthand, class methods,
-  default parameters, rest parameters, `() ->`, or unparenthesized `x ->`.
-- **One object story per semantic job:** record literals and unified `type` declarations
+- **One function form:** `=>`. No `function`, `return`, method shorthand, class methods,
+  default parameters, rest parameters, or unparenthesized `x =>`.
+- **One object story per semantic job:** record literals and unified `schema` declarations
   for plain data schemas and tagged unions (`| Variant(...)`), `error` for typed errors,
   `service` + `Layer` for dependencies. No classes, `new`, `this`, prototypes,
   `interface`, `enum`, `namespace`, or separate `data` keyword.
@@ -348,7 +372,7 @@ That means:
   `Effect.Ref`.
 - **One effect model:** Effect. No authored `Promise`, `async`/`await`, `throw`/`try`, or
   ad-hoc state. Promise interop is explicit at a boundary.
-- **One safe absence story:** `Option`, not `null` or `undefined`; `unknown` + `Schema`,
+- **One safe absence story:** `Option`, not `null` or `undefined`; `Unknown` + `Schema`,
   not `any`.
 
 The rejection table is in [rejected-syntax.md](rejected-syntax.md). The compiler is the
@@ -370,7 +394,7 @@ opted into explicitly with `mut` and updated with `=`.
 name = "Ada"
 age = 36
 user = { name, age }
-count: number = 0
+count: Number = 0
 
 { name, age } = user
 [first, ...rest] = items
@@ -379,20 +403,20 @@ count: number = 0
 Functions use CoffeeScript's arrow and return their last expression.
 
 ```funscript
-add = (a: number, b: number) -> a + b
+add = (a: Number, b: Number) => a + b
 
-identity = <A>(value: A): A -> value
+identity = <A>(value: A) => A { => value }
 
-greet = (name: string) ->
-  trimmed = name.trim()
+greet = (name: String) =>
+  trimmed = name |> String.trim()
   "Hello, {trimmed}!"
 
-accumulate = (delta: number) ->
+accumulate = (delta: Number) =>
   mut total = 0
   total = total + delta
   total
 
-answer = -> 42
+answer = () => 42
 ```
 
 ```ts
@@ -401,7 +425,7 @@ const add = (a: number, b: number) => a + b;
 const identity = <A>(value: A): A => value;
 
 const greet = (name: string) => {
-  const trimmed = name.trim();
+  const trimmed = pipe(name, String.trim);
   return `Hello, ${trimmed}!`;
 };
 
@@ -418,15 +442,15 @@ Rules:
 
 - Parameters may be annotated with TypeScript types and may use record/array
   destructuring. Optional generic type parameters `<A, B>` precede `(` and an optional
-  return type `: Type` precedes `->`.
-- A function body is either an expression after `->` or an indented block.
-- There is exactly one function form: `->`. There is no `function` keyword, method
+  return type follows `=>`, before the body: `(x: Number) => Number { => x }`.
+- A function body is either an expression after `=>` or an indented block.
+- Functions use `name = (params) => ...`. Neither `fn` nor `function` is supported; there is no second function keyword, method
   shorthand, or class method syntax. Object fields that hold functions use the same
   lambda.
-- Zero-argument functions use bare `->` (`() ->` is rejected); single-argument functions
-  require parentheses `(x) ->` (`x ->` is rejected).
-- The last expression of a block is returned. There is no `return` keyword; branching uses
-  exhaustive `match` expressions.
+- Zero-argument functions use `() => expression`; single-argument functions
+  require parentheses `(x) =>` (`x =>` is rejected).
+- The last expression of a block is returned; `=> expr` explicitly returns.
+  Use `when (condition) => expr` for an early return and `match` for exhaustive branching.
 - There are no default or rest parameters in V1. Use a record or `Option`.
 - Without `mut`, `=` is always a new immutable binding. Local mutable bindings use
   `mut x = ...` (allowed only inside function bodies or `effect` blocks, never at module
@@ -437,7 +461,7 @@ Rules:
 - A top-level binding is private unless prefixed with `export`.
 
 ```funscript
-export greet = (name: string) -> "Hello, {name}!"
+export greet = (name: String) => "Hello, {name}!"
 ```
 
 ### 5.2 Calls and pipelines
@@ -447,7 +471,7 @@ interop obvious.
 
 ```funscript
 sum = add(1, 2)
-trimmed = name.trim()
+trimmed = name |> String.trim()
 ```
 
 Pipelines flow left to right:
@@ -455,8 +479,8 @@ Pipelines flow left to right:
 ```funscript
 names =
   users
-  |> Array.filter((u) -> u.active)
-  |> Array.map((u) -> u.name)
+  |> Array.filter((u) => u.active)
+  |> Array.map((u) => u.name)
   |> Array.join(", ")
 ```
 
@@ -480,7 +504,7 @@ Semantics:
   `|>` call stage.
 - A pipeline of two or more stages compiles to Effect's `pipe`.
 - **Type-directed pipeline resolution:** Bare function calls in pipelines (`users |> filter(f) |> sortBy(key) |> take(5)`) auto-resolve against the companion module of the left-hand type (`effect/Array`), emitting `Array.filter`, `Array.sortBy`, etc., with zero visual repetition.
-- There is no point-free `>>` composition operator: write `(x) -> x |> f |> g` so
+- There is no point-free `>>` composition operator: write `(x) => x |> f |> g` so
   TypeScript preserves full contextual type inference across stages.
 
 This combines F# pipeline semantics for Effect's data-last APIs with ergonomic calling of
@@ -512,18 +536,18 @@ older = {
 
 visited =
   user
-  |> mut (draft) ->
+  |> mut (draft) =>
     draft.visits = draft.visits + 1
     draft.address.city = "Paris"
 
-city = user.address?.city ?? "unknown"
+city = user.address?.city ?? "Unknown"
 
 numbers = [1, 2, 3, 4]
 
 squares =
   numbers
-  |> Array.filter((n) -> n > 0)
-  |> Array.map((n) -> n * n)
+  |> Array.filter((n) => n > 0)
+  |> Array.map((n) => n * n)
 ```
 
 ```ts
@@ -556,7 +580,7 @@ Rules:
 - All records, arrays, and Schema-backed `type` values are deeply `readonly` at rest.
 - Shallow record spreads (`{ ...user, age: 37 }`) emit native JavaScript object spreads.
   When a record with a leading `...base` spread contains nested dot-path keys
-  (`{ ...user, address.city: "Paris" }`), or when a `mut` binding / `|> mut (draft) -> ...`
+  (`{ ...user, address.city: "Paris" }`), or when a `mut` binding / `|> mut (draft) => ...`
   pipeline stage mutates fields or arrays (`draft.visits = draft.visits + 1`,
   `draft.tags.push("x")`), the compiler lowers the update to Mutative's structural-sharing
   `create(...)`.
@@ -575,8 +599,8 @@ a positional constructor for each variant.
 
 ```funscript
 export schema Shape =
-  | Circle(radius: number)
-  | Rect(width: number, height: number)
+  | Circle(radius: Number)
+  | Rect(width: Number, height: Number)
 
 export schema Color =
   | Red
@@ -619,7 +643,7 @@ export const Color = Schema.Union(
 ```
 
 Nullary variant constructors are values, not functions: write `Red`, not `Red()`.
-Constructor names are unique across all tagged-union `type` and `error` declarations in a
+Constructor names are unique across all tagged-union `schema` and `error` declarations in a
 module; they share one value namespace. `_tag` is reserved. An exported tagged-union
 `type` exports the type, the companion `Schema.Union` constant, and the variant
 constructors; the generated `$<Name>` helper value is private. Use `Circle(...)`/`Red` in
@@ -628,16 +652,16 @@ FunScript, not `$Shape.Circle(...)`.
 Matching uses `match` with indented arms:
 
 ```funscript
-export area = (shape: Shape) ->
+export area = (shape: Shape) =>
   match shape
-    | Circle(r) -> Math.PI * r * r
-    | Rect(w, h) -> w * h
+    | Circle(r) => Math.PI * r * r
+    | Rect(w, h) => w * h
 
-export describe = (shape: Shape) ->
+export describe = (shape: Shape) =>
   match shape
-    | Circle(r) when r > 10 -> "large circle ({r})"
-    | Circle(r) -> "circle ({r})"
-    | Rect(w, h) -> "rectangle {w}x{h}"
+    | Circle(r) when r > 10 => "large circle ({r})"
+    | Circle(r) => "circle ({r})"
+    | Rect(w, h) => "rectangle {w}x{h}"
 ```
 
 ```ts
@@ -665,7 +689,7 @@ Rules:
 - `|> match` at the end of a pipeline matches the piped value directly without a temporary
   binding (`users |> Array.findFirst(...) |> match`).
 - Multiple patterns sharing the same handler can be combined with `|` on one arm
-  (`| Admin | Owner -> true`), lowering to `.with(pat1, pat2, handler)` in `ts-pattern`.
+  (`| Admin | Owner => true`), lowering to `.with(pat1, pat2, handler)` in `ts-pattern`.
 - Constructor arguments in patterns map positionally to the declared field names via a
   lightweight constructor-header cache across the `.fun` module graph; nested literal or
   structural sub-patterns lower directly into the `.with(...)` pattern object.
@@ -675,22 +699,22 @@ Rules:
 
 ```funscript
 match event
-  | { kind: "click", at: { x, y } } -> "click at {x},{y}"
-  | { kind: "key", key } -> "key {key}"
-  | [first, ...rest] -> "first item {first}"
-  | _ -> "other"
+  | { kind: "click", at: { x, y } } => "click at {x},{y}"
+  | { kind: "key", key } => "key {key}"
+  | [first, ...rest] => "first item {first}"
+  | _ => "other"
 ```
 
 - Built-in patterns for the core Effect types:
 
 ```funscript
 match maybeUser
-  | Some(user) -> user.name
-  | None -> "anonymous"
+  | Some(user) => user.name
+  | None => "anonymous"
 
 match result
-  | Right(value) -> value
-  | Left(error) -> "failed: {error.message}"
+  | Right(value) => value
+  | Left(error) => "failed: {error.message}"
 ```
 
 `Some`/`None`, `Left`/`Right`, and `Success`/`Failure` are compiler-known patterns for
@@ -706,9 +730,9 @@ Naming is part of the pattern grammar:
 - `_` is the wildcard.
 
 This removes the “is `foo` a binding or a nullary constructor?” ambiguity. `_tag` is
-reserved as the discriminant for tagged-union `type` and `error` declarations.
+reserved as the discriminant for tagged-union `schema` and `error` declarations.
 
-**V1 restriction:** tagged-union `type` declarations are monomorphic. For generic shapes,
+**V1 restriction:** tagged-union `schema` declarations are monomorphic. For generic shapes,
 use TypeScript `type` aliases and Effect's own types. Generic tagged unions are future
 work.
 
@@ -717,7 +741,7 @@ work.
 An `effect` block compiles to `Effect.gen`. `<-` is `yield*`; `_ <-` discards the result.
 
 ```funscript
-export getUser = (id: string) ->
+export getUser = (id: String) =>
   effect
     user <- UserRepo.find(id)
     org <- OrgRepo.find(user.orgId)
@@ -743,7 +767,7 @@ Rules:
   or a `match` statement. This makes the classic `Effect.gen` mistake — creating an effect
   and never running it — impossible to write silently.
 - The last expression is returned. A final binding or effect bind returns its value; a
-  final `_ <-` returns `undefined` (`Effect<void>`). There is no `return` keyword; early
+  final `_ <-` returns `undefined` (`Effect<Void>`). There is no `return` keyword; early
   failure uses `_ <- Effect.fail(...)`.
 - A final bare `Effect` value is returned as a value, not automatically yielded. The
   compiler's post-typecheck pass warns when an `effect` block returns a nested `Effect`,
@@ -773,7 +797,7 @@ export schema Todo = {
   title: NonEmptyString
 }
 
-export fetchTodo = (id: number) ->
+export fetchTodo = (id: Number) =>
   effect
     response <- HttpClient.get("https://jsonplaceholder.typicode.com/todos/{id}")
     todo <- response |> HttpClientResponse.schemaBodyJson(Todo)
@@ -791,7 +815,7 @@ model recoverable failures that are also runtime-validatable `Schema`s.
 
 ```funscript
 export error NotFound(id: UUID)
-export error ValidationFailed(field: string, message: NonEmptyString)
+export error ValidationFailed(field: String, message: NonEmptyString)
 ```
 
 ```ts
@@ -821,11 +845,11 @@ Effect.fail(new NotFound({ id }));
 Handle errors with the normal combinators:
 
 ```funscript
-export findUser = (id: string) ->
+export findUser = (id: String) =>
   effect
     user <- UserRepo.find(id)
     user
-  |> Effect.catchTag("NotFound", (e) -> Effect.succeed({ id: e.id, name: "anonymous" }))
+  |> Effect.catchTag("NotFound", (e) => Effect.succeed({ id: e.id, name: "anonymous" }))
 ```
 
 When sequencing operations with different error types in an `effect` block, the error
@@ -833,11 +857,11 @@ channel `E` automatically accumulates their union (e.g., `NotFound | PaymentDecl
 and callers must handle them exhaustively. Unrecoverable defects can be stripped from `E`
 via `|> orDie` (which auto-resolves to `Effect.orDie`).
 
-A nullary error is constructed with `Boom()`. This differs from nullary tagged-union `type`
+A nullary error is constructed with `Boom()`. This differs from nullary tagged-union `schema`
 variants, which are values (`Red`), because errors are Effect tagged error classes. In a
 pattern, all nullary constructors are bare names (`Boom`, `Red`, `None`); only error
 construction uses parentheses. Error constructor names share the value namespace with
-tagged-union `type` constructors; collisions are a compiler error.
+tagged-union `schema` constructors; collisions are a compiler error.
 
 This keeps stack traces, `_tag` discrimination, `catchTag`, and ts-pattern matching all
 working, without the class-plus-payload boilerplate. There is no `throw`/`try`/`catch` in
@@ -854,18 +878,18 @@ whenever a layer acquires dependencies with `<-`:
 import { Console, Effect, Layer } from "effect"
 
 export service Greeter
-  greet: (name: string) -> Effect<string>
+  greet: (name: String) => Effect<String>
 
 export GreeterLive =
   Layer.succeed(Greeter, {
-    greet: (name) -> Effect.succeed("Hello, {name}!")
+    greet: (name) => Effect.succeed("Hello, {name}!")
   })
 
 export ConfigurableGreeterLive =
   Layer.effect(Greeter, effect
     prefix <- PrefixConfig
     {
-      greet: (name) -> Effect.succeed("{prefix}, {name}!")
+      greet: (name) => Effect.succeed("{prefix}, {name}!")
     }
   )
 
@@ -881,9 +905,12 @@ export main =
 ```ts
 import { Console, Context, Effect, Layer } from "effect";
 
-export class Greeter extends Context.Service<Greeter, {
-  readonly greet: (name: string) => Effect.Effect<string>;
-}>()("app/Greeter") {}
+export class Greeter extends Context.Tag("app/Greeter")<
+  Greeter,
+  {
+    readonly greet: (name: string) => Effect.Effect<string>;
+  }
+>() {}
 
 export const GreeterLive = Layer.succeed(Greeter, {
   greet: (name) => Effect.succeed(`Hello, ${name}!`),
@@ -925,7 +952,7 @@ import { Effect, Console } from "effect"
 import { UserRepo } from "./services/user-repo.fun"
 
 export { Circle, Rect, Shape } from "./shapes.fun"
-export greet = (name: string) -> "Hello, {name}!"
+export greet = (name: String) => "Hello, {name}!"
 ```
 
 Rules:
@@ -970,7 +997,7 @@ aliases):
 
 ```funscript
 export schema Username =
-  string
+  String
   |> Schema.trimmed
   |> Schema.minLength(3)
   |> Schema.brand("Username")
@@ -984,7 +1011,7 @@ export schema User = {
   visits: NonNegativeInt = 0
 }
 
-export schema Lookup = (id: UUID) -> Effect<User, NotFound>
+export schema Lookup = (id: UUID) => Effect<User, NotFound>
 ```
 
 ```ts
@@ -1016,16 +1043,16 @@ export type Lookup = (id: Schema.UUID) => Effect.Effect<User, NotFound>;
 The compiler understands and rewrites blessed Effect type aliases and built-in `Schema`
 scalars wherever a type appears:
 
-| FunScript | Lowering |
-| --- | --- |
-| `Effect<A, E, R>` | `Effect.Effect<A, E, R>` |
-| `Option<A>` | `Option.Option<A>` |
-| `Either<A, E>` | `Either.Either<A, E>` |
-| `Layer<A, E, R>` | `Layer.Layer<A, E, R>` |
-| `Stream<A, E, R>` | `Stream.Stream<A, E, R>` |
-| `Array<A>` | `ReadonlyArray<A>` / `Schema.Array(...)` |
-| `Int`, `NonNegativeInt`, `Positive`, `NonNegative`, `Finite`, `JsonNumber` | `Schema.Int`, `Schema.NonNegativeInt`, etc. |
-| `NonEmptyString`, `Trimmed`, `UUID`, `ULID`, `DateTimeUtc`, `Duration` | `Schema.NonEmptyString`, `Schema.UUID`, etc. |
+| FunScript                                                                  | Lowering                                     |
+| -------------------------------------------------------------------------- | -------------------------------------------- |
+| `Effect<A, E, R>`                                                          | `Effect.Effect<A, E, R>`                     |
+| `Option<A>`                                                                | `Option.Option<A>`                           |
+| `Either<A, E>`                                                             | `Either.Either<A, E>`                        |
+| `Layer<A, E, R>`                                                           | `Layer.Layer<A, E, R>`                       |
+| `Stream<A, E, R>`                                                          | `Stream.Stream<A, E, R>`                     |
+| `Array<A>`                                                                 | `ReadonlyArray<A>` / `Schema.Array(...)`     |
+| `Int`, `NonNegativeInt`, `Positive`, `NonNegative`, `Finite`, `JsonNumber` | `Schema.Int`, `Schema.NonNegativeInt`, etc.  |
+| `NonEmptyString`, `Trimmed`, `UUID`, `ULID`, `DateTimeUtc`, `Duration`     | `Schema.NonEmptyString`, `Schema.UUID`, etc. |
 
 Rules:
 
@@ -1037,13 +1064,13 @@ Rules:
   which lowers to `Schema.OptionFromNullOr(...)` to ensure `null` never leaks into business
   logic. Fields with defaults (`role: T = "member"`) lower to `Schema.optionalWith(..., { default: () => "member" })`.
   All fields are deeply `readonly` at rest; updates use `{ ...user, a.b: 1 }` or
-  `mut draft = user` / `|> mut (draft) -> ...` lowered to Mutative's `create(...)`.
-- Tagged-union `type` declarations (`type Shape = | Circle(radius: number) | Rect(...)`)
+  `mut draft = user` / `|> mut (draft) => ...` lowered to Mutative's `create(...)`.
+- Tagged-union `type` declarations (`type Shape = | Circle(radius: Number) | Rect(...)`)
   generate `Data.TaggedEnum`, positional constructors, and a companion `Schema.Union`.
 - Non-data `type` declarations (containing function arrows, generics, `Effect`, `Layer`,
   `Stream`, or services) emit compile-time TypeScript `type` aliases only.
 - `error` declarations generate schema-backed tagged error classes (`Schema.TaggedError`).
-- `???` (and `??? "label"`) is a typed hole: it lowers to a `never`-typed throwing IIFE,
+- `???` (and `??? "label"`) is a typed hole: it lowers to a `Never`-typed throwing IIFE,
   inspects `checker.getContextualType(node)` and `checker.getSymbolsInScope(node)` to
   report the expected type and local bindings in scope, warns in `funscript dev` / `funscript check`,
   and is a hard error in `funscript build`.
@@ -1059,7 +1086,7 @@ id = UUID("0b9e6c1e-5f6a-4c6e-9a43-0c2f3b1d9e7a")
 pair = Pair([1, "ok"])
 ```
 
-- Explicit `any` is a compiler error in FunScript-authored types. Use `unknown` plus
+- Explicit `any` is a compiler error in FunScript-authored types. Use `Unknown` plus
   `Schema.decodeUnknown(MyType)` at boundaries; contain `any` from external packages in one
   adapter.
 - `interface`, `enum`, `namespace`, `data`, and `declare` are not FunScript declarations. Use
@@ -1078,7 +1105,7 @@ matching (`match value`) and boolean conditionals (subjectless `match`). There a
 Inline two-branch form:
 
 ```funscript
-label = match | n > 0 -> "positive" | _ -> "negative"
+label = match | n > 0 => "positive" | _ => "negative"
 ```
 
 Multi-branch block form:
@@ -1086,16 +1113,16 @@ Multi-branch block form:
 ```funscript
 label =
   match
-    | n > 0 -> "positive"
-    | n == 0 -> "zero"
-    | _ -> "negative"
+    | n > 0 => "positive"
+    | n == 0 => "zero"
+    | _ => "negative"
 ```
 
 Subjectless `match` lowers directly to native JavaScript conditional expressions (`? :`) or
 `if / else if / else` statements (with zero `ts-pattern` runtime overhead). In expression
-position, a trailing `| _ ->` arm is required so a conditional expression never silently
+position, a trailing `| _ =>` arm is required so a conditional expression never silently
 evaluates to `undefined`; in statement position (such as a single-condition guard in an
-`effect` or `mut` block), `| _ ->` may be omitted.
+`effect` or `mut` block), `| _ =>` may be omitted.
 
 There are no loops and no comprehensions. There is one way per domain:
 
@@ -1108,11 +1135,11 @@ There are no loops and no comprehensions. There is one way per domain:
 ```funscript
 squares =
   numbers
-  |> Array.filter((n) -> n > 0)
-  |> Array.map((n) -> n * n)
+  |> Array.filter((n) => n > 0)
+  |> Array.map((n) => n * n)
 
 effect
-  users <- Effect.forEach(ids, (id) -> UserRepo.find(id))
+  users <- Effect.forEach(ids, (id) => UserRepo.find(id))
   users
 ```
 
@@ -1140,31 +1167,31 @@ That means FunScript programmers use the same modules as Effect programmers:
 Effect is the only effect model, not merely the default library. New FunScript code uses the
 Effect equivalent instead of the JavaScript global or ad-hoc API:
 
-| Instead of | Use |
-| --- | --- |
-| `console.log` | `Console` |
-| `fetch` | `HttpClient` |
-| `process.env` | `Config` |
-| `setTimeout` | `Effect.sleep` / `Schedule` |
-| `Math.random` | `Effect.Random` |
-| `Date` / `Date.now` | `Clock` / `DateTime` |
-| `number` | `Int` / `Float` / `Decimal` |
-| `<`, `<=`, `>`, `>=` | `Number.greaterThan`, `DateTime.greaterThan`, etc. |
-| `JSON.parse` | `raw \|> Schema.decode(Type)` |
-| `Promise` / `async` | `Effect` |
-| `try` / `catch` / `throw` | `Effect.try`, `Effect.catch*`, `error` |
-| `let` / mutation | `mut` (local copy-on-write) or `Effect.Ref` (concurrent) |
-| `for` / `while` | Effect `Array`/`Record` pipelines or `Effect.forEach` |
-| `class` / `new` | records, `type` (Schema + tagged unions), `service` |
-| JS `Map` / `Set` | `HashMap` / `HashSet` |
-| `null` / `undefined` | `Option` |
-| `any` | `unknown` + `Schema` |
+| Instead of                | Use                                                      |
+| ------------------------- | -------------------------------------------------------- |
+| `console.log`             | `Console`                                                |
+| `fetch`                   | `HttpClient`                                             |
+| `process.env`             | `Config`                                                 |
+| `setTimeout`              | `Effect.sleep` / `Schedule`                              |
+| `Math.random`             | `Effect.Random`                                          |
+| `Date` / `Date.now`       | `Clock` / `DateTime`                                     |
+| `Number`                  | `Int` / `Float` / `Decimal`                              |
+| `<`, `<=`, `>`, `>=`      | `Number.greaterThan`, `DateTime.greaterThan`, etc.       |
+| `JSON.parse`              | `raw \|> Schema.decodeUnknown(Type)`                     |
+| `Promise` / `async`       | `Effect`                                                 |
+| `try` / `catch` / `throw` | `Effect.try`, `Effect.catch*`, `error`                   |
+| `let` / mutation          | `mut` (local copy-on-write) or `Effect.Ref` (concurrent) |
+| `for` / `while`           | Effect `Array`/`Record` pipelines or `Effect.forEach`    |
+| `class` / `new`           | records, `type` (Schema + tagged unions), `service`      |
+| JS `Map` / `Set`          | `HashMap` / `HashSet`                                    |
+| `null` / `undefined`      | `Option`                                                 |
+| `any`                     | `Unknown` + `Schema`                                     |
 
 These APIs are available because npm is available, but they are interop, not the
 supported programming model. The parser or `funscript check` rejects the surface forms; the
 remaining globals are lint-level warnings.
 
-FunScript's job is to make `Effect.gen`, `Context.Service`, `Data.TaggedEnum`, `Schema`, and
+FunScript's job is to make `Effect.gen`, `Context.Tag`, `Data.TaggedEnum`, `Schema`, and
 ts-pattern pleasant to write. It does not wrap them, re-export them, or add a competing
 API. If a utility is missing, the answer is a function in user code or an upstream
 contribution to Effect — not a new FunScript module.
@@ -1172,26 +1199,25 @@ contribution to Effect — not a new FunScript module.
 This is also why the language can stay small. The ecosystem is the library; the compiler
 is only the notation.
 
-### 5.12 Recommended stack (Effect v4)
+### 5.12 Recommended stack (Effect v3)
 
-FunScript targets **Effect v4** (the consolidated `effect` package). The default
-`funscript new` template and the docs assume this stack; every piece is an Effect-ecosystem
-package, so none of it is a FunScript runtime:
+FunScript currently depends on **Effect v3**. The integrations below describe the
+proposed ecosystem stack; optional packages are not all installed by this repository:
 
-| Need | Package / module | Replaces |
-| --- | --- | --- |
-| Effects, errors, DI, concurrency, streams, schemas | `effect` (core) | Promises, zod, RxJS, p-limit, lodash, date-fns |
-| Pattern matching | `ts-pattern` | `switch` / `if` chains |
-| Copy-on-write updates | `mutative` | Immer, hand-written nested spreads |
-| HTTP client & server | `effect/unstable/http` (`HttpClient`, `HttpRouter`) | `fetch`, express, axios |
-| Runtime per platform | `@effect/platform-node` / `-bun` / `-browser` (`NodeRuntime.runMain`, `FileSystem`, `Command`) | `fs`, `child_process`, `process.on("SIGINT")` |
-| SQL | `effect/unstable/sql` + `@effect/sql-pg` / `-sqlite-node` / `-mysql2` | Prisma, Knex |
-| Typed RPC | `effect/unstable/rpc` (shares `schema` and `error` declarations with the client) | tRPC |
-| Observability | `Effect.withSpan`, `Metric`, `@effect/opentelemetry` | ad-hoc logging |
-| CLIs | `effect/unstable/cli` | commander, yargs |
-| Testing | `@effect/vitest` (`it.effect`, `TestClock`, seeded `Random`) + Vitest | plain Vitest, fake timers |
-| Durable / distributed work | `effect/unstable/cluster`, `effect/unstable/workflow` | BullMQ, Temporal |
-| LLM calls | `effect/unstable/ai` | ad-hoc SDK wrappers |
+| Need                                               | Package / module                                                                               | Replaces                                       |
+| -------------------------------------------------- | ---------------------------------------------------------------------------------------------- | ---------------------------------------------- |
+| Effects, errors, DI, concurrency, streams, schemas | `effect` (core)                                                                                | Promises, zod, RxJS, p-limit, lodash, date-fns |
+| Pattern matching                                   | `ts-pattern`                                                                                   | `switch` / `if` chains                         |
+| Copy-on-write updates                              | `mutative`                                                                                     | Immer, hand-written nested spreads             |
+| HTTP client & server                               | `@effect/platform` (`HttpClient`, `HttpRouter`)                                                | `fetch`, express, axios                        |
+| Runtime per platform                               | `@effect/platform-node` / `-bun` / `-browser` (`NodeRuntime.runMain`, `FileSystem`, `Command`) | `fs`, `child_process`, `process.on("SIGINT")`  |
+| SQL                                                | `@effect/sql` + `@effect/sql-pg` / `-sqlite-node` / `-mysql2`                                  | Prisma, Knex                                   |
+| Typed RPC                                          | `@effect/rpc` (shares `schema` and `error` declarations with the client)                       | tRPC                                           |
+| Observability                                      | `Effect.withSpan`, `Metric`, `@effect/opentelemetry`                                           | ad-hoc logging                                 |
+| CLIs                                               | `@effect/cli`                                                                                  | commander, yargs                               |
+| Testing                                            | `@effect/vitest` (`it.effect`, `TestClock`, seeded `Random`) + Vitest                          | plain Vitest, fake timers                      |
+| Durable / distributed work                         | `@effect/cluster`, `@effect/workflow`                                                          | BullMQ, Temporal                               |
+| LLM calls                                          | `@effect/ai`                                                                                   | ad-hoc SDK wrappers                            |
 
 Concurrency deserves a note: Effect **fibers are goroutines** (green threads), `Queue` is a
 channel, `Effect.race` is `select`, and `Effect.forEach(xs, f, { concurrency: n })` is a
@@ -1199,8 +1225,8 @@ worker pool / `errgroup` — but structured: a fiber is owned by its parent or a
 interruption replaces `context.Context`, and a failing worker cancels its siblings. That is
 why FunScript adds no `go`, `chan`, or `select` syntax (see [syntax.md §9.8](syntax.md)).
 
-> Modules under `effect/unstable/*` may change between minor releases; FunScript pins the
-> Effect version in the `funscript new` template and upgrades it deliberately (§11.7).
+> Check optional package compatibility against the project's installed Effect version.
+> These integrations do not introduce a separate FunScript runtime.
 
 ---
 
@@ -1257,7 +1283,7 @@ The compiler does not type-check FunScript directly. It emits TypeScript and inv
 TypeScript compiler API (or the project's `tsc`) on the result. This has three benefits:
 
 1. Type semantics are exactly TypeScript's.
-2. Every npm type definition works; the FunScript *surface* deliberately limits expression
+2. Every npm type definition works; the FunScript _surface_ deliberately limits expression
    constructs.
 3. The compiler stays small.
 
@@ -1331,37 +1357,37 @@ it. The full design is in [tooling.md](tooling.md); this section is the summary.
 
 ### 7.1 Commands
 
-| Command | Purpose |
-| --- | --- |
-| `funscript new` | scaffold a Vite + Vitest + TypeScript project |
-| `funscript dev` | Vite dev server with the FunScript plugin + typecheck watcher |
-| `funscript build` | `funscript check` then Vite production build |
-| `funscript preview` | preview the production build through Vite |
-| `funscript test` | Vitest, discovering `*.test.fun` |
-| `funscript check` | parse + resolve + FunScript checks + `tsc --noEmit` |
-| `funscript fmt` | canonical formatter; `--check` for CI |
-| `funscript run` | compile and execute a script/CLI |
-| `funscript add` | delegate to npm/pnpm/Bun |
-| `funscript emit` | emit readable `.ts` for debugging or ejection |
-| `funscript lsp` | language server |
-| `funscript doctor` | diagnose toolchain/version problems |
+| Command             | Purpose                                                       |
+| ------------------- | ------------------------------------------------------------- |
+| `funscript new`     | scaffold a Vite + Vitest + TypeScript project                 |
+| `funscript dev`     | Vite dev server with the FunScript plugin + typecheck watcher |
+| `funscript build`   | `funscript check` then Vite production build                  |
+| `funscript preview` | preview the production build through Vite                     |
+| `funscript test`    | Vitest, discovering `*.test.fun`                              |
+| `funscript check`   | parse + resolve + FunScript checks + `tsc --noEmit`           |
+| `funscript fmt`     | canonical formatter; `--check` for CI                         |
+| `funscript run`     | compile and execute a script/CLI                              |
+| `funscript add`     | delegate to npm/pnpm/Bun                                      |
+| `funscript emit`    | emit readable `.ts` for debugging or ejection                 |
+| `funscript lsp`     | language server                                               |
+| `funscript doctor`  | diagnose toolchain/version problems                           |
 
 ### 7.2 Defaults
 
-| Concern | Default |
-| --- | --- |
-| Dev server / bundler | **Vite** |
-| Production preview | **Vite preview** |
-| Test runner | **Vitest** |
-| Type checker | **tsc** |
-| Formatter | **funscript fmt** (no config) |
-| Packages | npm / pnpm / Bun |
-| Editor | **funscript lsp** |
-| Runtime | **Effect TS** |
-| Standard library | **Effect TS** |
-| Entry point | `src/main.fun` |
-| Test files | `*.test.fun` |
-| Output | `dist/` |
+| Concern              | Default                       |
+| -------------------- | ----------------------------- |
+| Dev server / bundler | **Vite**                      |
+| Production preview   | **Vite preview**              |
+| Test runner          | **Vitest**                    |
+| Type checker         | **tsc**                       |
+| Formatter            | **funscript fmt** (no config) |
+| Packages             | npm / pnpm / Bun              |
+| Editor               | **funscript lsp**             |
+| Runtime              | **Effect TS**                 |
+| Standard library     | **Effect TS**                 |
+| Entry point          | `src/main.fun`                |
+| Test files           | `*.test.fun`                  |
+| Output               | `dist/`                       |
 
 `funscript new` generates a normal Vite project with `@funscript/vite`, a strict
 `tsconfig.json`, a passing test, and no FunScript runtime dependency. The generated
@@ -1389,7 +1415,7 @@ For Node scripts and CLIs, `funscript run` compiles and executes directly. For N
 
 1. parse and resolve, including the banned JavaScript/TypeScript surface;
 2. FunScript-specific checks (non-final bare expressions in `effect` blocks, duplicate
-   service tags, `_tag` collisions, constructor-name collisions across tagged-union `type`
+   service tags, `_tag` collisions, constructor-name collisions across tagged-union `schema`
    and `error`, explicit `any` in FunScript-authored types, unreachable match arms, known
    mutating JS methods on non-`mut` bindings and callback `forEach` loops as warnings);
 3. emit TypeScript;
@@ -1423,7 +1449,7 @@ A canonical formatter with no configuration:
 - Imports preserved in source order (never reordered; side effects matter).
 - `--check` for CI, `--stdin` for editors.
 
-There are no symbol aliases to normalize: `&&`, `||`, `!`, `===`, and `!==` are parse
+There are no boolean symbol aliases to normalize: `&&`, `||`, and `!` are parse
 errors. The formatter shares the compiler's parser and is published as
 `@funscript/formatter`. There is exactly one style and no configuration.
 
@@ -1509,14 +1535,14 @@ tests/
 
 Published names use the `@funscript/*` scope because the npm name `funscript` is taken:
 
-| Package | Purpose |
-| --- | --- |
-| `@funscript/compiler` | lexer, parser, resolver, surface checks, emitter |
-| `@funscript/vite` | Vite plugin |
-| `@funscript/formatter` | canonical formatter |
-| `@funscript/cli` | the `funscript` binary |
-| `@funscript/language-server` | LSP |
-| `@funscript/vscode` | VS Code extension |
+| Package                      | Purpose                                          |
+| ---------------------------- | ------------------------------------------------ |
+| `@funscript/compiler`        | lexer, parser, resolver, surface checks, emitter |
+| `@funscript/vite`            | Vite plugin                                      |
+| `@funscript/formatter`       | canonical formatter                              |
+| `@funscript/cli`             | the `funscript` binary                           |
+| `@funscript/language-server` | LSP                                              |
+| `@funscript/vscode`          | VS Code extension                                |
 
 The compiler's public API should stay small:
 
@@ -1574,7 +1600,7 @@ const result = compile(source, { filename: "main.fun" });
 - Compose source maps for runtime stack traces.
 - `funscript check` and `funscript build` (Vite).
 - Custom checks: non-final bare effect expressions, duplicate service tags, `_tag`
-  collisions, constructor-name collisions across tagged-union `type` and `error`, explicit
+  collisions, constructor-name collisions across tagged-union `schema` and `error`, explicit
   `any`, unreachable match arms, and warnings for known mutating JS methods on non-`mut`
   bindings.
 
@@ -1643,7 +1669,7 @@ and IIFE wrapper noise.
 
 ### 11.3 Matching backend
 
-The proposal uses ts-pattern. Effect 4 also ships `Match`, which is tag-oriented and
+The proposal uses ts-pattern. Effect also ships `Match`, which is tag-oriented and
 integrates tightly with Effect. ts-pattern is richer for structural patterns, guards, and
 nested data, and it is what the project explicitly targets. Recommendation: use
 ts-pattern for `match`; consider an opt-in `Match` backend later if it produces better
@@ -1664,7 +1690,7 @@ painful.
 
 Generic unions are common (`Result<A, E>`, `Tree<A>`). `Data.TaggedEnum` can express them
 but constructor generation requires generic wrapper functions and careful type plumbing.
-V1 keeps tagged-union `type` declarations monomorphic and leans on Effect's `Option`,
+V1 keeps tagged-union `schema` declarations monomorphic and leans on Effect's `Option`,
 `Either`, `Exit`, and `Schema` for generic shapes.
 
 ### 11.6 Diagnostic mapping
@@ -1676,9 +1702,9 @@ test suite before the emitter grows.
 
 ### 11.7 Effect API churn
 
-Effect 4 is current, but parts of the platform are still marked unstable. The compiler
+The implementation uses Effect 3.x; optional platform packages evolve independently. The compiler
 should isolate all lowering decisions behind a small "target" module so a future Effect 5
-or a changed `Context.Service` shape can be adapted in one place.
+or a changed `Context.Tag` shape can be adapted in one place.
 
 ### 11.8 Name collision
 
@@ -1690,7 +1716,7 @@ Alternatives if the name does not stick: Ristretto, Cortado, Cascara, Cremina.
 
 Some sugar (multi-branch `match` expressions, nested patterns, service declarations)
 necessarily expands into more TypeScript than the source. The rule is that the expansion
-must remain *locally understandable*: a reader should be able to see the correspondence
+must remain _locally understandable_: a reader should be able to see the correspondence
 without jumping across the file. Golden snapshots enforce this socially as much as
 technically.
 
@@ -1700,7 +1726,7 @@ No. Effect is the concurrency model. Promise interop is explicit and confined to
 boundary:
 
 ```funscript
-response <- Effect.tryPromise(-> fetch(url))
+response <- Effect.tryPromise(() => fetch(url))
 ```
 
 Adding `await` would create two effect systems and undermine the type-level guarantees.
@@ -1710,7 +1736,7 @@ FunScript-authored APIs return `Effect`, not `Promise`. This is a deliberate non
 
 ## 12. Prior art
 
-- **CoffeeScript** — indentation, `->`, implicit returns, and interpolation. FunScript keeps
+- **CoffeeScript** — indentation, `=>`, implicit returns, and interpolation. FunScript keeps
   the surface calm but drops implicit calls, `this`, classes, comprehensions (Effect's
   `Array` module is the iteration story), and the untyped runtime.
 - **F#** — pipelines, function composition, expression orientation, discriminated
@@ -1729,7 +1755,7 @@ FunScript-authored APIs return `Effect`, not `Promise`. This is a deliberate non
 - **ts-pattern** — the reason exhaustive structural matching can be a language feature
   without writing a matching engine.
 
-The closest philosophical sibling is CoffeeScript, but the closest *semantic* sibling is
+The closest philosophical sibling is CoffeeScript, but the closest _semantic_ sibling is
 F#: a small, typed, expression-oriented language whose features map onto a powerful
 runtime.
 
@@ -1737,7 +1763,7 @@ runtime.
 
 ## 13. Name
 
-**FunScript** combines *Functional* and *TypeScript/CoffeeScript*. Published packages use
+**FunScript** combines _Functional_ and _TypeScript/CoffeeScript_. Published packages use
 the `@funscript/*` scope, and the file extension `.fun` is short and reads well:
 
 ```text
@@ -1758,18 +1784,18 @@ The answer is a small, 16-keyword, indentation-based, expression-oriented langua
 - immutable bindings by default, `{ ...user, a.b: 1 }` and explicit `mut` copy-on-write
   updates via Mutative, and implicit returns (no `return`);
 - F#-style pipelines over Effect's data-last APIs (`|>` and `|> f(a, _)`);
-- unified `type` declarations (Effect `Schema` + tagged unions `| Variant(...)` +
+- unified `schema` declarations (Effect `Schema` + tagged unions `| Variant(...)` +
   compile-time aliases) and `error` declarations that lower to Effect's tagged errors;
 - exhaustive `match` (for both structural patterns via ts-pattern and boolean conditions);
 - `effect` blocks that lower to `Effect.gen`;
-- services that lower to `Context.Service`;
+- services that lower to `Context.Tag`;
 - Effect-first, one way per job: no classes/`new`, no loops or comprehensions, no
   `throw`/`try`, no `async`/`await` or authored `Promise`, no `null`/`undefined`, no
   explicit `any`, no `if`/`else`/`switch`/ternary, and only one function form;
 - TypeScript types, TypeScript checking, and a readable TypeScript output;
 - a Go-like toolchain: `funscript new/dev/build/preview/test/check/fmt/run`, Vite and Vitest
   by default, `tsc` as the type gate, a canonical formatter, and an LSP;
-- no FunScript runtime, no separate standard library (Effect TS *is* the standard library),
+- no FunScript runtime, no separate standard library (Effect TS _is_ the standard library),
   and a boring escape hatch.
 
 The compiler is a weekend-sized parser plus a carefully engineered emitter. The hard

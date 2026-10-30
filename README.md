@@ -3,9 +3,9 @@
 > A small, indentation-based functional language that compiles to readable TypeScript for the
 > [Effect](https://effect.website) + [ts-pattern](https://github.com/gvergnaud/ts-pattern) + [Mutative](https://github.com/unadlib/mutative) ecosystem.
 
-**Status:** design proposal · no compiler yet
-**Working name:** FunScript · **File extension:** `.fun` · **CLI:** `funscript`
-**Target:** Effect 4.x · ts-pattern 5.x · Mutative 1.x · TypeScript 7.x (5.9+ compatibility goal)
+**Status:** compiler and tooling in development
+**Working name:** FunScript · **File extension:** `.fun` / `.funx` · **CLI:** `funscript`
+**Target:** Effect 3.x · ts-pattern 5.x · Mutative 1.x · TypeScript 5.6+
 **Standard library:** Effect TS — there is no separate FunScript standard library
 
 ## The pitch
@@ -19,23 +19,23 @@ involves a lot of ceremony:
 - `match(value).with(...).with(...).exhaustive()`
 - `create(state, (draft) => { draft.a.b = ... })` or deeply nested object spreads
 - `pipe(value, ...)` or deeply nested calls
-- `Context.Service` / tag / layer boilerplate
+- `Context.Tag` / tag / layer boilerplate
 - duplicate `Schema.Struct` validators and TypeScript `type` declarations
 - tagged-union constructors and type declarations
 
-FunScript is a *notation* for that stack. It keeps Effect's semantics and ts-pattern's
+FunScript is a _notation_ for that stack. It keeps Effect's semantics and ts-pattern's
 exhaustiveness, removes the ceremony, and compiles to TypeScript you can still read,
 debug, and eject from.
 
 ```funscript
 export schema Shape =
-  | Circle(radius: number)
-  | Rect(width: number, height: number)
+  | Circle(radius: Number)
+  | Rect(width: Number, height: Number)
 
-export area = (shape: Shape) ->
+export area = (shape: Shape) =>
   match shape
-    | Circle(r) -> Math.PI * r * r
-    | Rect(w, h) -> w * h
+    | Circle(r) => Math.PI * r * r
+    | Rect(w, h) => w * h
 ```
 
 ```ts
@@ -46,7 +46,8 @@ export type Shape = Data.TaggedEnum<{
 const $Shape = Data.taggedEnum<Shape>();
 
 export const Circle = (radius: number): Shape => $Shape.Circle({ radius });
-export const Rect = (width: number, height: number): Shape => $Shape.Rect({ width, height });
+export const Rect = (width: number, height: number): Shape =>
+  $Shape.Rect({ width, height });
 
 export const area = (shape: Shape) =>
   match(shape)
@@ -60,11 +61,11 @@ export const area = (shape: Shape) =>
 FunScript is CoffeeScript's calm surface plus F#'s expression-oriented toolbox, aimed at a
 TypeScript backend. Bindings and data are deeply immutable by default, with shallow and
 deep dot-path record spreads (`{ ...user, age: 37, address.city: "Paris" }`) and explicit
-copy-on-write mutable bindings (`mut draft = user` / `|> mut (draft) -> ...`) that compile
+copy-on-write mutable bindings (`mut draft = user` / `|> mut (draft) => ...`) that compile
 to Mutative's structural-sharing `create(...)`. A single `schema` keyword declares record
-schemas, refinements, tagged unions (`| Circle(radius: number)`), and compile-time type
+schemas, refinements, tagged unions (`| Circle(radius: Number)`), and compile-time type
 aliases; functions return their last expression, pipelines are the default composition,
-`match` is the single branching construct (exhaustive by default), and `effect` blocks turn
+`match` handles exhaustive branching and `when` handles conditional execution, and `effect` blocks turn
 `<-` into `yield*`. There is no FunScript runtime and no separate standard library:
 **Effect TS is the standard library**. The generated code imports `effect`, `ts-pattern`,
 and `mutative` directly, and TypeScript remains the type checker.
@@ -76,16 +77,34 @@ model, one error model, one dependency model, one unified `schema` declaration (
 Effect `Schema` structs, refinements, `Data.TaggedEnum` tagged unions, and TS aliases), one
 data manipulation story (deeply immutable values updated via `{ ...x, a.b: 1 }` or
 Mutative-backed `mut` drafts, and `Effect.Ref` for shared/concurrent state), one iteration
-story, one branching construct (`match`), and one function form (`->`).
+story, `match` for branching and `when` for guards, and one function form (`=>`).
 
 The parser rejects the JavaScript/TypeScript habits that would create a second way:
 `let`/`var`, reassigning immutable bindings, loops, `return`, classes/`new`, `throw`/`try`,
 `async`/`await`, authored `Promise`, `null`, `undefined`, explicit `any`,
-`if`/`else`/`switch`/ternary (`match` is the only branching construct), `function`,
-semicolons, and the symbol spellings `&&`/`||`/`!`/`===`/`!==`. Raw TypeScript is the
+`if`/`else`/`switch`/ternary (use `match` or `when`), `function`,
+semicolons, and the symbol spellings `&&`/`||`/`!`. Raw TypeScript is the
 single, visible escape hatch.
 
+## Static checks and external data
+
+`funscript run` and `funscript build` check emitted TypeScript before execution
+or output. Type errors stop the command with a non-zero exit and source-mapped
+code frames. `--no-check` skips that static gate for prototyping.
+
+Inside FunScript, the compiler enforces types. At external boundaries, validate
+HTTP JSON, CLI input, file contents, and database rows with Effect Schema before
+using them. `export js` wrappers validate annotated arguments from JavaScript;
+schema constructors validate payloads at runtime. Skipping static checks does
+not skip those validators. See the [strictness contract](docs/syntax.md#123-static-guarantees-and-runtime-boundaries).
+
+Types use PascalCase (`String`, `Number`, `Boolean`, `Unknown`); native TypeScript
+spelling stays in emitted output or `ts "..."` escapes. Functions use
+`name = (params) => ...`; `fn` and `function` are rejected.
+
 ## Toolchain
+
+The following is the tooling design; use the installed CLI help for available commands.
 
 Go-like batteries included, TypeScript ecosystem underneath. One command, one default per
 concern:
@@ -140,7 +159,7 @@ packages/
   language-server/  # LSP built on the TypeScript language service
   vscode/           # editor integration
 tests/
-  golden/           # .fun -> .ts snapshots
+  golden/           # .fun to .ts snapshots
   runtime/          # compiled examples executed with Vitest
 ```
 
