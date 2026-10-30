@@ -7,6 +7,7 @@ import { fork } from "node:child_process";
 import { transformSync } from "esbuild";
 import { compileString, checkString } from "../compiler.js";
 import { typeCheckFiles } from "../compiler/check.js";
+import { checkCliFiles } from "./typecheck.js";
 import { startLspServer } from "../lsp/index.js";
 import { format } from "../formatter/index.js";
 import { startRepl } from "./repl.js";
@@ -50,7 +51,7 @@ const buildCommand = (args: string[]) =>
     const outDir = outDirIndex !== -1 ? args[outDirIndex + 1] : undefined;
 
     const rawFileArgs = args.filter((arg, i) => {
-      if (arg === "--sourcemap") return false;
+      if (arg === "--sourcemap" || arg === "--no-check") return false;
       if (arg === "--out" || (outIndex !== -1 && i === outIndex + 1)) return false;
       if (arg === "--outDir" || (outDirIndex !== -1 && i === outDirIndex + 1)) return false;
       return true;
@@ -92,6 +93,8 @@ const buildCommand = (args: string[]) =>
     if (filesToBuild.length === 0) {
       return yield* Console.log("No .fun or .funx files found to build");
     }
+
+    if (!args.includes("--no-check") && !(yield* checkCliFiles(filesToBuild))) return;
 
     for (const filePath of filesToBuild) {
       const source = yield* readFile(filePath);
@@ -269,10 +272,13 @@ const fmtCommand = (args: string[]) =>
 
 const runCommand = (args: string[]) =>
   Effect.gen(function* () {
-    const filePath = args[0];
+    const filePath = args.find((arg) => arg !== "--no-check");
     if (!filePath) {
-      return yield* Console.error("Usage: funscript run <file.fun|file.funx>");
+      process.exitCode = 1;
+      return yield* Console.error("Usage: funscript run <file.fun|file.funx> [--no-check]");
     }
+
+    if (!args.includes("--no-check") && !(yield* checkCliFiles([filePath]))) return;
 
     const source = yield* readFile(filePath);
     const result = yield* compileString(source, filePath);
@@ -324,10 +330,10 @@ const helpCommand = Console.log(`
 FunScript 0.1.0 — A functional notation for TypeScript and Effect
 
 Usage:
-  funscript build <file.fun|file.funx...> [--out <file>] [--outDir <dir>] [--sourcemap]  Build to TypeScript / TSX
+  funscript build <file.fun|file.funx...> [--out <file>] [--outDir <dir>] [--sourcemap] [--no-check]  Build to TypeScript / TSX
   funscript emit <file.fun|file.funx> [--out <file>] [--sourcemap]                       Compile to TypeScript / TSX
   funscript check [file.fun|file.funx...]                                               Static type-check via TypeScript API (defaults to src/)
-  funscript run <file.fun|file.funx>                                                     Compile and run with Node
+  funscript run <file.fun|file.funx> [--no-check]                                        Compile and run with Node
   funscript repl                                                                         Start interactive REPL
   funscript lsp [--stdio]                                                                Start Language Server Protocol server
   funscript fmt <file.fun...> [--check]                                                  Format FunScript source code

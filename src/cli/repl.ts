@@ -4,7 +4,8 @@ import { createRequire } from "node:module";
 import * as path from "node:path";
 import { transformSync } from "esbuild";
 import { Effect, Console, Option, Either, Duration, pipe } from "effect";
-import { compileString } from "../compiler.js";
+import { compileString, type CompileResult } from "../compiler.js";
+import { typeCheckSource } from "../compiler/check.js";
 
 export interface ReplOptions {
   input?: NodeJS.ReadableStream;
@@ -87,7 +88,12 @@ export function wrapExpression(expr: string): string {
 /**
  * Compiles a line or block of FunScript code into executable JavaScript for the REPL context.
  */
-export async function compileReplCode(input: string): Promise<{ jsCode: string; isExpression: boolean }> {
+const replDeclarations = new WeakMap<vm.Context, Map<string, string>>();
+
+export async function compileReplCode(
+  input: string,
+  declarations = new Map<string, string>(),
+): Promise<{ jsCode: string; isExpression: boolean }> {
   const trimmed = input.trim();
   if (!trimmed) {
     return { jsCode: "", isExpression: false };
@@ -97,17 +103,21 @@ export async function compileReplCode(input: string): Promise<{ jsCode: string; 
     /^\s*(export\s+|schema\s+|error\s+|service\s+|import\s+|mut\s+|fn\s+|[a-z_][a-zA-Z0-9_]*\s*(\:[^=]+)?=(?!=))/.test(trimmed) &&
     !/^\s*(match\b|effect\b)/.test(trimmed);
 
+  let compiled: CompileResult;
+  let checkedSource = trimmed;
   let tsCode = "";
   let isExpression = false;
 
   if (isLikelyDecl) {
     try {
       const res = await Effect.runPromise(compileString(trimmed, "repl.fun"));
+      compiled = res;
       tsCode = res.typescript;
       isExpression = false;
     } catch (declErr: any) {
       try {
         const res = await Effect.runPromise(compileString(wrapExpression(trimmed), "repl.fun"));
+        compiled = res;
         tsCode = res.typescript;
         isExpression = true;
       } catch {
@@ -117,17 +127,41 @@ export async function compileReplCode(input: string): Promise<{ jsCode: string; 
   } else {
     try {
       const res = await Effect.runPromise(compileString(wrapExpression(trimmed), "repl.fun"));
+      compiled = res;
       tsCode = res.typescript;
       isExpression = true;
     } catch (exprErr: any) {
       try {
         const res = await Effect.runPromise(compileString(trimmed, "repl.fun"));
+        compiled = res;
         tsCode = res.typescript;
         isExpression = false;
       } catch {
         throw exprErr;
       }
     }
+  }
+
+  checkedSource = isExpression ? wrapExpression(trimmed) : trimmed;
+  const nextDeclarations = new Map(declarations);
+  for (const [index, node] of compiled!.ast.body.entries()) {
+    const declaration = node.kind === "ExportDeclaration" ? node.declaration : node;
+    const snippet = checkedSource.slice(node.span.start.offset, compiled!.ast.body[index + 1]?.span.start.offset);
+    const key = "id" in declaration ? declaration.id.name : snippet;
+    nextDeclarations.set(key, snippet);
+  }
+  // These modules are provided by setupReplContext. Ambient globals avoid
+  // duplicate imports when the emitter also injects an Effect helper.
+  const globals = `ts "declare global { ${["Effect", "Console", "Option", "Either", "Duration", "pipe"]
+    .map((name) => `const ${name}: typeof import('effect').${name};`).join(" ")} } export {};"`;
+  const result = await Effect.runPromise(typeCheckSource(
+    [globals, ...nextDeclarations.values()].join("\n"), "repl.fun",
+  ));
+  if (!result.success) throw new Error(result.formattedOutput);
+
+  if (!isExpression) {
+    declarations.clear();
+    for (const [key, source] of nextDeclarations) declarations.set(key, source);
   }
 
   const transformed = transformSync(tsCode, { loader: "ts", format: "cjs" });
@@ -150,8 +184,12 @@ export async function evaluateReplLine(input: string, context: vm.Context): Prom
   }
 
   let compiled: { jsCode: string; isExpression: boolean };
+  let pendingDeclarations: Map<string, string>;
   try {
-    compiled = await compileReplCode(trimmed);
+    const declarations = new Map(replDeclarations.get(context));
+    compiled = await compileReplCode(trimmed, declarations);
+    // Keep types only after evaluation succeeds.
+    pendingDeclarations = declarations;
   } catch (err: any) {
     const rawMsg = extractErrorMessage(err);
     const msg = adjustErrorLocation(rawMsg);
@@ -171,6 +209,7 @@ export async function evaluateReplLine(input: string, context: vm.Context): Prom
     value = await value;
   }
 
+  replDeclarations.set(context, pendingDeclarations!);
   return compiled.isExpression ? value : undefined;
 }
 
