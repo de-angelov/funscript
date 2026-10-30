@@ -15,6 +15,7 @@ describe(".funx & TSX Component Support (Compiler & CLI)", () => {
 
   beforeAll(async () => {
     tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), "funscript-funx-test-"));
+    await fs.symlink(path.resolve("node_modules"), path.join(tmpDir, "node_modules"), "dir");
   });
 
   afterAll(async () => {
@@ -152,6 +153,9 @@ export FragmentView = () ->
       await fs.writeFile(
         funxFile,
         `
+schema Props = {
+  name: String
+}
 export Widget = (props: Props) ->
   <div className="widget">
     <h3>{props.name}</h3>
