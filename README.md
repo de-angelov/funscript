@@ -70,6 +70,9 @@ aliases; functions return their last expression, pipelines are the default compo
 **Effect TS is the standard library**. The generated code imports `effect`, `ts-pattern`,
 and `mutative` directly, and TypeScript remains the type checker.
 
+Write Effect sequencing with the canonical brace-delimited form, `effect { ... }`. The
+existing indentation-based `effect` block remains compatible syntax.
+
 ## Effect-first, one way per job
 
 Idiomatic Effect is the only easily supported way to write FunScript. There is one effect
