@@ -340,6 +340,9 @@ export class Emitter {
   }
 
   private emitBindingDeclaration(decl: BindingDeclaration, isExport = false): string {
+    if (decl.id.name === "_") {
+      return `${this.emitExpression(decl.init)};`;
+    }
     if (this.isPrimitiveType(decl.typeAnnotation) || this.isPrimitive(decl.init)) {
       this.primitiveIdentifiers.add(decl.id.name);
     }
@@ -404,6 +407,9 @@ export class Emitter {
       case "CallExpression":
         return `${this.emitExpression(expr.callee)}(${expr.args.map((a) => this.emitExpression(a)).join(", ")})`;
       case "MemberExpression":
+        if (expr.object.kind === "UpperIdentifier" && EFFECT_BUILTIN_MODULES.has(expr.object.name)) {
+          this.effectImports.add(expr.object.name);
+        }
         return `${this.emitExpression(expr.object)}.${expr.property.name}`;
       case "IndexExpression":
         return `${this.emitExpression(expr.object)}[${this.emitExpression(expr.index)}]`;
@@ -795,7 +801,10 @@ export class Emitter {
   private emitArmHandler(body: FunctionBody, pat?: Pattern): string {
     const vars = pat ? this.collectPatternVariables(pat) : [];
     if (vars.length > 0) {
-      const unpack = `const { _tag: _, ...__fields } = $matched as any;\n    const [${vars.join(", ")}] = Object.values(__fields) as any[];`;
+      let unpack = `const { _tag: _, ...__fields } = $matched as any;\n    const [${vars.join(", ")}] = Object.values(__fields) as any[];`;
+      if (pat && pat.kind === "ArrayPattern") {
+        unpack = `const [${pat.elements.map((e) => (e.kind === "VariablePattern" ? e.name.name : "_")).join(", ")}] = $matched as any[];`;
+      }
       if (body.kind === "BlockStatement") {
         return `($matched) => {\n    ${unpack}\n${this.emitFunctionBody(body)}\n  }`;
       }
@@ -875,6 +884,7 @@ export class Emitter {
       const obj = effectExpr.callee.object;
       if (obj.kind === "UpperIdentifier") {
         if (EFFECT_BUILTIN_MODULES.has(obj.name)) {
+          this.effectImports.add(obj.name);
           return `${obj.name}.${effectExpr.callee.property.name}(${effectExpr.args.map((a) => this.emitExpression(a)).join(", ")})`;
         }
         // Direct Service Call: Service.method(...) -> (yield* Service).method(...)
