@@ -32,7 +32,7 @@ describe("Dogfooding Real-World Applications (TASK-027)", () => {
       expect(res.typescript).toContain("export type ApiResponse = Data.TaggedEnum<{");
 
       // Effect error class
-      expect(res.typescript).toContain("export class GithubApiError extends Schema.TaggedError<GithubApiError>()(");
+      expect(res.typescript).toContain("export class GithubApiError$Class extends Schema.TaggedError<GithubApiError$Class>()(");
 
       // ts-pattern matching
       expect(res.typescript).toContain("match(res)");
