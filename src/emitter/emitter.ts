@@ -745,10 +745,21 @@ export class Emitter {
     return `${this.emitExpression(stmt.expression)};`;
   }
 
-  private emitWhenStatement(stmt: WhenStatement): string {
+  private emitWhenStatement(stmt: WhenStatement, insideEffect = false): string {
     const cond = this.emitExpression(stmt.condition);
     if (stmt.isEarlyReturn) {
-      return `if (${cond}) return ${this.emitExpression(stmt.consequent as Expression)};`;
+      const consequence = stmt.consequent as Expression;
+      if (
+        insideEffect &&
+        consequence.kind === "CallExpression" &&
+        consequence.callee.kind === "MemberExpression" &&
+        consequence.callee.object.kind === "UpperIdentifier" &&
+        consequence.callee.object.name === "Effect" &&
+        consequence.callee.property.name === "fail"
+      ) {
+        return `if (${cond}) return yield* ${this.emitEffectCall(consequence)};`;
+      }
+      return `if (${cond}) return ${this.emitExpression(consequence)};`;
     }
     const body = stmt.consequent as BlockStatement;
     const stmts = body.statements.map((s) => "  " + this.emitStatement(s)).join("\n");
@@ -928,7 +939,7 @@ export class Emitter {
           return `    ${this.emitBindingDeclaration(s)}`;
         }
         if (s.kind === "WhenStatement") {
-          return `    ${this.emitWhenStatement(s)}`;
+          return `    ${this.emitWhenStatement(s, true)}`;
         }
         return "";
       })
