@@ -9,7 +9,7 @@ export area = (shape: Shape) ->
     | Point -> 0
     | _ -> 0
 
-export evaluateScore = (score: number, isPro: boolean) ->
+export evaluateScore = (score: Number, isPro: Boolean) ->
   match
     | score |> Number.greaterThanOrEqualTo(90) and isPro -> "champion"
     | score |> Number.greaterThanOrEqualTo(60) -> "passed"

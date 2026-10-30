@@ -227,7 +227,7 @@ describe("Dogfooding Real-World Applications (TASK-027)", () => {
     it("verifies deep structural equality on TaggedEnum schemas vs reference equality on records", async () => {
       const adtCode = `
 export schema Status =
-  | Active(id: number)
+  | Active(id: Number)
   | Done
 
 export isSameTag = (a: Status, b: Status) => a == b

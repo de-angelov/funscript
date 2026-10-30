@@ -11,23 +11,23 @@ import { Console } from "effect"
 # --- Domain Data Model & Schemas ---
 
 export schema Repository = {
-  id: number
-  name: string
-  fullName: string
-  description: string
-  stargazersCount: number
-  forksCount: number
-  openIssuesCount: number
+  id: Number
+  name: String
+  fullName: String
+  description: String
+  stargazersCount: Number
+  forksCount: Number
+  openIssuesCount: Number
 }
 
 export schema ApiResponse =
   | Success(repo: Repository)
-  | RateLimited(resetTime: number, remaining: number)
-  | NotFound(repoName: string)
-  | ServerError(statusCode: number, message: string)
+  | RateLimited(resetTime: Number, remaining: Number)
+  | NotFound(repoName: String)
+  | ServerError(statusCode: Number, message: String)
 
 # Effect TaggedError representation
-export error GithubApiError(statusCode: number, message: string)
+export error GithubApiError(statusCode: Number, message: String)
 
 # TypeScript escape hatch for foreign fetch execution & error instantiation
 ts
@@ -91,7 +91,7 @@ ts
 
 # --- Response Parsing & Pipelines ---
 
-export parseResponse = (repoPath: string, raw: ts "RawApiResponse"): ApiResponse =>
+export parseResponse = (repoPath: String, raw: ts "RawApiResponse"): ApiResponse =>
   match raw.status
     | 200 => Success(raw.json |> Schema.decodeUnknownSync(Repository))
     | 403 => RateLimited(raw.json.resetTime, raw.json.remaining)
@@ -111,7 +111,7 @@ export formatApiResponse = (res: ApiResponse) =>
         "[Error " + statusCode + "] " + message
 
 # Client function using 'js' interop in Effect block
-export fetchRepo = (repoPath: string) =>
+export fetchRepo = (repoPath: String) =>
   effect
     _ <- Console.log("[GitHub Client] Requesting repository: " + repoPath)
     raw <- js executeFetch(repoPath)

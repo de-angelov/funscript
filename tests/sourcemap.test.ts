@@ -67,7 +67,7 @@ export age = 36
 
     it("correctly offsets line numbers when runtime imports are added to header", async () => {
       const code = `
-export add = (a: number, b: number) -> a + b
+export add = (a: Number, b: Number) -> a + b
 export res = 5 |> add(10, _)
 `.trim();
 
@@ -110,7 +110,7 @@ export res = 5 |> add(10, _)
 
     it("maps block statements inside functions", async () => {
       const code = `
-export compute = (x: number) ->
+export compute = (x: Number) ->
   a = x + 1
   b = a * 2
   b + 10
@@ -160,13 +160,13 @@ export main = effect
     it("maps schemas and tagged unions", async () => {
       const code = `
 export schema User = {
-  id: string
-  name: string
+  id: String
+  name: String
 }
 
 export schema Shape =
-  | Circle(radius: number)
-  | Square(size: number)
+  | Circle(radius: Number)
+  | Square(size: Number)
 `.trim();
 
       const res = await Effect.runPromise(compileString(code, "schema.fun"));
@@ -212,10 +212,10 @@ export schema Shape =
 
       const funCode = `
 export schema Config = {
-  port: number
+  port: Number
 }
 
-export start = (port: number) -> port + 1
+export start = (port: Number) -> port + 1
 `.trim();
 
       await fs.writeFile(funFile, funCode, "utf-8");

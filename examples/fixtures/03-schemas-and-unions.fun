@@ -3,15 +3,15 @@
 import { Option } from "effect"
 
 export schema User = {
-  id: string
-  name: string
-  role: string = "member"
-  bio: Option<string>
+  id: String
+  name: String
+  role: String = "member"
+  bio: Option<String>
 }
 
 export schema Shape =
-  | Circle(radius: number)
-  | Rect(width: number, height: number)
+  | Circle(radius: Number)
+  | Rect(width: Number, height: Number)
   | Point
 
 export c = Circle(10)

@@ -28,7 +28,7 @@ describe("FunScript Interactive REPL (TASK-020)", () => {
     });
 
     it("compiles functions as declarations", async () => {
-      const res = await compileReplCode("fn add(a: number, b: number) => a + b");
+      const res = await compileReplCode("fn add(a: Number, b: Number) => a + b");
       expect(res.isExpression).toBe(false);
       expect(res.jsCode).toContain("var add =");
     });
@@ -85,7 +85,7 @@ describe("FunScript Interactive REPL (TASK-020)", () => {
 
     it("defines and calls functions across evaluations", async () => {
       const ctx = createTestContext();
-      await evaluateReplLine("fn multiply(a: number, b: number) => a * b", ctx);
+      await evaluateReplLine("fn multiply(a: Number, b: Number) => a * b", ctx);
       const res = await evaluateReplLine("multiply(6, 7)", ctx);
       expect(res).toBe(42);
     });

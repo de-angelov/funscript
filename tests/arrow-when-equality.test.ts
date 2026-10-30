@@ -57,7 +57,7 @@ describe("Unified '=>' Arrow, 'when' Keyword Forms & Equality Operators", () => 
   describe("2. Unified '=>' Arrow Semantics", () => {
     it("supports '=>' for function return types and block bodies", async () => {
       const code = `
-export fn add(a: number, b: number) => number {
+export fn add(a: Number, b: Number) => Number {
   => a + b
 }
 `.trim();
@@ -69,7 +69,7 @@ export fn add(a: number, b: number) => number {
 
     it("supports '=>' for function return types with expression body", async () => {
       const code = `
-export fn multiply(a: number, b: number) => number => a * b
+export fn multiply(a: Number, b: Number) => Number => a * b
 `.trim();
 
       const res = await Effect.runPromise(compileString(code));
@@ -78,9 +78,9 @@ export fn multiply(a: number, b: number) => number => a * b
 
     it("supports '=>' for arrow lambdas", async () => {
       const code = `
-export square = (x: number) => x * x
+export square = (x: Number) => x * x
 export getVal = () => 42
-export combine = (a: number, b: number) => a + b
+export combine = (a: Number, b: Number) => a + b
 `.trim();
 
       const res = await Effect.runPromise(compileString(code));
@@ -93,7 +93,7 @@ export combine = (a: number, b: number) => a + b
       const code = `
 export schema Status =
   | Pending
-  | Active(id: number)
+  | Active(id: Number)
 
 export label = (s: Status) =>
   match s
@@ -108,7 +108,7 @@ export label = (s: Status) =>
 
     it("supports explicit return statement '=> expr' emitted as 'return (expr);'", async () => {
       const code = `
-export fn compute(x: number) => number {
+export fn compute(x: Number) => Number {
   when (x == 0) => 0
   => x * 10
 }
@@ -122,7 +122,7 @@ export fn compute(x: number) => number {
   describe("3. The 'when' Keyword (Three Forms)", () => {
     it("Form 1 (Early return): emits 'if (cond) return expr;' inside functions", async () => {
       const code = `
-export fn divide(a: number, b: number) => number {
+export fn divide(a: Number, b: Number) => Number {
   when (b == 0) => 0
   => a / b
 }
@@ -146,7 +146,7 @@ x = 10
 
     it("Form 2 (Conditional block): emits 'if (cond) { stmts }' with curly braces", async () => {
       const code = `
-export fn test(x: number) => number {
+export fn test(x: Number) => Number {
   mut result = 0
   when (x == 10) {
     result = x * 2
@@ -163,7 +163,7 @@ export fn test(x: number) => number {
 
     it("Form 2 (Conditional block): supports indented block", async () => {
       const code = `
-export fn testIndented(x: number) => number {
+export fn testIndented(x: Number) => Number {
   mut result = 0
   when (x == 5)
     result = 100
@@ -180,8 +180,8 @@ export fn testIndented(x: number) => number {
     it("Form 3 (Match arm guard): '| Pattern when condition => result'", async () => {
       const code = `
 export schema Action =
-  | Deposit(amount: number)
-  | Withdraw(amount: number)
+  | Deposit(amount: Number)
+  | Withdraw(amount: Number)
 
 export apply = (act: Action) =>
   match act
@@ -203,7 +203,7 @@ export apply = (act: Action) =>
   describe("4. Structural Equality vs Reference Identity", () => {
     it("lowers structural equality '==' to Effect's Equal.equals for structural types", async () => {
       const code = `
-schema Point = { x: number, y: number }
+schema Point = { x: Number, y: Number }
 export checkEqual = (p1: Point, p2: Point) => p1 == p2
 export checkNotEqual = (p1: Point, p2: Point) => p1 != p2
 `.trim();
@@ -229,7 +229,7 @@ export compareRecords = (a, b) => a == b
 export checkNums = (1 == 2)
 export checkStrings = ("hello" == "world")
 export checkBools = (true == false)
-export checkIdentNum = (n: number) => n == 0
+export checkIdentNum = (n: Number) => n == 0
 `.trim();
 
       const res = await Effect.runPromise(compileString(code));

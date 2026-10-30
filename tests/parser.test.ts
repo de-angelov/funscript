@@ -82,7 +82,7 @@ describe("FunScript Parser", () => {
 
     it("parses exported declarations", () => {
       const ast = parse(`
-export schema Item = { id: string }
+export schema Item = { id: String }
 export count = 10
 `);
       expect(ast.body.length).toBe(2);
@@ -98,10 +98,10 @@ export count = 10
     it("parses RecordSchema with required fields and default values", () => {
       const ast = parse(`
 schema User = {
-  id: string
-  name: string
-  role: string = "member"
-  age: number
+  id: String
+  name: String
+  role: String = "member"
+  age: Number
 }
 `);
       expect(ast.body.length).toBe(1);
@@ -124,8 +124,8 @@ schema User = {
     it("parses TaggedUnionSchema with variants, fields, and unit variants", () => {
       const ast = parse(`
 schema Shape =
-  | Circle(radius: number)
-  | Rect(width: number, height: number)
+  | Circle(radius: Number)
+  | Rect(width: Number, height: Number)
   | Point
 `);
       const decl = ast.body[0] as SchemaDeclaration;
@@ -165,7 +165,7 @@ schema Result<T, E> =
     });
 
     it("parses RefinementSchema", () => {
-      const ast = parse(`schema Positive = number |> Number.greaterThan(0)`);
+      const ast = parse(`schema Positive = Number |> Number.greaterThan(0)`);
       const decl = ast.body[0] as SchemaDeclaration;
       expect(decl.id.name).toBe("Positive");
 
@@ -178,11 +178,11 @@ schema Result<T, E> =
     it("parses schema with nested record types and complex types", () => {
       const ast = parse(`
 schema ServerConfig = {
-  host: string
-  port: number
+  host: String
+  port: Number
   db: {
-    url: string
-    poolSize: number
+    url: String
+    poolSize: Number
   }
 }
 `);
@@ -195,7 +195,7 @@ schema ServerConfig = {
 
     it("parses schema with Effect types including error and requirements channels", () => {
       const ast = parse(`
-schema Action = (id: string) -> Effect<User, NotFound, Database>
+schema Action = (id: String) -> Effect<User, NotFound, Database>
 `);
       const decl = ast.body[0] as SchemaDeclaration;
       const body = decl.body as TypeSignatureSchema;
@@ -211,7 +211,7 @@ schema Action = (id: string) -> Effect<User, NotFound, Database>
 
   describe("Error Declarations", () => {
     it("parses ErrorDeclaration with fields", () => {
-      const ast = parse(`error NotFound(id: string, code: number)`);
+      const ast = parse(`error NotFound(id: String, code: Number)`);
       const err = ast.body[0] as ErrorDeclaration;
 
       expect(err.kind).toBe("ErrorDeclaration");
@@ -235,8 +235,8 @@ schema Action = (id: string) -> Effect<User, NotFound, Database>
     it("parses ServiceDeclaration with members and default tag", () => {
       const ast = parse(`
 service UserRepo
-  find: (id: string) -> Effect<User, NotFound>
-  save: (user: User) -> Effect<void>
+  find: (id: String) -> Effect<User, NotFound>
+  save: (user: User) -> Effect<Void>
 `);
       const svc = ast.body[0] as ServiceDeclaration;
 
@@ -253,7 +253,7 @@ service UserRepo
     it("parses ServiceDeclaration with custom tag string", () => {
       const ast = parse(`
 service PaymentGateway "custom/payment/gateway"
-  charge: (amount: number) -> Effect<Receipt, PaymentFailed>
+  charge: (amount: Number) -> Effect<Receipt, PaymentFailed>
 `);
       const svc = ast.body[0] as ServiceDeclaration;
 
@@ -269,9 +269,9 @@ service PaymentGateway "custom/payment/gateway"
     it("parses immutable, typed, and mutable bindings", () => {
       const ast = parse(`
 x = 10
-count: number = 0
+count: Number = 0
 mut total = 100
-mut flag: boolean = true
+mut flag: Boolean = true
 `);
       expect(ast.body.length).toBe(4);
 
@@ -411,7 +411,7 @@ user = {
 f1 = () -> 42
 f2 = -> 100
 f3 = (x) -> x + 1
-f4 = (a: number, b: number): number -> a + b
+f4 = (a: Number, b: Number): Number -> a + b
 `);
       const l1 = (ast.body[0] as BindingDeclaration).init as FunctionExpression;
       expect(l1.kind).toBe("FunctionExpression");
@@ -431,7 +431,7 @@ f4 = (a: number, b: number): number -> a + b
 
     it("parses multiline block function body with local statements", () => {
       const ast = parse(`
-calculate = (x: number) ->
+calculate = (x: Number) ->
   multiplier = 2
   temp = x * multiplier
   temp + 1
@@ -558,7 +558,7 @@ grade = match
   describe("Effect Blocks", () => {
     it("parses effect block with binds, discards, local bindings, and final return", () => {
       const ast = parse(`
-getUser = (id: string) -> effect
+getUser = (id: String) -> effect
   user <- UserRepo.find(id)
   _ <- Console.log(user)
   prefix = "User: "

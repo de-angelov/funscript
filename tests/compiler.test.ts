@@ -18,7 +18,7 @@ export nextAge = age + 1
 
   it("compiles lambdas and pipelines", async () => {
     const code = `
-export add = (a: number, b: number) -> a + b
+export add = (a: Number, b: Number) -> a + b
 export res = 5 |> add(10, _)
 `.trim();
 
@@ -59,13 +59,13 @@ export resChained = 5 |> (_ + 1) |> (_ * 2)
   it("compiles record schemas and tagged union schemas", async () => {
     const code = `
 export schema User = {
-  id: string
-  name: string
+  id: String
+  name: String
 }
 
 export schema Shape =
-  | Circle(radius: number)
-  | Rect(width: number, height: number)
+  | Circle(radius: Number)
+  | Rect(width: Number, height: Number)
   | Point
 `.trim();
 
@@ -80,7 +80,7 @@ export schema Shape =
 
   it("compiles 'js' keyword for interop (export js, effect ingress, pipeline js)", async () => {
     const code = `
-export js fetchUser = (id: string) ->
+export js fetchUser = (id: String) ->
   effect
     res <- js fetch("https://api.com/users/" + id)
     payload <- js res.json()
@@ -131,7 +131,7 @@ export host = "localhost"
 
   it("compiles effect blocks with direct service calls", async () => {
     const code = `
-export getUser = (id: string) ->
+export getUser = (id: String) ->
   effect
     user <- UserRepo.find(id)
     _ <- Console.log(user)
@@ -148,7 +148,7 @@ export getUser = (id: string) ->
 
   it("compiles deep Mutative spreads", async () => {
     const code = `
-export updateCity = (user: User, city: string) ->
+export updateCity = (user: User, city: String) ->
   {
     ...user
     address.city: city
@@ -199,13 +199,13 @@ export getArea = (shape: Shape) ->
 
     it("compiles literal pattern matching (numbers and booleans)", async () => {
       const code = `
-export httpStatus = (code: number) ->
+export httpStatus = (code: Number) ->
   match code
     | 200 -> "ok"
     | 404 -> "not found"
     | _ -> "error"
 
-export boolToString = (flag: boolean) ->
+export boolToString = (flag: Boolean) ->
   match flag
     | true -> "yes"
     | false -> "no"
@@ -222,7 +222,7 @@ export boolToString = (flag: boolean) ->
 
     it("compiles subjectless boolean match expressions to ternary chains", async () => {
       const code = `
-export classify = (score: number) ->
+export classify = (score: Number) ->
   match
     | score |> Number.greaterThan(90) -> "A"
     | score |> Number.greaterThan(80) -> "B"
@@ -238,7 +238,7 @@ export classify = (score: number) ->
 
     it("compiles subjectless match arm with block body to an IIFE", async () => {
       const code = `
-export check = (flag: boolean) ->
+export check = (flag: Boolean) ->
   match
     | flag ->
       step1 = 1
@@ -256,7 +256,7 @@ export check = (flag: boolean) ->
   describe("Error declarations, services, and typed holes code generation", () => {
     it("compiles error declarations to Schema.TaggedError", async () => {
       const code = `
-export error UserNotFound(id: string, code: number)
+export error UserNotFound(id: String, code: Number)
 `.trim();
 
       const res = await Effect.runPromise(compileString(code));
@@ -269,7 +269,7 @@ export error UserNotFound(id: string, code: number)
     it("compiles service declarations with custom tag to Context.Tag", async () => {
       const code = `
 export service PaymentGateway "custom/payment/gateway"
-  charge: (amount: number) -> Effect<Receipt, PaymentFailed>
+  charge: (amount: Number) -> Effect<Receipt, PaymentFailed>
 `.trim();
 
       const res = await Effect.runPromise(compileString(code));

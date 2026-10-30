@@ -2,19 +2,19 @@
 
 import { Console, Effect, Layer } from "effect"
 
-export error NotFound(id: string)
-export error PaymentDeclined(reason: string)
+export error NotFound(id: String)
+export error PaymentDeclined(reason: String)
 
 export service UserRepo
-  find: (id: string) -> Effect<string, NotFound>
+  find: (id: String) -> Effect<String, NotFound>
 
 export service PaymentGateway
-  charge: (amount: number) -> Effect<void, PaymentDeclined>
+  charge: (amount: Number) -> Effect<Void, PaymentDeclined>
 
 export service ConfigRepo
-  loadDefaults: () -> Effect<string, NotFound>
+  loadDefaults: () -> Effect<String, NotFound>
 
-export checkout = (userId: string, amount: number) ->
+export checkout = (userId: String, amount: Number) ->
   effect
     user <- UserRepo.find(userId)
     _ <- PaymentGateway.charge(amount)

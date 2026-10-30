@@ -1,21 +1,21 @@
 # Fixture 05: Mutative Deep Spreads and Local Drafts
 
 export schema Profile = {
-  name: string
+  name: String
   address: {
-    city: string
-    zip: string
+    city: String
+    zip: String
   }
-  tags: Array<string>
+  tags: Array<String>
 }
 
-export updateCity = (p: Profile, newCity: string) ->
+export updateCity = (p: Profile, newCity: String) ->
   {
     ...p
     address.city: newCity
   }
 
-export appendTag = (p: Profile, tag: string) ->
+export appendTag = (p: Profile, tag: String) ->
   p
   |> mut (draft) ->
     draft.tags.push(tag)

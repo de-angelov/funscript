@@ -37,7 +37,7 @@ export Button = (props: Props) -> <button className="btn">{props.label}</button>
 
     it("recognizes .fun file and sets targetExtension to .ts", async () => {
       const code = `
-export add = (a: number, b: number) -> a + b
+export add = (a: Number, b: Number) -> a + b
 `.trim();
       const res = await Effect.runPromise(compileString(code, "src/math.fun"));
       expect(res.targetExtension).toBe(".ts");
@@ -49,9 +49,9 @@ export add = (a: number, b: number) -> a + b
     it("compiles a complex UI component with signals, effects, and mutative draft state", async () => {
       const code = `
 schema TaskItem = {
-  id: string
-  title: string
-  completed: boolean
+  id: String
+  title: String
+  completed: Boolean
 }
 
 export TaskList = (tasks: Array<TaskItem>) ->
@@ -68,7 +68,7 @@ export TaskList = (tasks: Array<TaskItem>) ->
       const res = await Effect.runPromise(compileString(code, "TaskList.funx"));
       expect(res.typescript).toBeDefined();
       expect(res.typescript).toContain('import { Array, Schema, pipe } from "effect";');
-      expect(res.typescript).toContain("export const TaskList = (tasks: Array<TaskItem>) => {");
+      expect(res.typescript).toContain("export const TaskList = (tasks: ReadonlyArray<TaskItem>) => {");
       expect(res.typescript).toContain('return <div className="task-container">');
       expect(res.typescript).toContain('<header className="header"><h1>Task Tracker</h1></header>');
       expect(res.typescript).toContain('<ul className="tasks">');
@@ -80,8 +80,8 @@ export TaskList = (tasks: Array<TaskItem>) ->
       const code = `
 schema ViewState =
   | Loading
-  | Failed(msg: string)
-  | Ready(content: string)
+  | Failed(msg: String)
+  | Ready(content: String)
 
 export View = (state: ViewState) ->
   match state
@@ -101,7 +101,7 @@ export View = (state: ViewState) ->
 
     it("compiles attributes with string template interpolation correctly", async () => {
       const code = `
-export Card = (variant: string, size: string) ->
+export Card = (variant: String, size: String) ->
   <div className="card-{variant}" data-size="size-{size}">
     <span>Card content</span>
   </div>
@@ -114,7 +114,7 @@ export Card = (variant: string, size: string) ->
 
     it("compiles attributes with dollar-prefixed template interpolation correctly", async () => {
       const code = `
-export Badge = (badgeKind: string) ->
+export Badge = (badgeKind: String) ->
   <span className="badge-\${badgeKind}">
     Badge
   </span>
@@ -156,7 +156,7 @@ export Widget = (props: Props) ->
       await fs.writeFile(
         funFile,
         `
-export multiply = (a: number, b: number) -> a * b
+export multiply = (a: Number, b: Number) -> a * b
 `.trim(),
         "utf-8",
       );
@@ -196,7 +196,7 @@ export Header = () -> <header><h1>FunScript</h1></header>
       const file2 = path.join(srcDir, "utils.fun");
 
       await fs.writeFile(file1, "export App = () -> <main>Hello</main>\n");
-      await fs.writeFile(file2, "export double = (x: number) -> x * 2\n");
+      await fs.writeFile(file2, "export double = (x: Number) -> x * 2\n");
 
       const { stdout } = await execFileAsync("node", [
         cliPath,

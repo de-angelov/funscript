@@ -3,7 +3,7 @@
 import { Console, Effect, Layer } from "effect"
 
 export service Greeter
-  greet: (name: string) -> Effect<string>
+  greet: (name: String) -> Effect<String>
 
 export GreeterLive =
   Layer.succeed(Greeter, {

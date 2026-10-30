@@ -3,16 +3,16 @@
 import { Console, Effect, Layer, Array, pipe } from "effect"
 
 export schema Todo = {
-  id: number
-  title: string
-  completed: boolean
+  id: Number
+  title: String
+  completed: Boolean
 }
 
-export error TodoNotFound(id: number)
+export error TodoNotFound(id: Number)
 
 export service TodoRepo
-  create: (title: string) -> Effect<Todo>
-  complete: (id: number) -> Effect<Todo, TodoNotFound>
+  create: (title: String) -> Effect<Todo>
+  complete: (id: Number) -> Effect<Todo, TodoNotFound>
   all: () -> Effect<Array<Todo>>
 
 # In-memory layer implementation using local store:

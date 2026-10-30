@@ -11,10 +11,10 @@ import { Console } from "effect"
 # --- Domain Data Model & Schemas ---
 
 export schema Task = {
-  id: number
-  title: string
-  completed: boolean
-  tag: string
+  id: Number
+  title: String
+  completed: Boolean
+  tag: String
 }
 
 export schema TaskManager = ts "{ tasks: Task[]; nextId: number; }"
@@ -54,7 +54,7 @@ export emptyManager: TaskManager = {
 }
 
 # 1. addTask with 'when' early return, Mutative draft array update, and explicit return '=>'
-export addTask = (manager: TaskManager, title: string, tag: string) => {
+export addTask = (manager: TaskManager, title: String, tag: String) => {
   # Early return guard for invalid/empty title
   when (title == "") => manager
 
@@ -82,7 +82,7 @@ export addTask = (manager: TaskManager, title: string, tag: string) => {
 }
 
 # 2. completeTask with 'when' early return and block 'when' condition
-export completeTask = (manager: TaskManager, targetId: number) => {
+export completeTask = (manager: TaskManager, targetId: Number) => {
   # Early return when collection is empty
   when (manager.tasks.length == 0) => manager
 
@@ -101,7 +101,7 @@ export completeTask = (manager: TaskManager, targetId: number) => {
 }
 
 # 3. removeTask with block 'when'
-export removeTask = (manager: TaskManager, targetId: number) => {
+export removeTask = (manager: TaskManager, targetId: Number) => {
   when (manager.tasks.length == 0) => manager
 
   updatedTasks = manager.tasks |> mut (draft) ->
@@ -133,14 +133,14 @@ export serializeToMarkdown = (manager: TaskManager) => {
 
 # --- Effect File System I/O Workflows ---
 
-export saveTasks = (filePath: string, manager: TaskManager) =>
+export saveTasks = (filePath: String, manager: TaskManager) =>
   effect
     md = serializeToMarkdown(manager)
     _ <- js writeTaskFile(filePath, md)
     _ <- Console.log("[TaskManager] Successfully persisted " + manager.tasks.length + " tasks to " + filePath)
     md
 
-export loadTasks = (filePath: string) =>
+export loadTasks = (filePath: String) =>
   effect
     content <- js readTaskFile(filePath)
     _ <- Console.log("[TaskManager] Loaded markdown file from " + filePath + " (" + content.length + " bytes)")
