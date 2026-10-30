@@ -170,6 +170,7 @@ describe("FunScript Interactive REPL (TASK-020)", () => {
       expect(captured).toContain("3");
       expect(captured).toContain("'hello world'");
       expect(captured).toContain("42");
+      expect(captured).not.toContain("Cannot find name 'msg'");
 
       server.close();
     });
