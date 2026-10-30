@@ -259,7 +259,7 @@ export class Emitter {
         const schemaFields = decl.body.fields
           .map((f) => `  ${f.name.name}: ${this.emitSchemaTypeField(f.typeAnnotation)}`)
           .join(",\n");
-        return `${exp}const ${name} = Schema.Struct({\n${schemaFields}\n});\n${exp}type ${name} = typeof ${name}.Type;`;
+        return `${exp}const ${name} = Schema.Struct({\n${schemaFields}\n});\n${exp}type ${name} = typeof ${name}.Type;\n${exp}const ${name}FromUnknown = (input: unknown): ${name} => Schema.decodeUnknownSync(${name})(input);`;
       }
       case "TaggedUnionSchema": {
         this.effectImports.add("Data");
@@ -303,6 +303,12 @@ export class Emitter {
         .map((f) => `  ${f.name.name}: ${this.emitSchemaTypeField(f.typeAnnotation)}`)
         .join(",\n");
       return `Schema.Struct({\n${inner}\n})`;
+    }
+    if (typeNode.kind === "ArrayTypeNode") {
+      return `Schema.Array(${this.emitSchemaTypeField(typeNode.elementType)})`;
+    }
+    if (typeNode.kind === "UnionTypeNode") {
+      return `Schema.Union(${typeNode.types.map((type) => this.emitSchemaTypeField(type)).join(", ")})`;
     }
     if (typeNode.kind === "TypeReferenceNode") {
       const tName = typeNode.name.name;
@@ -385,6 +391,11 @@ export class Emitter {
       this.effectImports.add("Effect");
       if (decl.init.kind === "FunctionExpression") {
         const fn = decl.init;
+        const validations = fn.params
+          .filter((p) => p.typeAnnotation)
+          .map((p) => `  ${p.name.name} = Schema.decodeUnknownSync(${this.emitSchemaTypeField(p.typeAnnotation!)})(${p.name.name});`)
+          .join("\n");
+        if (validations) this.effectImports.add("Schema");
         for (const p of fn.params) {
           if (this.isPrimitiveType(p.typeAnnotation)) {
             this.primitiveIdentifiers.add(p.name.name);
@@ -399,12 +410,12 @@ export class Emitter {
         if (fn.body.kind === "BlockStatement") {
           const retExpr = fn.body.finalExpression ? this.emitExpression(fn.body.finalExpression) : "undefined";
           if (fn.body.statements.length === 0) {
-            return `${exp}${keyword} ${decl.id.name} = (${params}) => Effect.runPromise(${retExpr});`;
+            return `${exp}${keyword} ${decl.id.name} = (${params}) => {\n${validations}\n  return Effect.runPromise(${retExpr});\n};`;
           }
           const stmts = fn.body.statements.map((s) => "    " + this.emitStatement(s)).join("\n");
-          return `${exp}${keyword} ${decl.id.name} = (${params}) => Effect.runPromise(Effect.gen(function* () {\n${stmts}\n    return ${retExpr};\n  }));`;
+          return `${exp}${keyword} ${decl.id.name} = (${params}) => {\n${validations}\n  return Effect.runPromise(Effect.gen(function* () {\n${stmts}\n    return ${retExpr};\n  }));\n};`;
         }
-        return `${exp}${keyword} ${decl.id.name} = (${params}) => Effect.runPromise(${this.emitExpression(fn.body)});`;
+        return `${exp}${keyword} ${decl.id.name} = (${params}) => {\n${validations}\n  return Effect.runPromise(${this.emitExpression(fn.body)});\n};`;
       }
       return `${exp}${keyword} ${decl.id.name}${typeAnn} = Effect.runPromise(${this.emitExpression(decl.init)});`;
     }

@@ -100,8 +100,9 @@ export runPromiseTest = fetchUser("123") |> js
 `.trim();
 
     const res = await Effect.runPromise(compileString(code));
-    expect(res.typescript).toContain(`import { Effect, pipe } from "effect";`);
-    expect(res.typescript).toContain(`export const fetchUser = (id: string) => Effect.runPromise(`);
+    expect(res.typescript).toContain(`import { Effect, Schema, pipe } from "effect";`);
+    expect(res.typescript).toContain(`export const fetchUser = (id: string) => {`);
+    expect(res.typescript).toContain(`id = Schema.decodeUnknownSync(Schema.String)(id);`);
     expect(res.typescript).toContain(`const res = yield* Effect.tryPromise(() => fetch(("https://api.com/users/" + id)));`);
     expect(res.typescript).toContain(`const payload = yield* Effect.tryPromise(() => res.json());`);
     expect(res.typescript).toContain(`Effect.runPromise`);
