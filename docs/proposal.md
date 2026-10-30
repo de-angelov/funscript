@@ -111,9 +111,10 @@ UserRepoLive = Layer.succeed(UserRepo, {
 })
 
 export main =
-  effect
+  effect {
     user <- UserRepo.find("1")
     user.name
+  }
   |> Effect.provide(UserRepoLive)
 ```
 
@@ -738,14 +739,17 @@ work.
 
 ### 5.5 Effects
 
-An `effect` block compiles to `Effect.gen`. `<-` is `yield*`; `_ <-` discards the result.
+The canonical brace-delimited `effect { ... }` expression compiles to `Effect.gen`.
+`<-` is `yield*`; `_ <-` discards the result. The existing indentation-based form
+remains compatible syntax and has the same semantics.
 
 ```funscript
 export getUser = (id: String) =>
-  effect
+  effect {
     user <- UserRepo.find(id)
     org <- OrgRepo.find(user.orgId)
     { user, org }
+  }
 ```
 
 ```ts
@@ -798,10 +802,11 @@ export schema Todo = {
 }
 
 export fetchTodo = (id: Number) =>
-  effect
+  effect {
     response <- HttpClient.get("https://jsonplaceholder.typicode.com/todos/{id}")
     todo <- response |> HttpClientResponse.schemaBodyJson(Todo)
     { id: todo.id, title: todo.title }
+  }
   |> Effect.retry(Schedule.exponential("100 millis"))
   |> Effect.provide(FetchHttpClient.layer)
 ```
@@ -846,9 +851,10 @@ Handle errors with the normal combinators:
 
 ```funscript
 export findUser = (id: String) =>
-  effect
+  effect {
     user <- UserRepo.find(id)
     user
+  }
   |> Effect.catchTag("NotFound", (e) => Effect.succeed({ id: e.id, name: "anonymous" }))
 ```
 
@@ -886,19 +892,20 @@ export GreeterLive =
   })
 
 export ConfigurableGreeterLive =
-  Layer.effect(Greeter, effect
+  Layer.effect(Greeter, effect {
     prefix <- PrefixConfig
     {
       greet: (name) => Effect.succeed("{prefix}, {name}!")
     }
-  )
+  })
 
 export main =
-  effect
+  effect {
     greeter <- Greeter
     message <- greeter.greet("Ada")
     _ <- Console.log(message)
     message
+  }
   |> Effect.provide(GreeterLive)
 ```
 
@@ -1138,9 +1145,10 @@ squares =
   |> Array.filter((n) => n > 0)
   |> Array.map((n) => n * n)
 
-effect
+effect {
   users <- Effect.forEach(ids, (id) => UserRepo.find(id))
   users
+}
 ```
 
 This is a deliberate constraint. Loops are where imperative mutation and off-by-one

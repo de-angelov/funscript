@@ -372,6 +372,11 @@ export interface OrPattern extends NodeBase {
 
 ## 6. Effect Blocks
 
+The canonical source spelling is brace-delimited `effect { ... }`. The existing
+indentation-based form is compatible and produces the same AST. Both forms preserve
+the rule that bindings and discards sequence effects while the final expression is
+returned.
+
 ```typescript
 export interface EffectBlockExpression extends NodeBase {
   kind: "EffectBlockExpression";

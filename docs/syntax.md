@@ -44,8 +44,8 @@ The design rule is simple:
 | Compile-time type alias      | `schema Lookup = (id: String) => Effect<User, NotFound>`                                         |
 | Error                        | `error NotFound(id: String)`                                                                     |
 | Service                      | `service Greeter` newline `greet: (name: String) => Effect<String>`                              |
-| Layer (pure / effectful)     | `Layer.succeed(Greeter, { ... })` or `Layer.effect(Greeter, effect ...)`                         |
-| Effect block                 | `effect` newline `user <- UserRepo.find(id)`                                                     |
+| Layer (pure / effectful)     | `Layer.succeed(Greeter, { ... })` or `Layer.effect(Greeter, effect { ... })`                    |
+| Effect block                 | `effect { user <- UserRepo.find(id); user }` (canonical; indentation form is compatible)         |
 | Effect bind                  | `name <- effect`                                                                                 |
 | Discard effect               | `_ <- effect`                                                                                    |
 | Typed hole                   | `???` or `??? "todo: handle pagination"`                                                         |
@@ -1472,12 +1472,16 @@ interop, wrapped with `Effect.tryPromise` or an Effect platform module.
 
 ### 9.1 `effect` blocks
 
+The canonical form uses braces with one statement per line. The established
+indentation-based form remains compatible:
+
 ```funscript
 export getUser = (id: String) =>
-  effect
+  effect {
     user <- UserRepo.find(id)
     org <- OrgRepo.find(user.orgId)
     { user, org }
+  }
 ```
 
 ```ts
@@ -1540,19 +1544,21 @@ This is a syntax rule, not a type-checking afterthought. It prevents the classic
 
 ```funscript
 # Rejected: the Console.log effect is created but never executed.
-effect
+effect {
   user <- UserRepo.find(id)
   Console.log("loaded")      # syntax error: non-final bare expression
   user
+}
 ```
 
 The fix is explicit:
 
 ```funscript
-effect
+effect {
   user <- UserRepo.find(id)
   _ <- Console.log("loaded")
   user
+}
 ```
 
 ### 9.4 Return value
@@ -1574,9 +1580,10 @@ Recoverable failures are typed values in the `E` channel:
 
 ```funscript
 export findUser = (id: String) =>
-  effect
+  effect {
     user <- UserRepo.find(id)
     user
+  }
   |> Effect.catchTag("NotFound", (e) => Effect.succeed({ id: e.id, name: "anonymous" }))
 ```
 
@@ -1587,11 +1594,12 @@ the generator's `E` channel automatically infers and tracks the union of all pos
 
 ```funscript
 export checkout = (cartId: String) =>
-  effect
+  effect {
     cart <- CartRepo.find(cartId)  # fails with NotFound
     _ <- PaymentGateway.charge(cart.total)  # fails with PaymentDeclined
     _ <- Inventory.reserve(cart.items)  # fails with OutOfStock
     cart
+  }
 
 # Return type inferred as:
 # Effect<Cart, NotFound | PaymentDeclined | OutOfStock, CartRepo | PaymentGateway | Inventory>
@@ -1608,9 +1616,10 @@ to load an embedded seed configuration or decoding a hardcoded constant), use `|
 
 ```funscript
 export loadDefaultConfig =
-  effect
+  effect {
     raw <- ConfigRepo.loadDefault |> orDie
     raw
+  }
 ```
 
 `|> orDie` strips the error from the `E` channel (demoting `E` to `never`) and converts any failure
@@ -1746,17 +1755,19 @@ producer = (jobs: Queue<Job>) =>
   |> Effect.repeat(Schedule.spaced("1 second"))
 
 worker = (jobs: Queue<Job>, id: Number) =>
-  effect
+  effect {
     job <- Queue.take(jobs)
     _ <- process(job) |> Effect.withSpan("worker.process", { attributes: { id } })
+  }
   |> Effect.forever
 
 export pipeline =
-  effect
+  effect {
     jobs <- Queue.bounded<Job>(100)               # back-pressure: offer waits when full
     _ <- Effect.forkScoped(producer(jobs))        # "go producer(jobs)"
     _ <- Array.range(1, 4) |> Effect.forEach((i) => Effect.forkScoped(worker(jobs, i)))
     Effect.Never
+  }
   |> Effect.scoped                                 # closing the scope interrupts every fiber
 ```
 
@@ -1796,18 +1807,19 @@ export GreeterLive =
 
 # Effectful layer (uses an `effect` block with `<-` to acquire dependencies):
 export ConfigurableGreeterLive =
-  Layer.effect(Greeter, effect
+  Layer.effect(Greeter, effect {
     prefix <- PrefixConfig
     {
       greet: (name) => Effect.succeed("{prefix}, {name}!")
     }
-  )
+  })
 
 export main =
-  effect
+  effect {
     message <- Greeter.greet("Ada")
     _ <- Console.log(message)
     message
+  }
   |> Effect.provide(GreeterLive)
 ```
 
@@ -1975,9 +1987,10 @@ schema User = {
 greet = (user: User) => "Hello, {user.name}!"
 
 loadGreeting = (raw: Unknown) =>
-  effect
+  effect {
     user <- raw |> Schema.decodeUnknown(User)
     greet(user)
+  }
 ```
 
 `Schema.decodeUnknown(User)` returns an Effect whose error channel contains
@@ -1997,8 +2010,9 @@ type; provide a boundary schema and decode those values explicitly.
 
 ```funscript
 export js greet = (name: String) =>
-  effect
+  effect {
     "Hello, {name}!"
+  }
 ```
 
 Schema constructors such as `User({ name: "Ada", age: 36 })` also validate their
@@ -2014,9 +2028,10 @@ development placeholder that can appear in any expression position:
 
 ```funscript
 export checkout = (user: User, cart: Cart) =>
-  effect
+  effect {
     total = calculateTotal(cart)
     ??? "charge payment provider"
+  }
 ```
 
 How `???` works:
@@ -2102,7 +2117,7 @@ export label = (role: Role) =>
     | Member(since) => "member since {since}"
 
 export main =
-  effect
+  effect {
     rawUser <- Schema.decodeUnknown(User)({
       id: "1"
       name: "Ada"
@@ -2112,6 +2127,7 @@ export main =
     user = recordLogin(rawUser)
     _ <- Console.log("{user.name} ({user.logins}): {label(Admin)}")
     user.name
+  }
 ```
 
 This example is deliberately ordinary: no macros, no hidden runtime, no FunScript-specific
