@@ -101,11 +101,11 @@ primary_type         = type_identifier, [ type_args ]
                      | array_type
                      | "(", type_annotation, ")" ;
 
-type_identifier      = upper_identifier | identifier ;
+type_identifier      = upper_identifier ;
 type_args            = "<", type_annotation, { ",", type_annotation }, ">" ;
 type_params          = "<", upper_identifier, { ",", upper_identifier }, ">" ;
 
-function_type        = [ type_params ], "(", [ param_types ], ")", "->", type_annotation ;
+function_type        = [ type_params ], "(", [ param_types ], ")", "=>", type_annotation ;
 param_types          = param_type, { ",", param_type } ;
 param_type           = [ identifier, ":" ], type_annotation ;
 
@@ -136,7 +136,8 @@ logical_and_expr     = equality_expr, { "and", equality_expr } ;
 equality_expr        = relational_expr, { "??", relational_expr } ;
 
 (* Level 5: Equality == / != *)
-relational_expr      = additive_expr, { ( "==" | "!=" ), additive_expr } ;
+relational_expr      = comparison_expr, { ( "==" | "!=" | "===" | "!==" ), comparison_expr } ;
+comparison_expr      = additive_expr, { ( "<" | "<=" | ">" | ">=" ), additive_expr } ;
 
 (* Level 6: Additive + / - *)
 additive_expr        = multiplicative_expr, { ( "+" | "-" ), multiplicative_expr } ;
@@ -187,22 +188,27 @@ dot_path             = identifier, ".", identifier, { ".", identifier } ;
 array_expr           = "[", [ argument_list ], "]" ;
 
 (* Function Expression *)
-function_expr        = [ type_params ], "(", [ param_list ], ")", [ ":", type_annotation ], "->", function_body
-                     | "->", function_body ;
+function_expr        = [ type_params ], "(", [ param_list ], ")", "=>", ( function_body | type_annotation, braced_body ) ;
+braced_body          = "{", { statement, [ NEWLINE ] }, "}" ;
 param_list           = param, { ",", param }, [ "," ] ;
 param                = identifier, [ ":", type_annotation ] ;
 function_body        = expression
                      | NEWLINE, INDENT, block_body, DEDENT ;
 
 block_body           = { statement, NEWLINE }, expression ;
+(* Explicit returns and conditional execution are valid within function bodies. *)
+explicit_return      = "=>", expression ;
+when_statement       = "when", "(", expression, ")", ( explicit_return | function_body | braced_body ) ;
 statement            = binding_declaration
+                     | explicit_return
+                     | when_statement
                      | assignment_statement
                      | expression ;
 
 assignment_statement = ( identifier | dot_path ), "=", expression ;
 
 (* Mutative Block *)
-mut_block            = "mut", "(", identifier, ")", "->", function_body ;
+mut_block            = "mut", "(", identifier, ")", "=>", function_body ;
 
 (* ========================================================================= *)
 (* 5. Pattern Matching (`match`)                                             *)
@@ -213,13 +219,13 @@ match_expr           = value_match | boolean_match ;
 value_match          = "match", expression, ( inline_match_arms | block_match_arms ) ;
 boolean_match        = "match", ( inline_boolean_arms | block_boolean_arms ) ;
 
-inline_match_arms    = { "|", pattern, [ guard ], "->", expression } ;
+inline_match_arms    = { "|", pattern, [ guard ], "=>", expression } ;
 block_match_arms     = NEWLINE, INDENT, match_arm, { NEWLINE, match_arm }, [ NEWLINE ], DEDENT ;
-match_arm            = "|", pattern, [ guard ], "->", arm_body ;
+match_arm            = "|", pattern, [ guard ], "=>", arm_body ;
 
-inline_boolean_arms  = { "|", expression, "->", expression }, [ "|", "_", "->", expression ] ;
+inline_boolean_arms  = { "|", expression, "=>", expression }, [ "|", "_", "=>", expression ] ;
 block_boolean_arms   = NEWLINE, INDENT, bool_arm, { NEWLINE, bool_arm }, [ NEWLINE ], DEDENT ;
-bool_arm             = "|", ( expression | "_" ), "->", arm_body ;
+bool_arm             = "|", ( expression | "_" ), "=>", arm_body ;
 
 guard                = "when", expression ;
 arm_body             = expression

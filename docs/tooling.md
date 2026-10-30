@@ -24,19 +24,19 @@ funscript doctor    diagnose the toolchain
 
 ## 1. The defaults
 
-| Concern | Default | Under the hood |
-| --- | --- | --- |
-| Build / dev server | **Vite** | `@funscript/vite` plugin |
-| Production preview | **Vite preview** | `dist/` served by Vite |
-| Tests | **Vitest** | same Vite pipeline |
-| Types | **TypeScript** | `tsc --noEmit` + language service |
-| Format | **funscript fmt** | canonical, no config |
-| Packages | npm / pnpm / Bun | no new registry or lockfile |
-| Editor | **funscript lsp** | TypeScript language service |
-| Runtime | **Effect TS** | no FunScript runtime |
-| Entry | `src/main.fun` | `funscript run` convention |
-| Test files | `*.test.fun` | Vitest discovery |
-| Output | `dist/` | Vite build |
+| Concern            | Default           | Under the hood                    |
+| ------------------ | ----------------- | --------------------------------- |
+| Build / dev server | **Vite**          | `@funscript/vite` plugin          |
+| Production preview | **Vite preview**  | `dist/` served by Vite            |
+| Tests              | **Vitest**        | same Vite pipeline                |
+| Types              | **TypeScript**    | `tsc --noEmit` + language service |
+| Format             | **funscript fmt** | canonical, no config              |
+| Packages           | npm / pnpm / Bun  | no new registry or lockfile       |
+| Editor             | **funscript lsp** | TypeScript language service       |
+| Runtime            | **Effect TS**     | no FunScript runtime              |
+| Entry              | `src/main.fun`    | `funscript run` convention        |
+| Test files         | `*.test.fun`      | Vitest discovery                  |
+| Output             | `dist/`           | Vite build                        |
 
 If a project needs something else, the generated `vite.config.ts` and `tsconfig.json`
 are ordinary, editable config files. There is no FunScript-specific build format to learn or
@@ -50,7 +50,7 @@ explicit `mut`), `for`/`while`, `class`/`new`/`this`, `throw`/`try`/`catch`, `re
 `async`/`await`, `Promise` as a FunScript-authored effect type, `null`, `undefined`, explicit
 `any`, `interface`/`enum`/`namespace`/`data`, `if`/`else`/`switch`/ternary (`match` is the
 single branching construct), `function`, runtime `typeof`/`instanceof`/`in`/`delete`/`eval`,
-semicolons, and the symbol spellings `&&`/`||`/`!`/`===`/`!==`.
+semicolons, and the symbol spellings `&&`/`||`/`!`.
 
 There is no ESLint/Prettier configuration to debate and no second loop, function, or
 object-creation form to lint. The compiler is the style guide. Raw TypeScript is the only
@@ -177,9 +177,25 @@ For Node services and scripts:
 funscript run src/server.fun --watch
 ```
 
-`funscript run` uses `tsx` (or Bun, if selected) and the compiler's emit path. It is for
-scripts, CLIs, and simple servers. Vite SSR is supported for full-stack apps; the default
-template remains a Vite web app.
+`funscript run` parses, emits, and statically checks the input before executing it.
+A syntax, resolution, or type error prevents execution and exits non-zero with
+source-mapped diagnostics and code frames. `funscript build` uses the same static
+gate before producing output. TypeScript annotations are checked, not just erased.
+
+```text
+funscript run src/server.fun
+funscript build src/server.fun
+funscript run src/server.fun --no-check
+funscript build src/server.fun --no-check
+```
+
+`--no-check` explicitly skips static checking for fast prototyping. Parsing and
+runtime schema validation still apply. Keep the default checks enabled in CI and
+production builds. Imported FunScript modules belong to the check as well as the
+entry file; generated Effect imports must be deduplicated against user imports.
+
+The Vite scaffolding, watch modes, and bundler integrations described below are
+the tooling design; command availability follows the installed CLI version.
 
 ---
 
@@ -197,6 +213,7 @@ funscript build
 4. The build summary reports the FunScript version, Effect target range, and output sizes.
 
 Vite/esbuild strips types; it does not typecheck. Step 1 is the type gate.
+`--no-check` is the explicit opt-out; failures otherwise exit non-zero before output is built.
 
 Flags pass through to Vite:
 
@@ -260,7 +277,7 @@ Example:
 import { expect, test } from "vitest"
 import { Circle, area } from "../src/shapes.fun"
 
-test("area of a circle", ->
+test("area of a circle", () =>
   expect(area(Circle(2))).toBeCloseTo(12.566)
 )
 ```
@@ -272,7 +289,7 @@ import { it } from "@effect/vitest"
 import { expect } from "vitest"
 import { Effect } from "effect"
 
-it.effect("loads a user", ->
+it.effect("loads a user", () =>
   effect
     user <- loadUser("1")
     expect(user.name).toBe("Ada")
@@ -299,7 +316,7 @@ the effect-aware layer.
      position;
    - duplicate `service` tags across the project;
    - `_tag` field collisions;
-   - constructor names that collide across tagged-union `type` and `error`;
+   - constructor names that collide across tagged-union `schema` and `error`;
    - variant names that collide with their union `type`;
    - nullary variant values called as functions, or `error` constructors used as bare values;
    - explicit `any` in FunScript-authored types;
@@ -514,7 +531,7 @@ The CLI prints its compatibility target:
 ```text
 funscript 0.1.0
 compiler 0.1.0
-target: Effect 4.x, ts-pattern 5.x, TypeScript 7.x
+target: Effect 3.x, ts-pattern 5.x, TypeScript 7.x
 ```
 
 There is no FunScript runtime package.
