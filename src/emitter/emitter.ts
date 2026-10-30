@@ -331,7 +331,8 @@ export class Emitter {
       .map((f) => `  ${f.name.name}: ${this.emitSchemaTypeField(f.typeAnnotation)}`)
       .join(",\n");
 
-    return `${exp}class ${name} extends Schema.TaggedError<${name}>()("${name}", {\n${fields}\n}) {}`;
+    const className = `${name}$Class`;
+    return `${exp}class ${className} extends Schema.TaggedError<${className}>()("${name}", {\n${fields}\n}) {}\n${exp}type ${name} = InstanceType<typeof ${className}>;\n${exp}const ${name} = (function(args: ConstructorParameters<typeof ${className}>[0]): ${name} { return new ${className}(args); }) as { (args: ConstructorParameters<typeof ${className}>[0]): ${name}; new (args: ConstructorParameters<typeof ${className}>[0]): ${name} };`;
   }
 
   private emitServiceDeclaration(decl: ServiceDeclaration, isExport: boolean): string {

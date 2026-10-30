@@ -78,6 +78,16 @@ export schema Shape =
     expect(res.typescript).toContain(`export const Point: Shape = $Shape.Point();`);
   });
 
+  it("emits Array schemas for fields in Schema.Struct", async () => {
+    const res = await Effect.runPromise(compileString(`export schema Items = { items: Array<String> }`));
+    expect(res.typescript).toContain(`items: Schema.Array(Schema.String)`);
+
+    const { Schema } = await import("effect");
+    const evalCode = res.typescript.replace(/import .*\n/g, "").replace(/export const /g, "const ").replace(/export type .*\n/g, "");
+    const decode = new Function("Schema", `${evalCode}; return Items;`)(Schema);
+    expect(Schema.decodeUnknownSync(decode)({ items: ["a", "b"] })).toEqual({ items: ["a", "b"] });
+  });
+
   it("compiles 'js' keyword for interop (export js, effect ingress, pipeline js)", async () => {
     const code = `
 export js fetchUser = (id: String) ->
@@ -262,8 +272,16 @@ export error UserNotFound(id: String, code: Number)
       const res = await Effect.runPromise(compileString(code));
       expect(res.typescript).toContain(`import { Schema } from "effect";`);
       expect(res.typescript).toContain(
-        `export class UserNotFound extends Schema.TaggedError<UserNotFound>()("UserNotFound", {\n  id: Schema.String,\n  code: Schema.Number\n}) {}`
+        `export class UserNotFound$Class extends Schema.TaggedError<UserNotFound$Class>()("UserNotFound", {\n  id: Schema.String,\n  code: Schema.Number\n}) {}`
       );
+      expect(res.typescript).toContain(`export const UserNotFound = (function(args: ConstructorParameters<typeof UserNotFound$Class>[0]): UserNotFound { return new UserNotFound$Class(args); }) as { (args: ConstructorParameters<typeof UserNotFound$Class>[0]): UserNotFound; new (args: ConstructorParameters<typeof UserNotFound$Class>[0]): UserNotFound };`);
+
+      const { Schema } = await import("effect");
+      const evalCode = res.typescript.replace(/import .*\n/g, "").replace(/<UserNotFound\$Class>\(\)/g, "()").replace(/\(function\(args: ConstructorParameters<typeof UserNotFound\$Class>\[0\]\): UserNotFound \{ return new UserNotFound\$Class\(args\); \}\) as \{[^}]+\}/, "function(args) { return new UserNotFound$Class(args); }").replace(/export type .*\n/g, "").replace(/export const /g, "const ").replace(/export class /g, "class ");
+      const makeError = new Function("Schema", `${evalCode}; return UserNotFound;`)(Schema);
+      const error = makeError({ id: "u1", code: 404 });
+      expect(error).toBeInstanceOf(Error);
+      expect(error.id).toBe("u1");
     });
 
     it("compiles service declarations with custom tag to Context.Tag", async () => {
