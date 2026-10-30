@@ -70,6 +70,12 @@ describe("Sample Applications & Real-World Programs", () => {
       expect(stdout).toContain("FAILED: Order ORD-9999 processing stopped: CreditLimitExceeded");
     });
 
+    it("passes static type checking", async () => {
+      const { stdout, stderr } = await execFileAsync("node", [cliPath, "check", programPath]);
+      expect(stderr).toBe("");
+      expect(stdout).toContain(`✓ ${programPath} checked successfully (0 errors)`);
+    });
+
     it("executes examples/order-fulfillment.fun identically", async () => {
       const { stdout, stderr } = await execFileAsync("node", [cliPath, "run", examplePath]);
       expect(stderr).toBe("");

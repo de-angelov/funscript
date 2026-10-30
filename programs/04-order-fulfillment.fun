@@ -87,12 +87,14 @@ export appendAuditEntry = (logs: Array<String>, entry: String) ->
 
 # --- Effect Services & Dependencies ---
 
+export error PaymentFailed(reason: String)
+
 export service InventoryService
   checkAvailability: (sku: String) -> Effect<Boolean>
   reserveStock: (sku: String, qty: Number) -> Effect<Boolean>
 
 export service PaymentGateway
-  charge: (orderId: String, amount: Number, method: PaymentMethod) -> Effect<String>
+  charge: (orderId: String, amount: Number, method: PaymentMethod) -> Effect<String, PaymentFailed>
 
 export service NotificationService
   sendConfirmation: (customer: String, message: String) -> Effect<Void>
@@ -126,12 +128,12 @@ export PaymentGatewayLive =
           | amount |> greaterThan(50000) ->
               effect
                 _ <- Console.log("  [PaymentGateway] Transaction denied: credit limit exceeded")
-                _ <- Effect.fail("CreditLimitExceeded")
+                _ <- Effect.fail(PaymentFailed("CreditLimitExceeded"))
                 ""
           | calls == 1 ->
               effect
                 _ <- Console.log("  [PaymentGateway] Transient network glitch on attempt 1! Retrying...")
-                _ <- Effect.fail("GatewayTimeout")
+                _ <- Effect.fail(PaymentFailed("GatewayTimeout"))
                 ""
           | _ ->
               effect
@@ -222,8 +224,8 @@ export processOrderSafely = (order: Order, method: PaymentMethod, tier: Delivery
   processOrderWorkflow(order, method, tier)
   |> Effect.catchAll((err) ->
     effect
-      _ <- Console.log("  [Workflow Recovery] Caught domain error: {err}")
-      Failed(order.id, err)
+      _ <- Console.log("  [Workflow Recovery] Caught domain error: {err.reason}")
+      Failed(order.id, err.reason)
   )
 
 # --- Initial Demo State & Main Entrypoint ---
