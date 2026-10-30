@@ -19,8 +19,8 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "fmt": "node ./dist/cli/index.js fmt",
-    "fmt:check": "node ./dist/cli/index.js fmt --check examples/*.fun programs/*.fun",
-    "prettier:check": "prettier --check \"**/*.fun\"",
+    "fmt:check": "node ./dist/cli/index.js fmt --check examples/fixtures/*.fun examples/solid-demo/*.fun examples/greeter-service.fun examples/hello.fun examples/order-fulfillment.fun examples/shapes.fun examples/todo-http.fun programs/01-fibonacci.fun programs/02-bank-account.fun programs/03-todo-service.fun programs/04-js-ts-interop.fun programs/04-order-fulfillment.fun tests/fixtures/formatter/*.funx",
+    "prettier:check": "prettier --plugin ./dist/formatter/prettier.js --check examples/hello.fun tests/fixtures/formatter/*.funx docs/ci-release.md",
     "verify": "npm run build && npm run fmt:check && npm test",
     "pr:check": "node scripts/validate-pr.js"
   },

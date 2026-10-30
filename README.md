@@ -126,6 +126,7 @@ alternatives. There is no FunScript runtime and no separate FunScript standard l
 **Effect TS is the standard library**.
 
 For checkout-based CLI setup and status, see [the optional toolchain helper](docs/toolchain.md).
+For CI checks and maintainer release steps, see [CI and npm release operations](docs/ci-release.md).
 
 ## Documents
 

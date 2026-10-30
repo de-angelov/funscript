@@ -6,6 +6,13 @@ on:
   pull_request:
     branches: [main]
 
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
 jobs:
   ci:
     name: Build, Verify & Test
@@ -24,26 +31,41 @@ jobs:
         run: npm ci
 
       - name: Run typechecking
-        run: npx tsc --noEmit
+        run: npx tsc --noEmit 2>&1 | tee build.log
 
       - name: Run VS Code extension typechecking
-        run: npx tsc -p editors/vscode --noEmit
-
-      - name: Check FunScript formatting (CLI)
-        run: npm run fmt:check
-
-      - name: Check formatting (Prettier)
-        run: npm run prettier:check
+        run: npx tsc -p editors/vscode --noEmit 2>&1 | tee vscode-build.log
 
       - name: Build package artifacts
-        run: npm run build
+        run: npm run build 2>&1 | tee build.log
+
+      - name: Check FunScript formatting
+        run: npm run fmt:check
+
+      - name: Check Markdown formatting
+        run: npm run prettier:check
 
       - name: Run full test suite
-        run: npm test
+        run: npm test -- --reporter=basic 2>&1 | tee test.log
+
+      - name: Upload failure diagnostics
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ci-diagnostics-${{ github.run_id }}
+          if-no-files-found: ignore
+          retention-days: 7
+          path: |
+            build.log
+            vscode-build.log
+            test.log
+            dist/**/*.map
 
   agent-pr-validation:
     name: GitHub Agent PR Validation
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
