@@ -14,6 +14,7 @@ const TMP_DIR = path.resolve("/tmp/opencode/test-sourcemap-" + Date.now());
 describe("Source Map Generation (.map) using magic-string", () => {
   beforeEach(async () => {
     await fs.mkdir(TMP_DIR, { recursive: true });
+    await fs.symlink(path.resolve("node_modules"), path.join(TMP_DIR, "node_modules"), "dir");
   });
 
   afterEach(async () => {
