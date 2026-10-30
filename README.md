@@ -125,6 +125,8 @@ See [docs/tooling.md](docs/tooling.md) for a minimal project workflow and suppor
 alternatives. There is no FunScript runtime and no separate FunScript standard library;
 **Effect TS is the standard library**.
 
+For checkout-based CLI setup and status, see [the optional toolchain helper](docs/toolchain.md).
+
 ## Documents
 
 - **[docs/proposal.md](docs/proposal.md)** — the full language proposal: motivation,
