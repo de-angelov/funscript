@@ -170,7 +170,7 @@ describe("FunScript LSP Server", () => {
             uri: "file:///workspace/valid.fun",
             languageId: "funscript",
             version: 1,
-            text: 'export greeting = "hello"\nexport add = (a: number, b: number) -> a + b\n',
+            text: 'export greeting = "hello"\nexport add = (a: Number, b: Number) -> a + b\n',
           },
         },
       });
@@ -475,8 +475,8 @@ getUser = () ->
       const uri = "file:///workspace/schema.fun";
       const source = `
 export schema User = {
-    id: string
-    name: string
+    id: String
+    name: String
 }
 
 export greet = (user: User) ->
@@ -509,7 +509,7 @@ export greet = (user: User) ->
       expect(response.result).toHaveLength(1);
       const edit: TextEdit = response.result[0];
       expect(edit.newText).toBe(
-        'export schema User = {\n  id: string\n  name: string\n}\n\nexport greet = (user: User) ->\n  "Hello, {user.name}!"\n'
+        'export schema User = {\n  id: String\n  name: String\n}\n\nexport greet = (user: User) ->\n  "Hello, {user.name}!"\n'
       );
     });
 
@@ -520,7 +520,7 @@ export greet = (user: User) ->
       const uri = "file:///workspace/indent.fun";
       const source = `
 export schema Config = {
-  host: string
+  host: String
 }
 `.trim();
 
@@ -550,7 +550,7 @@ export schema Config = {
       expect(response.error).toBeUndefined();
       expect(response.result).toHaveLength(1);
       const edit: TextEdit = response.result[0];
-      expect(edit.newText).toBe('export schema Config = {\n    host: string\n}\n');
+      expect(edit.newText).toBe('export schema Config = {\n    host: String\n}\n');
     });
 
     it("returns null when formatting an unknown or unopened document", async () => {
@@ -783,7 +783,7 @@ export schema Config = {
 
       const uri = "file:///fn.fun";
       const source = [
-        "add = (a: number, b: number) -> a + b",
+        "add = (a: Number, b: Number) -> a + b",
         "result = add(10, 20)",
       ].join("\n");
 
@@ -820,7 +820,7 @@ export schema Config = {
       await server.handleMessage({ jsonrpc: "2.0", id: 1, method: "initialize", params: {} });
 
       const uri = "file:///fn-decl.fun";
-      const source = "add = (a: number, b: number) -> a + b\n";
+      const source = "add = (a: Number, b: Number) -> a + b\n";
 
       await server.handleMessage({
         jsonrpc: "2.0",
@@ -856,7 +856,7 @@ export schema Config = {
 
       const uri = "file:///export-fn.fun";
       const source = [
-        "export multiply = (x: number, y: number) -> x * y",
+        "export multiply = (x: Number, y: Number) -> x * y",
         "value = multiply(3, 4)",
       ].join("\n");
 
@@ -928,7 +928,7 @@ export schema Config = {
       await server.handleMessage({ jsonrpc: "2.0", id: 1, method: "initialize", params: {} });
 
       const uri = "file:///params.fun";
-      const source = "double = (count: number) -> count * 2\n";
+      const source = "double = (count: Number) -> count * 2\n";
 
       await server.handleMessage({
         jsonrpc: "2.0",
@@ -965,7 +965,7 @@ export schema Config = {
 
       const uri = "file:///block.fun";
       const source = [
-        "calculate = (n: number) ->",
+        "calculate = (n: Number) ->",
         "  subtotal = n * 10",
         "  subtotal + 5",
       ].join("\n");
@@ -1006,8 +1006,8 @@ export schema Config = {
       const uri = "file:///schema.fun";
       const source = [
         "schema User = {",
-        "  id: string",
-        "  name: string",
+        "  id: String",
+        "  name: String",
         "}",
         "export getUserName = (user: User) -> user.name",
       ].join("\n");
@@ -1047,8 +1047,8 @@ export schema Config = {
       const uri = "file:///variants.fun";
       const source = [
         "schema Shape =",
-        "  | Circle(radius: number)",
-        "  | Rectangle(w: number, h: number)",
+        "  | Circle(radius: Number)",
+        "  | Rectangle(w: Number, h: Number)",
         "shape = Circle(15)",
       ].join("\n");
 
@@ -1086,9 +1086,9 @@ export schema Config = {
 
       const uri = "file:///services.fun";
       const source = [
-        "error NotFound(id: string)",
+        "error NotFound(id: String)",
         "service OrderService",
-        "  getOrder: (id: string) -> Effect<Order, NotFound>",
+        "  getOrder: (id: String) -> Effect<Order, NotFound>",
         "result = OrderService",
       ].join("\n");
 
@@ -1182,7 +1182,7 @@ export schema Config = {
 
       const uri = "file:///match.fun";
       const source = [
-        "schema Shape = | Circle(radius: number)",
+        "schema Shape = | Circle(radius: Number)",
         "calc = (s: Shape) ->",
         "  match s",
         "    | Circle(radius) -> radius * 2",
@@ -1222,7 +1222,7 @@ export schema Config = {
 
       const uri = "file:///mut.fun";
       const source = [
-        "appendTag = (p: Profile, tag: string) ->",
+        "appendTag = (p: Profile, tag: String) ->",
         "  p",
         "  |> mut (draft) ->",
         "    draft.tags.push(tag)",
@@ -1485,9 +1485,9 @@ export schema Config = {
       const uri = "file:///keywords.fun";
       const text = [
         "export service UserRepo",
-        "  find: (id: string) -> Effect<User, NotFound>",
+        "  find: (id: String) -> Effect<User, NotFound>",
         "",
-        "getUser = (id: string) ->",
+        "getUser = (id: String) ->",
         "  effect",
         "    mut count = 0",
         "    user <- UserRepo.find(id)",
@@ -1589,7 +1589,7 @@ export schema Config = {
         "  options: ts \"Record<string, unknown>\"",
         "}",
         "",
-        "fetchData = (url: string) ->",
+        "fetchData = (url: String) ->",
         "  effect",
         "    res <- js fetch(url)",
         "    res",
@@ -1635,7 +1635,7 @@ export schema Config = {
       await server.handleMessage({ jsonrpc: "2.0", id: 1, method: "initialize", params: {} });
 
       const uri = "file:///types.fun";
-      const text = "fn = (name: string, count: number, flag: boolean) -> Option<Array<string>>\n";
+      const text = "fn = (name: String, count: Number, flag: Boolean) -> Option<Array<String>>\n";
 
       await server.handleMessage({
         jsonrpc: "2.0",
@@ -1678,7 +1678,7 @@ export schema Config = {
 
       const uri = "file:///operators.fun";
       const text = [
-        "pipeline = (x: number) ->",
+        "pipeline = (x: Number) ->",
         "  x |> double",
         "",
         "run = () ->",

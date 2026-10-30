@@ -15,12 +15,12 @@ describe("FunScript Code Formatter", () => {
 
   it("normalizes indentation to 2 spaces", () => {
     const unformatted = `
-export greet = (name: string) ->
+export greet = (name: String) ->
     # greeting message
     "Hello, {name}!"
 `.trim();
     const formatted = format(unformatted);
-    expect(formatted).toBe(`export greet = (name: string) ->\n  # greeting message\n  "Hello, {name}!"\n`);
+    expect(formatted).toBe(`export greet = (name: String) ->\n  # greeting message\n  "Hello, {name}!"\n`);
     expect(format(formatted)).toBe(formatted);
   });
 
@@ -34,35 +34,35 @@ export greet = (name: string) ->
   it("formats schemas and tagged unions", () => {
     const unformatted = `
 export schema User = {
-    id: string
-    name: string
-    role: string = "user"
+    id: String
+    name: String
+    role: String = "user"
 }
 
 export schema Shape =
-    | Circle(radius: number)
-    | Rect(width: number, height: number)
+    | Circle(radius: Number)
+    | Rect(width: Number, height: Number)
     | Point
 `.trim();
     const formatted = format(unformatted);
     expect(formatted).toBe(
-      `export schema User = {\n  id: string\n  name: string\n  role: string = "user"\n}\n\nexport schema Shape =\n  | Circle(radius: number)\n  | Rect(width: number, height: number)\n  | Point\n`
+      `export schema User = {\n  id: String\n  name: String\n  role: String = "user"\n}\n\nexport schema Shape =\n  | Circle(radius: Number)\n  | Rect(width: Number, height: Number)\n  | Point\n`
     );
     expect(format(formatted)).toBe(formatted);
   });
 
   it("formats error declarations and service declarations", () => {
     const unformatted = `
-export error NotFound(id: string)
+export error NotFound(id: String)
 export error Empty
 
 export service Greeter "greeter-v1"
-    greet: (name: string) -> Effect<string>
-    farewell: (name: string) -> Effect<void, NotFound>
+    greet: (name: String) -> Effect<String>
+    farewell: (name: String) -> Effect<Void, NotFound>
 `.trim();
     const formatted = format(unformatted);
     expect(formatted).toBe(
-      `export error NotFound(id: string)\nexport error Empty\n\nexport service Greeter "greeter-v1"\n  greet: (name: string) -> Effect<string>\n  farewell: (name: string) -> Effect<void, NotFound>\n`
+      `export error NotFound(id: String)\nexport error Empty\n\nexport service Greeter "greeter-v1"\n  greet: (name: String) -> Effect<String>\n  farewell: (name: String) -> Effect<Void, NotFound>\n`
     );
     expect(format(formatted)).toBe(formatted);
   });
@@ -85,7 +85,7 @@ export classify = (shape: Shape) ->
 
   it("formats subjectless match expressions", () => {
     const unformatted = `
-export checkNumber = (n: number) ->
+export checkNumber = (n: Number) ->
   match
       | n |> Number.lessThan(0) -> "negative"
       | n == 0 -> "zero"
@@ -93,7 +93,7 @@ export checkNumber = (n: number) ->
 `.trim();
     const formatted = format(unformatted);
     expect(formatted).toBe(
-      `export checkNumber = (n: number) ->\n  match\n    | n |> Number.lessThan(0) -> "negative"\n    | n == 0 -> "zero"\n    | _ -> "positive"\n`
+      `export checkNumber = (n: Number) ->\n  match\n    | n |> Number.lessThan(0) -> "negative"\n    | n == 0 -> "zero"\n    | _ -> "positive"\n`
     );
     expect(format(formatted)).toBe(formatted);
   });
@@ -131,7 +131,7 @@ export main =
 
   it("formats copy-on-write mut draft blocks", () => {
     const unformatted = `
-export appendTag = (p: Profile, tag: string) ->
+export appendTag = (p: Profile, tag: String) ->
   p
   |> mut (draft) ->
       draft.tags.push(tag)
@@ -139,7 +139,7 @@ export appendTag = (p: Profile, tag: string) ->
 `.trim();
     const formatted = format(unformatted);
     expect(formatted).toBe(
-      `export appendTag = (p: Profile, tag: string) ->\n  p\n  |> mut (draft) ->\n    draft.tags.push(tag)\n    draft\n`
+      `export appendTag = (p: Profile, tag: String) ->\n  p\n  |> mut (draft) ->\n    draft.tags.push(tag)\n    draft\n`
     );
     expect(format(formatted)).toBe(formatted);
   });
@@ -228,12 +228,12 @@ export updated = {
     });
 
     it("formats FunScript code using prettier.format with the plugin", async () => {
-      const unformatted = `export greet = (name: string) -> "Hello, {name}!"`;
+      const unformatted = `export greet = (name: String) -> "Hello, {name}!"`;
       const result = await prettier.format(unformatted, {
         parser: "funscript",
         plugins: [prettierPlugin],
       });
-      expect(result).toBe(`export greet = (name: string) -> "Hello, {name}!"\n`);
+      expect(result).toBe(`export greet = (name: String) -> "Hello, {name}!"\n`);
 
       const pass2 = await prettier.format(result, {
         parser: "funscript",
@@ -243,19 +243,19 @@ export updated = {
     });
 
     it("formats based on .fun file extension via filepath", async () => {
-      const unformatted = `export add = (a: number, b: number) -> a + b`;
+      const unformatted = `export add = (a: Number, b: Number) -> a + b`;
       const result = await prettier.format(unformatted, {
         filepath: "math.fun",
         plugins: [prettierPlugin],
       });
-      expect(result).toBe(`export add = (a: number, b: number) -> a + b\n`);
+      expect(result).toBe(`export add = (a: Number, b: Number) -> a + b\n`);
     });
 
     it("respects tabWidth option from Prettier", async () => {
       const code = `
 export schema Config = {
-  timeout: number
-  retries: number
+  timeout: Number
+  retries: Number
 }
 `.trim();
       const result = await prettier.format(code, {
@@ -263,8 +263,8 @@ export schema Config = {
         plugins: [prettierPlugin],
         tabWidth: 4,
       });
-      expect(result).toContain("    timeout: number");
-      expect(result).toContain("    retries: number");
+      expect(result).toContain("    timeout: Number");
+      expect(result).toContain("    retries: Number");
     });
   });
 });

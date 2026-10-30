@@ -3,14 +3,14 @@
 import { Console } from "effect"
 
 export schema Account = {
-  id: string
-  owner: string
-  balance: number
+  id: String
+  owner: String
+  balance: Number
 }
 
 export schema Action =
-  | Deposit(amount: number)
-  | Withdraw(amount: number)
+  | Deposit(amount: Number)
+  | Withdraw(amount: Number)
   | Freeze
 
 export applyAction = (acc: Account, action: Action): Account ->

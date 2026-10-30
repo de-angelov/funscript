@@ -1888,7 +1888,10 @@ export class Parser {
       return this.parseEffectTypeNode();
     }
 
-    const typeId = this.parseAnyIdentifier();
+    if (!this.check(TokenType.UPPER_IDENTIFIER)) {
+      throw new ParseError("Type names must begin with an uppercase letter (for example String or Number); use ts for TypeScript types", this.peek().span);
+    }
+    const typeId = this.parseUpperIdentifier();
     let typeArgs: TypeNode[] | undefined;
 
     if (this.match(TokenType.LT)) {

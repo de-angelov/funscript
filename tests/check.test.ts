@@ -31,9 +31,9 @@ describe("In-Memory Type-Checking (funscript check via TypeScript API)", () => {
   describe("typeCheckSource unit checks", () => {
     it("passes cleanly on valid FunScript code with no diagnostics", async () => {
       const code = `
-export name: string = "Ada"
-export age: number = 36
-export fn greet(n: string) => "Hello, " + n
+export name: String = "Ada"
+export age: Number = 36
+export fn greet(n: String) => "Hello, " + n
 export message = greet(name)
 `.trim();
 
@@ -46,8 +46,8 @@ export message = greet(name)
 
     it("detects variable type mismatch and maps back to original line and column", async () => {
       const code = `
-export title: string = "FunScript"
-export count: number = "not-a-number"
+export title: String = "FunScript"
+export count: Number = "not-a-number"
 `.trim();
 
       const result = await Effect.runPromise(typeCheckSource(code, "type-err.fun"));
@@ -60,13 +60,13 @@ export count: number = "not-a-number"
       expect(err!.line).toBe(2);
       expect(err!.column).toBeGreaterThan(0);
       expect(err!.frame).toBeDefined();
-      expect(err!.frame).toContain("export count: number = \"not-a-number\"");
+      expect(err!.frame).toContain("export count: Number = \"not-a-number\"");
       expect(err!.formatted).toContain("type-err.fun:2:");
     });
 
     it("detects function argument type mismatch with exact line and column", async () => {
       const code = `
-fn calculate(a: number, b: number) => a + b
+fn calculate(a: Number, b: Number) => a + b
 export result = calculate("hello", 42)
 `.trim();
 
@@ -86,7 +86,7 @@ export result = calculate("hello", 42)
 
     it("detects function return type mismatch", async () => {
       const code = `
-fn getAnswer(): number {
+fn getAnswer(): Number {
   => "forty-two"
 }
 `.trim();
@@ -103,8 +103,8 @@ fn getAnswer(): number {
     it("type checks Schema definitions and detects property type mismatches", async () => {
       const code = `
 schema User = {
-  id: number
-  email: string
+  id: Number
+  email: String
 }
 
 export user: User = {
@@ -132,7 +132,7 @@ export user: User = {
 
     it("type checks Effect structures imported from effect", async () => {
       const code = `
-export eff: Effect<number, never, never> = Effect.succeed("string-value")
+export eff: Effect<Number, Never, Never> = Effect.succeed("string-value")
 `.trim();
 
       const result = await Effect.runPromise(typeCheckSource(code, "effect-err.fun"));
@@ -164,7 +164,7 @@ fn broken(
     it("resolves and type checks imports between virtual modules", async () => {
       const files = {
         "src/utils.fun": `
-export fn multiply(a: number, b: number) => a * b
+export fn multiply(a: Number, b: Number) => a * b
 `.trim(),
         "src/main.fun": `
 import { multiply } from "./utils.js"
@@ -188,8 +188,8 @@ export res = multiply(6, "invalid")
       const files = {
         "src/types.fun": `
 schema Config = {
-  port: number
-  host: string
+  port: Number
+  host: String
 }
 export config: Config = { port: 8080, host: "localhost" }
 `.trim(),
@@ -209,7 +209,7 @@ export fn getUrl() => "http://" + config.host + ":" + config.port
     it("type checks .funx UI components and detects prop errors", async () => {
       const code = `
 schema Props = {
-  label: string
+  label: String
 }
 
 export Button = (props: Props) ->
@@ -266,7 +266,7 @@ export Button = (props: Props) ->
       await fs.writeFile(
         testFile,
         `
-export fn square(x: number) => x * x
+export fn square(x: Number) => x * x
 export res = square(5)
 `.trim(),
         "utf-8"
@@ -282,7 +282,7 @@ export res = square(5)
       await fs.writeFile(
         testFile,
         `
-fn greet(name: string) => "Hello, " + name
+fn greet(name: String) => "Hello, " + name
 export res = greet(12345)
 `.trim(),
         "utf-8"

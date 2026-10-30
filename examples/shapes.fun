@@ -4,8 +4,8 @@
 import { Array, Console } from "effect"
 
 export schema Shape =
-  | Circle(radius: number)
-  | Rect(width: number, height: number)
+  | Circle(radius: Number)
+  | Rect(width: Number, height: Number)
 
 export area = (shape: Shape) ->
   match shape

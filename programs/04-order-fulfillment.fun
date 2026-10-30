@@ -14,28 +14,28 @@ export schema DeliveryTier =
   | Overnight
 
 export schema PaymentMethod =
-  | CreditCard(last4: string, brand: string)
-  | DigitalWallet(provider: string, email: string)
-  | Crypto(network: string, txHash: string)
+  | CreditCard(last4: String, brand: String)
+  | DigitalWallet(provider: String, email: String)
+  | Crypto(network: String, txHash: String)
 
 export schema OrderResult =
-  | Success(orderId: string, txId: string, trackingNumber: string)
-  | Failed(orderId: string, reason: string)
+  | Success(orderId: String, txId: String, trackingNumber: String)
+  | Failed(orderId: String, reason: String)
 
 export schema ShippingDetails = {
-  recipient: string
-  address: string
-  carrier: string
-  trackingNumber: string
-  estimatedDays: number
+  recipient: String
+  address: String
+  carrier: String
+  trackingNumber: String
+  estimatedDays: Number
 }
 
 export schema Order = {
-  id: string
-  customer: string
-  itemCount: number
-  total: number
-  status: string
+  id: String
+  customer: String
+  itemCount: Number
+  total: Number
+  status: String
   shipping: ShippingDetails
 }
 
@@ -62,7 +62,7 @@ export describeResult = (res: OrderResult) ->
     | Failed(id, reason) -> "FAILED: Order {id} processing stopped: {reason}"
 
 # Mutative deep record updates (dot-path syntax)
-export updateShipping = (order: Order, carrier: string, trackingNumber: string, estimatedDays: number) ->
+export updateShipping = (order: Order, carrier: String, trackingNumber: String, estimatedDays: Number) ->
   {
     ...order
     shipping.carrier: carrier
@@ -72,14 +72,14 @@ export updateShipping = (order: Order, carrier: string, trackingNumber: string, 
   }
 
 # Pure discount calculation using pipe
-export applyDiscount = (order: Order, discount: number) ->
+export applyDiscount = (order: Order, discount: Number) ->
   {
     ...order
     total: order.total - discount
   }
 
 # Mutative array draft recipe
-export appendAuditEntry = (logs: Array<string>, entry: string) ->
+export appendAuditEntry = (logs: Array<String>, entry: String) ->
   logs
   |> mut (draft) ->
     draft.push(entry)
@@ -88,18 +88,18 @@ export appendAuditEntry = (logs: Array<string>, entry: string) ->
 # --- Effect Services & Dependencies ---
 
 export service InventoryService
-  checkAvailability: (sku: string) -> Effect<boolean>
-  reserveStock: (sku: string, qty: number) -> Effect<boolean>
+  checkAvailability: (sku: String) -> Effect<Boolean>
+  reserveStock: (sku: String, qty: Number) -> Effect<Boolean>
 
 export service PaymentGateway
-  charge: (orderId: string, amount: number, method: PaymentMethod) -> Effect<string>
+  charge: (orderId: String, amount: Number, method: PaymentMethod) -> Effect<String>
 
 export service NotificationService
-  sendConfirmation: (customer: string, message: string) -> Effect<void>
+  sendConfirmation: (customer: String, message: String) -> Effect<Void>
 
 # --- Live Layer Implementations ---
 
-mut paymentCallCount: Array<number> = []
+mut paymentCallCount: Array<Number> = []
 
 export InventoryServiceLive =
   Layer.succeed(InventoryService, {
@@ -152,17 +152,17 @@ export AppLive =
   |> Layer.merge(NotificationServiceLive)
 
 # Helper for service call wrapped in effect
-export checkSku = (sku: string) ->
+export checkSku = (sku: String) ->
   effect
     avail <- InventoryService.checkAvailability(sku)
     avail
 
-export executePayment = (orderId: string, amount: number, method: PaymentMethod) ->
+export executePayment = (orderId: String, amount: Number, method: PaymentMethod) ->
   effect
     tx <- PaymentGateway.charge(orderId, amount, method)
     tx
 
-export notifyCustomer = (customer: string, message: string) ->
+export notifyCustomer = (customer: String, message: String) ->
   effect
     _ <- NotificationService.sendConfirmation(customer, message)
     true
@@ -209,7 +209,7 @@ export processOrderWorkflow = (order: Order, method: PaymentMethod, tier: Delive
     _ <- Fiber.join(notifyFiber)
 
     # 7. Immutably append audit records
-    log0: Array<string> = []
+    log0: Array<String> = []
     log1 = appendAuditEntry(log0, "Order initialized")
     log2 = appendAuditEntry(log1, "Inventory reserved")
     log3 = appendAuditEntry(log2, "Payment processed: {txId}")

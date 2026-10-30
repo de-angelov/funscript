@@ -1033,11 +1033,11 @@ export class Formatter {
         const typeArgs = node.typeArgs && node.typeArgs.length > 0
           ? `<${node.typeArgs.map(t => this.formatType(t, indent)).join(", ")}>`
           : "";
-        return `${node.name.name}${typeArgs}`;
+        return `${node.name.name[0].toUpperCase()}${node.name.name.slice(1)}${typeArgs}`;
       }
       case "FunctionTypeNode": {
         const params = node.params.map(p => {
-          const typeStr = p.typeAnnotation ? this.formatType(p.typeAnnotation, indent) : "any";
+          const typeStr = p.typeAnnotation ? this.formatType(p.typeAnnotation, indent) : "Unknown";
           return p.name ? `${p.name.name}: ${typeStr}` : typeStr;
         }).join(", ");
         return `(${params}) -> ${this.formatType(node.returnType, indent)}`;

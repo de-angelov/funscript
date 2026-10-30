@@ -132,6 +132,19 @@ const NUMBER_COMPANION_METHODS = new Set([
   "decrement",
 ]);
 
+const STRING_COMPANION_METHODS = new Set(["trim", "trimStart", "trimEnd", "split", "lines", "toUpperCase", "toLowerCase"]);
+const RECORD_COMPANION_METHODS = new Set(["omit", "pick"]);
+const DURATION_COMPANION_METHODS = new Set(["seconds", "millis", "minutes", "hours", "days"]);
+
+const PRIMITIVE_TYPES: Readonly<Record<string, string>> = {
+  String: "string",
+  Number: "number",
+  Boolean: "boolean",
+  Void: "void",
+  Unknown: "unknown",
+  Never: "never",
+};
+
 const EFFECT_BUILTIN_MODULES = new Set([
   "Console",
   "Effect",
@@ -148,6 +161,11 @@ const EFFECT_BUILTIN_MODULES = new Set([
   "Context",
   "Layer",
   "Math",
+  "String",
+  "Number",
+  "Record",
+  "Duration",
+  "Struct",
 ]);
 
 export class Emitter {
@@ -157,7 +175,16 @@ export class Emitter {
   private primitiveIdentifiers = new Set<string>();
   private currentPlaceholderParam: string | null = null;
 
-  constructor(private program?: Program) {}
+  private declaredTypeNames = new Set<string>();
+
+  constructor(private program?: Program) {
+    for (const item of program?.body ?? []) {
+      const decl = item.kind === "ExportDeclaration" ? item.declaration : item;
+      if (decl.kind === "SchemaDeclaration" || decl.kind === "ErrorDeclaration" || decl.kind === "ServiceDeclaration") {
+        this.declaredTypeNames.add(decl.id.name);
+      }
+    }
+  }
 
   public emit(): string {
     let bodyCode = "";
@@ -261,7 +288,7 @@ export class Emitter {
       }
       case "RefinementSchema": {
         this.effectImports.add("pipe");
-        return `${exp}const ${name} = pipe(${this.emitTypeNode(decl.body.baseType)}, ${this.emitExpression(decl.body.refinement)});\n${exp}type ${name} = typeof ${name}.Type;`;
+        return `${exp}const ${name} = pipe(${this.emitSchemaTypeField(decl.body.baseType)}, ${this.emitExpression(decl.body.refinement)});\n${exp}type ${name} = typeof ${name}.Type;`;
       }
       case "TypeSignatureSchema": {
         return `${exp}type ${name} = ${this.emitTypeNode(decl.body.signature)};`;
@@ -279,15 +306,20 @@ export class Emitter {
     }
     if (typeNode.kind === "TypeReferenceNode") {
       const tName = typeNode.name.name;
-      if (tName === "string") return "Schema.String";
-      if (tName === "number") return "Schema.Number";
-      if (tName === "boolean") return "Schema.Boolean";
+      if (PRIMITIVE_TYPES[tName] || tName === "Duration") return `Schema.${tName}`;
       if (tName === "UUID") return "Schema.UUID";
       if (tName === "Option" && typeNode.typeArgs) {
         return `Schema.Option(${this.emitSchemaTypeField(typeNode.typeArgs[0])})`;
       }
+      if (tName === "Array" && typeNode.typeArgs?.length === 1) {
+        return `Schema.Array(${this.emitSchemaTypeField(typeNode.typeArgs[0])})`;
+      }
+      if (tName === "Record" && typeNode.typeArgs?.length === 2) {
+        return `Schema.Record({ key: ${this.emitSchemaTypeField(typeNode.typeArgs[0])}, value: ${this.emitSchemaTypeField(typeNode.typeArgs[1])} })`;
+      }
       return tName;
     }
+    if (typeNode.kind === "ArrayTypeNode") return `Schema.Array(${this.emitSchemaTypeField(typeNode.elementType)})`;
     return this.emitTypeNode(typeNode);
   }
 
@@ -540,7 +572,7 @@ export class Emitter {
           callee: {
             kind: "MemberExpression",
             object: { kind: "UpperIdentifier", name: companion, span: stage.callee.span },
-            property: stage.callee,
+            property: { ...stage.callee, name: name === "lines" ? "linesIterator" : name },
             span: stage.callee.span,
           },
         };
@@ -568,7 +600,7 @@ export class Emitter {
         return {
           kind: "MemberExpression",
           object: { kind: "UpperIdentifier", name: companion, span: stage.span },
-          property: stage,
+          property: { ...stage, name: name === "lines" ? "linesIterator" : name },
           span: stage.span,
         };
       }
@@ -577,11 +609,14 @@ export class Emitter {
     return stage;
   }
 
-  private getCompanionModule(name: string): "Array" | "Effect" | "Option" | "Number" | undefined {
+  private getCompanionModule(name: string): "Array" | "Effect" | "Option" | "Number" | "String" | "Record" | "Duration" | "Struct" | undefined {
     if (ARRAY_COMPANION_METHODS.has(name)) return "Array";
     if (EFFECT_COMPANION_METHODS.has(name)) return "Effect";
     if (OPTION_COMPANION_METHODS.has(name)) return "Option";
     if (NUMBER_COMPANION_METHODS.has(name)) return "Number";
+    if (STRING_COMPANION_METHODS.has(name)) return "String";
+    if (RECORD_COMPANION_METHODS.has(name)) return "Struct";
+    if (DURATION_COMPANION_METHODS.has(name)) return "Duration";
     return undefined;
   }
 
@@ -927,7 +962,13 @@ export class Emitter {
   private emitTypeNode(node: TypeNode): string {
     switch (node.kind) {
       case "TypeReferenceNode": {
-        const name = node.name.name;
+        let name = node.name.name;
+        if (PRIMITIVE_TYPES[name]) return PRIMITIVE_TYPES[name];
+        if (name === "Array" && !this.declaredTypeNames.has(name)) name = "ReadonlyArray";
+        else if (["Option", "Record", "Duration"].includes(name) && !this.declaredTypeNames.has(name)) {
+          this.effectImports.add(name);
+          name = name === "Record" ? "Record.ReadonlyRecord" : `${name}.${name}`;
+        }
         if (node.typeArgs && node.typeArgs.length > 0) {
           return `${name}<${node.typeArgs.map((t) => this.emitTypeNode(t)).join(", ")}>`;
         }

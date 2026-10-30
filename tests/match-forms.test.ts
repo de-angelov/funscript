@@ -46,7 +46,7 @@ describe("Equality Type Constraints & Match Forms Test Suite Matrix (TASK-026)",
 
     it("rejects reference equality on typed primitive variables", async () => {
       const code = `
-export fn checkNums(a: number, b: number) => boolean {
+export fn checkNums(a: Number, b: Number) => Boolean {
   => a === b
 }
 `.trim();
@@ -57,7 +57,7 @@ export fn checkNums(a: number, b: number) => boolean {
 
     it("allows reference equality on reference objects, schemas, and untyped parameters", async () => {
       const code = `
-schema Point = { x: number, y: number }
+schema Point = { x: Number, y: Number }
 export checkPointRef = (p1: Point, p2: Point) => p1 === p2
 export checkPointRefNeq = (p1: Point, p2: Point) => p1 !== p2
 export checkGeneric = (a, b) => a === b
@@ -72,8 +72,8 @@ export checkGeneric = (a, b) => a === b
   describe("2. Structural Equality '==' Semantics across Schemas, Data.struct, & Tagged Unions", () => {
     it("lowers nested schema equality to Effect's Equal.equals", async () => {
       const code = `
-schema Geo = { lat: number, lng: number }
-schema Venue = { name: string, location: Geo }
+schema Geo = { lat: Number, lng: Number }
+schema Venue = { name: String, location: Geo }
 
 export compareVenues = (v1: Venue, v2: Venue) => v1 == v2
 export compareVenuesNeq = (v1: Venue, v2: Venue) => v1 != v2
@@ -132,8 +132,8 @@ export compareVenuesNeq = (v1: Venue, v2: Venue) => v1 != v2
     it("compiles and executes tagged union value matching with positional extraction", async () => {
       const code = `
 schema Shape =
-  | Circle(radius: number)
-  | Rectangle(width: number, height: number)
+  | Circle(radius: Number)
+  | Rectangle(width: Number, height: Number)
   | Dot
 
 export area = (s: Shape) =>
@@ -154,7 +154,7 @@ export area = (s: Shape) =>
 
     it("compiles literal pattern matching with wildcard fallback", async () => {
       const code = `
-export label = (code: number) =>
+export label = (code: Number) =>
   match code
     | 1 => "one"
     | 2 => "two"
@@ -249,7 +249,7 @@ export evalShape = (s: Shape) =>
 
     it("formats multiline subjectless match with standard 2-space indentation", () => {
       const unformatted = `
-export testNum = (flag: boolean) =>
+export testNum = (flag: Boolean) =>
   match
     | flag => "big"
     | _ => "small"
@@ -265,7 +265,7 @@ export testNum = (flag: boolean) =>
     it("parses, emits, and executes pipeline match with tagged union variants", async () => {
       const code = `
 schema Option =
-  | Some(value: number)
+  | Some(value: Number)
   | None
 
 export getVal = (opt: Option) =>
@@ -394,8 +394,8 @@ export isRgb = (c: Color) =>
     it("compiles and executes constructor pattern match with when guards", async () => {
       const code = `
 schema Action =
-  | Deposit(amount: number)
-  | Withdraw(amount: number)
+  | Deposit(amount: Number)
+  | Withdraw(amount: Number)
   | Reset
 
 export classifyAction = (act: Action) =>

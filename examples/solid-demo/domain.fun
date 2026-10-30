@@ -2,16 +2,16 @@
 import { Effect, Console, Array } from "effect"
 
 export schema Todo = {
-  id: number
-  title: string
-  completed: boolean
-  priority: string
+  id: Number
+  title: String
+  completed: Boolean
+  priority: String
 }
 
 export schema Action =
-  | AddTodo(title: string, priority: string)
-  | ToggleTodo(id: number)
-  | RemoveTodo(id: number)
+  | AddTodo(title: String, priority: String)
+  | ToggleTodo(id: Number)
+  | RemoveTodo(id: Number)
   | ClearCompleted
 
 export reduceTodos = (todos: Array<Todo>, action: Action): Array<Todo> ->
@@ -26,7 +26,7 @@ export reduceTodos = (todos: Array<Todo>, action: Action): Array<Todo> ->
     | ClearCompleted ->
         todos |> filter((t) -> not t.completed)
 
-export getVisibleTodos = (todos: Array<Todo>, filterName: string): Array<Todo> ->
+export getVisibleTodos = (todos: Array<Todo>, filterName: String): Array<Todo> ->
   match filterName
     | "active" -> todos |> filter((t) -> not t.completed)
     | "completed" -> todos |> filter((t) -> t.completed)

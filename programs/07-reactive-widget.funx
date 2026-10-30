@@ -32,18 +32,18 @@ ts
 # --- Component Schemas & Tagged Unions ---
 
 export schema WidgetProps = {
-  title: string
-  initialCount: number
-  step: number
-  min: number
-  max: number
-  variant: string
+  title: String
+  initialCount: Number
+  step: Number
+  min: Number
+  max: Number
+  variant: String
 }
 
 export schema WidgetState =
   | Idle
-  | Active(current: number)
-  | LimitReached(limit: number)
+  | Active(current: Number)
+  | LimitReached(limit: Number)
 
 # --- Pattern Matching View Helper ---
 
