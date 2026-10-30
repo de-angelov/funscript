@@ -123,6 +123,25 @@ export Badge = (badgeKind: String) ->
       const res = await Effect.runPromise(compileString(code, "Badge.funx"));
       expect(res.typescript).toContain('className={`badge-${badgeKind}`}');
     });
+
+    it("compiles nested fragments with sibling children to TSX", async () => {
+      const code = `
+export FragmentView = () ->
+  <>
+    <span>First</span>
+    <>
+      <strong>Nested</strong>
+      <em>Sibling</em>
+    </>
+    <span>Last</span>
+  </>
+`.trim();
+
+      const res = await Effect.runPromise(compileString(code, "FragmentView.funx"));
+      expect(res.typescript).toContain(
+        "return <><span>First</span><><strong>Nested</strong><em>Sibling</em></><span>Last</span></>;",
+      );
+    });
   });
 
   describe("CLI build command with .funx files", () => {
