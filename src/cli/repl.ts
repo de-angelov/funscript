@@ -196,6 +196,8 @@ export function setupReplContext(context: vm.Context): void {
  * Creates the custom evaluator function for node:repl.
  */
 export function createReplEvaluator(): repl.REPLEval {
+  let pendingEvaluations = Promise.resolve();
+
   return async function evalFunScript(
     cmd: string,
     context: vm.Context,
@@ -207,15 +209,19 @@ export function createReplEvaluator(): repl.REPLEval {
       return callback(null, undefined);
     }
 
-    try {
-      const result = await evaluateReplLine(cmd, context);
-      callback(null, result);
-    } catch (err: any) {
-      if (isRecoverable(err.raw || err)) {
-        return callback(new Recoverable(err));
+    const evaluation = pendingEvaluations.then(async () => {
+      try {
+        const result = await evaluateReplLine(cmd, context);
+        callback(null, result);
+      } catch (err: any) {
+        if (isRecoverable(err.raw || err)) {
+          return callback(new Recoverable(err));
+        }
+        callback(err);
       }
-      callback(err);
-    }
+    });
+    pendingEvaluations = evaluation.then(() => undefined, () => undefined);
+    await evaluation;
   };
 }
 
