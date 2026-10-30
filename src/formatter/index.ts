@@ -76,6 +76,7 @@ import {
 
 export interface FormatOptions {
   indentSize?: number;
+  filename?: string;
 }
 
 export interface Comment {
@@ -968,7 +969,7 @@ export class Formatter {
         return expr.name;
       case "JSXElement":
       case "JSXSelfClosingElement":
-        throw new Error(`JSX formatting not yet implemented: ${(expr as any).kind}`);
+        return this.source.slice(expr.span.start.offset, expr.span.end.offset);
       case "JsExpression":
         return `js ${this.formatExpression(expr.expression, indent)}`;
       case "TsEscapeExpression":
@@ -1075,9 +1076,10 @@ export class Formatter {
 }
 
 export function format(source: string, options?: FormatOptions): string {
-  const lexer = new Lexer(source);
+  const filename = options?.filename ?? "<anonymous>";
+  const lexer = new Lexer(source, filename);
   const tokens = lexer.tokenize();
-  const parser = new Parser(tokens);
+  const parser = new Parser(tokens, filename);
   const ast = parser.parse();
   const formatter = new Formatter(source, ast, options);
   return formatter.format();

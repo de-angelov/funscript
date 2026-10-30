@@ -237,7 +237,7 @@ const fmtCommand = (args: string[]) =>
       const source = yield* readFile(filePath);
       let formatted: string;
       try {
-        formatted = format(source);
+        formatted = format(source, { filename: filePath });
       } catch (err: any) {
         process.exitCode = 1;
         hasDiff = true;

@@ -219,6 +219,7 @@ export updated = {
       expect(prettierPlugin.languages).toBeDefined();
       expect(prettierPlugin.languages?.[0]?.name).toBe("FunScript");
       expect(prettierPlugin.languages?.[0]?.extensions).toContain(".fun");
+      expect(prettierPlugin.languages?.[0]?.extensions).toContain(".funx");
 
       expect(prettierPlugin.parsers).toBeDefined();
       expect(prettierPlugin.parsers?.funscript).toBeDefined();
@@ -249,6 +250,14 @@ export updated = {
         plugins: [prettierPlugin],
       });
       expect(result).toBe(`export add = (a: Number, b: Number) -> a + b\n`);
+    });
+
+    it("formats JSX in .funx files while preserving JSX source", async () => {
+      const result = await prettier.format("export Button = () => <button>hello</button>", {
+        filepath: "Button.funx",
+        plugins: [prettierPlugin],
+      });
+      expect(result).toBe("export Button = () -> <button>hello</button>\n");
     });
 
     it("respects tabWidth option from Prettier", async () => {

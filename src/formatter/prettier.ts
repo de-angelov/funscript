@@ -7,8 +7,8 @@ export const languages: SupportLanguage[] = [
   {
     name: "FunScript",
     parsers: ["funscript"],
-    extensions: [".fun"],
-    vscodeLanguageIds: ["funscript"],
+    extensions: [".fun", ".funx"],
+    vscodeLanguageIds: ["funscript", "funscriptx"],
   },
 ];
 
@@ -39,7 +39,7 @@ export const printers: Record<string, Printer> = {
       const formatOptions: FormatOptions = {
         indentSize: options?.tabWidth ?? 2,
       };
-      return format(node.text, formatOptions);
+      return format(node.text, { ...formatOptions, filename: options?.filepath });
     },
   },
 };
