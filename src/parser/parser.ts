@@ -1424,8 +1424,10 @@ export class Parser {
       this.skipNewlines();
       if (this.check(TokenType.DEDENT)) break;
 
+      if (this.check(TokenType.WHEN)) {
+        body.push(this.parseWhenStatement());
       // Check for effect bind: x <- eff or _ <- eff
-      if (this.check(TokenType.UNDERSCORE) && this.peekAhead(1).type === TokenType.LARROW) {
+      } else if (this.check(TokenType.UNDERSCORE) && this.peekAhead(1).type === TokenType.LARROW) {
         this.advance(); // consume '_'
         this.advance(); // consume '<-'
         const eff = this.parseExpression();

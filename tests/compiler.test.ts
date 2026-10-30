@@ -146,6 +146,33 @@ export getUser = (id: String) ->
     expect(res.typescript).toContain(`return user;`);
   });
 
+  it("compiles when statements inside effect blocks", async () => {
+    const code = `
+export earlyValue = (skip: Boolean) ->
+  effect
+    when (skip) => "early"
+    "done"
+
+export failEarly = (shouldFail: Boolean) ->
+  effect
+    when (shouldFail) => Effect.fail("failed")
+    "done"
+
+export conditionalBlock = (enabled: Boolean) ->
+  effect
+    when (enabled) {
+      selected = "inside"
+    }
+    "done"
+`.trim();
+
+    const res = await Effect.runPromise(compileString(code));
+    expect(res.typescript).toContain(`if (skip) return "early";`);
+    expect(res.typescript).toContain(`if (shouldFail) return yield* Effect.fail("failed");`);
+    expect(res.typescript).toContain(`if (enabled) {\n  const selected = "inside";\n}`);
+    expect(res.typescript).toContain(`return "done";`);
+  });
+
   it("compiles deep Mutative spreads", async () => {
     const code = `
 export updateCity = (user: User, city: String) ->
