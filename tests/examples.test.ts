@@ -45,7 +45,7 @@ describe("Sample Applications & Real-World Programs", () => {
       // Effect concurrency, retry, fiber, and layers
       expect(res.typescript).toContain("Effect.all(checks, { concurrency: \"unbounded\" })");
       expect(res.typescript).toContain("Effect.retry(Schedule.recurs(2))");
-      expect(res.typescript).toContain("Effect.fork(");
+      expect(res.typescript).toContain("Effect.forkChild(");
       expect(res.typescript).toContain("Fiber.join(");
       expect(res.typescript).toContain("Layer.succeed(InventoryService,");
       expect(res.typescript).toContain("Layer.merge(PaymentGatewayLive)");

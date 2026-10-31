@@ -1,6 +1,6 @@
 # FunScript
 
-> A compact, indentation-based language that compiles to readable TypeScript for the Effect ecosystem.
+> A compact, indentation-based language that compiles to readable TypeScript for the Effect v4 ecosystem.
 
 FunScript is a notation for building typed TypeScript programs with [Effect](https://effect.website),
 [ts-pattern](https://github.com/gvergnaud/ts-pattern), and [Mutative](https://github.com/unadlib/mutative).

@@ -296,7 +296,7 @@ const runCommand = (args: string[]) =>
 
     yield* writeFile(targetFile, transformed.code);
 
-    yield* Effect.async<void, Error>((resume) => {
+    yield* Effect.callback<void, Error>((resume) => {
       const child = fork(targetFile, { stdio: "inherit" });
       child.on("exit", (code) => {
         if (code === 0) resume(Effect.void);
@@ -306,21 +306,14 @@ const runCommand = (args: string[]) =>
     });
   });
 
-const lspCommand = (args: string[]) =>
-  Effect.async<void, Error>((resume) => {
-    const server = startLspServer({
-      reader: process.stdin,
-      writer: process.stdout,
-    });
-    server.onExit((code) => {
-      setImmediate(() => {
-        process.exit(code);
-      });
-    });
+const lspCommand = (_args: string[]) =>
+  Effect.callback<void, Error>(() => {
+    const server = startLspServer({ reader: process.stdin, writer: process.stdout });
+    server.onExit((code) => setImmediate(() => process.exit(code)));
   });
 
 const replCommand = (args: string[]) =>
-  Effect.async<void, Error>((resume) => {
+  Effect.callback<void, Error>((resume) => {
     const server = startRepl();
     server.on("exit", () => {
       resume(Effect.void);
@@ -360,11 +353,11 @@ const program = Effect.gen(function* () {
       return yield* helpCommand;
   }
 }).pipe(
-  Effect.catchAll((err: any) => {
+  Effect.catch((err: any) => {
     process.exitCode = 1;
     return Console.error(`\x1b[31merror\x1b[0m: ${err.message || err}`);
   })
 );
 
 // Execute Effect program
-Effect.runPromise(program);
+void Effect.runPromise(program);

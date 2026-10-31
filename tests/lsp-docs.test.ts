@@ -132,7 +132,7 @@ describe("LSP Keyword & Built-in Documentation Catalog", () => {
       "Option",
       "Some",
       "None",
-      "Either",
+      "Result",
       "Ref",
       "Duration",
       "DateTime",

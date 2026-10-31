@@ -243,7 +243,7 @@ describe("VS Code Extension Package (TASK-018)", () => {
 
       const primRule = typePatterns.find((p) => p.name === "support.type.primitive.funscript");
       const primRegex = new RegExp(primRule.match);
-      for (const t of ["number", "string", "boolean", "unknown", "never", "void", "Effect", "Option", "Either"]) {
+      for (const t of ["number", "string", "boolean", "unknown", "never", "void", "Effect", "Option", "Result"]) {
         expect(primRegex.test(t)).toBe(true);
       }
 

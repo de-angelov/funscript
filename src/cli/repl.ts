@@ -3,7 +3,7 @@ import vm from "node:vm";
 import { createRequire } from "node:module";
 import * as path from "node:path";
 import { transformSync } from "esbuild";
-import { Effect, Console, Option, Either, Duration, pipe } from "effect";
+import { Effect, Console, Option, Result, Duration, pipe } from "effect";
 import { compileString, type CompileResult } from "../compiler.js";
 import { typeCheckSource } from "../compiler/check.js";
 
@@ -152,7 +152,7 @@ export async function compileReplCode(
   }
   // These modules are provided by setupReplContext. Ambient globals avoid
   // duplicate imports when the emitter also injects an Effect helper.
-  const globals = `ts "declare global { ${["Effect", "Console", "Option", "Either", "Duration", "pipe"]
+  const globals = `ts "declare global { ${["Effect", "Console", "Option", "Result", "Duration", "pipe"]
     .map((name) => `const ${name}: typeof import('effect').${name};`).join(" ")} } export {};"`;
   const result = await Effect.runPromise(typeCheckSource(
     [globals, ...nextDeclarations.values()].join("\n"), "repl.fun",
@@ -226,7 +226,7 @@ export function setupReplContext(context: vm.Context): void {
   context.Effect = Effect;
   context.Console = Console;
   context.Option = Option;
-  context.Either = Either;
+  context.Result = Result;
   context.Duration = Duration;
   context.pipe = pipe;
   context.global = context;

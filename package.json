@@ -17,6 +17,7 @@
   "scripts": {
     "build": "tsc && tsc -p editors/vscode",
     "test": "vitest run",
+    "test:examples": "vitest run tests/example-apps-build.test.ts",
     "test:watch": "vitest",
     "fmt": "node ./dist/cli/index.js fmt",
     "fmt:check": "node ./dist/cli/index.js fmt --check examples/fixtures/*.fun examples/solid-demo/*.fun examples/greeter-service.fun examples/hello.fun examples/order-fulfillment.fun examples/shapes.fun examples/todo-http.fun programs/01-fibonacci.fun programs/02-bank-account.fun programs/03-todo-service.fun programs/04-js-ts-interop.fun programs/04-order-fulfillment.fun tests/fixtures/formatter/*.funx",
@@ -40,7 +41,7 @@
   "dependencies": {
     "@babel/code-frame": "^7.29.7",
     "@jridgewell/trace-mapping": "^0.3.31",
-    "effect": "^3.10.16",
+    "effect": "^4.1.1",
     "magic-string": "^1.4.5",
     "mutative": "^1.1.0",
     "ts-pattern": "^5.5.0",
@@ -53,6 +54,7 @@
     "@types/node": "^20.17.0",
     "@types/vscode": "^1.140.0",
     "prettier": "^3.9.10",
+    "solid-js": "^1.9.18",
     "vitest": "^2.1.3"
   }
 }

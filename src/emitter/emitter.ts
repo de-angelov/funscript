@@ -132,6 +132,18 @@ const NUMBER_COMPANION_METHODS = new Set([
   "decrement",
 ]);
 
+const EFFECT_V4_MEMBER_RENAMES: Readonly<Record<string, string>> = {
+  catchAll: "catch",
+  fork: "forkChild",
+};
+
+const NUMBER_V4_MEMBER_RENAMES: Readonly<Record<string, string>> = {
+  greaterThan: "isGreaterThan",
+  greaterThanOrEqualTo: "isGreaterThanOrEqualTo",
+  lessThan: "isLessThan",
+  lessThanOrEqualTo: "isLessThanOrEqualTo",
+};
+
 const STRING_COMPANION_METHODS = new Set(["trim", "trimStart", "trimEnd", "split", "lines", "toUpperCase", "toLowerCase"]);
 const RECORD_COMPANION_METHODS = new Set(["omit", "pick"]);
 const DURATION_COMPANION_METHODS = new Set(["seconds", "millis", "minutes", "hours", "days"]);
@@ -171,6 +183,7 @@ const EFFECT_BUILTIN_MODULES = new Set([
 export class Emitter {
   private effectImports = new Set<string>();
   private userEffectBindings = new Set<string>();
+  private effectModuleBindings = new Set<string>();
   private needsTsPattern = false;
   private needsMutative = false;
   private primitiveIdentifiers = new Set<string>();
@@ -183,6 +196,9 @@ export class Emitter {
       const decl = item.kind === "ExportDeclaration" ? item.declaration : item;
       if (item.kind === "ImportDeclaration" && item.source.raw === '"effect"') {
         for (const spec of item.specifiers) this.userEffectBindings.add(spec.local.name);
+      }
+      if (item.kind === "ImportDeclaration" && /^"effect(?:\/|\")/.test(item.source.raw)) {
+        for (const spec of item.specifiers) this.effectModuleBindings.add(spec.local.name);
       }
       if (decl.kind === "SchemaDeclaration" || decl.kind === "ErrorDeclaration" || decl.kind === "ServiceDeclaration") {
         this.declaredTypeNames.add(decl.id.name);
@@ -355,7 +371,7 @@ export class Emitter {
       .map((m) => `  readonly ${m.name.name}: ${this.emitTypeNode(m.signature)};`)
       .join("\n");
 
-    return `${exp}class ${name} extends Context.Tag(${tag})<${name}, {\n${members}\n}>() {}`;
+    return `${exp}class ${name} extends Context.Service<${name}, {\n${members}\n}>()(${tag}) {}`;
   }
 
   private isPrimitiveType(type?: TypeNode): boolean {
@@ -453,7 +469,7 @@ export class Emitter {
       case "CallExpression":
         return `${this.emitExpression(expr.callee)}(${expr.args.map((a) => this.emitExpression(a)).join(", ")})`;
       case "MemberExpression":
-        return `${this.emitExpression(expr.object)}.${expr.property.name}`;
+        return `${this.emitExpression(expr.object)}.${this.emitMemberProperty(expr)}`;
       case "IndexExpression":
         return `${this.emitExpression(expr.object)}[${this.emitExpression(expr.index)}]`;
       case "RecordExpression":
@@ -479,6 +495,14 @@ export class Emitter {
       case "TsEscapeExpression":
         return expr.code;
     }
+  }
+
+  private emitMemberProperty(expr: MemberExpression): string {
+    if (expr.object.kind === "UpperIdentifier") {
+      if (expr.object.name === "Effect") return EFFECT_V4_MEMBER_RENAMES[expr.property.name] ?? expr.property.name;
+      if (expr.object.name === "Number") return NUMBER_V4_MEMBER_RENAMES[expr.property.name] ?? expr.property.name;
+    }
+    return expr.property.name;
   }
 
   private emitMutativeRecipe(expr: MutBlockExpression): string {
@@ -605,7 +629,7 @@ export class Emitter {
           callee: {
             kind: "MemberExpression",
             object: { kind: "UpperIdentifier", name: companion, span: stage.callee.span },
-            property: { ...stage.callee, name: name === "lines" ? "linesIterator" : name },
+            property: { ...stage.callee, name: name === "lines" ? "linesIterator" : NUMBER_V4_MEMBER_RENAMES[name] ?? name },
             span: stage.callee.span,
           },
         };
@@ -993,8 +1017,8 @@ export class Emitter {
     if (effectExpr.kind === "CallExpression" && effectExpr.callee.kind === "MemberExpression") {
       const obj = effectExpr.callee.object;
       if (obj.kind === "UpperIdentifier") {
-        if (EFFECT_BUILTIN_MODULES.has(obj.name)) {
-          return `${obj.name}.${effectExpr.callee.property.name}(${effectExpr.args.map((a) => this.emitExpression(a)).join(", ")})`;
+        if (EFFECT_BUILTIN_MODULES.has(obj.name) || this.effectModuleBindings.has(obj.name)) {
+          return `${obj.name}.${this.emitMemberProperty(effectExpr.callee)}(${effectExpr.args.map((a) => this.emitExpression(a)).join(", ")})`;
         }
         // Direct Service Call: Service.method(...) -> (yield* Service).method(...)
         return `(yield* ${obj.name}).${effectExpr.callee.property.name}(${effectExpr.args.map((a) => this.emitExpression(a)).join(", ")})`;

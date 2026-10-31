@@ -193,9 +193,9 @@ export apply = (act: Action) =>
 
       const res = await Effect.runPromise(compileString(code));
       expect(res.typescript).toContain(".with({ _tag: \"Deposit\" }, ($matched) => {");
-      expect(res.typescript).toContain("greaterThan(1000)");
+      expect(res.typescript).toContain("isGreaterThan(1000)");
       expect(res.typescript).toContain('"large deposit"');
-      expect(res.typescript).toContain("greaterThan(500)");
+      expect(res.typescript).toContain("isGreaterThan(500)");
       expect(res.typescript).toContain('"large withdrawal"');
     });
   });

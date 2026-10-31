@@ -215,7 +215,7 @@ export processOrderWorkflow = (order: Order, method: PaymentMethod, tier: Delive
 
     # 6. Concurrency: Fork background notification fiber
     _ <- Console.log("Step 5: Emitting customer notification...")
-    notifyFiber <- Effect.fork(notifyCustomer(finalOrder.customer, "Your order {finalOrder.id} is confirmed! Tracking: {trackingNum}"))
+    notifyFiber <- Effect.forkChild(notifyCustomer(finalOrder.customer, "Your order {finalOrder.id} is confirmed! Tracking: {trackingNum}"))
     _ <- Fiber.join(notifyFiber)
 
     # 7. Immutably append audit records
@@ -234,7 +234,7 @@ export processOrderSafely = (order: Order, method: PaymentMethod, tier: Delivery
   |> Effect.catchAll((err) ->
     effect {
       _ <- Console.log("  [Workflow Recovery] Caught domain error: {err}")
-      Failed(order.id, err)
+      Failed(order.id, "{err}")
     }
   )
 

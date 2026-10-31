@@ -161,6 +161,21 @@ export getUser = (id: String) ->
     expect(res.typescript).toContain(`return user;`);
   });
 
+  it("does not resolve Effect submodule APIs as services", async () => {
+    const code = `
+import { HttpClient } from "effect/http"
+
+export fetch =
+  effect
+    response <- HttpClient.get("https://example.com")
+    response
+`.trim();
+
+    const res = await Effect.runPromise(compileString(code));
+    expect(res.typescript).toContain(`const response = yield* HttpClient.get("https://example.com");`);
+    expect(res.typescript).not.toContain("yield* (yield* HttpClient)");
+  });
+
   it("compiles brace-delimited effects as pipeline expressions", async () => {
     const res = await Effect.runPromise(compileString(`result = effect {\n  user <- fetchUser()\n  user |> summarize\n}`));
     expect(res.typescript).toContain("Effect.gen(function* () {");
@@ -321,9 +336,9 @@ export classify = (score: Number) ->
 `.trim();
 
       const res = await Effect.runPromise(compileString(code));
-      expect(res.typescript).toContain(`Number.greaterThan(90)`);
+      expect(res.typescript).toContain(`Number.isGreaterThan(90)`);
       expect(res.typescript).toContain(`? "A" :`);
-      expect(res.typescript).toContain(`Number.greaterThan(80)`);
+      expect(res.typescript).toContain(`Number.isGreaterThan(80)`);
       expect(res.typescript).toContain(`? "B" : "C"`);
     });
 
@@ -365,7 +380,7 @@ export error UserNotFound(id: String, code: Number)
       expect(error.id).toBe("u1");
     });
 
-    it("compiles service declarations with custom tag to Context.Tag", async () => {
+    it("compiles service declarations with custom tag to Context.Service", async () => {
       const code = `
 export service PaymentGateway "custom/payment/gateway"
   charge: (amount: Number) -> Effect<Receipt, PaymentFailed>
@@ -373,7 +388,8 @@ export service PaymentGateway "custom/payment/gateway"
 
       const res = await Effect.runPromise(compileString(code));
       expect(res.typescript).toContain(`import { Context, Effect } from "effect";`);
-      expect(res.typescript).toContain(`export class PaymentGateway extends Context.Tag("custom/payment/gateway")<PaymentGateway, {`);
+      expect(res.typescript).toContain(`export class PaymentGateway extends Context.Service<PaymentGateway, {`);
+      expect(res.typescript).toContain(`}>()("custom/payment/gateway") {}`);
       expect(res.typescript).toContain(`readonly charge: (amount: number) => Effect.Effect<Receipt, PaymentFailed, never>;`);
     });
 

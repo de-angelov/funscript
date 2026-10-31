@@ -1,4 +1,4 @@
-import { createSignal, createMemo, createComputed, createRoot } from "solid-js/dist/dev.cjs"
+import { createSignal, createMemo, createComputed, createRoot } from "solid-js"
 
 export main = () ->
   console.log("Starting SolidJS in FunScript test...")

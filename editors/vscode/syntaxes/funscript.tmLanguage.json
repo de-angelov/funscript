@@ -160,7 +160,7 @@
       "patterns": [
         {
           "name": "support.type.primitive.funscript",
-          "match": "\\b(number|string|boolean|unknown|never|void|any|Record|Array|Effect|Option|Either)\\b"
+          "match": "\\b(number|string|boolean|unknown|never|void|any|Record|Array|Effect|Option|Result)\\b"
         },
         {
           "name": "entity.name.type.funscript",

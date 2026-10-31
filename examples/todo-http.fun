@@ -4,8 +4,8 @@ import { Console, Effect, Schedule } from "effect"
 import { FetchHttpClient, HttpClient, HttpClientResponse } from "effect/http"
 
 export schema Todo = {
-  id: Int
-  title: NonEmptyString
+  id: Number
+  title: String
   completed: Boolean
 }
 
