@@ -13,14 +13,6 @@ ts
 # --- Standalone JSX runtime for deterministic CLI rendering ---
 
 ts
-  declare global {
-    namespace JSX {
-      interface IntrinsicElements {
-        [elem: string]: any;
-      }
-    }
-  }
-
   export const React = {
     createElement: (tag: any, props: any, ...children: any[]) => ({
       tag,

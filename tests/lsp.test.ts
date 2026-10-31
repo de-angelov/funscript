@@ -276,7 +276,7 @@ describe("FunScript LSP Server", () => {
       expect(exitSpy).toHaveBeenCalledWith(1);
     });
 
-    it("returns MethodNotFound for unsupported request method", async () => {
+    it("returns workspace symbols for workspace/symbol", async () => {
       const server = new FunScriptLspServer();
       await server.handleMessage({
         jsonrpc: "2.0",
@@ -292,7 +292,7 @@ describe("FunScript LSP Server", () => {
         params: {},
       })) as ResponseMessage;
 
-      expect(response.error?.code).toBe(ErrorCodes.MethodNotFound);
+      expect(response.result).toEqual([]);
     });
   });
 
