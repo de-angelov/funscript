@@ -3,3 +3,5 @@ dist/
 .funscript-cache/
 *.tsbuildinfo
 .DS_Store
+slopboss/workspaces/
+slopboss/.slopboss-board.lock
