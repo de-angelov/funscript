@@ -6,6 +6,7 @@ import * as path from "node:path";
 import { Effect } from "effect";
 import {
   startRepl,
+  createReplEvaluator,
   evaluateReplLine,
   compileReplCode,
   setupReplContext,
@@ -139,6 +140,27 @@ describe("FunScript Interactive REPL (TASK-020)", () => {
       expect(isRecoverable(new Error("Unexpected token '' (DEDENT)"))).toBe(true);
       expect(isRecoverable(new Error("Unterminated string literal at line 1"))).toBe(true);
       expect(isRecoverable(new Error("Banned keyword 'var'"))).toBe(false);
+    });
+  });
+
+  describe("Buffered evaluator inputs", () => {
+    it("type-checks and evaluates a declaration before later buffered input", async () => {
+      const context = vm.createContext({});
+      setupReplContext(context);
+      const evaluate = createReplEvaluator();
+      const run = (input: string) => new Promise<any>((resolve, reject) => {
+        evaluate(input, context, "repl", (error, result) => {
+          if (error) reject(error);
+          else resolve(result);
+        });
+      });
+
+      const declaration = run('msg = "hello"');
+      const usage = run('msg + " world"');
+      const [declResult, useResult] = await Promise.all([declaration, usage]);
+
+      expect(declResult).toBeUndefined();
+      expect(useResult).toBe("hello world");
     });
   });
 
