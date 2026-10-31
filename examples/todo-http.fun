@@ -13,15 +13,17 @@ export completeTodo = (todo: Todo) ->
   { ...todo, completed: true }
 
 export fetchTodo = (id: Number) ->
-  effect
+  effect {
     response <- HttpClient.get("https://jsonplaceholder.typicode.com/todos/{id}")
     todo <- response |> HttpClientResponse.schemaBodyJson(Todo)
     completeTodo(todo)
+  }
   |> Effect.retry(Schedule.exponential("100 millis"))
   |> Effect.provide(FetchHttpClient.layer)
 
 export main =
-  effect
+  effect {
     todo <- fetchTodo(1)
     _ <- Console.log("Fetched: {todo.title} (completed: {todo.completed})")
     todo
+  }

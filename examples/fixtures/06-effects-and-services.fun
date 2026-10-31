@@ -15,9 +15,10 @@ export service ConfigRepo
   loadDefaults: () -> Effect<String, NotFound>
 
 export checkout = (userId: String, amount: Number) ->
-  effect
+  effect {
     user <- UserRepo.find(userId)
     _ <- PaymentGateway.charge(amount)
     defaultConfig <- ConfigRepo.loadDefaults() |> orDie
     _ <- Console.log("Completed checkout for {user}")
     user
+  }

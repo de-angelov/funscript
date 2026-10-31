@@ -34,7 +34,7 @@ export getVisibleTodos = (todos: Array<Todo>, filterName: String): Array<Todo> -
 
 # Async Effect service simulating API loading
 export fetchInitialTodos =
-  effect
+  effect {
     _ <- Console.log("[FunScript API] Fetching initial todos...")
     todos: Array<Todo> = [
       { id: 1, title: "Learn SolidJS fine-grained reactivity", completed: true, priority: "high" },
@@ -42,3 +42,4 @@ export fetchInitialTodos =
       { id: 3, title: "Dogfood SolidJS + FunScript integration", completed: false, priority: "medium" }
     ]
     todos
+  }
