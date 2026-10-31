@@ -160,6 +160,7 @@ describe("FunScript LSP Server", () => {
             resolveProvider: false,
             triggerCharacters: [".", "<"],
           },
+          codeActionProvider: true,
         },
         serverInfo: {
           name: "funscript-lsp",
@@ -288,11 +289,21 @@ describe("FunScript LSP Server", () => {
       const response = (await server.handleMessage({
         jsonrpc: "2.0",
         id: 99,
-        method: "workspace/symbol",
+        method: "funscript/unsupported",
         params: {},
       })) as ResponseMessage;
 
       expect(response.error?.code).toBe(ErrorCodes.MethodNotFound);
+    });
+
+    it("offers a deterministic whole-document formatter code action", () => {
+      const server = new FunScriptLspServer();
+      const uri = "file:///example.fun";
+      server.onDidOpenHandler({ textDocument: { uri, languageId: "funscript", version: 1, text: "value=1" } });
+      const actions = server.onCodeActionHandler({ textDocument: { uri }, range: { start: { line: 0, character: 0 }, end: { line: 0, character: 7 } }, context: { diagnostics: [] } });
+      expect(actions).toHaveLength(1);
+      expect(actions[0].title).toBe("Format document");
+      expect(actions[0].edit?.changes?.[uri]?.[0].newText).toBe(format("value=1", { filename: "/example.fun" }));
     });
   });
 

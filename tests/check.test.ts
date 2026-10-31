@@ -68,6 +68,8 @@ export count: Number = "not-a-number"
 
       const err = result.diagnostics.find((d) => d.message.includes("not assignable to type 'number'"));
       expect(err).toBeDefined();
+      expect(err?.diagnosticCode).toMatch(/^TS\d+$/);
+      expect(err?.explanation).toContain("generated source");
       expect(err!.file).toBe("type-err.fun");
       expect(err!.line).toBe(2);
       expect(err!.column).toBeGreaterThan(0);
@@ -167,6 +169,7 @@ fn broken(
       expect(result.errorCount).toBe(1);
       expect(result.diagnostics[0].category).toBe("error");
       expect(result.diagnostics[0].code).toBe("SYNTAX");
+      expect(result.diagnostics[0].diagnosticCode).toBe("FS_SYNTAX");
       expect(result.diagnostics[0].line).toBe(1);
       expect(result.diagnostics[0].frame).toBeDefined();
     });

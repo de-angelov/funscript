@@ -23,6 +23,10 @@ export interface TypeCheckDiagnostic {
   endLine?: number;
   endColumn?: number;
   message: string;
+  /** Stable FunScript diagnostic identifier; TypeScript codes remain available in `code`. */
+  diagnosticCode?: string;
+  explanation?: string;
+  suggestedAction?: string;
   category: DiagnosticCategory;
   code?: number | string;
   frame?: string;
@@ -259,13 +263,16 @@ export const typeCheckVirtualFiles = (
           }
 
           const header = `${filePath}:${errLine}:${errCol} - error: ${compErr.message}`;
-          const formatted = frame ? `${header}\n${frame}` : header;
+          const formatted = `${frame ? `${header}\n${frame}` : header}\n  help: Fix the syntax at the highlighted location and run \`funscript check\` again.`;
 
           earlyDiagnostics.push({
             file: filePath,
             line: errLine,
             column: errCol,
             message: compErr.message,
+            diagnosticCode: "FS_SYNTAX",
+            explanation: "The FunScript source could not be parsed.",
+            suggestedAction: "Fix the syntax at the highlighted location and run `funscript check` again.",
             category: "error",
             code: "SYNTAX",
             frame,
@@ -371,6 +378,8 @@ export const typeCheckVirtualFiles = (
             endLine: loc.endLine,
             endColumn: loc.endColumn,
             message,
+            diagnosticCode: `TS${code}`,
+            explanation: `TypeScript reported diagnostic TS${code} for the generated source.`,
             category,
             code,
             frame,
