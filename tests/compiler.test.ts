@@ -2,6 +2,7 @@ import { describe, it, expect } from "vitest";
 import { Effect } from "effect";
 import ts from "typescript";
 import { compileString, checkString, CompilerError } from "../src/compiler.js";
+import { typeCheckSource } from "../src/compiler/check.js";
 
 describe("FunScript Compiler", () => {
   it("compiles basic bindings and arithmetic", async () => {
@@ -200,6 +201,23 @@ export updateCity = (user: User, city: String) ->
     expect(res.typescript).toContain(`import { create } from "mutative";`);
     expect(res.typescript).toContain(`create(user, (draft) => {`);
     expect(res.typescript).toContain(`draft.address.city = city;`);
+  });
+
+  it("checks pipeline mut recipes without returning the draft proxy", async () => {
+    const code = `
+tasks = ["existing"]
+item = "new"
+updated = tasks |> mut (draft) ->
+  draft.push(item)
+  draft
+`.trim();
+
+    const res = await Effect.runPromise(compileString(code));
+    expect(res.typescript).toContain("draft.push(item);");
+    expect(res.typescript).not.toContain("return draft;");
+
+    const checked = await Effect.runPromise(typeCheckSource(code, "mut-recipe.fun"));
+    expect(checked.success, checked.formattedOutput).toBe(true);
   });
 
   describe("Complex pattern matching code generation", () => {
