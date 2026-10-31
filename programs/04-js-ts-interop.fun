@@ -13,21 +13,24 @@ jsGetGreeting = (name: String) ->
 
 # 3. 'js' in Effect block: auto-wrapped with Effect.tryPromise
 export fetchUserGreeting = (name: String) ->
-  effect
+  effect {
     _ <- Console.log("[FunScript] Starting async fiber...")
     greeting <- js jsGetGreeting(name)
     _ <- Console.log("[FunScript] Received from JS: " + greeting)
     greeting
+  }
 
 # 4. 'export js': Emits a function returning a native Promise for outside JS/TS
 export js getPublicGreeting = (name: String) ->
-  effect
+  effect {
     res <- fetchUserGreeting(name)
     res
+  }
 
 # 5. 'eff |> js': Converts Effect to Promise in pipeline
 export main = () ->
-  effect
+  effect {
     _ <- fetchUserGreeting("Ada Lovelace")
     _ <- Console.log("[FunScript] Done!")
     0
+  }

@@ -104,40 +104,47 @@ mut paymentCallCount: ts "number[]" = []
 export InventoryServiceLive =
   Layer.succeed(InventoryService, {
     checkAvailability: (sku) ->
-      effect
+      effect {
         _ <- Console.log("  [InventoryService] Checking stock for {sku}...")
         true
+      }
 
     reserveStock: (sku, qty) ->
-      effect
+      effect {
         _ <- Console.log("  [InventoryService] Reserved {qty} unit(s) of {sku}")
         true
+      }
   })
 
 export PaymentGatewayLive =
   Layer.succeed(PaymentGateway, {
     charge: (orderId, amount, method) ->
-      effect
+      effect {
         methodDesc = formatPaymentMethod(method)
         _ <- Console.log("  [PaymentGateway] Attempting to charge ${amount} via {methodDesc}")
         _ = paymentCallCount.push(1)
         calls = paymentCallCount.length
         res <- match
           | amount |> greaterThan(50000) ->
-              effect
+              effect {
                 _ <- Console.log("  [PaymentGateway] Transaction denied: credit limit exceeded")
                 _ <- Effect.fail("CreditLimitExceeded")
                 ""
+              }
           | calls == 1 ->
-              effect
+              effect {
                 _ <- Console.log("  [PaymentGateway] Transient network glitch on attempt 1! Retrying...")
                 _ <- Effect.fail("GatewayTimeout")
                 ""
+              }
           | _ ->
-              effect
+              effect {
                 _ <- Console.log("  [PaymentGateway] Payment authorized successfully!")
                 "TXN-90210"
+              }
+
         res
+      }
   })
 
 export NotificationServiceLive =
@@ -153,24 +160,27 @@ export AppLive =
 
 # Helper for service call wrapped in effect
 export checkSku = (sku: String) ->
-  effect
+  effect {
     avail <- InventoryService.checkAvailability(sku)
     avail
+  }
 
 export executePayment = (orderId: String, amount: Number, method: PaymentMethod) ->
-  effect
+  effect {
     tx <- PaymentGateway.charge(orderId, amount, method)
     tx
+  }
 
 export notifyCustomer = (customer: String, message: String) ->
-  effect
+  effect {
     _ <- NotificationService.sendConfirmation(customer, message)
     true
+  }
 
 # --- Workflow Implementation ---
 
 export processOrderWorkflow = (order: Order, method: PaymentMethod, tier: DeliveryTier) ->
-  effect
+  effect {
     _ <- Console.log("=== Starting Fulfillment for Order {order.id} ===")
     _ <- Console.log("Customer: {order.customer}, Initial Total: ${order.total}")
 
@@ -217,13 +227,15 @@ export processOrderWorkflow = (order: Order, method: PaymentMethod, tier: Delive
     _ <- Console.log("  Audit trail: {log4.length} events logged immutably")
 
     Success(finalOrder.id, txId, trackingNum)
+  }
 
 export processOrderSafely = (order: Order, method: PaymentMethod, tier: DeliveryTier) ->
   processOrderWorkflow(order, method, tier)
   |> Effect.catchAll((err) ->
-    effect
+    effect {
       _ <- Console.log("  [Workflow Recovery] Caught domain error: {err}")
       Failed(order.id, err)
+    }
   )
 
 # --- Initial Demo State & Main Entrypoint ---
@@ -263,7 +275,7 @@ export highValueOrder: Order = {
 export digitalPayment: PaymentMethod = DigitalWallet("ApplePay", "babbage@example.com")
 
 export program =
-  effect
+  effect {
     # Scenario 1: Standard order with transient retry and successful dispatch
     res1 <- processOrderSafely(sampleOrder, payment, Express)
     summary1 = describeResult(res1)
@@ -276,6 +288,7 @@ export program =
     _ <- Console.log("=== Scenario 2 Result ===")
     _ <- Console.log(summary2)
     [res1, res2]
+  }
 
 export main =
   program

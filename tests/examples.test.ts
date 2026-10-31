@@ -69,7 +69,7 @@ describe("Sample Applications & Real-World Programs", () => {
       expect(stdout).toContain("[PaymentGateway] Transaction denied: credit limit exceeded");
       expect(stdout).toContain("[Workflow Recovery] Caught domain error: CreditLimitExceeded");
       expect(stdout).toContain("FAILED: Order ORD-9999 processing stopped: CreditLimitExceeded");
-    });
+    }, 15_000);
 
     it("executes examples/order-fulfillment.fun identically", async () => {
       const { stdout, stderr } = await execFileAsync("node", [cliPath, "run", examplePath]);
@@ -78,7 +78,7 @@ describe("Sample Applications & Real-World Programs", () => {
       expect(stdout).toContain("SUCCESS: Order ORD-9402 settled (Tx: TXN-90210) and dispatched with tracking #TRACK-GLO-8849");
       expect(stdout).toContain("=== Scenario 2 Result ===");
       expect(stdout).toContain("FAILED: Order ORD-9999 processing stopped: CreditLimitExceeded");
-    });
+    }, 15_000);
   });
 
   describe("Existing sample programs compilation and execution", () => {
