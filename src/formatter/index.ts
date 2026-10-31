@@ -608,10 +608,11 @@ export class Formatter {
     return `${head}\n${steps}`;
   }
 
-  private formatTarget(target: Identifier | import("../ast/types.js").DotPathExpression): string {
+  private formatTarget(target: Identifier | import("../ast/types.js").DotPathExpression | import("../ast/types.js").IndexExpression): string {
     if (target.kind === "Identifier") {
       return target.name;
     }
+    if (target.kind === "IndexExpression") return this.formatExpression(target, 0);
     return target.path.map(p => p.name).join(".");
   }
 

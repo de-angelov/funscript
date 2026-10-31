@@ -24,8 +24,9 @@ describe("Sample Applications & Real-World Programs", () => {
       expect(res.typescript).toBeDefined();
 
       // Effect imports & features
-      expect(res.typescript).toContain('import { Context, Data, Effect, Number, Schema, pipe } from "effect";');
       expect(res.typescript).toContain('import { Array, Console, Effect, Fiber, Layer, Number, Schedule, pipe } from "effect";');
+      expect(res.typescript).not.toContain('import { Context, Data, Effect, Number, Schema, pipe } from "effect";');
+      expect(res.typescript).toContain('import { Context, Data, Schema } from "effect";');
       expect(res.typescript).toContain('import { match, P } from "ts-pattern";');
       expect(res.typescript).toContain('import { create } from "mutative";');
 
