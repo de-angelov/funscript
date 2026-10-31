@@ -1,5 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { Effect } from "effect";
+import ts from "typescript";
 import { compileString, checkString, CompilerError } from "../src/compiler.js";
 
 describe("FunScript Compiler", () => {
@@ -83,7 +84,9 @@ export schema Shape =
     expect(res.typescript).toContain(`items: Schema.Array(Schema.String)`);
 
     const { Schema } = await import("effect");
-    const evalCode = res.typescript.replace(/import .*\n/g, "").replace(/export const /g, "const ").replace(/export type .*\n/g, "");
+    const evalCode = ts.transpile(res.typescript, { module: ts.ModuleKind.ESNext })
+      .replace(/import .*\n/g, "")
+      .replace(/\bexport\s+/g, "");
     const decode = new Function("Schema", `${evalCode}; return Items;`)(Schema);
     expect(Schema.decodeUnknownSync(decode)({ items: ["a", "b"] })).toEqual({ items: ["a", "b"] });
   });
