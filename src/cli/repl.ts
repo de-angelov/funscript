@@ -152,8 +152,8 @@ export async function compileReplCode(
   }
   // These modules are provided by setupReplContext. Ambient globals avoid
   // duplicate imports when the emitter also injects an Effect helper.
-  const globals = `ts "declare global { ${["Effect", "Console", "Option", "Result", "Duration", "pipe"]
-    .map((name) => `const ${name}: typeof import('effect').${name};`).join(" ")} } export {};"`;
+  const globals = `ts { declare global { ${["Effect", "Console", "Option", "Result", "Duration", "pipe"]
+    .map((name) => `const ${name}: typeof import('effect').${name};`).join(" ")} } export {}; }`;
   const result = await Effect.runPromise(typeCheckSource(
     [globals, ...nextDeclarations.values()].join("\n"), "repl.fun",
   ));

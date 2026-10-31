@@ -931,14 +931,14 @@ See also: `false`, `boolean`.
 
 ## `ts`
 
-TypeScript type system escape hatch for complex types.
+TypeScript escape hatch for complex declarations, expressions, and types.
 
 ```funscript
-schema Dict = ts "Record<string, unknown>"
-type Position = ts "import('vscode-languageserver').Position"
+schema Dict = ts { Record<string, unknown> }
+type Position = ts { import('vscode-languageserver').Position }
 ```
 
-Allows embedding arbitrary TypeScript types without expanding FunScript's core grammar. Useful for generics, utility types, and third-party library types.
+Embeds verbatim TypeScript in a balanced `ts { ... }` block without expanding FunScript's core grammar. Useful for generics, utility types, and third-party library types.
 
 
 See also: `js`, `schema`.

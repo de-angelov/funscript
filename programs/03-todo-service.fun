@@ -9,7 +9,7 @@ export schema Todo = {
 }
 
 export error TodoNotFound(id: Number)
-ts "const pushTodo = (store: Todo[], todo: Todo): void => { store.push(todo); }; const replaceTodo = (store: Todo[], index: number, todo: Todo): void => { store.splice(index, 1, todo); };"
+ts { const pushTodo = (store: Todo[], todo: Todo): void => { store.push(todo); }; const replaceTodo = (store: Todo[], index: number, todo: Todo): void => { store.splice(index, 1, todo); }; }
 
 export service TodoRepo
   create: (title: String) -> Effect<Todo>
@@ -17,7 +17,7 @@ export service TodoRepo
   all: () -> Effect<Array<Todo>>
 
 # In-memory layer implementation using local store:
-mut store: ts "Todo[]" = []
+mut store: ts { Todo[] } = []
 
 export TodoRepoLive =
   Layer.succeed(TodoRepo, {

@@ -405,7 +405,7 @@ export class Formatter {
       case "WhenStatement":
         return this.formatStatement(decl, 0);
       case "TsEscapeDeclaration":
-        return `ts "${decl.code}"`;
+        return this.formatTsEscape(decl.code);
     }
   }
 
@@ -974,7 +974,7 @@ export class Formatter {
       case "JsExpression":
         return `js ${this.formatExpression(expr.expression, indent)}`;
       case "TsEscapeExpression":
-        return `ts "${expr.code}"`;
+        return this.formatTsEscape(expr.code);
     }
   }
 
@@ -1071,8 +1071,12 @@ export class Formatter {
       case "UnionTypeNode":
         return node.types.map(t => this.formatType(t, indent)).join(" | ");
       case "TsEscapeTypeNode":
-        return `ts "${node.code}"`;
+        return this.formatTsEscape(node.code);
     }
+  }
+
+  private formatTsEscape(code: string): string {
+    return code.includes("\n") ? `ts {\n${code}\n}` : `ts { ${code} }`;
   }
 }
 

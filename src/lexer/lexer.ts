@@ -424,75 +424,60 @@ export class Lexer {
   /**
    * Reads the verbatim TypeScript payload that follows the 'ts' keyword.
    *
-   * Two forms are supported:
-   *   ts "Record<string, { a: number }>"      inline: raw string, no interpolation
-   *   ts                                      block: every following line indented
-   *     interface Foo { a: number }           deeper than the 'ts' line, dedented
+   * The sole form is a balanced brace block. Its contents are verbatim TypeScript:
+   *   ts { Record<string, { a: number }> }
+   *   ts { interface Foo { a: number } }
    */
   private readTsCode(): void {
     while (this.peek() === " ") this.advance();
     const startPos = this.currentPosition();
 
-    // Inline form: ts "..."
-    if (this.peek() === '"') {
-      this.advance(); // opening '"'
-      let buffer = "";
-      while (!this.isAtEnd() && this.peek() !== '"') {
-        const c = this.peek();
-        if (c === "\n" || c === "\r") {
-          throw new LexerError("Unterminated ts string; use an indented 'ts' block for multi-line TypeScript", {
-            start: startPos,
-            end: this.currentPosition(),
-          });
-        }
-        if (c === "\\" && (this.peekAhead(1) === '"' || this.peekAhead(1) === "\\")) {
-          this.advance();
-        }
-        buffer += this.advance();
-      }
-      if (this.isAtEnd()) {
-        throw new LexerError("Unterminated ts string", { start: startPos, end: this.currentPosition() });
-      }
-      this.advance(); // closing '"'
-      this.tokens.push({ type: TokenType.TS_CODE, value: buffer, span: { start: startPos, end: this.currentPosition() } });
-      return;
+    if (this.peek() !== "{") {
+      throw new LexerError("Expected '{ ... }' after 'ts'", this.currentSpan(1));
     }
 
-    // Block form: 'ts' at end of line, followed by deeper-indented lines
-    if (this.peek() === "\n" || this.peek() === "\r" || this.peek() === "#") {
-      while (!this.isAtEnd() && this.peek() !== "\n") this.advance(); // skip rest of line / comment
-      const baseIndent = this.indentStack[this.indentStack.length - 1];
-      const lines: string[] = [];
+    this.advance(); // opening '{'
+    let depth = 1;
+    let code = "";
+    let quote: '"' | "'" | "`" | null = null;
+    let lineComment = false;
+    let blockComment = false;
 
-      while (!this.isAtEnd()) {
-        // Look at the next line without consuming it
-        let i = this.offset + 1; // skip '\n'
-        let spaces = 0;
-        while (this.source[i] === " ") { spaces++; i++; }
-        const lineEnd = this.source.indexOf("\n", i) === -1 ? this.source.length : this.source.indexOf("\n", i);
-        const content = this.source.slice(i, lineEnd).replace(/\r$/, "");
-        const blank = content.trim() === "";
-        if (!blank && spaces <= baseIndent) break;
-
-        // Consume the line
-        this.advance(); // '\n'
+    while (!this.isAtEnd() && depth > 0) {
+      const c = this.advance();
+      const next = this.peek();
+      if (c === "\n") {
         this.line++;
         this.column = 1;
-        while (this.offset < lineEnd) this.advance();
-        lines.push(blank ? "" : " ".repeat(spaces) + content);
+        lineComment = false;
       }
-
-      while (lines.length > 0 && lines[lines.length - 1] === "") lines.pop();
-      if (lines.length === 0) {
-        throw new LexerError("Empty 'ts' block; indent the TypeScript code under 'ts'", { start: startPos, end: this.currentPosition() });
+      if (lineComment) { code += c; continue; }
+      if (blockComment) {
+        code += c;
+        if (c === "*" && next === "/") { code += this.advance(); blockComment = false; }
+        continue;
       }
-      const minIndent = Math.min(...lines.filter((l) => l !== "").map((l) => l.length - l.trimStart().length));
-      const code = lines.map((l) => l.slice(minIndent)).join("\n");
-      this.tokens.push({ type: TokenType.TS_CODE, value: code, span: { start: startPos, end: this.currentPosition() } });
-      return;
+      if (quote) {
+        code += c;
+        if (c === "\\") { code += this.advance(); continue; }
+        if (c === quote) quote = null;
+        continue;
+      }
+      if (c === "/" && next === "/") { code += c + this.advance(); lineComment = true; continue; }
+      if (c === "/" && next === "*") { code += c + this.advance(); blockComment = true; continue; }
+      if (c === '"' || c === "'" || c === "`") { quote = c; code += c; continue; }
+      if (c === "{") { depth++; code += c; continue; }
+      if (c === "}") {
+        depth--;
+        if (depth > 0) code += c;
+        continue;
+      }
+      code += c;
     }
 
-    throw new LexerError("Expected \"...\" or an indented block after 'ts'", this.currentSpan(1));
+    if (depth !== 0) throw new LexerError("Unterminated 'ts { ... }' block", { start: startPos, end: this.currentPosition() });
+    if (code.trim() === "") throw new LexerError("Empty 'ts { ... }' block", { start: startPos, end: this.currentPosition() });
+    this.tokens.push({ type: TokenType.TS_CODE, value: code.trim(), span: { start: startPos, end: this.currentPosition() } });
   }
 
   private continueStringAfterInterpolation(): void {

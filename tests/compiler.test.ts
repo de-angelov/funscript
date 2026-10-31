@@ -114,11 +114,11 @@ export runPromiseTest = fetchUser("123") |> js
 
   it("compiles 'ts' keyword for TypeScript escape hatches", async () => {
     const code = `
-ts "interface CustomBuffer { size: number }"
+ts { interface CustomBuffer { size: number } }
 
-schema UserMap = ts "Record<string, unknown>"
+schema UserMap = ts { Record<string, unknown> }
 
-export createBuffer = ts "Buffer.from('hello')"
+export createBuffer = ts { Buffer.from('hello') }
 `.trim();
 
     const res = await Effect.runPromise(compileString(code));
@@ -127,13 +127,14 @@ export createBuffer = ts "Buffer.from('hello')"
     expect(res.typescript).toContain(`export const createBuffer = Buffer.from('hello');`);
   });
 
-  it("compiles indented 'ts' block escape hatch", async () => {
+  it("compiles brace-delimited 'ts' block escape hatches", async () => {
     const code = `
-ts
+ts {
   interface MultiLineConfig {
     readonly host: string;
     readonly port: number;
   }
+}
 
 export host = "localhost"
 `.trim();
@@ -142,6 +143,11 @@ export host = "localhost"
     expect(res.typescript).toContain(`interface MultiLineConfig {`);
     expect(res.typescript).toContain(`readonly host: string;`);
     expect(res.typescript).toContain(`readonly port: number;`);
+  });
+
+  it("rejects removed quoted and indentation-based ts escapes", async () => {
+    await expect(Effect.runPromise(compileString('schema Legacy = ts "Record<string, unknown>"'))).rejects.toThrow("Expected '{ ... }' after 'ts'");
+    await expect(Effect.runPromise(compileString("ts\n  interface Legacy {}"))).rejects.toThrow("Expected '{ ... }' after 'ts'");
   });
 
   it("compiles effect blocks with direct service calls", async () => {

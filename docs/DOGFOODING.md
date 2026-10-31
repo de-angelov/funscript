@@ -129,7 +129,7 @@ In addition to building and executing these applications, extensive stress testi
   err = NotFound(1)
   ```
 - **Root Cause**: FunScript has no `new` keyword in its grammar. Schema.TaggedError produces a class constructor expecting `new NotFound({ id: 1 })`.
-- **Current Workaround**: Use `ts` escape hatch: `ts "export const makeNotFound = (id: number) => new NotFound({ id });"`.
+- **Current Workaround**: Use `ts` escape hatch: `ts { export const makeNotFound = (id: number) => new NotFound({ id }); }`.
 - **Recommendation**: Emitter should emit a callable constructor companion function alongside the class:
   ```typescript
   export const NotFound = (id: number) => new NotFound$Class({ id });

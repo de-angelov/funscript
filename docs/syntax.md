@@ -135,7 +135,7 @@ generated output, but not in idiomatic FunScript:
   local `export { ... }` without `from`.
 - **Formatting noise:** semicolons.
 
-Use `js` for JavaScript/Promise interop and `ts "..."` for TypeScript types.
+Use `js` for JavaScript/Promise interop and `ts { ... }` for TypeScript escapes.
 Raw TypeScript backtick blocks remain an explicit escape hatch. See §1.8. The complete rejected/replacement table is in
 [rejected-syntax.md](rejected-syntax.md).
 
@@ -277,7 +277,7 @@ tagged unions, or services; absence is `Option`.
 ### 1.6 Effect TS types as the language primitives
 
 All FunScript type names are PascalCase. Native TypeScript spelling is used only in
-emitted TypeScript and `ts "..."` escape hatches.
+emitted TypeScript and `ts { ... }` escape hatches.
 
 | FunScript type | TypeScript output  | Runtime schema     |
 | -------------- | ------------------ | ------------------ |
@@ -2018,7 +2018,7 @@ export js greet = (name: String) =>
 
 Schema constructors such as `User({ name: "Ada", age: 36 })` also validate their
 payloads at runtime. Keep the runtime validator and static type derived from the
-same schema. Use `Option<T>` for absence, and `ts "..."` for complex TypeScript
+same schema. Use `Option<T>` for absence, and `ts { ... }` for complex TypeScript
 types; a type escape hatch does not replace boundary decoding. Neither a cast
 nor `Unknown` itself proves that an external value satisfies a schema.
 

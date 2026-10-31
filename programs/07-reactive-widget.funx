@@ -11,8 +11,8 @@ import { Console } from "effect"
 
 # --- TypeScript & JSX Environment Types ---
 
-ts
-  declare global {
+ts {
+declare global {
     namespace JSX {
       interface IntrinsicElements {
         [elem: string]: any;
@@ -28,6 +28,7 @@ ts
       children: children.flat().filter((c) => c !== null && c !== undefined && c !== false)
     })
   };
+}
 
 # --- Component Schemas & Tagged Unions ---
 
@@ -47,18 +48,17 @@ export schema WidgetState =
 
 # --- Pattern Matching View Helper ---
 
-export renderStatusBadge = (state: WidgetState) =>
+export renderStatusBadge = (state: WidgetState) ->
   match state
     | Idle =>
         <span className="badge badge-idle">Status: Idle</span>
     | Active(current) =>
         <span className="badge badge-active">Active: {current}</span>
     | LimitReached(limit) =>
+        # --- Reactive Widget Component ---
         <span className="badge badge-limit">Warning: Max Limit {limit} Reached</span>
 
-# --- Reactive Widget Component ---
-
-export CounterWidget = (props: WidgetProps) =>
+export CounterWidget = (props: WidgetProps) ->
   <div className="widget-card variant-${props.variant}">
     <header className="widget-header">
       <h3 className="widget-title">{props.title}</h3>
@@ -112,16 +112,16 @@ export CounterWidget = (props: WidgetProps) =>
 # --- Main Demonstration Runner ---
 
 export main =
-  effect
+  effect {
     _ <- Console.log("=== Reactive Widget (.funx) Starting ===")
 
     # 1. Render Normal Counter Widget
     p1: WidgetProps = {
-      title: "Task Queue Throughput",
-      initialCount: 5,
-      step: 1,
-      min: 0,
-      max: 10,
+      title: "Task Queue Throughput"
+      initialCount: 5
+      step: 1
+      min: 0
+      max: 10
       variant: "primary"
     }
     w1 = CounterWidget(p1)
@@ -130,11 +130,11 @@ export main =
 
     # 2. Render Widget at boundary
     p2: WidgetProps = {
-      title: "CPU Utilization Alert",
-      initialCount: 100,
-      step: 5,
-      min: 0,
-      max: 100,
+      title: "CPU Utilization Alert"
+      initialCount: 100
+      step: 5
+      min: 0
+      max: 100
       variant: "danger"
     }
     w2 = CounterWidget(p2)
@@ -150,3 +150,4 @@ export main =
 
     _ <- Console.log("=== Reactive Widget (.funx) Completed Successfully ===")
     0
+  }

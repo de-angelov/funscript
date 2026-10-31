@@ -228,7 +228,7 @@ export class Parser {
 
   /** Consumes the raw TypeScript payload the lexer captured after 'ts'. */
   private consumeTsCode(): Token {
-    return this.consume(TokenType.TS_CODE, "Expected \"...\" or an indented block after 'ts'");
+    return this.consume(TokenType.TS_CODE, "Expected '{ ... }' after 'ts'");
   }
 
   private parseImportDeclaration(): ImportDeclaration {
@@ -1165,7 +1165,7 @@ export class Parser {
       };
     }
 
-    // 12. TS escape hatch: ts "raw TypeScript expression"
+    // 12. TS escape hatch: ts { raw TypeScript expression }
     if (this.match(TokenType.TS)) {
       const start = this.previous().span.start;
       const code = this.consumeTsCode();
@@ -1940,7 +1940,7 @@ export class Parser {
       return { kind: "RecordTypeNode", fields, span: { start, end } };
     }
 
-    // TS escape hatch for types: ts "Record<string, unknown>"
+    // TS escape hatch for types: ts { Record<string, unknown> }
     if (this.match(TokenType.TS)) {
       const start = this.previous().span.start;
       const code = this.consumeTsCode();

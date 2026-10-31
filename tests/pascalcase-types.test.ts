@@ -90,11 +90,11 @@ shortDelay = 3 |> millis
   });
 
   it("preserves PascalCase formatting and raw TypeScript escape types", () => {
-    const source = 'schema Signature = (name: String, value: Option<Unknown>) => Array<Number>\nschema Foreign = ts "Record<string, unknown>"';
+    const source = 'schema Signature = (name: String, value: Option<Unknown>) => Array<Number>\nschema Foreign = ts { Record<string, unknown> }';
     const formatted = format(source);
     expect(formatted).toContain("(name: String, value: Option<Unknown>)");
     expect(formatted).toContain("Array<Number>");
-    expect(formatted).toContain('ts "Record<string, unknown>"');
+    expect(formatted).toContain('ts { Record<string, unknown> }');
     expect(format(formatted)).toBe(formatted);
   });
 });

@@ -2099,7 +2099,7 @@ export schema Config = {
       const uri = "file:///interop.fun";
       const text = [
         "schema Config = {",
-        '  options: ts "Record<string, unknown>"',
+        '  options: ts { Record<string, unknown> }',
         "}",
         "",
         "fetchData = (url: String) ->",
@@ -2128,7 +2128,7 @@ export schema Config = {
       })) as ResponseMessage;
       const tsHover = tsRes.result as Hover;
       expect((tsHover.contents as any).value).toContain(
-        "TypeScript type system escape hatch",
+        "TypeScript escape hatch for complex declarations",
       );
 
       // Hover on 'js'

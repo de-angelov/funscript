@@ -289,7 +289,7 @@ describe("VS Code Extension Package (TASK-018)", () => {
       expect(new RegExp(commentRule.match).test("# This is a comment")).toBe(true);
 
       const tsRule = grammar.repository["ts-escape"].patterns[0];
-      const tsMatch = 'ts "import(\'effect\').Effect"'.match(new RegExp(tsRule.match));
+      const tsMatch = "ts { import('effect').Effect }".match(new RegExp(tsRule.match));
       expect(tsMatch).not.toBeNull();
       expect(tsMatch?.[1]).toBe("ts");
       expect(tsMatch?.[2]).toBe('"import(\'effect\').Effect"');

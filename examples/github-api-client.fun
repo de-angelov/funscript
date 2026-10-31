@@ -30,8 +30,8 @@ export schema ApiResponse =
 export error GithubApiError(statusCode: Number, message: String)
 
 # TypeScript escape hatch for foreign fetch execution & error instantiation
-ts
-  export const makeGithubApiError = (statusCode: number, message: string) =>
+ts {
+export const makeGithubApiError = (statusCode: number, message: string) =>
     new GithubApiError({ statusCode, message });
 
   export interface RawApiResponse {
@@ -88,10 +88,11 @@ ts
       message: "Internal GitHub API server error"
     };
   }
+}
 
 # --- Response Parsing & Pipelines ---
 
-export parseResponse = (repoPath: String, raw: ts "RawApiResponse"): ApiResponse =>
+export parseResponse = (repoPath: String, raw: ts { RawApiResponse }): ApiResponse ->
   match raw.status
     | 200 => Success(raw.json |> Schema.decodeUnknownSync(Repository))
     | 403 => RateLimited(raw.json.resetTime, raw.json.remaining)
@@ -99,7 +100,7 @@ export parseResponse = (repoPath: String, raw: ts "RawApiResponse"): ApiResponse
     | _ => ServerError(raw.status, raw.message ?? "Unknown error")
 
 # Pattern matching on ApiResponse variants
-export formatApiResponse = (res: ApiResponse) =>
+export formatApiResponse = (res: ApiResponse) ->
   match res
     | Success(repo) =>
         "[200 OK] " + repo.fullName + " - " + repo.description + " (Stars: " + repo.stargazersCount + ", Forks: " + repo.forksCount + ")"
@@ -108,24 +109,25 @@ export formatApiResponse = (res: ApiResponse) =>
     | NotFound(repoName) =>
         "[404 Not Found] Repository '" + repoName + "' does not exist"
     | ServerError(statusCode, message) =>
+        # Client function using 'js' interop in Effect block
         "[Error " + statusCode + "] " + message
 
-# Client function using 'js' interop in Effect block
-export fetchRepo = (repoPath: String) =>
-  effect
+export fetchRepo = (repoPath: String) ->
+  effect {
     _ <- Console.log("[GitHub Client] Requesting repository: " + repoPath)
     raw <- js executeFetch(repoPath)
     parsed = parseResponse(repoPath, raw)
     parsed
+  }
 
 # Summary formatter for a batch of repositories
-export summarizeRepo = (repo: Repository) =>
+export summarizeRepo = (repo: Repository) ->
   repo.fullName + " (⭐ " + repo.stargazersCount + " | 🍴 " + repo.forksCount + " | ⚠️ " + repo.openIssuesCount + ")"
 
 # --- Main Program Runner ---
 
 export main =
-  effect
+  effect {
     _ <- Console.log("=== GitHub API Client Dogfooding ===")
 
     # 1. Fetch valid repository
@@ -146,3 +148,4 @@ export main =
 
     _ <- Console.log("=== GitHub API Client Completed Successfully ===")
     0
+  }
