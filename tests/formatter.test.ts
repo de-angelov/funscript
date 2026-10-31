@@ -32,7 +32,7 @@ describe("FunScript Code Formatter", () => {
   it("formats Effect blocks and pipelines idempotently", () => {
     const source = `result =\n  effect\n    value <- fetch()\n    value |> normalize`;
     const formatted = format(source);
-    expect(formatted).toContain("effect\n");
+    expect(formatted).toContain("effect {");
     expect(formatted).toContain("value |> normalize");
     expect(format(formatted)).toBe(formatted);
   });
@@ -133,7 +133,7 @@ export program =
 `.trim();
     const formatted = format(unformatted);
     expect(formatted).toBe(
-      `export program =\n  effect\n    x <- fetchNumber()\n    _ <- Console.log(x)\n    y = x + 1\n    y\n`
+      `export program =\n  effect {\n    x <- fetchNumber()\n    _ <- Console.log(x)\n    y = x + 1\n    y\n  }\n`
     );
     expect(format(formatted)).toBe(formatted);
   });

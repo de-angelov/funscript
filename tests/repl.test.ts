@@ -134,6 +134,7 @@ describe("FunScript Interactive REPL (TASK-020)", () => {
     it("identifies recoverable incomplete input errors", () => {
       expect(isRecoverable(new Error("Expected ')' after parameters"))).toBe(true);
       expect(isRecoverable(new Error("Expected '}' after record schema"))).toBe(true);
+      expect(isRecoverable(new Error("Expected '}' to close effect block"))).toBe(true);
       expect(isRecoverable(new Error("Expected indent after 'effect'"))).toBe(true);
       expect(isRecoverable(new Error("Unexpected token '' (DEDENT)"))).toBe(true);
       expect(isRecoverable(new Error("Unterminated string literal at line 1"))).toBe(true);

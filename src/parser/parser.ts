@@ -105,6 +105,7 @@ export class Parser {
   private functionDepth = 0;
   private mutableVariables = new Set<string>();
   private mutDraftVariables = new Set<string>();
+  private parsingBraceEffect = false;
 
   constructor(
     private tokens: Token[],
@@ -934,6 +935,9 @@ export class Parser {
   }
 
   private parsePrimary(): Expression {
+    if (this.parsingBraceEffect && this.isAtEnd()) {
+      throw new ParseError("Expected '}' to close effect block", this.peek().span);
+    }
     // 0. JSX Element: <tag ...> or <tag ... />
     if (this.check(TokenType.JSX_TAG_OPEN)) {
       return this.parseJsxElement();
@@ -1422,15 +1426,21 @@ export class Parser {
 
   private parseEffectBlock(): EffectBlockExpression {
     const start = this.previous().span.start;
-    this.consume(TokenType.NEWLINE, "Expected newline after 'effect'");
-    this.consume(TokenType.INDENT, "Expected indent after 'effect'");
+    const braced = this.match(TokenType.LBRACE);
+    if (braced) this.parsingBraceEffect = true;
+    if (!braced) {
+      this.consume(TokenType.NEWLINE, "Expected newline or '{' after 'effect'");
+      this.consume(TokenType.INDENT, "Expected indent after 'effect'");
+    }
 
     const body: EffectStatement[] = [];
     let finalExpression: Expression | undefined;
 
-    while (!this.check(TokenType.DEDENT) && !this.isAtEnd()) {
+    const atEnd = () => braced ? this.check(TokenType.RBRACE) : this.check(TokenType.DEDENT);
+    while (!atEnd() && !this.isAtEnd()) {
       this.skipNewlines();
-      if (this.check(TokenType.DEDENT)) break;
+      if (braced) while (this.match(TokenType.INDENT) || this.match(TokenType.DEDENT)) {}
+      if (atEnd()) break;
 
       if (this.check(TokenType.WHEN)) {
         body.push(this.parseWhenStatement());
@@ -1494,7 +1504,8 @@ export class Parser {
         // Expression - must be the final line or control flow
         const expr = this.parseExpression();
         this.skipNewlines();
-        if (this.check(TokenType.DEDENT)) {
+        if (braced) while (this.match(TokenType.INDENT) || this.match(TokenType.DEDENT)) {}
+        if (atEnd()) {
           finalExpression = expr;
           break;
         } else {
@@ -1506,7 +1517,12 @@ export class Parser {
       }
     }
 
-    this.consume(TokenType.DEDENT, "Expected unindent after effect block");
+    if (braced) {
+      this.consume(TokenType.RBRACE, "Expected '}' to close effect block");
+      this.parsingBraceEffect = false;
+    } else {
+      this.consume(TokenType.DEDENT, "Expected unindent after effect block");
+    }
 
     if (!finalExpression) {
       throw new ParseError("Effect block must end with a return expression", { start, end: this.previous().span.end });

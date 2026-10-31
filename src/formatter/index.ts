@@ -700,7 +700,7 @@ export class Formatter {
     const trailingFinal = this.getTrailingComment(expr.finalExpression.span.end.line);
     lines.push(`${leadingFinal}${stmtIndent}${this.formatExpression(expr.finalExpression, indent + this.indentSize)}${trailingFinal}`);
 
-    return `effect\n${lines.join("\n")}`;
+    return `effect {\n${lines.join("\n")}\n${this.spaces(indent)}}`;
   }
 
   private formatEffectStatement(stmt: EffectStatement, indent: number): string {
