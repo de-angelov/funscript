@@ -448,7 +448,15 @@ export class Emitter {
         return this.emitFunctionExpression(expr);
       case "MutBlockExpression":
         this.needsMutative = true;
-        return `create((${expr.draftParam.name}) => {\n${this.emitFunctionBody(expr.body)}\n})`;
+        // Mutative recipes mutate their draft in place and must return void.
+        // A trailing draft expression is useful in FunScript's block syntax,
+        // but returning that proxy selects the wrong create overload.
+        const recipeBody = expr.body.kind === "BlockStatement" &&
+          expr.body.finalExpression?.kind === "Identifier" &&
+          expr.body.finalExpression.name === expr.draftParam.name
+          ? this.emitFunctionBody({ ...expr.body, finalExpression: undefined })
+          : this.emitFunctionBody(expr.body);
+        return `create((${expr.draftParam.name}) => {\n${recipeBody}\n})`;
       case "MatchExpression":
         return this.emitMatchExpression(expr);
       case "EffectBlockExpression":
