@@ -283,6 +283,18 @@ export const typeCheckVirtualFiles = (
         });
       }
 
+      const hasTsx = Array.from(virtualTsFiles.keys()).some((fileName) => fileName.endsWith(".tsx"));
+      const hasJsxIntrinsicTypes = Array.from(virtualTsFiles.values()).some((source) =>
+        /namespace\s+JSX[\s\S]*?IntrinsicElements/.test(source),
+      );
+      if (hasTsx && !hasJsxIntrinsicTypes) {
+        const jsxTypesPath = path.join(cwd, "__funscript_jsx_intrinsics__.d.ts");
+        virtualTsFiles.set(
+          jsxTypesPath,
+          "declare namespace JSX { interface IntrinsicElements { [element: string]: any } }",
+        );
+      }
+
       const defaultHost = ts.createCompilerHost(compilerOptions);
 
       const resolveVirtualContent = (fileName: string): string | undefined => {

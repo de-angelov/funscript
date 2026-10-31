@@ -464,15 +464,7 @@ export class Emitter {
         return this.emitFunctionExpression(expr);
       case "MutBlockExpression":
         this.needsMutative = true;
-        // Mutative recipes mutate their draft in place and must return void.
-        // A trailing draft expression is useful in FunScript's block syntax,
-        // but returning that proxy selects the wrong create overload.
-        const recipeBody = expr.body.kind === "BlockStatement" &&
-          expr.body.finalExpression?.kind === "Identifier" &&
-          expr.body.finalExpression.name === expr.draftParam.name
-          ? this.emitFunctionBody({ ...expr.body, finalExpression: undefined })
-          : this.emitFunctionBody(expr.body);
-        return `create((${expr.draftParam.name}) => {\n${recipeBody}\n})`;
+        return `create(${this.emitMutativeRecipe(expr)})`;
       case "MatchExpression":
         return this.emitMatchExpression(expr);
       case "EffectBlockExpression":
@@ -487,6 +479,18 @@ export class Emitter {
       case "TsEscapeExpression":
         return expr.code;
     }
+  }
+
+  private emitMutativeRecipe(expr: MutBlockExpression): string {
+    // Mutative recipes mutate their draft in place and must return void.
+    // A trailing draft expression is useful in FunScript's block syntax,
+    // but returning that proxy selects the wrong create overload.
+    const recipeBody = expr.body.kind === "BlockStatement" &&
+      expr.body.finalExpression?.kind === "Identifier" &&
+      expr.body.finalExpression.name === expr.draftParam.name
+      ? this.emitFunctionBody({ ...expr.body, finalExpression: undefined })
+      : this.emitFunctionBody(expr.body);
+    return `(${expr.draftParam.name}) => {\n${recipeBody}\n}`;
   }
 
   private emitStringLiteral(lit: StringLiteral): string {
@@ -517,6 +521,11 @@ export class Emitter {
 
     const emittedStages = stages.map((s, idx) => {
       if (idx === 0) return this.emitExpression(s);
+
+      if (s.kind === "MutBlockExpression") {
+        this.needsMutative = true;
+        return `(__mutInput) => create(__mutInput, ${this.emitMutativeRecipe(s)})`;
+      }
 
       // Auto-namespace resolution for pipeline stage callee
       const resolvedStage = this.resolvePipelineStage(s);

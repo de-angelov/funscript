@@ -95,7 +95,7 @@ describe("Dogfooding Real-World Applications (TASK-027)", () => {
       expect(res.typescript).toContain("if ((idx !== (-1))) {");
 
       // Mutative draft scopes
-      expect(res.typescript).toContain("create((draft) => {");
+      expect(res.typescript).toContain("create(__mutInput, (draft) => {");
       expect(res.typescript).toContain("draft.push(newTask);");
       expect(res.typescript).toContain("draft.splice(idx, 1, updatedItem);");
 
