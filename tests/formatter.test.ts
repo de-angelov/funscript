@@ -21,6 +21,22 @@ describe("FunScript Code Formatter", () => {
     expect(checkFormat(formatted, { filename: "message.funx" }).isFormatted).toBe(true);
   });
 
+  it("preserves JSX source and comments across repeated formatting", () => {
+    const source = `# greeting comment\nexport Message = (name: String) => <section class="message"><p>Hello, {name}!</p></section>`;
+    const formatted = format(source, { filename: "message.funx" });
+    expect(formatted).toContain('<section class="message">');
+    expect(formatted).toContain("# greeting comment");
+    expect(format(formatted, { filename: "message.funx" })).toBe(formatted);
+  });
+
+  it("formats Effect blocks and pipelines idempotently", () => {
+    const source = `result =\n  effect\n    value <- fetch()\n    value |> normalize`;
+    const formatted = format(source);
+    expect(formatted).toContain("effect\n");
+    expect(formatted).toContain("value |> normalize");
+    expect(format(formatted)).toBe(formatted);
+  });
+
   it("normalizes indentation to 2 spaces", () => {
     const unformatted = `
 export greet = (name: String) ->

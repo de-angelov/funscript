@@ -23,6 +23,7 @@ import {
   type HoverParams,
   MarkupKind,
 } from "../src/lsp/index.js";
+import { format } from "../src/formatter/index.js";
 
 describe("FunScript LSP Server", () => {
   describe("Lifecycle Handling", () => {
@@ -46,6 +47,7 @@ describe("FunScript LSP Server", () => {
         capabilities: {
           textDocumentSync: TextDocumentSyncKind.Full,
           documentFormattingProvider: true,
+          documentRangeFormattingProvider: true,
           definitionProvider: true,
           hoverProvider: true,
         },
@@ -599,6 +601,28 @@ export schema Config = {
 
       expect(response.id).toBe(50);
       expect(response.result).toBeNull();
+    });
+
+    it("matches CLI formatting for .funx documents and declines partial ranges", async () => {
+      const server = new FunScriptLspServer();
+      await server.handleMessage({ jsonrpc: "2.0", id: 1, method: "initialize", params: {} });
+      const uri = "file:///workspace/message.funx";
+      const source = `export Message = () => <p>Done!</p>`;
+      await server.handleMessage({
+        jsonrpc: "2.0", method: "textDocument/didOpen",
+        params: { textDocument: { uri, languageId: "funscriptx", version: 1, text: source } },
+      });
+      const formatted = await server.handleMessage({
+        jsonrpc: "2.0", id: 51, method: "textDocument/formatting",
+        params: { textDocument: { uri }, options: { tabSize: 2, insertSpaces: true } },
+      }) as ResponseMessage;
+      expect(formatted.result[0].newText).toBe(format(source, { filename: "/workspace/message.funx" }));
+
+      const partial = server.onRangeFormattingHandler({
+        textDocument: { uri }, options: { tabSize: 2, insertSpaces: true },
+        range: { start: { line: 0, character: 1 }, end: { line: 0, character: 4 } },
+      } as any);
+      expect(partial).toBeNull();
     });
 
     it("returns empty array for empty documents", async () => {

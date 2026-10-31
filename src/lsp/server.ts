@@ -13,6 +13,7 @@ import {
   type DidChangeTextDocumentParams,
   type DidOpenTextDocumentParams,
   type DocumentFormattingParams,
+  type DocumentRangeFormattingParams,
   type DefinitionParams,
   type HoverParams,
   type Hover,
@@ -174,6 +175,9 @@ export class FunScriptLspServer extends EventEmitter {
     connection.onDocumentFormatting((params) =>
       this.onFormattingHandler(params),
     );
+    connection.onDocumentRangeFormatting((params) =>
+      this.onRangeFormattingHandler(params),
+    );
     connection.onDefinition((params) => this.onDefinitionHandler(params));
     connection.onHover((params) => this.onHoverHandler(params));
   }
@@ -185,6 +189,7 @@ export class FunScriptLspServer extends EventEmitter {
       capabilities: {
         textDocumentSync: TextDocumentSyncKind.Full,
         documentFormattingProvider: true,
+        documentRangeFormattingProvider: true,
         definitionProvider: true,
         hoverProvider: true,
       },
@@ -270,10 +275,11 @@ export class FunScriptLspServer extends EventEmitter {
         params.options.tabSize > 0
           ? params.options.tabSize
           : undefined;
-      const formatted = format(
-        doc.text,
-        indentSize !== undefined ? { indentSize } : undefined,
-      );
+      const filename = uri ? new URL(uri).pathname : undefined;
+      const formatted = format(doc.text, {
+        ...(indentSize !== undefined ? { indentSize } : {}),
+        ...(filename ? { filename } : {}),
+      });
 
       const lines = doc.text.split("\n");
       const lastLine = Math.max(0, lines.length - 1);
@@ -291,6 +297,29 @@ export class FunScriptLspServer extends EventEmitter {
     } catch {
       return null;
     }
+  }
+
+  public onRangeFormattingHandler(
+    params: DocumentRangeFormattingParams,
+  ): TextEdit[] | null {
+    const uri = params?.textDocument?.uri;
+    const doc = uri ? this.documents.get(uri) : undefined;
+    if (!doc) return null;
+
+    // The formatter currently operates on complete syntax trees. Only accept a
+    // range that covers the full document; partial edits could alter unrelated code.
+    const lines = doc.text.split("\n");
+    const lastLine = lines.length - 1;
+    const end = params.range?.end;
+    const start = params.range?.start;
+    if (!start || !end || start.line !== 0 || start.character !== 0 ||
+        end.line < lastLine || (end.line === lastLine && end.character < lines[lastLine].length)) {
+      return null;
+    }
+    return this.onFormattingHandler({
+      textDocument: params.textDocument,
+      options: params.options,
+    });
   }
 
   public onDefinitionHandler(
