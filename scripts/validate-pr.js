@@ -10,6 +10,11 @@ export const CHECKS = [
     args: ["run", "build"],
   },
   {
+    name: "Generated Documentation Check",
+    cmd: "npm",
+    args: ["run", "docs:check"],
+  },
+  {
     name: "FunScript CLI Formatting Check",
     cmd: "npm",
     args: ["run", "fmt:check"],

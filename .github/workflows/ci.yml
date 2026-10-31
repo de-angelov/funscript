@@ -34,6 +34,9 @@ jobs:
       - name: Build package artifacts
         run: npm run build 2>&1 | tee build.log
 
+      - name: Check generated reference documentation
+        run: npm run docs:check
+
       - name: Check FunScript formatting
         run: npm run fmt:check
 

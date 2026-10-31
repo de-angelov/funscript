@@ -108,22 +108,10 @@ spelling stays in emitted output or `ts "..."` escapes. Functions use
 
 ## Toolchain
 
-The CLI currently supports `build`, `emit`, `check`, `run`, `fmt`, `repl`, `lsp`, and
-`version`. `funscript --help` shows the installed command syntax. Project scaffolding and
+See the generated [CLI reference](docs/reference/cli.md) for the installed command syntax. Project scaffolding and
 `dev`, `preview`, `test`, `add`, and `doctor` wrappers are planned, not implemented.
 Use standard project files and ecosystem tools directly: Vite for web development/builds,
 Vitest for JavaScript/TypeScript tests, and npm, pnpm, or Bun for dependencies.
-
-```text
-funscript build <file.fun|file.funx...>
-funscript emit <file.fun|file.funx>
-funscript check [file.fun|file.funx...]
-funscript run <file.fun|file.funx>
-funscript fmt <file.fun...> [--check]
-funscript repl
-funscript lsp [--stdio]
-funscript version
-```
 
 See [docs/tooling.md](docs/tooling.md) for a minimal project workflow and supported
 alternatives. There is no FunScript runtime and no separate FunScript standard library;
@@ -138,6 +126,8 @@ For CI checks and maintainer release steps, see [CI and npm release operations](
   syntax tour, compilation model, tooling, roadmap, risks, and open questions.
 - **[docs/syntax.md](docs/syntax.md)** — the working syntax reference, cheat sheet,
   grammar sketch, and syntax review decisions.
+- **[docs/reference/cli.md](docs/reference/cli.md)** — generated CLI command reference.
+- **[docs/reference/api.md](docs/reference/api.md)** — generated package entry-point reference.
 - **[docs/pit-of-success.md](docs/pit-of-success.md)** — how the grammar and toolchain
   make the safe path the default, and where the guardrails stop.
 - **[docs/tooling.md](docs/tooling.md)** — supported CLI commands and a minimal workflow

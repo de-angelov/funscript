@@ -1,23 +1,14 @@
 # FunScript tooling
 
-This page describes the commands implemented by the published CLI. Project scaffolding
+This page describes how to use the published CLI in a project. The command surface is
+generated directly from code in the [CLI reference](reference/cli.md). Project scaffolding
 and Vite/Vitest wrappers are planned, not part of the current command surface.
 Use the package manager and ecosystem tools directly when you need those features.
 
 ## Supported CLI commands
 
-`funscript --help` is the source of truth for command syntax. The current commands are:
-
-| Command | What it does |
-| --- | --- |
-| `funscript build <file.fun|file.funx...> [options]` | Compile source files to TypeScript/TSX. |
-| `funscript emit <file.fun|file.funx> [options]` | Emit TypeScript/TSX for one source file. |
-| `funscript check [file.fun|file.funx...]` | Type-check source files, or scan `src/` when no files are given. |
-| `funscript run <file.fun|file.funx>` | Compile and execute a source file with Node. |
-| `funscript fmt <file.fun...> [--check]` | Format source files, or report whether they need formatting. |
-| `funscript repl` | Start the interactive REPL. |
-| `funscript lsp [--stdio]` | Start the language server. |
-| `funscript version` | Print the CLI version. |
+`funscript --help` and the generated [CLI reference](reference/cli.md) are the source of
+truth for command syntax.
 
 The CLI does not currently provide `new`, `dev`, `preview`, `test`, `add`, or `doctor`.
 For project creation, create ordinary `package.json`, `tsconfig.json`, and tool config files

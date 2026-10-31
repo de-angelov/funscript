@@ -14,6 +14,7 @@ describe("GitHub Agent PR Validation & CI Tooling (TASK-022)", () => {
     expect(checkNames).toContain("FunScript CLI Formatting Check");
     expect(checkNames).toContain("Prettier Formatting Check");
     expect(checkNames).toContain("Build Package Artifacts");
+    expect(checkNames).toContain("Generated Documentation Check");
     expect(checkNames).toContain("Vitest Test Suite");
 
     // Verify commands
@@ -21,6 +22,7 @@ describe("GitHub Agent PR Validation & CI Tooling (TASK-022)", () => {
     expect(commands).toContain("npm run fmt:check");
     expect(commands).toContain("npm run prettier:check");
     expect(commands).toContain("npm run build");
+    expect(commands).toContain("npm run docs:check");
     expect(commands).toContain("npm test");
 
     // The formatter commands load the built CLI and Prettier plugin from dist/.
@@ -29,6 +31,9 @@ describe("GitHub Agent PR Validation & CI Tooling (TASK-022)", () => {
     );
     expect(checkNames.indexOf("Build Package Artifacts")).toBeLessThan(
       checkNames.indexOf("Prettier Formatting Check")
+    );
+    expect(checkNames.indexOf("Build Package Artifacts")).toBeLessThan(
+      checkNames.indexOf("Generated Documentation Check")
     );
   });
 

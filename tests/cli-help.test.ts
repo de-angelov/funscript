@@ -3,7 +3,7 @@ import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 
 const CLI_PATH = new URL("../dist/cli/index.js", import.meta.url).pathname;
-const TOOLING_DOCS = new URL("../docs/tooling.md", import.meta.url);
+const CLI_DOCS = new URL("../docs/reference/cli.md", import.meta.url);
 
 const runCli = (...args: string[]) =>
   execFileSync(process.execPath, [CLI_PATH, ...args], { encoding: "utf8" });
@@ -11,7 +11,7 @@ const runCli = (...args: string[]) =>
 describe("CLI help contract", () => {
   it("lists the commands implemented by dispatch", () => {
     const help = runCli("--help");
-    const docs = readFileSync(TOOLING_DOCS, "utf8");
+    const docs = readFileSync(CLI_DOCS, "utf8");
 
     for (const command of ["build", "emit", "check", "run", "repl", "lsp", "fmt", "version"]) {
       expect(help).toContain(`funscript ${command}`);

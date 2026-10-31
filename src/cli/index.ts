@@ -11,6 +11,7 @@ import { checkCliFiles } from "./typecheck.js";
 import { startLspServer } from "../lsp/index.js";
 import { format } from "../formatter/index.js";
 import { startRepl } from "./repl.js";
+import { renderCliHelp } from "./commands.js";
 
 const readFile = (filePath: string) =>
   Effect.tryPromise({
@@ -326,30 +327,7 @@ const replCommand = (args: string[]) =>
     });
   });
 
-const helpCommand = Console.log(`
-FunScript 0.1.0 — A functional notation for TypeScript and Effect
-
-Usage:
-  funscript build <file.fun|file.funx...> [--out <file>] [--outDir <dir>] [--sourcemap] [--no-check]  Build to TypeScript / TSX
-  funscript emit <file.fun|file.funx> [--out <file>] [--sourcemap]                       Compile to TypeScript / TSX
-  funscript check [file.fun|file.funx...]                                               Static type-check via TypeScript API (defaults to src/)
-  funscript run <file.fun|file.funx> [--no-check]                                        Compile and run with Node
-  funscript repl                                                                         Start interactive REPL
-  funscript lsp [--stdio]                                                                Start Language Server Protocol server
-  funscript fmt <file.fun...> [--check]                                                  Format FunScript source code
-  funscript version                                                                      Display version
-
-Examples:
-  funscript repl
-  funscript build src/Button.funx --sourcemap
-  funscript emit src/main.fun --out src/main.ts --sourcemap
-  funscript check examples/shapes.fun
-  funscript lsp --stdio
-  funscript fmt examples/hello.fun --check
-
-Project scaffolding and dev/preview/test/add/doctor wrappers are not currently available.
-Use standard project tools such as Vite, Vitest, and npm/pnpm/Bun directly.
-`);
+const helpCommand = Console.log(renderCliHelp("0.1.0"));
 
 const program = Effect.gen(function* () {
   const argv = process.argv.slice(2);
