@@ -1,0 +1,120 @@
+# Program 08: Todo Dashboard (.funx)
+# Demonstrates typed props, filter matching, composed JSX, and immutable event updates.
+
+import { Console } from "effect"
+
+ts
+  import { create } from "mutative";
+  export const addTodo = (todos: ReadonlyArray<Todo>, title: string): ReadonlyArray<Todo> =>
+    create(todos, (draft) => {
+      draft.push({ id: "new-task", title, completed: false });
+    });
+
+# --- Standalone JSX runtime for deterministic CLI rendering ---
+
+ts
+  declare global {
+    namespace JSX {
+      interface IntrinsicElements {
+        [elem: string]: any;
+      }
+    }
+  }
+
+  export const React = {
+    createElement: (tag: any, props: any, ...children: any[]) => ({
+      tag,
+      props: props || {},
+      children: children.flat().filter((child) => child !== null && child !== undefined && child !== false),
+    }),
+  };
+
+# --- Domain types ---
+
+export schema Todo = {
+  id: String
+  title: String
+  completed: Boolean
+}
+
+export schema TodoFilter =
+  | All
+  | Active
+  | Completed
+
+export schema DashboardProps = {
+  todos: Array<Todo>
+  filter: String
+  draft: String
+}
+
+# --- Reusable dashboard components ---
+
+export StatCard = (label: String, value: Number) =>
+  <div className="stat-card">
+    <span className="stat-label">{label}</span>
+    <strong className="stat-value">{value}</strong>
+  </div>
+
+export FilterButton = (label: String, selected: Boolean) =>
+  <button className={selected and "filter selected" or "filter"} aria-pressed={selected}>
+    {label}
+  </button>
+
+export TodoItemRow = (todo: Todo) =>
+  <li className={todo.completed and "todo completed" or "todo"} data-id={todo.id}>
+    <input type="checkbox" checked={todo.completed} />
+    <span>{todo.title}</span>
+  </li>
+
+export visibleTodos = (props: DashboardProps) =>
+  match props.filter
+    | "All" => props.todos
+    | "Active" => props.todos |> Array.filter((todo) => not todo.completed)
+    | "Completed" => props.todos |> Array.filter((todo) => todo.completed)
+    | _ => props.todos
+
+export TodoDashboard = (props: DashboardProps) =>
+  <main className="todo-dashboard">
+    <header className="dashboard-header">
+      <h1>Todo Dashboard</h1>
+      <p>Plan the work, then make progress.</p>
+    </header>
+    <section className="stats" aria-label="Task statistics">
+      {StatCard("All tasks", props.todos.length)}
+      {StatCard("Active", props.todos |> Array.filter((todo) => not todo.completed) |> Array.length)}
+      {StatCard("Completed", props.todos |> Array.filter((todo) => todo.completed) |> Array.length)}
+    </section>
+    <form className="todo-form">
+      <input name="title" value={props.draft} placeholder="Add a task" />
+      <button type="submit" onClick={() => handleAdd(props.todos, props.draft)}>Add task</button>
+    </form>
+    <nav className="filters" aria-label="Filter tasks">
+      {FilterButton("All", props.filter == "All")}
+      {FilterButton("Active", props.filter == "Active")}
+      {FilterButton("Completed", props.filter == "Completed")}
+    </nav>
+    <ul className="todo-list">
+      {visibleTodos(props) |> Array.map((todo) => TodoItemRow(todo))}
+    </ul>
+  </main>
+
+# Immutable state update example used by the UI add handler.
+export js handleAdd = (todos: Array<Todo>, title: String) => Effect.succeed(addTodo(todos, title))
+
+# --- Deterministic render demonstration ---
+
+export main =
+  effect
+    todos: Array<Todo> = [
+      { id: "write", title: "Write project brief", completed: true },
+      { id: "review", title: "Review pull request", completed: false },
+      { id: "ship", title: "Ship dashboard", completed: false }
+    ]
+    props: DashboardProps = { todos: todos, filter: "Active", draft: "Prepare release notes" }
+    view = TodoDashboard(props)
+    _ <- Console.log("[Todo] Root tag: <" + view.tag + ">")
+    _ <- Console.log("[Todo] Root sections: " + view.children.length)
+    _ <- Console.log("[Todo] Visible rows: " + view.children[4].children.length)
+    _ <- Console.log("[Todo] Added task handler: ready")
+    0

@@ -240,4 +240,60 @@ export Header = () -> <header><h1>FunScript</h1></header>
       expect(utilsContent).toContain("export const double = (x: number) => (x * 2);");
     });
   });
+
+  describe("Todo dashboard showcase", () => {
+    const dashboardPath = path.resolve("programs/08-todo-dashboard.funx");
+
+    it("compiles composed dashboard components to TSX", async () => {
+      const source = await fs.readFile(dashboardPath, "utf-8");
+      const res = await Effect.runPromise(compileString(source, dashboardPath));
+
+      expect(res.targetExtension).toBe(".tsx");
+      expect(res.typescript).toContain("export const StatCard");
+      expect(res.typescript).toContain("export const FilterButton");
+      expect(res.typescript).toContain("export const TodoItemRow");
+      expect(res.typescript).toContain("export const TodoDashboard");
+      expect(res.typescript).toContain('import { create } from "mutative";');
+      expect(res.typescript).toContain("<main className=\"todo-dashboard\">");
+    });
+
+    it("checks, runs, and production-builds the .funx applications", async () => {
+      const funxFiles = [
+        "programs/07-reactive-widget.funx",
+        dashboardPath,
+        path.resolve("examples/reactive-widget.funx"),
+        path.resolve("examples/08-todo-dashboard.funx"),
+      ];
+
+      for (const funxFile of funxFiles) {
+        const { stdout } = await execFileAsync("node", [cliPath, "check", funxFile]);
+        expect(stdout).toContain("checked successfully (0 errors)");
+      }
+
+      const dashboardRun = await execFileAsync("node", [cliPath, "run", dashboardPath]);
+      expect(dashboardRun.stdout).toContain("[Todo] Root tag: <main>");
+      expect(dashboardRun.stdout).toContain("[Todo] Root sections: 5");
+      expect(dashboardRun.stdout).toContain("[Todo] Visible rows: 2");
+
+      const widgetRun = await execFileAsync("node", [
+        cliPath,
+        "run",
+        "programs/07-reactive-widget.funx",
+      ]);
+      expect(widgetRun.stdout).toContain("[Badge] Rendered Active badge: <span>");
+
+      const distDir = path.join(tmpDir, "showcase-dist");
+      const { stdout: buildOutput } = await execFileAsync("node", [
+        cliPath,
+        "build",
+        "programs",
+        "--outDir",
+        distDir,
+      ]);
+      expect(buildOutput).toContain(`✓ Built ${path.join(distDir, "07-reactive-widget.tsx")}`);
+      expect(buildOutput).toContain(`✓ Built ${path.join(distDir, "08-todo-dashboard.tsx")}`);
+      const builtDashboard = await fs.readFile(path.join(distDir, "08-todo-dashboard.tsx"), "utf-8");
+      expect(builtDashboard).toContain("export const TodoDashboard");
+    }, 30_000);
+  });
 });
