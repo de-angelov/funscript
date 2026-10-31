@@ -2,7 +2,8 @@
 
 # Language reference
 
-This catalogue is the same metadata used by Language Server hover help.
+This catalogue is the same metadata used by Language Server hover help. For runnable
+programs, use the [validated example inventory](examples.md).
 
 ## `->`
 
@@ -14,11 +15,6 @@ Function and lambda declaration arrow.
 
 Declares pure functions and lambdas in FunScript. FunScript functions automatically return their last evaluated expression without needing a `return` keyword.
 
-### Example
-
-```funscript
-add = (a: number, b: number): number -> a + b
-```
 
 See also: `effect`.
 
@@ -32,11 +28,6 @@ Typed hole placeholder for incomplete code.
 
 A hole placeholder that satisfies any type at compile time but raises a diagnostic or throws an uncatchable defect at runtime if reached. Ideal for rapid prototyping.
 
-### Example
-
-```funscript
-todoImplementation = (input: string): Result -> ??? "implement parser"
-```
 
 See also: `never`.
 
@@ -50,13 +41,6 @@ binding <- effectExpression
 
 Extracts the success value from an Effect within an `effect` block, short-circuiting on failure. Desugars to `yield*` in `Effect.gen`.
 
-### Example
-
-```funscript
-effect
-  user <- UserRepo.find(id)
-  user.name
-```
 
 See also: `effect`, `Effect`.
 
@@ -70,14 +54,6 @@ expression |> function(args...)
 
 Passes the value of the left expression as the first argument (or into placeholder `_`) of the right expression. Compiles to `pipe(...)` or direct function invocation.
 
-### Example
-
-```funscript
-formatted =
-  data
-  |> Array.filter((x) -> x > 0)
-  |> Array.map((x) -> x * 2)
-```
 
 See also: `pipe`.
 
@@ -91,12 +67,6 @@ expr1 and expr2
 
 Evaluates to `true` if both operands are truthy. Short-circuits if the left operand is falsy. FunScript uses the English word `and` instead of `&&`.
 
-### Example
-
-```funscript
-isValid = (n: number) ->
-  n >= 0 and n <= 100
-```
 
 See also: `or`, `not`.
 
@@ -110,11 +80,6 @@ type Array<T>
 
 Standard sequence collection. In FunScript, Arrays are deeply immutable unless operated on inside an explicit `mut` draft. Compatible with Effect's `Array` module combinators (`Array.map`, `Array.filter`).
 
-### Example
-
-```funscript
-numbers: Array<number> = [1, 2, 3, 4, 5]
-```
 
 See also: `Chunk`, `Record`, `mut`.
 
@@ -128,11 +93,6 @@ type boolean = true | false
 
 Represents logical truth values (`true` or `false`).
 
-### Example
-
-```funscript
-ready: boolean = true
-```
 
 See also: `true`, `false`, `and`, `or`, `not`.
 
@@ -146,11 +106,6 @@ type Chunk<A>
 
 A fast, persistent sequential data structure with O(1) prepend, append, and slice operations, optimized for streaming and batch processing.
 
-### Example
-
-```funscript
-items = Chunk.make(1, 2, 3)
-```
 
 See also: `Array`.
 
@@ -164,11 +119,6 @@ type Context<Services>
 
 Represents the dependency environment `R` in `Effect<A, E, R>`.
 
-### Example
-
-```funscript
-context = Context.empty()
-```
 
 See also: `service`, `Layer`.
 
@@ -182,11 +132,6 @@ type DateTime
 
 Effect's modern date-time module replacing JavaScript's mutable `Date`.
 
-### Example
-
-```funscript
-now <- DateTime.now
-```
 
 See also: `Duration`.
 
@@ -200,11 +145,6 @@ type Duration
 
 Effect's type representing a time duration, constructed with `Duration.millis`, `Duration.seconds`, `Duration.minutes`, etc. Used for timeouts, delays, and scheduling.
 
-### Example
-
-```funscript
-waitFiveSec = Effect.sleep(Duration.seconds(5))
-```
 
 See also: `Schedule`, `DateTime`.
 
@@ -227,15 +167,6 @@ Inside an `effect` block:
 - Plain statements evaluate sequentially, and the block automatically returns its final expression.
 - Early exits or error handling use typed error combinators or `Effect.fail`.
 
-### Example
-
-```funscript
-getUserProfile = (id: string) ->
-  effect
-    user <- UserRepo.find(id)
-    _ <- Console.log("Found: " + user.name)
-    user.name
-```
 
 See also: `Effect`, `service`, `fail`, `<-`.
 
@@ -256,11 +187,6 @@ An `Effect<A, E, R>` represents a blueprint for a workflow that:
 
 Effects are lazy, composable, cancellable, and fibers-based.
 
-### Example
-
-```funscript
-type UserFlow = Effect<User, NotFound, UserRepo>
-```
 
 See also: `service`, `effect`, `Layer`, `Context`.
 
@@ -274,14 +200,6 @@ Effect.all(effects: Array<Effect<...>>, options?: { concurrency?: number }): Eff
 
 Gathers multiple effects into a single Effect that collects all success values in an array or struct.
 
-### Example
-
-```funscript
-combined <- Effect.all([
-  UserRepo.find("1"),
-  OrderRepo.find("100"),
-], { concurrency: "unbounded" })
-```
 
 See also: `Effect.forEach`.
 
@@ -295,13 +213,6 @@ Effect.andThen<A, B>(self: Effect<A, E, R>, next: Effect<B, E2, R2> | ((a: A) ->
 
 Versatile combinator that chains an Effect or a pure function after another Effect succeeds.
 
-### Example
-
-```funscript
-action =
-  Effect.succeed(10)
-  |> Effect.andThen((n) -> n * 2)
-```
 
 See also: `Effect.map`, `Effect.flatMap`.
 
@@ -315,13 +226,6 @@ Effect.catchAll<A, E, R, B, E2, R2>(self: Effect<A, E, R>, handler: (err: E) -> 
 
 Catches all typed errors in `E` and invokes a recovery function that returns an alternative Effect.
 
-### Example
-
-```funscript
-safeQuery =
-  riskyQuery
-  |> Effect.catchAll((err) -> Effect.succeed(defaultFallback))
-```
 
 See also: `Effect.catchTag`, `fail`.
 
@@ -335,13 +239,6 @@ Effect.catchTag(tag: string, handler: (err: Tagged) -> Effect<...>): Effect<...>
 
 Selectively catches errors matching a specific discriminant tag (from `error` schemas). Leaves all other errors intact in the `E` channel.
 
-### Example
-
-```funscript
-workflow =
-  UserRepo.find(id)
-  |> Effect.catchTag("NotFound", (_err) -> Effect.succeed(guestUser))
-```
 
 See also: `error`, `Effect.catchAll`.
 
@@ -355,11 +252,6 @@ Effect.die(defect: unknown): Effect<never>
 
 Terminates the current fiber with an uncatchable defect (system bug or assertion failure).
 
-### Example
-
-```funscript
-Effect.die(new Error("Fatal database corruption"))
-```
 
 See also: `Effect.orDie`, `fail`.
 
@@ -373,13 +265,6 @@ Effect.flatMap<A, B, E2, R2>(self: Effect<A, E, R>, f: (a: A) -> Effect<B, E2, R
 
 Sequentially composes two Effectful actions where the second depends on the result of the first.
 
-### Example
-
-```funscript
-step =
-  UserRepo.find(id)
-  |> Effect.flatMap((user) -> EmailService.sendWelcome(user))
-```
 
 See also: `Effect.map`, `Effect.andThen`.
 
@@ -393,13 +278,6 @@ Effect.forEach(elements: Iterable<A>, f: (a: A) -> Effect<B, E, R>, options?: { 
 
 Replaces imperative loops for effectful iteration. Can run sequentially or concurrently using the `concurrency` option.
 
-### Example
-
-```funscript
-results <- Effect.forEach(userIds, (id) -> UserRepo.find(id), {
-  concurrency: 5,
-})
-```
 
 See also: `Effect.all`.
 
@@ -413,11 +291,6 @@ Effect.fork<A, E>(self: Effect<A, E, R>): Effect<Fiber<A, E>, never, R>
 
 Starts background execution of an Effect in an isolated green fiber.
 
-### Example
-
-```funscript
-fiber <- Effect.fork(backgroundTask)
-```
 
 See also: `Effect.forkScoped`.
 
@@ -431,11 +304,6 @@ Effect.forkScoped<A, E>(self: Effect<A, E, R>): Effect<Fiber<A, E>, never, R | S
 
 Spawns a fiber that is automatically interrupted and cleaned up when the enclosing Scope closes.
 
-### Example
-
-```funscript
-scopedFiber <- Effect.forkScoped(longLivedService)
-```
 
 See also: `Effect.fork`, `Effect.scoped`.
 
@@ -449,13 +317,6 @@ Effect.map<A, B>(self: Effect<A, E, R>, f: (a: A) -> B): Effect<B, E, R>
 
 Applies the mapping function `f` to the successful result of `self` without altering errors or dependencies.
 
-### Example
-
-```funscript
-lengthEffect =
-  Effect.succeed("hello")
-  |> Effect.map((s) -> s.length)
-```
 
 See also: `Effect.flatMap`, `Effect.andThen`.
 
@@ -469,11 +330,6 @@ Effect.orDie<A, E, R>(self: Effect<A, E, R>): Effect<A, never, R>
 
 Converts recoverable errors in the `E` channel into defects, asserting that the operation cannot fail.
 
-### Example
-
-```funscript
-safeVal = riskyOp |> Effect.orDie
-```
 
 See also: `Effect.die`.
 
@@ -487,11 +343,6 @@ Effect.repeat(policy: Schedule): Effect<...>
 
 Repeatedly executes an Effect as long as the Schedule allows.
 
-### Example
-
-```funscript
-pollStatus = checkHealth |> Effect.repeat(Schedule.spaced(Duration.seconds(10)))
-```
 
 See also: `Schedule`, `Effect.retry`.
 
@@ -505,13 +356,6 @@ Effect.retry(policy: Schedule): Effect<...>
 
 Automatically re-executes an Effect upon failure until the schedule policy dictates termination.
 
-### Example
-
-```funscript
-fetchWithRetry =
-  apiCall
-  |> Effect.retry(Schedule.exponential(Duration.millis(100)))
-```
 
 See also: `Schedule`, `Effect.repeat`.
 
@@ -525,11 +369,6 @@ Effect.runPromise<A, E>(effect: Effect<A, E, never>): Promise<A>
 
 Evaluates the Effect workflow to completion and resolves the resulting Promise with the success value. Only permitted in application entrypoints (`main`).
 
-### Example
-
-```funscript
-Effect.runPromise(mainProgram)
-```
 
 See also: `Effect.runSync`.
 
@@ -543,11 +382,6 @@ Effect.runSync<A>(effect: Effect<A, never, never>): A
 
 Executes an Effect synchronously. Throws if the Effect contains asynchronous fibers or unresolved failures.
 
-### Example
-
-```funscript
-result = Effect.runSync(pureCalculation)
-```
 
 See also: `Effect.runPromise`.
 
@@ -561,11 +395,6 @@ Effect.scoped<A, E, R>(self: Effect<A, E, R | Scope>): Effect<A, E, R>
 
 Creates an execution boundary for resources requiring deterministic cleanup (like files or sockets).
 
-### Example
-
-```funscript
-Effect.scoped(useTemporaryResource)
-```
 
 See also: `Effect.forkScoped`, `Layer.scoped`.
 
@@ -579,11 +408,6 @@ Effect.succeed<A>(value: A): Effect<A>
 
 Wraps a pure value in an Effect that succeeds synchronously without errors or dependencies.
 
-### Example
-
-```funscript
-pureValue = Effect.succeed(42)
-```
 
 See also: `Effect.fail`, `Effect.sync`.
 
@@ -597,11 +421,6 @@ Effect.sync<A>(evaluate: () -> A): Effect<A>
 
 Defers execution of a synchronous function until the Effect is run, capturing any uncaught throws as defects.
 
-### Example
-
-```funscript
-randomNum = Effect.sync(-> Math.random())
-```
 
 See also: `Effect.succeed`, `Effect.tryPromise`.
 
@@ -615,11 +434,6 @@ Effect.timeout(duration: Duration): Effect<Option<A>>
 
 Aborts the Effect if it does not finish within the specified duration.
 
-### Example
-
-```funscript
-safeFetch = slowRequest |> Effect.timeout(Duration.seconds(3))
-```
 
 See also: `Duration`.
 
@@ -633,15 +447,6 @@ Effect.tryPromise<A, E>(options: { try: () -> Promise<A>, catch: (err: unknown) 
 
 Safely converts external Promise calls into FunScript Effects. Catches Promise rejections and maps them into typed domain errors in the `E` channel.
 
-### Example
-
-```funscript
-fetchData = (url: string) ->
-  Effect.tryPromise({
-    try: () -> fetch(url),
-    catch: (err) -> NetworkError(String(err)),
-  })
-```
 
 See also: `Effect`, `effect`.
 
@@ -657,15 +462,6 @@ Defines a domain error with a discriminator `_tag` matching the error name.
 
 Because errors are typed values rather than unchecked runtime exceptions, they appear explicitly in the `E` channel of `Effect<A, E, R>` and can be matched by tag.
 
-### Example
-
-```funscript
-export error NotFound(id: string)
-export error Unauthorized(reason: string)
-
-lookup = (id: string) ->
-  Effect.fail(NotFound(id))
-```
 
 See also: `fail`, `schema`, `Effect.catchTag`.
 
@@ -681,12 +477,6 @@ export service Name ...
 
 Exposes module members to other files. All exports in FunScript are named exports; default exports are disallowed to keep naming consistent and refactorable.
 
-### Example
-
-```funscript
-export greet = (name: string) -> "Hello, " + name
-export schema User = { id: string, name: string }
-```
 
 See also: `import`.
 
@@ -704,14 +494,6 @@ FunScript eliminates unchecked exceptions, `throw`, and `try/catch`. All recover
 
 `fail` (or `Effect.fail`) produces an Effect that terminates execution along the error channel. Callers must handle the typed error exhaustively using `match`, `Effect.catchTag`, or `Effect.catchAll`.
 
-### Example
-
-```funscript
-findAccount = (id: string) ->
-  match db.lookup(id)
-    | Some(acc) -> Effect.succeed(acc)
-    | None -> Effect.fail(AccountNotFound(id))
-```
 
 See also: `effect`, `error`, `Effect.succeed`, `Effect.catchTag`.
 
@@ -725,11 +507,6 @@ false: boolean
 
 The primitive boolean value representing false.
 
-### Example
-
-```funscript
-isDone: boolean = false
-```
 
 See also: `true`, `boolean`.
 
@@ -743,11 +520,6 @@ import { X } from "module"
 
 Specifies the source file path or npm package name for `import` and `export { ... } from` statements.
 
-### Example
-
-```funscript
-import { Effect } from "effect"
-```
 
 See also: `import`, `export`.
 
@@ -761,11 +533,6 @@ type HashMap<K, V>
 
 Efficient immutable hash map with structural hashing and equality.
 
-### Example
-
-```funscript
-map = HashMap.make(["key", 42])
-```
 
 See also: `Record`, `HashSet`.
 
@@ -779,11 +546,6 @@ type HashSet<A>
 
 Efficient immutable collection of unique elements with structural hashing and equality.
 
-### Example
-
-```funscript
-set = HashSet.make(1, 2, 3)
-```
 
 See also: `HashMap`.
 
@@ -797,11 +559,6 @@ import { Name } from "module"
 
 Standard ESM import statement in FunScript. Imports can load values, types, or services from neighboring `.fun` files or npm packages like `effect`.
 
-### Example
-
-```funscript
-import { Effect, Console, pipe } from "effect"
-```
 
 See also: `export`, `from`.
 
@@ -815,11 +572,6 @@ schema Int = number |> Schema.int()
 
 A refined numeric schema that validates numbers to be whole integers without fractional parts.
 
-### Example
-
-```funscript
-schema Age = Int |> Schema.between(0, 120)
-```
 
 See also: `number`, `schema`.
 
@@ -835,15 +587,6 @@ eff |> js
 
 Lifts JS Promises into Effects inside effect blocks (`res <- js promiseFn()`), compiles exported functions to Promise-returning JS functions (`export js fn`), or pipes Effects to JS Promises (`eff |> js`).
 
-### Example
-
-```funscript
-fetchData = (url: string) ->
-  effect
-    res <- js fetch(url)
-    data <- js res.json()
-    data
-```
 
 See also: `ts`, `effect`, `export`.
 
@@ -857,13 +600,6 @@ type Layer<Out, Error = never, In = never>
 
 A `Layer<Out, E, In>` specifies how to construct services `Out` given dependencies `In`. Layers enable modular dependency injection, memoization, parallel construction, and resource management.
 
-### Example
-
-```funscript
-export AppLive =
-  UserRepoLive
-  |> Layer.provide(DatabaseLive)
-```
 
 See also: `service`, `Layer.succeed`, `Layer.effect`.
 
@@ -877,15 +613,6 @@ Layer.effect<T, E, R>(tag: Service<T>, build: Effect<T, E, R>): Layer<T, E, R>
 
 Allows effectful setup (e.g. connecting to a database, reading config) when instantiating a service.
 
-### Example
-
-```funscript
-export DbLive =
-  Layer.effect(Database, effect
-    conn <- createConnection()
-    { query: (sql) -> conn.execute(sql) }
-  )
-```
 
 See also: `Layer`, `Layer.succeed`, `service`.
 
@@ -899,11 +626,6 @@ Layer.scoped<T, E, R>(tag: Service<T>, build: Effect<T, E, R | Scope>): Layer<T,
 
 Binds the constructed service to a Scope. The service will be automatically torn down when the layer is released.
 
-### Example
-
-```funscript
-Layer.scoped(ConnectionPool, acquirePool)
-```
 
 See also: `Layer`, `Effect.scoped`.
 
@@ -917,14 +639,6 @@ Layer.succeed<T>(tag: Service<T>, implementation: T): Layer<T>
 
 Supplies a pre-constructed service implementation directly without asynchronous setup.
 
-### Example
-
-```funscript
-export GreeterLive =
-  Layer.succeed(Greeter, {
-    greet: (name) -> Effect.succeed("Hello " + name),
-  })
-```
 
 See also: `Layer`, `Layer.effect`, `service`.
 
@@ -947,15 +661,6 @@ Features:
 - Subjectless boolean branching (`match | condition -> expr | _ -> default`).
 - Pattern guards via `when` and or-patterns via `| A | B ->`.
 
-### Example
-
-```funscript
-describe = (shape: Shape) ->
-  match shape
-    | Circle(r) when r <= 0 -> "Degenerate circle"
-    | Circle(r) -> "Circle with radius " + r
-    | Rect(w, h) -> "Rectangle of " + w + "x" + h
-```
 
 See also: `variant`, `when`, `schema`.
 
@@ -976,13 +681,6 @@ Rules:
 - Pipeline drafts (`|> mut (draft) -> ...`) create isolated draft scopes.
 - Top-level `mut` and closure-captured mutable mutation across fibers are prohibited.
 
-### Example
-
-```funscript
-addItems = (list: Array<string>, item: string) ->
-  list |> mut (draft) ->
-    draft.push(item)
-```
 
 See also: `record`, `|>`.
 
@@ -996,11 +694,6 @@ type never
 
 Uninhabited type used for functions that never return, effects that cannot fail (`Effect<A, never>`), or unreachable branches in exhaustive pattern matching.
 
-### Example
-
-```funscript
-unreachable = (x: never): never -> x
-```
 
 See also: `unknown`, `void`.
 
@@ -1014,11 +707,6 @@ Option.none(): Option<never>
 
 Represents an empty `Option` container, replacing `null` and `undefined`.
 
-### Example
-
-```funscript
-emptyVal = Option.none()
-```
 
 See also: `Option`, `Some`.
 
@@ -1032,11 +720,6 @@ schema NonEmptyString = string |> Schema.nonEmptyString()
 
 Guarantees at compile and run time that a string contains at least one character.
 
-### Example
-
-```funscript
-schema Username = NonEmptyString
-```
 
 See also: `string`, `schema`.
 
@@ -1050,12 +733,6 @@ not expression
 
 Inverts a boolean expression. Evaluates to `true` if the expression is falsy, and `false` otherwise. FunScript uses `not` instead of `!`.
 
-### Example
-
-```funscript
-isEmpty = (list: Array<string>) ->
-  not (list.length > 0)
-```
 
 See also: `and`, `or`.
 
@@ -1069,12 +746,6 @@ type number
 
 Represents all numbers in FunScript, including floating-point values and integers. Can be refined to integers via `Int` schema.
 
-### Example
-
-```funscript
-count: number = 42
-ratio: number = 3.14159
-```
 
 See also: `Int`, `string`, `boolean`.
 
@@ -1088,14 +759,6 @@ type Option<A> = Some<A> | None
 
 FunScript disallows `null` and `undefined`. Optional values are represented strictly with `Option<A>` from Effect, containing either `Some(value)` or `None`. Eliminates null pointer exceptions.
 
-### Example
-
-```funscript
-findUser = (id: string): Option<User> ->
-  match id
-    | "1" -> Option.some({ id: "1", name: "Ada" })
-    | _ -> Option.none()
-```
 
 See also: `Some`, `None`, `Result`.
 
@@ -1109,12 +772,6 @@ expr1 or expr2
 
 Evaluates to `true` if either operand is truthy. Short-circuits if the left operand is truthy. FunScript uses the English word `or` instead of `||`.
 
-### Example
-
-```funscript
-canProceed = (user: User) ->
-  user.isAdmin or user.isOwner
-```
 
 See also: `and`, `not`.
 
@@ -1128,15 +785,6 @@ pipe(value, f1, f2, ...): Result
 
 Utility function for data-first function composition. In FunScript, the `|>` pipeline operator is preferred syntax and compiles down to `pipe` calls.
 
-### Example
-
-```funscript
-res = pipe(
-  5,
-  (n) -> n * 2,
-  (n) -> n + 1
-)
-```
 
 See also: `|>`.
 
@@ -1154,18 +802,6 @@ FunScript records are deeply immutable by default.
 
 Record updates support shallow spread (`{ ...user, age: 37 }`) and deep nested dot-path updates (`{ ...order, shipping.carrier: "DHL" }`). Deep updates compile to Mutative's structural-sharing `create(...)` to guarantee both performance and purity without manual nested spreads.
 
-### Example
-
-```funscript
-export schema User = {
-  id: string
-  name: string
-  address: { city: string, zip: string }
-}
-
-updateCity = (user: User, newCity: string) ->
-  { ...user, address.city: newCity }
-```
 
 See also: `schema`, `mut`, `variant`.
 
@@ -1179,11 +815,6 @@ type Record<K extends string | number | symbol, V>
 
 Key-value dictionary mapping string keys to values of type `V`.
 
-### Example
-
-```funscript
-scores: Record<string, number> = { alice: 100, bob: 95 }
-```
 
 See also: `HashMap`, `record`, `Array`.
 
@@ -1197,13 +828,6 @@ type Ref<A>
 
 Effect's primitive for shared, concurrent state across fibers. All read and write operations (`Ref.get`, `Ref.set`, `Ref.update`) return Effects, ensuring atomic and lock-free thread safety.
 
-### Example
-
-```funscript
-counterRef <- Ref.make(0)
-_ <- Ref.update(counterRef, (n) -> n + 1)
-current <- Ref.get(counterRef)
-```
 
 See also: `effect`, `Effect`.
 
@@ -1217,14 +841,6 @@ type Result<A, E> = Success<A, E> | Failure<A, E>
 
 Use `Result.succeed(value)` and `Result.fail(error)` when success and failure must remain available as data.
 
-### Example
-
-```funscript
-divide = (a: Number, b: Number): Result<Number, String> ->
-  match
-    | b == 0 -> Result.fail("Division by zero")
-    | _ -> Result.succeed(a / b)
-```
 
 See also: `Option`, `Effect`.
 
@@ -1238,11 +854,6 @@ type Schedule<Env, In, Out>
 
 Configures delays, intervals, exponential backoffs, and iteration bounds for `retry` and `repeat`.
 
-### Example
-
-```funscript
-policy = Schedule.exponential(Duration.millis(100)) |> Schedule.compose(Schedule.recurs(5))
-```
 
 See also: `Effect.retry`, `Effect.repeat`, `Duration`.
 
@@ -1260,15 +871,6 @@ Declares data models backed by Effect's `@effect/schema` and `Data.TaggedEnum`.
 
 A single `schema` declaration generates both the runtime validator/constructor and the static TypeScript type definition, avoiding dual declaration boilerplate.
 
-### Example
-
-```funscript
-export schema Order = {
-  id: string
-  total: number
-  items: Array<string>
-}
-```
 
 See also: `record`, `variant`, `error`.
 
@@ -1285,19 +887,6 @@ Defines a service contract that compiles to an Effect `Context.Service` tag.
 
 Calls to service methods (such as `UserRepo.find(id)`) inside `effect` blocks automatically resolve the service from Context and track its dependency in the Effect `R` channel. Implementations are supplied at runtime via `Layer.succeed`, `Layer.effect`, or `Layer.scoped`.
 
-### Example
-
-```funscript
-export service UserRepo
-  find: (id: string) -> Effect<User, NotFound>
-  save: (user: User) -> Effect<void>
-
-export UserRepoLive =
-  Layer.succeed(UserRepo, {
-    find: (id) -> Effect.succeed({ id, name: "Ada" }),
-    save: (user) -> Effect.void,
-  })
-```
 
 See also: `Layer`, `Context`, `effect`, `Effect`.
 
@@ -1311,11 +900,6 @@ Option.some<A>(value: A): Option<A>
 
 Represents the presence of a value in an `Option` container.
 
-### Example
-
-```funscript
-hasName = Option.some("Ada")
-```
 
 See also: `Option`, `None`.
 
@@ -1329,11 +913,6 @@ type string
 
 Represents immutable textual data. FunScript strings support string interpolation via curly brace syntax `"{status}: {message}"` and multiline string literals.
 
-### Example
-
-```funscript
-greeting: string = "Hello, FunScript!"
-```
 
 See also: `NonEmptyString`, `number`, `boolean`.
 
@@ -1347,11 +926,6 @@ true: boolean
 
 The primitive boolean value representing true.
 
-### Example
-
-```funscript
-isEnabled: boolean = true
-```
 
 See also: `false`, `boolean`.
 
@@ -1366,13 +940,6 @@ type Position = ts "import('vscode-languageserver').Position"
 
 Allows embedding arbitrary TypeScript types without expanding FunScript's core grammar. Useful for generics, utility types, and third-party library types.
 
-### Example
-
-```funscript
-schema Options = {
-  metadata: ts "Record<string, unknown>"
-}
-```
 
 See also: `js`, `schema`.
 
@@ -1386,11 +953,6 @@ type unknown
 
 Top type representing values whose type is not statically known (e.g. from external API payloads). Must be narrowed via `Schema.decodeUnknown` or `match` before access.
 
-### Example
-
-```funscript
-parsePayload = (raw: unknown) -> Schema.decodeUnknown(User)(raw)
-```
 
 See also: `never`, `schema`.
 
@@ -1404,11 +966,6 @@ schema UUID = string |> Schema.UUID
 
 Validates and types canonical UUID strings (such as `123e4567-e89b-12d3-a456-426614174000`).
 
-### Example
-
-```funscript
-userId: UUID = UUID("550e8400-e29b-41d4-a716-446655440000")
-```
 
 See also: `string`, `schema`.
 
@@ -1426,18 +983,6 @@ Declares a variant case of a discriminated union algebraic data type.
 
 Under the hood, variants compile to Effect `Data.TaggedEnum` and `Schema.Union`. Each variant can be instantiated directly as a constructor function (e.g. `Circle(10)`) or constant (`None`) and pattern-matched exhaustively with `match`.
 
-### Example
-
-```funscript
-export schema Shape =
-  | Circle(radius: number)
-  | Rect(width: number, height: number)
-
-area = (s: Shape) ->
-  match s
-    | Circle(r) -> Math.PI * r * r
-    | Rect(w, h) -> w * h
-```
 
 See also: `schema`, `match`, `error`.
 
@@ -1451,11 +996,6 @@ type void
 
 Used as the return type for side-effecting operations that do not produce a useful value, such as `Console.log` or mutating operations yielding `Effect<void>`.
 
-### Example
-
-```funscript
-logInfo: (msg: string) -> Effect<void>
-```
 
 See also: `never`, `unknown`.
 
@@ -1469,14 +1009,5 @@ Pattern match guard condition within a match arm.
 
 Adds a boolean predicate to a `match` arm. The arm matches only if both the structural pattern matches and the `when` condition evaluates to `true`.
 
-### Example
-
-```funscript
-categorizeAge = (age: number) ->
-  match age
-    | a when a < 13 -> "child"
-    | a when a < 20 -> "teen"
-    | _ -> "adult"
-```
 
 See also: `match`.

@@ -78,8 +78,8 @@ Use `npm run docs:generate` after changing the CLI catalogue or package exports.
 - **Escape hatch, not a second language:** use explicit raw `ts` blocks when TypeScript is the
   right boundary.
 
-For the exact grammar, constraints, and runtime-boundary rules, read the
-[syntax reference](docs/syntax.md) and [pit of success guide](docs/pit-of-success.md).
+For the current, verified contract and runnable source examples, read the
+[documentation map](docs/README.md).
 
 ## Examples
 
@@ -142,10 +142,9 @@ tests/            Compiler, CLI, formatter, LSP, and integration coverage
 - [Package entry points](docs/reference/api.md) — generated from `package.json` exports.
 - [Language reference](docs/reference/language.md) — generated from the LSP hover catalogue.
 - [Example inventory](docs/reference/examples.md) — generated from the runnable example tree.
+- [Documentation map](docs/README.md) — separates current verified docs from proposals/history.
 - [Tooling guide](docs/tooling.md) — use FunScript in a normal Node project.
-- [Syntax reference](docs/syntax.md) — language rules and examples.
 - [CI and release operations](docs/ci-release.md) — maintainer workflow.
-- [Language proposal](docs/proposal.md) — rationale and longer-term design.
 
 ## Scope and non-goals
 

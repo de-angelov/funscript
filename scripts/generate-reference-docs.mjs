@@ -23,7 +23,8 @@ const renderLanguageReference = () => {
 
 # Language reference
 
-This catalogue is the same metadata used by Language Server hover help.
+This catalogue is the same metadata used by Language Server hover help. For runnable
+programs, use the [validated example inventory](examples.md).
 
 ${entries.map((item) => `## \`${item.name}\`
 
@@ -35,7 +36,7 @@ ${item.signature}
 
 ${item.description}
 
-${item.snippet ? `### Example\n\n\`\`\`funscript\n${item.snippet}\n\`\`\`\n` : ""}${item.seeAlso?.length ? `\nSee also: ${item.seeAlso.map((name) => `\`${name}\``).join(", ")}.` : ""}`).join("\n\n")}
+${item.seeAlso?.length ? `\nSee also: ${item.seeAlso.map((name) => `\`${name}\``).join(", ")}.` : ""}`).join("\n\n")}
 `;
 };
 
