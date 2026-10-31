@@ -30,14 +30,24 @@ import {
   type LocationLink,
   type CompletionParams,
   type CompletionItem,
+  type DocumentSymbolParams,
+  type WorkspaceSymbolParams,
+  type ReferenceParams,
+  type PrepareRenameParams,
+  type RenameParams,
+  type WorkspaceEdit,
+  type DocumentSymbol,
+  type SymbolInformation,
+  type PrepareRenameResult,
+  SymbolKind,
 } from "vscode-languageserver/node";
 import { Lexer } from "../lexer/lexer.js";
 import { Parser } from "../parser/parser.js";
 import { format } from "../formatter/index.js";
 import type { Span } from "../ast/types.js";
-import { findDefinition } from "./definition.js";
 import { findHover } from "./hover.js";
 import { complete } from "./completion.js";
+import { documentSymbols, workspaceSymbols, references, prepareRename, rename, findWorkspaceDefinition } from "./navigation.js";
 
 export function toDiagnostic(error: any): Diagnostic {
   const span: Span | undefined = error.span;
@@ -184,6 +194,11 @@ export class FunScriptLspServer extends EventEmitter {
     connection.onDefinition((params) => this.onDefinitionHandler(params));
     connection.onHover((params) => this.onHoverHandler(params));
     connection.onCompletion((params) => this.onCompletionHandler(params));
+    connection.onDocumentSymbol((params) => this.onDocumentSymbolHandler(params));
+    connection.onWorkspaceSymbol((params) => this.onWorkspaceSymbolHandler(params));
+    connection.onReferences((params) => this.onReferencesHandler(params));
+    connection.onPrepareRename((params) => this.onPrepareRenameHandler(params));
+    connection.onRenameRequest((params) => this.onRenameHandler(params));
   }
 
   public onInitializeHandler(params: InitializeParams): InitializeResult {
@@ -195,6 +210,10 @@ export class FunScriptLspServer extends EventEmitter {
         documentFormattingProvider: true,
         documentRangeFormattingProvider: true,
         definitionProvider: true,
+        documentSymbolProvider: true,
+        workspaceSymbolProvider: true,
+        referencesProvider: true,
+        renameProvider: { prepareProvider: true },
         hoverProvider: true,
         completionProvider: {
           resolveProvider: false,
@@ -349,7 +368,7 @@ export class FunScriptLspServer extends EventEmitter {
       this.clientCapabilities?.textDocument?.definition?.linkSupport,
     );
 
-    return findDefinition(doc.text, uri, params.position, clientSupportsLink);
+    return findWorkspaceDefinition(doc.text, uri, params.position, this.getDocuments(), clientSupportsLink);
   }
 
   public onHoverHandler(params: HoverParams): Hover | null {
@@ -367,6 +386,34 @@ export class FunScriptLspServer extends EventEmitter {
     const doc = uri ? this.documents.get(uri) : undefined;
     if (!doc || !params?.position) return [];
     return complete(doc.text, uri, params.position, this.getDocuments());
+  }
+
+  public onDocumentSymbolHandler(params: DocumentSymbolParams): DocumentSymbol[] {
+    const uri = params?.textDocument?.uri;
+    const doc = uri ? this.documents.get(uri) : undefined;
+    return doc ? documentSymbols(doc.text, uri) : [];
+  }
+
+  public onWorkspaceSymbolHandler(params: WorkspaceSymbolParams): SymbolInformation[] {
+    return workspaceSymbols(this.getDocuments(), params?.query ?? "");
+  }
+
+  public onReferencesHandler(params: ReferenceParams): Location[] {
+    const uri = params?.textDocument?.uri;
+    const doc = uri ? this.documents.get(uri) : undefined;
+    return doc ? references(doc.text, uri!, params.position, this.getDocuments(), params.context.includeDeclaration) : [];
+  }
+
+  public onPrepareRenameHandler(params: PrepareRenameParams): PrepareRenameResult | null {
+    const uri = params?.textDocument?.uri;
+    const doc = uri ? this.documents.get(uri) : undefined;
+    return doc ? prepareRename(doc.text, uri!, params.position, this.getDocuments()) : null;
+  }
+
+  public onRenameHandler(params: RenameParams): WorkspaceEdit | null {
+    const uri = params?.textDocument?.uri;
+    const doc = uri ? this.documents.get(uri) : undefined;
+    return doc ? rename(doc.text, uri!, params.position, params.newName, this.getDocuments()) : null;
   }
 
   public async handleMessage(msg: Message): Promise<ResponseMessage | void> {
@@ -456,6 +503,12 @@ export class FunScriptLspServer extends EventEmitter {
         result: this.onCompletionHandler(req.params as CompletionParams),
       };
     }
+
+    if (req.method === "textDocument/documentSymbol") return { jsonrpc: "2.0", id: req.id, result: this.onDocumentSymbolHandler(req.params as DocumentSymbolParams) };
+    if (req.method === "workspace/symbol") return { jsonrpc: "2.0", id: req.id, result: this.onWorkspaceSymbolHandler(req.params as WorkspaceSymbolParams) };
+    if (req.method === "textDocument/references") return { jsonrpc: "2.0", id: req.id, result: this.onReferencesHandler(req.params as ReferenceParams) };
+    if (req.method === "textDocument/prepareRename") return { jsonrpc: "2.0", id: req.id, result: this.onPrepareRenameHandler(req.params as PrepareRenameParams) };
+    if (req.method === "textDocument/rename") return { jsonrpc: "2.0", id: req.id, result: this.onRenameHandler(req.params as RenameParams) };
 
     return {
       jsonrpc: "2.0",

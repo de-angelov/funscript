@@ -151,6 +151,10 @@ describe("FunScript LSP Server", () => {
           documentFormattingProvider: true,
           documentRangeFormattingProvider: true,
           definitionProvider: true,
+          documentSymbolProvider: true,
+          workspaceSymbolProvider: true,
+          referencesProvider: true,
+          renameProvider: { prepareProvider: true },
           hoverProvider: true,
           completionProvider: {
             resolveProvider: false,
@@ -952,6 +956,23 @@ export schema Config = {
   });
 
   describe("Go to Definition (textDocument/definition)", () => {
+    it("resolves imported workspace exports and supports outline and rename requests", async () => {
+      const server = new FunScriptLspServer();
+      const libraryUri = "file:///project/math.fun";
+      const appUri = "file:///project/app.fun";
+      server.onDidOpenHandler({ textDocument: { uri: libraryUri, languageId: "funscript", version: 1, text: "export add = (a, b) => a + b\n" } });
+      server.onDidOpenHandler({ textDocument: { uri: appUri, languageId: "funscript", version: 1, text: 'import { add } from "./math.fun"\nresult = add(1, 2)\n' } });
+
+      expect(server.onDefinitionHandler({ textDocument: { uri: appUri }, position: { line: 1, character: 10 } })).toMatchObject({ uri: libraryUri, range: { start: { line: 0, character: 7 } } });
+      expect(server.onDocumentSymbolHandler({ textDocument: { uri: libraryUri } }).map((symbol) => symbol.name)).toContain("add");
+      expect(server.onWorkspaceSymbolHandler({ query: "ad" }).map((symbol) => symbol.name)).toContain("add");
+      expect(server.onPrepareRenameHandler({ textDocument: { uri: appUri }, position: { line: 1, character: 10 } })).toMatchObject({ placeholder: "add" });
+      const refs = server.onReferencesHandler({ textDocument: { uri: appUri }, position: { line: 1, character: 10 }, context: { includeDeclaration: true } });
+      expect(refs.map((reference) => reference.uri)).toEqual(expect.arrayContaining([appUri, libraryUri]));
+      expect(server.onRenameHandler({ textDocument: { uri: appUri }, position: { line: 1, character: 10 }, newName: "sum" })).toMatchObject({ changes: { [appUri]: expect.any(Array), [libraryUri]: expect.any(Array) } });
+      expect(server.onRenameHandler({ textDocument: { uri: appUri }, position: { line: 1, character: 10 }, newName: "schema" })).toBeNull();
+    });
+
     it("returns null when document is not open", async () => {
       const server = new FunScriptLspServer();
       await server.handleMessage({
