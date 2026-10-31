@@ -1,4 +1,4 @@
-# FunScript — a language proposal
+# FunScript — language design and roadmap
 
 **Draft 0.1 · October 2026**
 
@@ -15,6 +15,11 @@
 
 **Companion documents:** [syntax.md](syntax.md) · [pit-of-success.md](pit-of-success.md) ·
 [tooling.md](tooling.md) · [rejected-syntax.md](rejected-syntax.md)
+
+**Status:** Mixed: current behavior and design rationale are labeled **Implemented**;
+future work is labeled **Planned**. This document is not the accepted-syntax reference:
+use [syntax.md](syntax.md) for syntax supported by the current compiler. Compatibility
+forms are identified as such in that reference.
 
 ---
 
@@ -34,7 +39,9 @@ or `Schema.decodeUnknownSync`. Static aliases and raw `ts` types do not create
 validators. See [syntax.md](syntax.md#123-static-guarantees-and-runtime-boundaries)
 and [tooling.md](tooling.md).
 
-The sections below also describe planned tooling and ecosystem integrations.
+Sections labeled **Planned** describe tooling or integrations that are not part of the
+current implementation. Unlabeled language examples describe the current design contract;
+check [syntax.md](syntax.md) for the implemented forms.
 
 ## 1. The itch
 
@@ -734,8 +741,7 @@ This removes the “is `foo` a binding or a nullary constructor?” ambiguity. `
 reserved as the discriminant for tagged-union `schema` and `error` declarations.
 
 **V1 restriction:** tagged-union `schema` declarations are monomorphic. For generic shapes,
-use TypeScript `type` aliases and Effect's own types. Generic tagged unions are future
-work.
+use TypeScript `type` aliases and Effect's own types. **Planned:** generic tagged unions.
 
 ### 5.5 Effects
 
@@ -1306,8 +1312,8 @@ project file list.
 
 The cost is diagnostic mapping. The emitter records a source map from `.fun` spans to
 `.ts` spans. TypeScript diagnostics are mapped back through that map. In early versions,
-the CLI shows both the FunScript location and the generated TypeScript location; later
-versions show a single FunScript code frame.
+the CLI shows both the FunScript location and the generated TypeScript location.
+**Planned:** later versions show a single FunScript code frame.
 
 ### 6.4 Source maps
 
@@ -1461,7 +1467,7 @@ There are no boolean symbol aliases to normalize: `&&`, `||`, and `!` are parse
 errors. The formatter shares the compiler's parser and is published as
 `@funscript/formatter`. There is exactly one style and no configuration.
 
-### 7.6 Editor support
+### 7.6 Editor support — Planned
 
 - **Phase 1:** TextMate grammar for syntax highlighting.
 - **Phase 2:** `funscript lsp` compiles on save, runs the TypeScript language service on the
@@ -1473,13 +1479,13 @@ errors. The formatter shares the compiler's parser and is published as
 The TypeScript language service does the heavy lifting. FunScript only maps positions and
 provides syntax-level completions. The editor shows the same errors as `funscript check`.
 
-### 7.7 Playground
+### 7.7 Playground — Planned
 
 A browser playground that bundles the compiler (which is TypeScript) and shows `.fun`
 on the left, emitted `.ts` on the right, and errors inline. This is also the fastest way
 to get feedback from people who will never install a CLI.
 
-### 7.8 Testing strategy
+### 7.8 Testing strategy — Planned
 
 - **Golden tests:** every `.fun` fixture has a reviewed `.ts` snapshot.
 - **Type tests:** emitted examples are checked with `tsc --noEmit`.
@@ -1487,7 +1493,7 @@ to get feedback from people who will never install a CLI.
 - **Diagnostic tests:** parser/type errors assert message, span, and suggestion, including
   banned-surface errors (`let`, `class`, `null`, `undefined`, `any`, `&&`, semicolons) and
   the targeted fix suggestion for each.
-- **Fuzzing:** later, for the lexer and parser.
+- **Planned — Fuzzing:** later, for the lexer and parser.
 
 The examples in this repository are the first golden fixtures.
 

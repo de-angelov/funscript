@@ -1,11 +1,12 @@
 # FunScript syntax
 
-**Status:** draft, aligned with proposal 0.1
+**Status:** Implemented language reference (FunScript 0.1)
 **Audience:** FunScript users and compiler contributors
 
-This is the working syntax reference. It is more concrete than the tour in
-[proposal.md](proposal.md), and it records the decisions made while reviewing the
-surface for ambiguity and failure modes.
+This is the normative reference for syntax accepted by the current compiler. Examples
+and compatibility forms describe implemented behavior; explicit future-work notes are
+marked **Planned**. For the design rationale and roadmap, see [proposal.md](proposal.md).
+For safety guarantees and their intended enforcement, see [pit-of-success.md](pit-of-success.md).
 
 The design rule is simple:
 
@@ -45,7 +46,7 @@ The design rule is simple:
 | Error                        | `error NotFound(id: String)`                                                                     |
 | Service                      | `service Greeter` newline `greet: (name: String) => Effect<String>`                              |
 | Layer (pure / effectful)     | `Layer.succeed(Greeter, { ... })` or `Layer.effect(Greeter, effect { ... })`                    |
-| Effect block                 | `effect { user <- UserRepo.find(id); user }` (canonical; indentation form is compatible)         |
+| Effect block                 | `effect { user <- UserRepo.find(id); user }` (canonical; indentation form is implemented compatibility syntax) |
 | Effect bind                  | `name <- effect`                                                                                 |
 | Discard effect               | `_ <- effect`                                                                                    |
 | Typed hole                   | `???` or `??? "todo: handle pagination"`                                                         |
@@ -213,7 +214,7 @@ Block comments do not nest. `#` inside a string is not a comment.
 identifier = [A-Za-z_][A-Za-z0-9_]*
 ```
 
-V1 is ASCII-only. Unicode identifiers are future work.
+V1 is ASCII-only. **Planned:** Unicode identifiers.
 
 Naming is part of the syntax, not just style:
 
