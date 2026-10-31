@@ -66,7 +66,7 @@ describe("FunScript LSP Server", () => {
       expect(labels).toContain("add");
       expect(labels).toContain("localValue");
       expect(labels).toContain("Effect");
-      expect(labels).toContain("div");
+      expect(labels).not.toContain("div");
       server.onDidChangeHandler({
         textDocument: { uri: "file:///project/math.fun", version: 2 },
         contentChanges: [{ text: "export subtract = (a, b) => a - b" }],
@@ -76,6 +76,24 @@ describe("FunScript LSP Server", () => {
         position: { line: 3, character: 0 },
       });
       expect(refreshed.map((item) => item.label)).toContain("subtract");
+    });
+
+    it("offers JSX tags only in JSX context and excludes later local bindings", async () => {
+      const server = new FunScriptLspServer();
+      server.onDidOpenHandler({ textDocument: {
+        uri: "file:///project/view.funx", languageId: "funscript", version: 1,
+        text: "shown = true\n<d\nlater = 1",
+      }});
+      const jsx = server.onCompletionHandler({
+        textDocument: { uri: "file:///project/view.funx" },
+        position: { line: 1, character: 2 },
+      });
+      expect(jsx.map((item) => item.label)).toContain("div");
+      expect(jsx.map((item) => item.label)).not.toContain("later");
+      expect(jsx.find((item) => item.label === "div")?.textEdit).toMatchObject({
+        range: { start: { line: 1, character: 1 }, end: { line: 1, character: 2 } },
+        newText: "div",
+      });
     });
 
     it("provides schema fields and Effect methods after member access", async () => {

@@ -21,6 +21,7 @@ export function complete(
   const lines = source.split("\n");
   const line = lines[position.line] ?? "";
   const before = line.slice(0, position.character);
+  const priorSource = lines.slice(0, position.line).join("\n") + before;
   const match = before.match(/[\w$.-]*$/);
   const typedPrefix = match?.[0] ?? "";
   const member = /([A-Za-z_$][\w$]*)\.$/.exec(before)?.[1];
@@ -82,10 +83,12 @@ export function complete(
     const visible = new Set<string>();
     for (const doc of documents) {
       if (doc.uri === uri) {
+        for (const found of priorSource.matchAll(
+          /^\s*(?!export\s)(?:mut\s+)?([a-z_$][\w$]*)\s*(?:=|:)/gm,
+        )) visible.add(found[1]);
         for (const found of doc.text.matchAll(
-          /^\s*(?:export\s+)?(?:schema\s+|error\s+|service\s+)?([A-Za-z_$][\w$]*)\s*(?:=|\(|:)/gm,
-        ))
-          visible.add(found[1]);
+          /^\s*export\s+(?:(?:schema|error|service)\s+)?([A-Za-z_$][\w$]*)\s*(?:=|\(|:)/gm,
+        )) visible.add(found[1]);
         for (const found of doc.text.matchAll(
           /\b(?:export\s+)?(?:schema|error|service)\s+([A-Z][\w$]*)/g,
         ))
@@ -110,7 +113,11 @@ export function complete(
     }
     for (const name of visible)
       add(name, CompletionItemKind.Variable, "Workspace symbol");
-    for (const [name, doc] of Object.entries(DOC_CATALOG))
+    const pipelineContext = /\|>\s*(?:[\w.]*)$/.test(before);
+    const jsxContext = /<\s*[A-Za-z_$\w]*$/.test(before);
+    add("Effect", CompletionItemKind.Module, "Effect API namespace");
+    for (const [name, doc] of Object.entries(DOC_CATALOG)) {
+      if (doc.category === "effect" && !pipelineContext) continue;
       add(
         name,
         doc.category === "keyword"
@@ -121,7 +128,8 @@ export function complete(
         doc.signature,
         doc.summary,
       );
-    if (/\.funx?$/.test(uri))
+    }
+    if (/\.funx?$/.test(uri) && jsxContext)
       for (const tag of [
         "div",
         "span",
