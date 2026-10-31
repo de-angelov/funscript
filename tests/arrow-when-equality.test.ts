@@ -6,12 +6,6 @@ import { compileString, CompilerError } from "../src/compiler.js";
 
 describe("Unified '=>' Arrow, 'when' Keyword Forms & Equality Operators", () => {
   describe("1. Lexer Tokenization", () => {
-    it("tokenizes '=>' as FAT_ARROW", () => {
-      const tokens = new Lexer("fn add(a, b) => Int => a + b").tokenize();
-      const fatArrows = tokens.filter((t) => t.type === TokenType.FAT_ARROW);
-      expect(fatArrows.length).toBe(2);
-      expect(fatArrows[0].value).toBe("=>");
-    });
 
     it("tokenizes '===' and '!==' as reference equality operators", () => {
       const tokens = new Lexer("a === b\nc !== d").tokenize();

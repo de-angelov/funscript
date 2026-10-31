@@ -1,15 +1,15 @@
 # Fixture 02: Functions & Pipelines
 
-export add = (a: Number, b: Number) -> a + b
+export add = (a: Number, b: Number) => a + b
 
-export multiplyBy = (factor: Number) ->
-  (n: Number) -> n * factor
+export multiplyBy = (factor: Number) =>
+  (n: Number) => n * factor
 
-export clamp = (min: Number, max: Number, value: Number) ->
+export clamp = (min: Number, max: Number, value: Number) =>
   match
-    | value |> Number.lessThan(min) -> min
-    | value |> Number.greaterThan(max) -> max
-    | _ -> value
+    | value |> Number.lessThan(min) => min
+    | value |> Number.greaterThan(max) => max
+    | _ => value
 
 export processed =
   5

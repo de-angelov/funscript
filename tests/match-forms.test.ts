@@ -69,7 +69,7 @@ export checkGeneric = (a, b) => a === b
     });
   });
 
-  describe("2. Structural Equality '==' Semantics across Schemas, Data.struct, & Tagged Unions", () => {
+  describe("2. Structural Equality '==' Semantics across Schemas, , & Tagged Unions", () => {
     it("lowers nested schema equality to Effect's Equal.equals", async () => {
       const code = `
 schema Geo = { lat: Number, lng: Number }
@@ -85,13 +85,13 @@ export compareVenuesNeq = (v1: Venue, v2: Venue) => v1 != v2
     });
 
     it("evaluates structural equality on nested Data structures with Equal.equals", () => {
-      const geo1 = Data.struct({ lat: 48.8566, lng: 2.3522 });
-      const geo2 = Data.struct({ lat: 48.8566, lng: 2.3522 });
-      const geo3 = Data.struct({ lat: 51.5074, lng: -0.1278 });
+      const geo1 = ({ lat: 48.8566, lng: 2.3522 });
+      const geo2 = ({ lat: 48.8566, lng: 2.3522 });
+      const geo3 = ({ lat: 51.5074, lng: -0.1278 });
 
-      const venue1 = Data.struct({ name: "Louvre", location: geo1 });
-      const venue2 = Data.struct({ name: "Louvre", location: geo2 });
-      const venue3 = Data.struct({ name: "Louvre", location: geo3 });
+      const venue1 = ({ name: "Louvre", location: geo1 });
+      const venue2 = ({ name: "Louvre", location: geo2 });
+      const venue3 = ({ name: "Louvre", location: geo3 });
 
       // Structural value equality
       expect(Equal.equals(venue1, venue2)).toBe(true);
@@ -181,11 +181,11 @@ export grade = (score) =>
 `.trim();
 
       const res = await Effect.runPromise(compileString(code));
-      expect(res.typescript).toContain("greaterThan(90)");
+      expect(res.typescript).toContain("Number.isGreaterThan(90)");
       expect(res.typescript).toContain('? "A" :');
-      expect(res.typescript).toContain("greaterThan(80)");
+      expect(res.typescript).toContain("Number.isGreaterThan(80)");
       expect(res.typescript).toContain('? "B" :');
-      expect(res.typescript).toContain("greaterThan(70)");
+      expect(res.typescript).toContain("Number.isGreaterThan(70)");
       expect(res.typescript).toContain('? "C" : "F"');
 
       // Test execution with Effect Number module
@@ -410,12 +410,12 @@ export classifyAction = (act: Action) =>
 
       const res = await Effect.runPromise(compileString(code));
       expect(res.typescript).toContain('.with({ _tag: "Deposit" }, ($matched) => {');
-      expect(res.typescript).toContain("greaterThan(1000)");
+      expect(res.typescript).toContain("Number.isGreaterThan(1000)");
       expect(res.typescript).toContain('"huge deposit"');
-      expect(res.typescript).toContain("greaterThan(100)");
+      expect(res.typescript).toContain("Number.isGreaterThan(100)");
       expect(res.typescript).toContain('"medium deposit"');
       expect(res.typescript).toContain('"small deposit"');
-      expect(res.typescript).toContain("greaterThan(500)");
+      expect(res.typescript).toContain("Number.isGreaterThan(500)");
       expect(res.typescript).toContain('"large withdrawal"');
       expect(res.typescript).toContain(".exhaustive()");
 

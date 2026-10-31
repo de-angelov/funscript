@@ -1,1 +1,1 @@
-export Button = () -> <button>hello</button>
+export Button = () => <button>hello</button>

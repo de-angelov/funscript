@@ -9,10 +9,10 @@ export schema Todo = {
   completed: Boolean
 }
 
-export completeTodo = (todo: Todo) ->
+export completeTodo = (todo: Todo) =>
   { ...todo, completed: true }
 
-export fetchTodo = (id: Number) ->
+export fetchTodo = (id: Number) =>
   effect {
     response <- HttpClient.get("https://jsonplaceholder.typicode.com/todos/{id}")
     todo <- response |> HttpClientResponse.schemaBodyJson(Todo)

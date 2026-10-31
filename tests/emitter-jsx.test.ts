@@ -144,7 +144,7 @@ describe("TSX Emitter for JSX AST Nodes", () => {
     });
 
     it("emits lambda function returning JSX inside expression container", () => {
-      const code = `<div>{users |> Array.map((u) -> <span key={u.id}>{u.name}</span>)}</div>`;
+      const code = `<div>{users |> Array.map((u) => <span key={u.id}>{u.name}</span>)}</div>`;
       const emitted = emitJsxExpr(code);
       expect(emitted).toContain("(u) => <span key={u.id}>{u.name}</span>");
     });
@@ -263,7 +263,7 @@ export view = <div className="app">
 
     it("compiles inline component arrow function returning JSX", async () => {
       const code = `
-export Item = (props: Props) -> <li className="item">{props.title}</li>
+export Item = (props: Props) => <li className="item">{props.title}</li>
 `.trim();
       const tsx = await compileFunx(code);
       expect(tsx).toContain(
@@ -273,7 +273,7 @@ export Item = (props: Props) -> <li className="item">{props.title}</li>
 
     it("compiles component with indented block returning JSX", async () => {
       const code = `
-export renderCard = (user: User) ->
+export renderCard = (user: User) =>
   title = user.name
   <div className="card">
     <h2>{title}</h2>
@@ -295,10 +295,10 @@ export navItems = [<li key="1">Home</li>, <li key="2">About</li>]
 
     it("compiles match expressions returning JSX", async () => {
       const code = `
-export renderStatus = (state) ->
+export renderStatus = (state) =>
   match state
-    | Loading -> <Spinner />
-    | Success(info) -> <UserProfile user={info} />
+    | Loading => <Spinner />
+    | Success(info) => <UserProfile user={info} />
 `.trim();
       const tsx = await compileFunx(code);
       expect(tsx).toContain('import { match, P } from "ts-pattern";');
@@ -323,7 +323,7 @@ export viewEffect = effect
     it("compiles pipeline in JSX child with automatic pipe import", async () => {
       const code = `
 export list = <ul>
-  {items |> Array.map((i) -> <li>{i}</li>)}
+  {items |> Array.map((i) => <li>{i}</li>)}
 </ul>
 `.trim();
       const tsx = await compileFunx(code);

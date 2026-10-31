@@ -17,7 +17,7 @@ describe("FunScript Code Formatter", () => {
     const source = `export Message = () => <p>Done!</p>`;
     const formatted = format(source, { filename: "message.funx" });
 
-    expect(formatted).toBe(`export Message = () -> <p>Done!</p>\n`);
+    expect(formatted).toBe(`export Message = () => <p>Done!</p>\n`);
     expect(checkFormat(formatted, { filename: "message.funx" }).isFormatted).toBe(true);
   });
 
@@ -39,12 +39,12 @@ describe("FunScript Code Formatter", () => {
 
   it("normalizes indentation to 2 spaces", () => {
     const unformatted = `
-export greet = (name: String) ->
+export greet = (name: String) =>
     # greeting message
     "Hello, {name}!"
 `.trim();
     const formatted = format(unformatted);
-    expect(formatted).toBe(`export greet = (name: String) ->\n  # greeting message\n  "Hello, {name}!"\n`);
+    expect(formatted).toBe(`export greet = (name: String) =>\n  # greeting message\n  "Hello, {name}!"\n`);
     expect(format(formatted)).toBe(formatted);
   });
 
@@ -81,43 +81,43 @@ export error NotFound(id: String)
 export error Empty
 
 export service Greeter "greeter-v1"
-    greet: (name: String) -> Effect<String>
-    farewell: (name: String) -> Effect<Void, NotFound>
+    greet: (name: String) => Effect<String>
+    farewell: (name: String) => Effect<Void, NotFound>
 `.trim();
     const formatted = format(unformatted);
     expect(formatted).toBe(
-      `export error NotFound(id: String)\nexport error Empty\n\nexport service Greeter "greeter-v1"\n  greet: (name: String) -> Effect<String>\n  farewell: (name: String) -> Effect<Void, NotFound>\n`
+      `export error NotFound(id: String)\nexport error Empty\n\nexport service Greeter "greeter-v1"\n  greet: (name: String) => Effect<String>\n  farewell: (name: String) => Effect<Void, NotFound>\n`
     );
     expect(format(formatted)).toBe(formatted);
   });
 
   it("formats match expressions with pattern types", () => {
     const unformatted = `
-export classify = (shape: Shape) ->
+export classify = (shape: Shape) =>
   match shape
-      | Circle(r) when r |> Number.greaterThan(10) -> "large"
-      | Circle(_) -> "circle"
-      | Rect(w, h) -> "rect"
-      | _ -> "unknown"
+      | Circle(r) when r |> Number.greaterThan(10) => "large"
+      | Circle(_) => "circle"
+      | Rect(w, h) => "rect"
+      | _ => "unknown"
 `.trim();
     const formatted = format(unformatted);
     expect(formatted).toBe(
-      `export classify = (shape: Shape) ->\n  match shape\n    | Circle(r) when r |> Number.greaterThan(10) -> "large"\n    | Circle(_) -> "circle"\n    | Rect(w, h) -> "rect"\n    | _ -> "unknown"\n`
+      `export classify = (shape: Shape) =>\n  match shape\n    | Circle(r) when r |> Number.greaterThan(10) => "large"\n    | Circle(_) => "circle"\n    | Rect(w, h) => "rect"\n    | _ => "unknown"\n`
     );
     expect(format(formatted)).toBe(formatted);
   });
 
   it("formats subjectless match expressions", () => {
     const unformatted = `
-export checkNumber = (n: Number) ->
+export checkNumber = (n: Number) =>
   match
-      | n |> Number.lessThan(0) -> "negative"
-      | n == 0 -> "zero"
-      | _ -> "positive"
+      | n |> Number.lessThan(0) => "negative"
+      | n == 0 => "zero"
+      | _ => "positive"
 `.trim();
     const formatted = format(unformatted);
     expect(formatted).toBe(
-      `export checkNumber = (n: Number) ->\n  match\n    | n |> Number.lessThan(0) -> "negative"\n    | n == 0 -> "zero"\n    | _ -> "positive"\n`
+      `export checkNumber = (n: Number) =>\n  match\n    | n |> Number.lessThan(0) => "negative"\n    | n == 0 => "zero"\n    | _ => "positive"\n`
     );
     expect(format(formatted)).toBe(formatted);
   });
@@ -142,33 +142,33 @@ export program =
     const unformatted = `
 export main =
     [1, 2, 3]
-    |> Array.map((x) -> x * 2)
+    |> Array.map((x) => x * 2)
     |> Array.join(", ")
     |> Console.log
 `.trim();
     const formatted = format(unformatted);
     expect(formatted).toBe(
-      `export main =\n  [1, 2, 3]\n  |> Array.map((x) -> x * 2)\n  |> Array.join(", ")\n  |> Console.log\n`
+      `export main =\n  [1, 2, 3]\n  |> Array.map((x) => x * 2)\n  |> Array.join(", ")\n  |> Console.log\n`
     );
     expect(format(formatted)).toBe(formatted);
   });
 
   it("formats copy-on-write mut draft blocks", () => {
     const unformatted = `
-export appendTag = (p: Profile, tag: String) ->
+export appendTag = (p: Profile, tag: String) =>
   p
-  |> mut (draft) ->
+  |> mut (draft) =>
       draft.tags.push(tag)
       draft
 `.trim();
     const formatted = format(unformatted);
     expect(formatted).toBe(
-      `export appendTag = (p: Profile, tag: String) ->\n  p\n  |> mut (draft) ->\n    draft.tags.push(tag)\n    draft\n`
+      `export appendTag = (p: Profile, tag: String) =>\n  p\n  |> mut (draft) =>\n    draft.tags.push(tag)\n    draft\n`
     );
     expect(format(formatted)).toBe(formatted);
   });
 
-  it("normalizes comments (#without-space -> # with-space, indentation, trailing)", () => {
+  it("normalizes comments (#without-space => # with-space, indentation, trailing)", () => {
     const unformatted = `
 #file header comment
 export x = 10 #trailing comment on x
@@ -253,12 +253,12 @@ export updated = {
     });
 
     it("formats FunScript code using prettier.format with the plugin", async () => {
-      const unformatted = `export greet = (name: String) -> "Hello, {name}!"`;
+      const unformatted = `export greet = (name: String) => "Hello, {name}!"`;
       const result = await prettier.format(unformatted, {
         parser: "funscript",
         plugins: [prettierPlugin],
       });
-      expect(result).toBe(`export greet = (name: String) -> "Hello, {name}!"\n`);
+      expect(result).toBe(`export greet = (name: String) => "Hello, {name}!"\n`);
 
       const pass2 = await prettier.format(result, {
         parser: "funscript",
@@ -268,12 +268,12 @@ export updated = {
     });
 
     it("formats based on .fun file extension via filepath", async () => {
-      const unformatted = `export add = (a: Number, b: Number) -> a + b`;
+      const unformatted = `export add = (a: Number, b: Number) => a + b`;
       const result = await prettier.format(unformatted, {
         filepath: "math.fun",
         plugins: [prettierPlugin],
       });
-      expect(result).toBe(`export add = (a: Number, b: Number) -> a + b\n`);
+      expect(result).toBe(`export add = (a: Number, b: Number) => a + b\n`);
     });
 
     it("formats JSX in .funx files while preserving JSX source", async () => {
@@ -281,7 +281,7 @@ export updated = {
         filepath: "Button.funx",
         plugins: [prettierPlugin],
       });
-      expect(result).toBe("export Button = () -> <button>hello</button>\n");
+      expect(result).toBe("export Button = () => <button>hello</button>\n");
     });
 
     it("respects tabWidth option from Prettier", async () => {

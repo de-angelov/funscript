@@ -92,7 +92,7 @@ export const makeGithubApiError = (statusCode: number, message: string) =>
 
 # --- Response Parsing & Pipelines ---
 
-export parseResponse = (repoPath: String, raw: ts { RawApiResponse }): ApiResponse ->
+export parseResponse = (repoPath: String, raw: ts { RawApiResponse }): ApiResponse =>
   match raw.status
     | 200 => Success(raw.json |> Schema.decodeUnknownSync(Repository))
     | 403 => RateLimited(raw.json.resetTime, raw.json.remaining)
@@ -100,7 +100,7 @@ export parseResponse = (repoPath: String, raw: ts { RawApiResponse }): ApiRespon
     | _ => ServerError(raw.status, raw.message ?? "Unknown error")
 
 # Pattern matching on ApiResponse variants
-export formatApiResponse = (res: ApiResponse) ->
+export formatApiResponse = (res: ApiResponse) =>
   match res
     | Success(repo) =>
         "[200 OK] " + repo.fullName + " - " + repo.description + " (Stars: " + repo.stargazersCount + ", Forks: " + repo.forksCount + ")"
@@ -112,7 +112,7 @@ export formatApiResponse = (res: ApiResponse) ->
         # Client function using 'js' interop in Effect block
         "[Error " + statusCode + "] " + message
 
-export fetchRepo = (repoPath: String) ->
+export fetchRepo = (repoPath: String) =>
   effect {
     _ <- Console.log("[GitHub Client] Requesting repository: " + repoPath)
     raw <- js executeFetch(repoPath)
@@ -121,7 +121,7 @@ export fetchRepo = (repoPath: String) ->
   }
 
 # Summary formatter for a batch of repositories
-export summarizeRepo = (repo: Repository) ->
+export summarizeRepo = (repo: Repository) =>
   repo.fullName + " (⭐ " + repo.stargazersCount + " | 🍴 " + repo.forksCount + " | ⚠️ " + repo.openIssuesCount + ")"
 
 # --- Main Program Runner ---

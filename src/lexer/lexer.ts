@@ -105,10 +105,6 @@ export class Lexer {
         this.emitToken(TokenType.NEQEQ, "!==", 3);
         continue;
       }
-      if (this.matchAhead("=>")) {
-        this.emitToken(TokenType.FAT_ARROW, "=>", 2);
-        continue;
-      }
       if (this.matchAhead("???")) {
         this.emitToken(TokenType.TYPED_HOLE, "???", 3);
         continue;
@@ -117,8 +113,8 @@ export class Lexer {
         this.emitToken(TokenType.DOTDOTDOT, "...", 3);
         continue;
       }
-      if (this.matchAhead("->")) {
-        this.emitToken(TokenType.ARROW, "->", 2);
+      if (this.matchAhead("=>")) {
+        this.emitToken(TokenType.ARROW, "=>", 2);
         continue;
       }
       if (this.matchAhead("<-")) {

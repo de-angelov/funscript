@@ -48,7 +48,7 @@ export schema WidgetState =
 
 # --- Pattern Matching View Helper ---
 
-export renderStatusBadge = (state: WidgetState) ->
+export renderStatusBadge = (state: WidgetState) =>
   match state
     | Idle =>
         <span className="badge badge-idle">Status: Idle</span>
@@ -58,7 +58,7 @@ export renderStatusBadge = (state: WidgetState) ->
         # --- Reactive Widget Component ---
         <span className="badge badge-limit">Warning: Max Limit {limit} Reached</span>
 
-export CounterWidget = (props: WidgetProps) ->
+export CounterWidget = (props: WidgetProps) =>
   <div className="widget-card variant-${props.variant}">
     <header className="widget-header">
       <h3 className="widget-title">{props.title}</h3>

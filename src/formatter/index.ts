@@ -532,8 +532,8 @@ export class Formatter {
         return p.typeAnnotation ? `${p.name.name}: ${this.formatType(p.typeAnnotation)}` : p.name.name;
       }).join(", ");
       const ret = init.returnType ? `: ${this.formatType(init.returnType)}` : "";
-      const isArrowOnly = init.params.length === 0 && !init.returnType && init.span && this.source.slice(init.span.start.offset, init.span.start.offset + 2) === "->";
-      const sig = isArrowOnly ? ` ->` : ` ${typeParams}(${params})${ret} ->`;
+      const isArrowOnly = init.params.length === 0 && !init.returnType && init.span && this.source.slice(init.span.start.offset, init.span.start.offset + 2) === "=>";
+      const sig = isArrowOnly ? ` =>` : ` ${typeParams}(${params})${ret} =>`;
 
       if (init.body.kind === "BlockStatement") {
         const body = this.formatBlockStatement(init.body, indent + this.indentSize);
@@ -724,7 +724,7 @@ export class Formatter {
     if (this.source && arm.span && arm.body.span) {
       const between = this.source.slice(arm.span.start.offset, arm.body.span.start.offset);
       if (between.includes("=>")) return "=>";
-      if (between.includes("->")) return "->";
+      if (between.includes("=>")) return "=>";
     }
     return "=>";
   }
@@ -950,7 +950,7 @@ export class Formatter {
       case "FunctionExpression":
         return this.formatFunctionExpression(expr, indent);
       case "MutBlockExpression":
-        return `mut (${expr.draftParam.name}) ->\n${this.formatFunctionBody(expr.body, indent + this.indentSize)}`;
+        return `mut (${expr.draftParam.name}) =>\n${this.formatFunctionBody(expr.body, indent + this.indentSize)}`;
       case "MatchExpression":
         return this.formatMatchExpression(expr, indent);
       case "EffectBlockExpression":
@@ -1017,8 +1017,8 @@ export class Formatter {
       return p.typeAnnotation ? `${p.name.name}: ${this.formatType(p.typeAnnotation)}` : p.name.name;
     }).join(", ");
     const ret = expr.returnType ? `: ${this.formatType(expr.returnType)}` : "";
-    const isArrowOnly = expr.params.length === 0 && !expr.returnType && expr.span && this.source.slice(expr.span.start.offset, expr.span.start.offset + 2) === "->";
-    const sig = isArrowOnly ? `->` : `${typeParams}(${params})${ret} ->`;
+    const isArrowOnly = expr.params.length === 0 && !expr.returnType && expr.span && this.source.slice(expr.span.start.offset, expr.span.start.offset + 2) === "=>";
+    const sig = isArrowOnly ? `=>` : `${typeParams}(${params})${ret} =>`;
 
     if (expr.body.kind === "BlockStatement") {
       const body = this.formatBlockStatement(expr.body, indent + this.indentSize);
@@ -1042,7 +1042,7 @@ export class Formatter {
           const typeStr = p.typeAnnotation ? this.formatType(p.typeAnnotation, indent) : "Unknown";
           return p.name ? `${p.name.name}: ${typeStr}` : typeStr;
         }).join(", ");
-        return `(${params}) -> ${this.formatType(node.returnType, indent)}`;
+        return `(${params}) => ${this.formatType(node.returnType, indent)}`;
       }
       case "EffectTypeNode": {
         const args = [this.formatType(node.success, indent)];

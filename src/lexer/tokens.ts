@@ -39,8 +39,7 @@ export enum TokenType {
   WHEN = "when",
 
   // Operators & Delimiters
-  ARROW = "->",
-  FAT_ARROW = "=>",
+  ARROW = "=>",
   LARROW = "<-",
   PIPE = "|>",
   BAR = "|",
@@ -118,7 +117,7 @@ export const BANNED_KEYWORDS: Record<string, string> = {
   let: "FunScript has no 'let'; use 'name = value' for immutable bindings, or 'mut name = value' for local mutable drafts.",
   var: "FunScript has no 'var'; use 'name = value' for immutable bindings, or 'mut name = value' for local mutable drafts.",
   const: "FunScript bindings are const by default; write 'name = value'.",
-  function: "FunScript functions use the arrow syntax: '(args) -> body'.",
+  function: "FunScript functions use the arrow syntax: '(args) => body'.",
   class: "FunScript has no classes; use 'schema' for data, 'error' for errors, and 'service' for services.",
   return: "FunScript is expression-oriented; every block automatically evaluates to its final line.",
   throw: "FunScript has no 'throw'; recoverable failures use Effect typed errors, and defects use 'Effect.die' or '|> orDie'.",
@@ -130,7 +129,7 @@ export const BANNED_KEYWORDS: Record<string, string> = {
   null: "FunScript has no 'null'; use Option.none() or Option<T> for optional values.",
   undefined: "FunScript has no 'undefined'; use Option<T> or explicit types.",
   if: "FunScript has no 'if'; use 'match' for both pattern matching and boolean branching.",
-  else: "FunScript has no 'else'; use '| _ ->' in 'match'.",
+  else: "FunScript has no 'else'; use '| _ =>' in 'match'.",
   switch: "FunScript has no 'switch'; use 'match'.",
   for: "FunScript has no 'for' loops; use Array pipelines (map, filter) or Effect.forEach.",
   while: "FunScript has no 'while' loops; use Effect.repeat, Schedule, or recursion.",

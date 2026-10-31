@@ -47,7 +47,7 @@ describe("FunScript Unified Error Hierarchy", () => {
   });
 
   it("Parser throws ParseError inheriting from FunScriptError", () => {
-    const lexer = new Lexer("fn foo ->");
+    const lexer = new Lexer("fn foo =>");
     const tokens = lexer.tokenize();
     const parser = new Parser(tokens);
     expect(() => {

@@ -52,7 +52,7 @@ debugging, exploratory edits, or routine commands.
 
 ## Board Lifecycle
 
-    BACKLOG.md -> TASKS.md active lane -> ARCHIVE.md
+    BACKLOG.md => TASKS.md active lane => ARCHIVE.md
 
 - Pending assignable backlog tasks must use Status: Backlog. "Ready" is a
   readiness concept, not a valid backlog Status value.

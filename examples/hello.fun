@@ -3,7 +3,7 @@
 
 import { Array, Console } from "effect"
 
-export greet = (name: String) ->
+export greet = (name: String) =>
   "Hello, {name}!"
 
 export main =

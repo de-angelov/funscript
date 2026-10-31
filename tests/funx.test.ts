@@ -27,7 +27,7 @@ describe(".funx & TSX Component Support (Compiler & CLI)", () => {
   describe("Compiler targetExtension recognition", () => {
     it("recognizes .funx file and sets targetExtension to .tsx", async () => {
       const code = `
-export Button = (props: Props) -> <button className="btn">{props.label}</button>
+export Button = (props: Props) => <button className="btn">{props.label}</button>
 `.trim();
       const res = await Effect.runPromise(compileString(code, "src/components/Button.funx"));
       expect(res.targetExtension).toBe(".tsx");
@@ -38,7 +38,7 @@ export Button = (props: Props) -> <button className="btn">{props.label}</button>
 
     it("recognizes .fun file and sets targetExtension to .ts", async () => {
       const code = `
-export add = (a: Number, b: Number) -> a + b
+export add = (a: Number, b: Number) => a + b
 `.trim();
       const res = await Effect.runPromise(compileString(code, "src/math.fun"));
       expect(res.targetExtension).toBe(".ts");
@@ -46,7 +46,7 @@ export add = (a: Number, b: Number) -> a + b
     });
   });
 
-  describe("End-to-End Component Compilation (.funx -> .tsx)", () => {
+  describe("End-to-End Component Compilation (.funx => .tsx)", () => {
     it("compiles a complex UI component with signals, effects, and mutative draft state", async () => {
       const code = `
 schema TaskItem = {
@@ -55,13 +55,13 @@ schema TaskItem = {
   completed: Boolean
 }
 
-export TaskList = (tasks: Array<TaskItem>) ->
+export TaskList = (tasks: Array<TaskItem>) =>
   <div className="task-container">
     <header className="header">
       <h1>Task Tracker</h1>
     </header>
     <ul className="tasks">
-      {tasks |> Array.map((task) -> <li key={task.id}>{task.title}</li>)}
+      {tasks |> Array.map((task) => <li key={task.id}>{task.title}</li>)}
     </ul>
   </div>
 `.trim();
@@ -84,11 +84,11 @@ schema ViewState =
   | Failed(msg: String)
   | Ready(content: String)
 
-export View = (state: ViewState) ->
+export View = (state: ViewState) =>
   match state
-    | Loading -> <div className="spinner"><span /></div>
-    | Failed(err) -> <div className="error-banner">{err.msg}</div>
-    | Ready(info) -> <div className="content"><p>{info.content}</p></div>
+    | Loading => <div className="spinner"><span /></div>
+    | Failed(err) => <div className="error-banner">{err.msg}</div>
+    | Ready(info) => <div className="content"><p>{info.content}</p></div>
 `.trim();
 
       const res = await Effect.runPromise(compileString(code, "View.funx"));
@@ -102,7 +102,7 @@ export View = (state: ViewState) ->
 
     it("compiles attributes with string template interpolation correctly", async () => {
       const code = `
-export Card = (variant: String, size: String) ->
+export Card = (variant: String, size: String) =>
   <div className="card-{variant}" data-size="size-{size}">
     <span>Card content</span>
   </div>
@@ -115,7 +115,7 @@ export Card = (variant: String, size: String) ->
 
     it("compiles attributes with dollar-prefixed template interpolation correctly", async () => {
       const code = `
-export Badge = (badgeKind: String) ->
+export Badge = (badgeKind: String) =>
   <span className="badge-\${badgeKind}">
     Badge
   </span>
@@ -127,7 +127,7 @@ export Badge = (badgeKind: String) ->
 
     it("compiles nested fragments with sibling children to TSX", async () => {
       const code = `
-export FragmentView = () ->
+export FragmentView = () =>
   <>
     <span>First</span>
     <>
@@ -156,10 +156,7 @@ export FragmentView = () ->
 schema Props = {
   name: String
 }
-export Widget = (props: Props) ->
-  <div className="widget">
-    <h3>{props.name}</h3>
-  </div>
+export Widget = (props: Props) => <div className="widget"><h3>{props.name}</h3></div>
 `.trim(),
         "utf-8",
       );
@@ -179,7 +176,7 @@ export Widget = (props: Props) ->
       await fs.writeFile(
         funFile,
         `
-export multiply = (a: Number, b: Number) -> a * b
+export multiply = (a: Number, b: Number) => a * b
 `.trim(),
         "utf-8",
       );
@@ -198,7 +195,7 @@ export multiply = (a: Number, b: Number) -> a * b
       await fs.writeFile(
         funxFile,
         `
-export Header = () -> <header><h1>FunScript</h1></header>
+export Header = () => <header><h1>FunScript</h1></header>
 `.trim(),
         "utf-8",
       );
@@ -218,8 +215,8 @@ export Header = () -> <header><h1>FunScript</h1></header>
       const file1 = path.join(srcDir, "App.funx");
       const file2 = path.join(srcDir, "utils.fun");
 
-      await fs.writeFile(file1, "export App = () -> <main>Hello</main>\n");
-      await fs.writeFile(file2, "export double = (x: Number) -> x * 2\n");
+      await fs.writeFile(file1, "export App = () => <main>Hello</main>\n");
+      await fs.writeFile(file2, "export double = (x: Number) => x * 2\n");
 
       const { stdout } = await execFileAsync("node", [
         cliPath,

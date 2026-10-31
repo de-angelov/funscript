@@ -19,7 +19,7 @@ const evaluate = async (source: string, names: string[]) => {
 describe("runtime boundary validation", () => {
   it("validates exported JavaScript function arguments before running the body", async () => {
     const { greet } = await evaluate(`
-export js greet = (name: String) ->
+export js greet = (name: String) =>
   effect
     "Hello, " + name
 `, ["greet"]);

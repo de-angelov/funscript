@@ -57,7 +57,7 @@ describe("FunScript Lexer", () => {
 
   describe("Indentation handling (indent/dedent stack)", () => {
     it("handles 2-space indentation (INDENT and DEDENT)", () => {
-      const code = `match x\n  | 1 -> "one"\n  | _ -> "other"`;
+      const code = `match x\n  | 1 => "one"\n  | _ => "other"`;
       const lexer = new Lexer(code);
       const tokens = lexer.tokenize();
 
@@ -280,7 +280,7 @@ block
 
   describe("Operators and Delimiters", () => {
     it("tokenizes all multi-character operators", () => {
-      const code = `-> <- |> == != ** ?? ... ???`;
+      const code = `=> <- |> == != ** ?? ... ???`;
       const lexer = new Lexer(code);
       const tokens = lexer.tokenize();
 

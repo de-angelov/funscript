@@ -271,7 +271,7 @@ describe("JSX Parser (.funx mode)", () => {
     });
 
     it("parses inline arrow function returning JSX", () => {
-      const code = "render = (item) -> <li>{item.name}</li>";
+      const code = "render = (item) => <li>{item.name}</li>";
       const ast = parse(code);
 
       const decl = ast.body[0] as BindingDeclaration;
@@ -282,7 +282,7 @@ describe("JSX Parser (.funx mode)", () => {
     });
 
     it("parses function with indented block returning JSX as finalExpression", () => {
-      const code = `renderCard = (user) ->
+      const code = `renderCard = (user) =>
   title = user.name
   <div className="card">
     <h2>{title}</h2>
@@ -306,11 +306,11 @@ describe("JSX Parser (.funx mode)", () => {
     });
 
     it("parses match expression arms producing JSX elements", () => {
-      const code = `renderStatus = (state) ->
+      const code = `renderStatus = (state) =>
   match state
-    | Loading -> <Spinner />
-    | Success(info) -> <UserProfile user={info} />
-    | Failed(err) -> <ErrorMessage errorMsg={err} />`;
+    | Loading => <Spinner />
+    | Success(info) => <UserProfile user={info} />
+    | Failed(err) => <ErrorMessage errorMsg={err} />`;
       const ast = parse(code);
 
       const decl = ast.body[0] as BindingDeclaration;
@@ -337,7 +337,7 @@ describe("JSX Parser (.funx mode)", () => {
 
     it("parses arrow function lambda inside JSX child expression container", () => {
       const code = `<div>
-  {users |> Array.map((u) -> <span key={u.id}>{u.name}</span>)}
+  {users |> Array.map((u) => <span key={u.id}>{u.name}</span>)}
 </div>`;
       const el = parseJsx(code) as JSXElement;
 
