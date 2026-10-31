@@ -220,6 +220,31 @@ updated = tasks |> mut (draft) ->
     expect(checked.success, checked.formattedOutput).toBe(true);
   });
 
+  it("supports member and index assignments in mut draft blocks", async () => {
+    const code = `
+profile = { name: "Ada", tags: ["old"] }
+updated = profile |> mut (draft) ->
+  draft.name = "Grace"
+  draft.tags[0] = "new"
+  draft
+`.trim();
+    const res = await Effect.runPromise(compileString(code));
+    expect(res.typescript).toContain('draft.name = "Grace";');
+    expect(res.typescript).toContain('draft.tags[0] = "new";');
+    const checked = await Effect.runPromise(typeCheckSource(code, "mut-assignment.fun"));
+    expect(checked.success, checked.formattedOutput).toBe(true);
+  });
+
+  it("deduplicates generated Effect imports against user imports during checking", async () => {
+    const code = `
+import { Effect } from "effect"
+export task = Effect.succeed(1)
+`.trim();
+    const result = await Effect.runPromise(typeCheckSource(code, "effect-import-dedup.fun"));
+    expect(result.success, result.formattedOutput).toBe(true);
+    expect(result.formattedOutput).not.toContain("TS2300");
+  });
+
   describe("Complex pattern matching code generation", () => {
     it("compiles constructor pattern matching with field unpack and guards using ts-pattern", async () => {
       const code = `

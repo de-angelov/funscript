@@ -290,7 +290,7 @@ export interface WhenStatement extends NodeBase {
 
 export interface AssignmentStatement extends NodeBase {
   kind: "AssignmentStatement";
-  target: Identifier | DotPathExpression;
+  target: Identifier | DotPathExpression | IndexExpression;
   value: Expression;
 }
 

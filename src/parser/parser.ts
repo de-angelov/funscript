@@ -32,6 +32,7 @@ import {
   CallExpression,
   MemberExpression,
   IndexExpression,
+  DotPathExpression,
   RecordExpression,
   RecordEntry,
   SpreadEntry,
@@ -103,6 +104,7 @@ export class Parser {
   public diagnostics: ParseError[] = [];
   private functionDepth = 0;
   private mutableVariables = new Set<string>();
+  private mutDraftVariables = new Set<string>();
 
   constructor(
     private tokens: Token[],
@@ -725,7 +727,13 @@ export class Parser {
       throw new ParseError("Expected '->' or '=>' in mut block", this.peek().span);
     }
 
-    const body = this.parseFunctionBody();
+    this.mutDraftVariables.add(draftParam.name);
+    let body: FunctionBody;
+    try {
+      body = this.parseFunctionBody();
+    } finally {
+      this.mutDraftVariables.delete(draftParam.name);
+    }
     return {
       kind: "MutBlockExpression",
       draftParam,
@@ -1557,6 +1565,47 @@ export class Parser {
     return true;
   }
 
+  private isAssignmentStart(): boolean {
+    if (!this.check(TokenType.IDENTIFIER)) return false;
+    let i = 1;
+    let member = false;
+    while (true) {
+      const type = this.peekAhead(i).type;
+      if (type === TokenType.DOT) { member = true; i += 2; continue; }
+      if (type === TokenType.LBRACKET) {
+        member = true;
+        i++;
+        let depth = 1;
+        while (depth > 0 && this.peekAhead(i).type !== TokenType.EOF) {
+          if (this.peekAhead(i).type === TokenType.LBRACKET) depth++;
+          if (this.peekAhead(i).type === TokenType.RBRACKET) depth--;
+          i++;
+        }
+        continue;
+      }
+      break;
+    }
+    return this.peekAhead(i).type === TokenType.EQ &&
+      (this.mutableVariables.has(this.peek().value) || (member && this.mutDraftVariables.has(this.peek().value)));
+  }
+
+  private parseAssignmentTarget(): Identifier | DotPathExpression | IndexExpression {
+    const expr = this.parsePostfix();
+    if (expr.kind === "Identifier") return expr;
+    if (expr.kind === "IndexExpression") return expr;
+    if (expr.kind === "MemberExpression") {
+      const path: Identifier[] = [];
+      let current: Expression = expr;
+      while (current.kind === "MemberExpression") {
+        path.unshift(current.property as Identifier);
+        current = current.object;
+      }
+      if (current.kind === "Identifier") path.unshift(current);
+      return { kind: "DotPathExpression", path, span: expr.span };
+    }
+    throw new ParseError("Invalid assignment target", expr.span);
+  }
+
   private parseFunctionBody(): FunctionBody {
     this.functionDepth++;
     try {
@@ -1612,8 +1661,8 @@ export class Parser {
           continue;
         }
 
-        if (this.check(TokenType.IDENTIFIER) && this.peekAhead(1).type === TokenType.EQ && this.mutableVariables.has(this.peek().value)) {
-          const target = this.parseIdentifier();
+        if (this.isAssignmentStart()) {
+          const target = this.parseAssignmentTarget();
           this.consume(TokenType.EQ, "Expected '=' in assignment");
           const val = this.parseExpression();
           this.consumeNewlineOrEof();
@@ -1723,8 +1772,8 @@ export class Parser {
           continue;
         }
 
-        if (this.check(TokenType.IDENTIFIER) && this.peekAhead(1).type === TokenType.EQ && this.mutableVariables.has(this.peek().value)) {
-          const target = this.parseIdentifier();
+        if (this.isAssignmentStart()) {
+          const target = this.parseAssignmentTarget();
           this.consume(TokenType.EQ, "Expected '=' in assignment");
           const val = this.parseExpression();
           this.consumeNewlineOrEof();

@@ -170,6 +170,7 @@ const EFFECT_BUILTIN_MODULES = new Set([
 
 export class Emitter {
   private effectImports = new Set<string>();
+  private userEffectBindings = new Set<string>();
   private needsTsPattern = false;
   private needsMutative = false;
   private primitiveIdentifiers = new Set<string>();
@@ -180,6 +181,9 @@ export class Emitter {
   constructor(private program?: Program) {
     for (const item of program?.body ?? []) {
       const decl = item.kind === "ExportDeclaration" ? item.declaration : item;
+      if (item.kind === "ImportDeclaration" && item.source.raw === '"effect"') {
+        for (const spec of item.specifiers) this.userEffectBindings.add(spec.local.name);
+      }
       if (decl.kind === "SchemaDeclaration" || decl.kind === "ErrorDeclaration" || decl.kind === "ServiceDeclaration") {
         this.declaredTypeNames.add(decl.id.name);
       }
@@ -197,8 +201,9 @@ export class Emitter {
 
     // Generate header imports
     let header = "";
-    if (this.effectImports.size > 0) {
-      const sorted = Array.from(this.effectImports).sort().join(", ");
+    const generatedEffectImports = Array.from(this.effectImports).filter((name) => !this.userEffectBindings.has(name));
+    if (generatedEffectImports.length > 0) {
+      const sorted = generatedEffectImports.sort().join(", ");
       header += `import { ${sorted} } from "effect";\n`;
     }
     if (this.needsTsPattern) {
@@ -325,7 +330,6 @@ export class Emitter {
       }
       return tName;
     }
-    if (typeNode.kind === "ArrayTypeNode") return `Schema.Array(${this.emitSchemaTypeField(typeNode.elementType)})`;
     return this.emitTypeNode(typeNode);
   }
 
@@ -749,7 +753,9 @@ export class Emitter {
       return this.emitBindingDeclaration(stmt);
     }
     if (stmt.kind === "AssignmentStatement") {
-      const target = stmt.target.kind === "Identifier" ? stmt.target.name : stmt.target.path.map((p) => p.name).join(".");
+      const target = stmt.target.kind === "Identifier" || stmt.target.kind === "IndexExpression"
+        ? this.emitExpression(stmt.target)
+        : stmt.target.path.map((p) => p.name).join(".");
       return `${target} = ${this.emitExpression(stmt.value)};`;
     }
     if (stmt.kind === "ReturnStatement") {
