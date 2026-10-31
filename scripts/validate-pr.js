@@ -15,6 +15,11 @@ export const CHECKS = [
     args: ["tsc", "-p", "editors/vscode", "--noEmit"],
   },
   {
+    name: "Build Package Artifacts",
+    cmd: "npm",
+    args: ["run", "build"],
+  },
+  {
     name: "FunScript CLI Formatting Check",
     cmd: "npm",
     args: ["run", "fmt:check"],
@@ -23,11 +28,6 @@ export const CHECKS = [
     name: "Prettier Formatting Check",
     cmd: "npm",
     args: ["run", "prettier:check"],
-  },
-  {
-    name: "Build Package Artifacts",
-    cmd: "npm",
-    args: ["run", "build"],
   },
   {
     name: "Vitest Test Suite",

@@ -25,6 +25,14 @@ describe("GitHub Agent PR Validation & CI Tooling (TASK-022)", () => {
     expect(commands).toContain("npm run prettier:check");
     expect(commands).toContain("npm run build");
     expect(commands).toContain("npm test");
+
+    // The formatter commands load the built CLI and Prettier plugin from dist/.
+    expect(checkNames.indexOf("Build Package Artifacts")).toBeLessThan(
+      checkNames.indexOf("FunScript CLI Formatting Check")
+    );
+    expect(checkNames.indexOf("Build Package Artifacts")).toBeLessThan(
+      checkNames.indexOf("Prettier Formatting Check")
+    );
   });
 
   it("runCheck handles successful commands properly", () => {
