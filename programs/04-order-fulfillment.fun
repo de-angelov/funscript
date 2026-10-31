@@ -128,12 +128,12 @@ export PaymentGatewayLive =
           | amount |> greaterThan(50000) ->
               effect
                 _ <- Console.log("  [PaymentGateway] Transaction denied: credit limit exceeded")
-                _ <- Effect.fail(PaymentFailed("CreditLimitExceeded"))
+                _ <- Effect.fail(PaymentFailed({ reason: "CreditLimitExceeded" }))
                 ""
           | calls == 1 ->
               effect
                 _ <- Console.log("  [PaymentGateway] Transient network glitch on attempt 1! Retrying...")
-                _ <- Effect.fail(PaymentFailed("GatewayTimeout"))
+                _ <- Effect.fail(PaymentFailed({ reason: "GatewayTimeout" }))
                 ""
           | _ ->
               effect
