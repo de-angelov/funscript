@@ -28,6 +28,8 @@ import {
   type TextEdit,
   type Location,
   type LocationLink,
+  type CompletionParams,
+  type CompletionItem,
 } from "vscode-languageserver/node";
 import { Lexer } from "../lexer/lexer.js";
 import { Parser } from "../parser/parser.js";
@@ -35,6 +37,7 @@ import { format } from "../formatter/index.js";
 import type { Span } from "../ast/types.js";
 import { findDefinition } from "./definition.js";
 import { findHover } from "./hover.js";
+import { complete } from "./completion.js";
 
 export function toDiagnostic(error: any): Diagnostic {
   const span: Span | undefined = error.span;
@@ -180,6 +183,7 @@ export class FunScriptLspServer extends EventEmitter {
     );
     connection.onDefinition((params) => this.onDefinitionHandler(params));
     connection.onHover((params) => this.onHoverHandler(params));
+    connection.onCompletion((params) => this.onCompletionHandler(params));
   }
 
   public onInitializeHandler(params: InitializeParams): InitializeResult {
@@ -192,6 +196,10 @@ export class FunScriptLspServer extends EventEmitter {
         documentRangeFormattingProvider: true,
         definitionProvider: true,
         hoverProvider: true,
+        completionProvider: {
+          resolveProvider: false,
+          triggerCharacters: [".", "<"],
+        },
       },
       serverInfo: {
         name: "funscript-lsp",
@@ -312,8 +320,14 @@ export class FunScriptLspServer extends EventEmitter {
     const lastLine = lines.length - 1;
     const end = params.range?.end;
     const start = params.range?.start;
-    if (!start || !end || start.line !== 0 || start.character !== 0 ||
-        end.line < lastLine || (end.line === lastLine && end.character < lines[lastLine].length)) {
+    if (
+      !start ||
+      !end ||
+      start.line !== 0 ||
+      start.character !== 0 ||
+      end.line < lastLine ||
+      (end.line === lastLine && end.character < lines[lastLine].length)
+    ) {
       return null;
     }
     return this.onFormattingHandler({
@@ -346,6 +360,13 @@ export class FunScriptLspServer extends EventEmitter {
     }
 
     return findHover(doc.text, uri, params.position);
+  }
+
+  public onCompletionHandler(params: CompletionParams): CompletionItem[] {
+    const uri = params?.textDocument?.uri;
+    const doc = uri ? this.documents.get(uri) : undefined;
+    if (!doc || !params?.position) return [];
+    return complete(doc.text, uri, params.position, this.getDocuments());
   }
 
   public async handleMessage(msg: Message): Promise<ResponseMessage | void> {
@@ -425,6 +446,14 @@ export class FunScriptLspServer extends EventEmitter {
         jsonrpc: "2.0",
         id: req.id,
         result,
+      };
+    }
+
+    if (req.method === "textDocument/completion") {
+      return {
+        jsonrpc: "2.0",
+        id: req.id,
+        result: this.onCompletionHandler(req.params as CompletionParams),
       };
     }
 

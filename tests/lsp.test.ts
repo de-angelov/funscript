@@ -26,6 +26,108 @@ import {
 import { format } from "../src/formatter/index.js";
 
 describe("FunScript LSP Server", () => {
+  describe("Completion", () => {
+    it("returns local, Effect, JSX and imported workspace symbols for partial source", async () => {
+      const server = new FunScriptLspServer();
+      await server.handleMessage({
+        jsonrpc: "2.0",
+        id: 1,
+        method: "initialize",
+        params: {},
+      });
+      server.onDidOpenHandler({
+        textDocument: {
+          uri: "file:///project/math.fun",
+          languageId: "funscript",
+          version: 1,
+          text: "export add = (a) => a\nexport schema User = { name: string }",
+        },
+      });
+      server.onDidOpenHandler({
+        textDocument: {
+          uri: "file:///project/app.funx",
+          languageId: "funscript",
+          version: 1,
+          text: 'import { add } from "./math.fun"\nlocalValue = 1\nadd\n',
+        },
+      });
+      const response = await server.handleMessage({
+        jsonrpc: "2.0",
+        id: 2,
+        method: "textDocument/completion",
+        params: {
+          textDocument: { uri: "file:///project/app.funx" },
+          position: { line: 3, character: 0 },
+        },
+      });
+      const labels = (
+        (response as ResponseMessage).result as Array<{ label: string }>
+      ).map((item) => item.label);
+      expect(labels).toContain("add");
+      expect(labels).toContain("localValue");
+      expect(labels).toContain("Effect");
+      expect(labels).not.toContain("div");
+      server.onDidChangeHandler({
+        textDocument: { uri: "file:///project/math.fun", version: 2 },
+        contentChanges: [{ text: "export subtract = (a, b) => a - b" }],
+      });
+      const refreshed = server.onCompletionHandler({
+        textDocument: { uri: "file:///project/app.funx" },
+        position: { line: 3, character: 0 },
+      });
+      expect(refreshed.map((item) => item.label)).toContain("subtract");
+    });
+
+    it("offers JSX tags only in JSX context and excludes later local bindings", async () => {
+      const server = new FunScriptLspServer();
+      server.onDidOpenHandler({ textDocument: {
+        uri: "file:///project/view.funx", languageId: "funscript", version: 1,
+        text: "shown = true\n<d\nlater = 1",
+      }});
+      const jsx = server.onCompletionHandler({
+        textDocument: { uri: "file:///project/view.funx" },
+        position: { line: 1, character: 2 },
+      });
+      expect(jsx.map((item) => item.label)).toContain("div");
+      expect(jsx.map((item) => item.label)).not.toContain("later");
+      expect(jsx.find((item) => item.label === "div")?.textEdit).toMatchObject({
+        range: { start: { line: 1, character: 1 }, end: { line: 1, character: 2 } },
+        newText: "div",
+      });
+    });
+
+    it("provides schema fields and Effect methods after member access", async () => {
+      const server = new FunScriptLspServer();
+      await server.handleMessage({
+        jsonrpc: "2.0",
+        id: 1,
+        method: "initialize",
+        params: {},
+      });
+      server.onDidOpenHandler({
+        textDocument: {
+          uri: "file:///project/main.fun",
+          languageId: "funscript",
+          version: 1,
+          text: "schema User = {\n  name: string\n  age: number\n}\nUser.",
+        },
+      });
+      const fields = server.onCompletionHandler({
+        textDocument: { uri: "file:///project/main.fun" },
+        position: { line: 4, character: 5 },
+      });
+      expect(fields.map((item) => item.label)).toContain("name");
+      server.onDidChangeHandler({
+        textDocument: { uri: "file:///project/main.fun", version: 2 },
+        contentChanges: [{ text: "Effect." }],
+      });
+      const methods = server.onCompletionHandler({
+        textDocument: { uri: "file:///project/main.fun" },
+        position: { line: 0, character: 7 },
+      });
+      expect(methods.map((item) => item.label)).toContain("map");
+    });
+  });
   describe("Lifecycle Handling", () => {
     it("returns capabilities and serverInfo on initialize request", async () => {
       const server = new FunScriptLspServer();
@@ -50,6 +152,10 @@ describe("FunScript LSP Server", () => {
           documentRangeFormattingProvider: true,
           definitionProvider: true,
           hoverProvider: true,
+          completionProvider: {
+            resolveProvider: false,
+            triggerCharacters: [".", "<"],
+          },
         },
         serverInfo: {
           name: "funscript-lsp",
@@ -60,7 +166,12 @@ describe("FunScript LSP Server", () => {
 
     it("accepts initialized notification", async () => {
       const server = new FunScriptLspServer();
-      await server.handleMessage({ jsonrpc: "2.0", id: 1, method: "initialize", params: {} });
+      await server.handleMessage({
+        jsonrpc: "2.0",
+        id: 1,
+        method: "initialize",
+        params: {},
+      });
 
       const initializedSpy = vi.fn();
       server.on("initialized", initializedSpy);
@@ -91,7 +202,12 @@ describe("FunScript LSP Server", () => {
 
     it("handles shutdown request and responds with null", async () => {
       const server = new FunScriptLspServer();
-      await server.handleMessage({ jsonrpc: "2.0", id: 1, method: "initialize", params: {} });
+      await server.handleMessage({
+        jsonrpc: "2.0",
+        id: 1,
+        method: "initialize",
+        params: {},
+      });
 
       const response = (await server.handleMessage({
         jsonrpc: "2.0",
@@ -105,7 +221,12 @@ describe("FunScript LSP Server", () => {
 
     it("rejects subsequent requests after shutdown with InvalidRequest error", async () => {
       const server = new FunScriptLspServer();
-      await server.handleMessage({ jsonrpc: "2.0", id: 1, method: "initialize", params: {} });
+      await server.handleMessage({
+        jsonrpc: "2.0",
+        id: 1,
+        method: "initialize",
+        params: {},
+      });
       await server.handleMessage({ jsonrpc: "2.0", id: 2, method: "shutdown" });
 
       const response = (await server.handleMessage({
@@ -120,7 +241,12 @@ describe("FunScript LSP Server", () => {
 
     it("emits exit with code 0 if preceded by shutdown", async () => {
       const server = new FunScriptLspServer();
-      await server.handleMessage({ jsonrpc: "2.0", id: 1, method: "initialize", params: {} });
+      await server.handleMessage({
+        jsonrpc: "2.0",
+        id: 1,
+        method: "initialize",
+        params: {},
+      });
       await server.handleMessage({ jsonrpc: "2.0", id: 2, method: "shutdown" });
 
       const exitSpy = vi.fn();
@@ -132,7 +258,12 @@ describe("FunScript LSP Server", () => {
 
     it("emits exit with code 1 if shutdown was not called", async () => {
       const server = new FunScriptLspServer();
-      await server.handleMessage({ jsonrpc: "2.0", id: 1, method: "initialize", params: {} });
+      await server.handleMessage({
+        jsonrpc: "2.0",
+        id: 1,
+        method: "initialize",
+        params: {},
+      });
 
       const exitSpy = vi.fn();
       server.onExit(exitSpy);
@@ -143,7 +274,12 @@ describe("FunScript LSP Server", () => {
 
     it("returns MethodNotFound for unsupported request method", async () => {
       const server = new FunScriptLspServer();
-      await server.handleMessage({ jsonrpc: "2.0", id: 1, method: "initialize", params: {} });
+      await server.handleMessage({
+        jsonrpc: "2.0",
+        id: 1,
+        method: "initialize",
+        params: {},
+      });
 
       const response = (await server.handleMessage({
         jsonrpc: "2.0",
@@ -159,7 +295,12 @@ describe("FunScript LSP Server", () => {
   describe("Document Synchronization & Diagnostic Reporting", () => {
     it("publishes empty diagnostics for clean valid FunScript documents on didOpen", async () => {
       const server = new FunScriptLspServer();
-      await server.handleMessage({ jsonrpc: "2.0", id: 1, method: "initialize", params: {} });
+      await server.handleMessage({
+        jsonrpc: "2.0",
+        id: 1,
+        method: "initialize",
+        params: {},
+      });
 
       const diagEvents: PublishDiagnosticsParams[] = [];
       server.on("diagnostics", (p) => diagEvents.push(p));
@@ -185,7 +326,12 @@ describe("FunScript LSP Server", () => {
 
     it("reports diagnostic for banned let keyword with exact line and column range", async () => {
       const server = new FunScriptLspServer();
-      await server.handleMessage({ jsonrpc: "2.0", id: 1, method: "initialize", params: {} });
+      await server.handleMessage({
+        jsonrpc: "2.0",
+        id: 1,
+        method: "initialize",
+        params: {},
+      });
 
       const diagEvents: PublishDiagnosticsParams[] = [];
       server.on("diagnostics", (p) => diagEvents.push(p));
@@ -217,7 +363,12 @@ describe("FunScript LSP Server", () => {
 
     it("reports diagnostic on second line for banned operator with accurate range", async () => {
       const server = new FunScriptLspServer();
-      await server.handleMessage({ jsonrpc: "2.0", id: 1, method: "initialize", params: {} });
+      await server.handleMessage({
+        jsonrpc: "2.0",
+        id: 1,
+        method: "initialize",
+        params: {},
+      });
 
       const diagEvents: PublishDiagnosticsParams[] = [];
       server.on("diagnostics", (p) => diagEvents.push(p));
@@ -247,7 +398,12 @@ describe("FunScript LSP Server", () => {
 
     it("reports diagnostic for tabs indentation", async () => {
       const server = new FunScriptLspServer();
-      await server.handleMessage({ jsonrpc: "2.0", id: 1, method: "initialize", params: {} });
+      await server.handleMessage({
+        jsonrpc: "2.0",
+        id: 1,
+        method: "initialize",
+        params: {},
+      });
 
       const diagEvents: PublishDiagnosticsParams[] = [];
       server.on("diagnostics", (p) => diagEvents.push(p));
@@ -274,7 +430,12 @@ describe("FunScript LSP Server", () => {
 
     it("reports parser syntax errors with token positions", async () => {
       const server = new FunScriptLspServer();
-      await server.handleMessage({ jsonrpc: "2.0", id: 1, method: "initialize", params: {} });
+      await server.handleMessage({
+        jsonrpc: "2.0",
+        id: 1,
+        method: "initialize",
+        params: {},
+      });
 
       const diagEvents: PublishDiagnosticsParams[] = [];
       server.on("diagnostics", (p) => diagEvents.push(p));
@@ -300,7 +461,12 @@ describe("FunScript LSP Server", () => {
 
     it("updates diagnostics on textDocument/didChange (clearing errors when fixed)", async () => {
       const server = new FunScriptLspServer();
-      await server.handleMessage({ jsonrpc: "2.0", id: 1, method: "initialize", params: {} });
+      await server.handleMessage({
+        jsonrpc: "2.0",
+        id: 1,
+        method: "initialize",
+        params: {},
+      });
 
       const diagEvents: PublishDiagnosticsParams[] = [];
       server.on("diagnostics", (p) => diagEvents.push(p));
@@ -342,7 +508,12 @@ describe("FunScript LSP Server", () => {
 
     it("clears diagnostics and untracks document on textDocument/didClose", async () => {
       const server = new FunScriptLspServer();
-      await server.handleMessage({ jsonrpc: "2.0", id: 1, method: "initialize", params: {} });
+      await server.handleMessage({
+        jsonrpc: "2.0",
+        id: 1,
+        method: "initialize",
+        params: {},
+      });
 
       const diagEvents: PublishDiagnosticsParams[] = [];
       server.on("diagnostics", (p) => diagEvents.push(p));
@@ -379,7 +550,12 @@ describe("FunScript LSP Server", () => {
 
     it("tracks multiple open documents simultaneously", async () => {
       const server = new FunScriptLspServer();
-      await server.handleMessage({ jsonrpc: "2.0", id: 1, method: "initialize", params: {} });
+      await server.handleMessage({
+        jsonrpc: "2.0",
+        id: 1,
+        method: "initialize",
+        params: {},
+      });
 
       await server.handleMessage({
         jsonrpc: "2.0",
@@ -419,23 +595,38 @@ getUser = () ->
     user <- UserRepo.find("123")
 `.trim();
 
-      const diagnostics = validateFunScript(invalidEffectCode, "file:///test.fun");
+      const diagnostics = validateFunScript(
+        invalidEffectCode,
+        "file:///test.fun",
+      );
       expect(diagnostics).toHaveLength(1);
       expect(diagnostics[0].severity).toBe(DiagnosticSeverity.Error);
-      expect(diagnostics[0].message).toContain("Effect block must end with a return expression");
+      expect(diagnostics[0].message).toContain(
+        "Effect block must end with a return expression",
+      );
     });
 
     it("reports a missing brace at the end of an effect expression", () => {
-      const diagnostics = validateFunScript("result = effect {\n  user <- fetchUser()", "file:///test.fun");
+      const diagnostics = validateFunScript(
+        "result = effect {\n  user <- fetchUser()",
+        "file:///test.fun",
+      );
       expect(diagnostics).toHaveLength(1);
-      expect(diagnostics[0].message).toContain("Expected '}' to close effect block");
+      expect(diagnostics[0].message).toContain(
+        "Expected '}' to close effect block",
+      );
     });
   });
 
   describe("Document Formatting (textDocument/formatting)", () => {
     it("formats unformatted documents and returns a TextEdit replacing the whole document range", async () => {
       const server = new FunScriptLspServer();
-      await server.handleMessage({ jsonrpc: "2.0", id: 1, method: "initialize", params: {} });
+      await server.handleMessage({
+        jsonrpc: "2.0",
+        id: 1,
+        method: "initialize",
+        params: {},
+      });
 
       const uri = "file:///workspace/format-test.fun";
       const source = 'name = "Ada"\nage =   36\nisActive = true';
@@ -478,7 +669,12 @@ getUser = () ->
 
     it("formats functions and schemas conforming to FunScript formatting rules", async () => {
       const server = new FunScriptLspServer();
-      await server.handleMessage({ jsonrpc: "2.0", id: 1, method: "initialize", params: {} });
+      await server.handleMessage({
+        jsonrpc: "2.0",
+        id: 1,
+        method: "initialize",
+        params: {},
+      });
 
       const uri = "file:///workspace/schema.fun";
       const source = `
@@ -517,13 +713,18 @@ export greet = (user: User) ->
       expect(response.result).toHaveLength(1);
       const edit: TextEdit = response.result[0];
       expect(edit.newText).toBe(
-        'export schema User = {\n  id: String\n  name: String\n}\n\nexport greet = (user: User) ->\n  "Hello, {user.name}!"\n'
+        'export schema User = {\n  id: String\n  name: String\n}\n\nexport greet = (user: User) ->\n  "Hello, {user.name}!"\n',
       );
     });
 
     it("respects tabSize formatting option", async () => {
       const server = new FunScriptLspServer();
-      await server.handleMessage({ jsonrpc: "2.0", id: 1, method: "initialize", params: {} });
+      await server.handleMessage({
+        jsonrpc: "2.0",
+        id: 1,
+        method: "initialize",
+        params: {},
+      });
 
       const uri = "file:///workspace/indent.fun";
       const source = `
@@ -558,12 +759,19 @@ export schema Config = {
       expect(response.error).toBeUndefined();
       expect(response.result).toHaveLength(1);
       const edit: TextEdit = response.result[0];
-      expect(edit.newText).toBe('export schema Config = {\n    host: String\n}\n');
+      expect(edit.newText).toBe(
+        "export schema Config = {\n    host: String\n}\n",
+      );
     });
 
     it("returns null when formatting an unknown or unopened document", async () => {
       const server = new FunScriptLspServer();
-      await server.handleMessage({ jsonrpc: "2.0", id: 1, method: "initialize", params: {} });
+      await server.handleMessage({
+        jsonrpc: "2.0",
+        id: 1,
+        method: "initialize",
+        params: {},
+      });
 
       const response = (await server.handleMessage({
         jsonrpc: "2.0",
@@ -580,7 +788,12 @@ export schema Config = {
 
     it("returns null when formatting document with syntax errors", async () => {
       const server = new FunScriptLspServer();
-      await server.handleMessage({ jsonrpc: "2.0", id: 1, method: "initialize", params: {} });
+      await server.handleMessage({
+        jsonrpc: "2.0",
+        id: 1,
+        method: "initialize",
+        params: {},
+      });
 
       const uri = "file:///workspace/syntax-error.fun";
       await server.handleMessage({
@@ -611,29 +824,58 @@ export schema Config = {
 
     it("matches CLI formatting for .funx documents and declines partial ranges", async () => {
       const server = new FunScriptLspServer();
-      await server.handleMessage({ jsonrpc: "2.0", id: 1, method: "initialize", params: {} });
+      await server.handleMessage({
+        jsonrpc: "2.0",
+        id: 1,
+        method: "initialize",
+        params: {},
+      });
       const uri = "file:///workspace/message.funx";
       const source = `export Message = () => <p>Done!</p>`;
       await server.handleMessage({
-        jsonrpc: "2.0", method: "textDocument/didOpen",
-        params: { textDocument: { uri, languageId: "funscriptx", version: 1, text: source } },
+        jsonrpc: "2.0",
+        method: "textDocument/didOpen",
+        params: {
+          textDocument: {
+            uri,
+            languageId: "funscriptx",
+            version: 1,
+            text: source,
+          },
+        },
       });
-      const formatted = await server.handleMessage({
-        jsonrpc: "2.0", id: 51, method: "textDocument/formatting",
-        params: { textDocument: { uri }, options: { tabSize: 2, insertSpaces: true } },
-      }) as ResponseMessage;
-      expect(formatted.result[0].newText).toBe(format(source, { filename: "/workspace/message.funx" }));
+      const formatted = (await server.handleMessage({
+        jsonrpc: "2.0",
+        id: 51,
+        method: "textDocument/formatting",
+        params: {
+          textDocument: { uri },
+          options: { tabSize: 2, insertSpaces: true },
+        },
+      })) as ResponseMessage;
+      expect(formatted.result[0].newText).toBe(
+        format(source, { filename: "/workspace/message.funx" }),
+      );
 
       const partial = server.onRangeFormattingHandler({
-        textDocument: { uri }, options: { tabSize: 2, insertSpaces: true },
-        range: { start: { line: 0, character: 1 }, end: { line: 0, character: 4 } },
+        textDocument: { uri },
+        options: { tabSize: 2, insertSpaces: true },
+        range: {
+          start: { line: 0, character: 1 },
+          end: { line: 0, character: 4 },
+        },
       } as any);
       expect(partial).toBeNull();
     });
 
     it("returns empty array for empty documents", async () => {
       const server = new FunScriptLspServer();
-      await server.handleMessage({ jsonrpc: "2.0", id: 1, method: "initialize", params: {} });
+      await server.handleMessage({
+        jsonrpc: "2.0",
+        id: 1,
+        method: "initialize",
+        params: {},
+      });
 
       const uri = "file:///workspace/empty.fun";
       await server.handleMessage({
@@ -664,7 +906,12 @@ export schema Config = {
 
     it("formats modified document after textDocument/didChange", async () => {
       const server = new FunScriptLspServer();
-      await server.handleMessage({ jsonrpc: "2.0", id: 1, method: "initialize", params: {} });
+      await server.handleMessage({
+        jsonrpc: "2.0",
+        id: 1,
+        method: "initialize",
+        params: {},
+      });
 
       const uri = "file:///workspace/change-and-format.fun";
       await server.handleMessage({
@@ -707,7 +954,12 @@ export schema Config = {
   describe("Go to Definition (textDocument/definition)", () => {
     it("returns null when document is not open", async () => {
       const server = new FunScriptLspServer();
-      await server.handleMessage({ jsonrpc: "2.0", id: 1, method: "initialize", params: {} });
+      await server.handleMessage({
+        jsonrpc: "2.0",
+        id: 1,
+        method: "initialize",
+        params: {},
+      });
 
       const response = (await server.handleMessage({
         jsonrpc: "2.0",
@@ -725,14 +977,24 @@ export schema Config = {
 
     it("returns null for empty documents", async () => {
       const server = new FunScriptLspServer();
-      await server.handleMessage({ jsonrpc: "2.0", id: 1, method: "initialize", params: {} });
+      await server.handleMessage({
+        jsonrpc: "2.0",
+        id: 1,
+        method: "initialize",
+        params: {},
+      });
 
       const uri = "file:///empty.fun";
       await server.handleMessage({
         jsonrpc: "2.0",
         method: "textDocument/didOpen",
         params: {
-          textDocument: { uri, languageId: "funscript", version: 1, text: "   \n\n  " },
+          textDocument: {
+            uri,
+            languageId: "funscript",
+            version: 1,
+            text: "   \n\n  ",
+          },
         },
       });
 
@@ -751,14 +1013,24 @@ export schema Config = {
 
     it("returns null when cursor is on whitespace or non-identifier token", async () => {
       const server = new FunScriptLspServer();
-      await server.handleMessage({ jsonrpc: "2.0", id: 1, method: "initialize", params: {} });
+      await server.handleMessage({
+        jsonrpc: "2.0",
+        id: 1,
+        method: "initialize",
+        params: {},
+      });
 
       const uri = "file:///whitespace.fun";
       await server.handleMessage({
         jsonrpc: "2.0",
         method: "textDocument/didOpen",
         params: {
-          textDocument: { uri, languageId: "funscript", version: 1, text: "x = 42 + 10\n" },
+          textDocument: {
+            uri,
+            languageId: "funscript",
+            version: 1,
+            text: "x = 42 + 10\n",
+          },
         },
       });
 
@@ -783,14 +1055,24 @@ export schema Config = {
 
     it("returns null for undefined / unresolved identifiers", async () => {
       const server = new FunScriptLspServer();
-      await server.handleMessage({ jsonrpc: "2.0", id: 1, method: "initialize", params: {} });
+      await server.handleMessage({
+        jsonrpc: "2.0",
+        id: 1,
+        method: "initialize",
+        params: {},
+      });
 
       const uri = "file:///undefined.fun";
       await server.handleMessage({
         jsonrpc: "2.0",
         method: "textDocument/didOpen",
         params: {
-          textDocument: { uri, languageId: "funscript", version: 1, text: "y = unknownVariable + 1\n" },
+          textDocument: {
+            uri,
+            languageId: "funscript",
+            version: 1,
+            text: "y = unknownVariable + 1\n",
+          },
         },
       });
 
@@ -809,7 +1091,12 @@ export schema Config = {
 
     it("resolves function calls to top-level function declaration range", async () => {
       const server = new FunScriptLspServer();
-      await server.handleMessage({ jsonrpc: "2.0", id: 1, method: "initialize", params: {} });
+      await server.handleMessage({
+        jsonrpc: "2.0",
+        id: 1,
+        method: "initialize",
+        params: {},
+      });
 
       const uri = "file:///fn.fun";
       const source = [
@@ -821,7 +1108,12 @@ export schema Config = {
         jsonrpc: "2.0",
         method: "textDocument/didOpen",
         params: {
-          textDocument: { uri, languageId: "funscript", version: 1, text: source },
+          textDocument: {
+            uri,
+            languageId: "funscript",
+            version: 1,
+            text: source,
+          },
         },
       });
 
@@ -847,7 +1139,12 @@ export schema Config = {
 
     it("resolves function definition when cursor is directly on declaration identifier", async () => {
       const server = new FunScriptLspServer();
-      await server.handleMessage({ jsonrpc: "2.0", id: 1, method: "initialize", params: {} });
+      await server.handleMessage({
+        jsonrpc: "2.0",
+        id: 1,
+        method: "initialize",
+        params: {},
+      });
 
       const uri = "file:///fn-decl.fun";
       const source = "add = (a: Number, b: Number) -> a + b\n";
@@ -856,7 +1153,12 @@ export schema Config = {
         jsonrpc: "2.0",
         method: "textDocument/didOpen",
         params: {
-          textDocument: { uri, languageId: "funscript", version: 1, text: source },
+          textDocument: {
+            uri,
+            languageId: "funscript",
+            version: 1,
+            text: source,
+          },
         },
       });
 
@@ -882,7 +1184,12 @@ export schema Config = {
 
     it("resolves exported function declarations including the export statement range", async () => {
       const server = new FunScriptLspServer();
-      await server.handleMessage({ jsonrpc: "2.0", id: 1, method: "initialize", params: {} });
+      await server.handleMessage({
+        jsonrpc: "2.0",
+        id: 1,
+        method: "initialize",
+        params: {},
+      });
 
       const uri = "file:///export-fn.fun";
       const source = [
@@ -894,7 +1201,12 @@ export schema Config = {
         jsonrpc: "2.0",
         method: "textDocument/didOpen",
         params: {
-          textDocument: { uri, languageId: "funscript", version: 1, text: source },
+          textDocument: {
+            uri,
+            languageId: "funscript",
+            version: 1,
+            text: source,
+          },
         },
       });
 
@@ -920,7 +1232,12 @@ export schema Config = {
 
     it("resolves variable usages to top-level variable declaration range", async () => {
       const server = new FunScriptLspServer();
-      await server.handleMessage({ jsonrpc: "2.0", id: 1, method: "initialize", params: {} });
+      await server.handleMessage({
+        jsonrpc: "2.0",
+        id: 1,
+        method: "initialize",
+        params: {},
+      });
 
       const uri = "file:///var.fun";
       const source = "total = 42\nnext = total + 1\n";
@@ -929,7 +1246,12 @@ export schema Config = {
         jsonrpc: "2.0",
         method: "textDocument/didOpen",
         params: {
-          textDocument: { uri, languageId: "funscript", version: 1, text: source },
+          textDocument: {
+            uri,
+            languageId: "funscript",
+            version: 1,
+            text: source,
+          },
         },
       });
 
@@ -955,7 +1277,12 @@ export schema Config = {
 
     it("resolves function parameters inside function body", async () => {
       const server = new FunScriptLspServer();
-      await server.handleMessage({ jsonrpc: "2.0", id: 1, method: "initialize", params: {} });
+      await server.handleMessage({
+        jsonrpc: "2.0",
+        id: 1,
+        method: "initialize",
+        params: {},
+      });
 
       const uri = "file:///params.fun";
       const source = "double = (count: Number) -> count * 2\n";
@@ -964,7 +1291,12 @@ export schema Config = {
         jsonrpc: "2.0",
         method: "textDocument/didOpen",
         params: {
-          textDocument: { uri, languageId: "funscript", version: 1, text: source },
+          textDocument: {
+            uri,
+            languageId: "funscript",
+            version: 1,
+            text: source,
+          },
         },
       });
 
@@ -991,7 +1323,12 @@ export schema Config = {
 
     it("resolves local variable bindings inside block statements", async () => {
       const server = new FunScriptLspServer();
-      await server.handleMessage({ jsonrpc: "2.0", id: 1, method: "initialize", params: {} });
+      await server.handleMessage({
+        jsonrpc: "2.0",
+        id: 1,
+        method: "initialize",
+        params: {},
+      });
 
       const uri = "file:///block.fun";
       const source = [
@@ -1004,7 +1341,12 @@ export schema Config = {
         jsonrpc: "2.0",
         method: "textDocument/didOpen",
         params: {
-          textDocument: { uri, languageId: "funscript", version: 1, text: source },
+          textDocument: {
+            uri,
+            languageId: "funscript",
+            version: 1,
+            text: source,
+          },
         },
       });
 
@@ -1031,7 +1373,12 @@ export schema Config = {
 
     it("resolves type references to schema declaration range", async () => {
       const server = new FunScriptLspServer();
-      await server.handleMessage({ jsonrpc: "2.0", id: 1, method: "initialize", params: {} });
+      await server.handleMessage({
+        jsonrpc: "2.0",
+        id: 1,
+        method: "initialize",
+        params: {},
+      });
 
       const uri = "file:///schema.fun";
       const source = [
@@ -1046,7 +1393,12 @@ export schema Config = {
         jsonrpc: "2.0",
         method: "textDocument/didOpen",
         params: {
-          textDocument: { uri, languageId: "funscript", version: 1, text: source },
+          textDocument: {
+            uri,
+            languageId: "funscript",
+            version: 1,
+            text: source,
+          },
         },
       });
 
@@ -1072,7 +1424,12 @@ export schema Config = {
 
     it("resolves tagged union variant constructors to their variant declaration", async () => {
       const server = new FunScriptLspServer();
-      await server.handleMessage({ jsonrpc: "2.0", id: 1, method: "initialize", params: {} });
+      await server.handleMessage({
+        jsonrpc: "2.0",
+        id: 1,
+        method: "initialize",
+        params: {},
+      });
 
       const uri = "file:///variants.fun";
       const source = [
@@ -1086,7 +1443,12 @@ export schema Config = {
         jsonrpc: "2.0",
         method: "textDocument/didOpen",
         params: {
-          textDocument: { uri, languageId: "funscript", version: 1, text: source },
+          textDocument: {
+            uri,
+            languageId: "funscript",
+            version: 1,
+            text: source,
+          },
         },
       });
 
@@ -1112,7 +1474,12 @@ export schema Config = {
 
     it("resolves error declarations and service declarations", async () => {
       const server = new FunScriptLspServer();
-      await server.handleMessage({ jsonrpc: "2.0", id: 1, method: "initialize", params: {} });
+      await server.handleMessage({
+        jsonrpc: "2.0",
+        id: 1,
+        method: "initialize",
+        params: {},
+      });
 
       const uri = "file:///services.fun";
       const source = [
@@ -1126,7 +1493,12 @@ export schema Config = {
         jsonrpc: "2.0",
         method: "textDocument/didOpen",
         params: {
-          textDocument: { uri, languageId: "funscript", version: 1, text: source },
+          textDocument: {
+            uri,
+            languageId: "funscript",
+            version: 1,
+            text: source,
+          },
         },
       });
 
@@ -1167,7 +1539,12 @@ export schema Config = {
 
     it("resolves effect-bound variables inside effect block expressions", async () => {
       const server = new FunScriptLspServer();
-      await server.handleMessage({ jsonrpc: "2.0", id: 1, method: "initialize", params: {} });
+      await server.handleMessage({
+        jsonrpc: "2.0",
+        id: 1,
+        method: "initialize",
+        params: {},
+      });
 
       const uri = "file:///effect.fun";
       const source = [
@@ -1181,7 +1558,12 @@ export schema Config = {
         jsonrpc: "2.0",
         method: "textDocument/didOpen",
         params: {
-          textDocument: { uri, languageId: "funscript", version: 1, text: source },
+          textDocument: {
+            uri,
+            languageId: "funscript",
+            version: 1,
+            text: source,
+          },
         },
       });
 
@@ -1208,7 +1590,12 @@ export schema Config = {
 
     it("resolves pattern variables inside match expression arms", async () => {
       const server = new FunScriptLspServer();
-      await server.handleMessage({ jsonrpc: "2.0", id: 1, method: "initialize", params: {} });
+      await server.handleMessage({
+        jsonrpc: "2.0",
+        id: 1,
+        method: "initialize",
+        params: {},
+      });
 
       const uri = "file:///match.fun";
       const source = [
@@ -1222,7 +1609,12 @@ export schema Config = {
         jsonrpc: "2.0",
         method: "textDocument/didOpen",
         params: {
-          textDocument: { uri, languageId: "funscript", version: 1, text: source },
+          textDocument: {
+            uri,
+            languageId: "funscript",
+            version: 1,
+            text: source,
+          },
         },
       });
 
@@ -1248,7 +1640,12 @@ export schema Config = {
 
     it("resolves draft parameters inside mut block expressions", async () => {
       const server = new FunScriptLspServer();
-      await server.handleMessage({ jsonrpc: "2.0", id: 1, method: "initialize", params: {} });
+      await server.handleMessage({
+        jsonrpc: "2.0",
+        id: 1,
+        method: "initialize",
+        params: {},
+      });
 
       const uri = "file:///mut.fun";
       const source = [
@@ -1263,7 +1660,12 @@ export schema Config = {
         jsonrpc: "2.0",
         method: "textDocument/didOpen",
         params: {
-          textDocument: { uri, languageId: "funscript", version: 1, text: source },
+          textDocument: {
+            uri,
+            languageId: "funscript",
+            version: 1,
+            text: source,
+          },
         },
       });
 
@@ -1289,7 +1691,12 @@ export schema Config = {
 
     it("resolves imported specifiers to the import declaration", async () => {
       const server = new FunScriptLspServer();
-      await server.handleMessage({ jsonrpc: "2.0", id: 1, method: "initialize", params: {} });
+      await server.handleMessage({
+        jsonrpc: "2.0",
+        id: 1,
+        method: "initialize",
+        params: {},
+      });
 
       const uri = "file:///import.fun";
       const source = [
@@ -1301,7 +1708,12 @@ export schema Config = {
         jsonrpc: "2.0",
         method: "textDocument/didOpen",
         params: {
-          textDocument: { uri, languageId: "funscript", version: 1, text: source },
+          textDocument: {
+            uri,
+            languageId: "funscript",
+            version: 1,
+            text: source,
+          },
         },
       });
 
@@ -1327,14 +1739,24 @@ export schema Config = {
 
     it("updates definitions after document changes via textDocument/didChange", async () => {
       const server = new FunScriptLspServer();
-      await server.handleMessage({ jsonrpc: "2.0", id: 1, method: "initialize", params: {} });
+      await server.handleMessage({
+        jsonrpc: "2.0",
+        id: 1,
+        method: "initialize",
+        params: {},
+      });
 
       const uri = "file:///change.fun";
       await server.handleMessage({
         jsonrpc: "2.0",
         method: "textDocument/didOpen",
         params: {
-          textDocument: { uri, languageId: "funscript", version: 1, text: "foo = 10\nbar = foo\n" },
+          textDocument: {
+            uri,
+            languageId: "funscript",
+            version: 1,
+            text: "foo = 10\nbar = foo\n",
+          },
         },
       });
 
@@ -1390,7 +1812,12 @@ export schema Config = {
         jsonrpc: "2.0",
         method: "textDocument/didOpen",
         params: {
-          textDocument: { uri, languageId: "funscript", version: 1, text: source },
+          textDocument: {
+            uri,
+            languageId: "funscript",
+            version: 1,
+            text: source,
+          },
         },
       });
 
@@ -1428,7 +1855,12 @@ export schema Config = {
   describe("Hover Provider (textDocument/hover)", () => {
     it("returns null when document is not open", async () => {
       const server = new FunScriptLspServer();
-      await server.handleMessage({ jsonrpc: "2.0", id: 1, method: "initialize", params: {} });
+      await server.handleMessage({
+        jsonrpc: "2.0",
+        id: 1,
+        method: "initialize",
+        params: {},
+      });
 
       const response = (await server.handleMessage({
         jsonrpc: "2.0",
@@ -1446,14 +1878,24 @@ export schema Config = {
 
     it("returns null for empty documents", async () => {
       const server = new FunScriptLspServer();
-      await server.handleMessage({ jsonrpc: "2.0", id: 1, method: "initialize", params: {} });
+      await server.handleMessage({
+        jsonrpc: "2.0",
+        id: 1,
+        method: "initialize",
+        params: {},
+      });
 
       const uri = "file:///empty.fun";
       await server.handleMessage({
         jsonrpc: "2.0",
         method: "textDocument/didOpen",
         params: {
-          textDocument: { uri, languageId: "funscript", version: 1, text: "   \n  " },
+          textDocument: {
+            uri,
+            languageId: "funscript",
+            version: 1,
+            text: "   \n  ",
+          },
         },
       });
 
@@ -1472,14 +1914,24 @@ export schema Config = {
 
     it("returns null when cursor is on whitespace or undocumented user identifier", async () => {
       const server = new FunScriptLspServer();
-      await server.handleMessage({ jsonrpc: "2.0", id: 1, method: "initialize", params: {} });
+      await server.handleMessage({
+        jsonrpc: "2.0",
+        id: 1,
+        method: "initialize",
+        params: {},
+      });
 
       const uri = "file:///code.fun";
       await server.handleMessage({
         jsonrpc: "2.0",
         method: "textDocument/didOpen",
         params: {
-          textDocument: { uri, languageId: "funscript", version: 1, text: "myCustomVar = 123\n" },
+          textDocument: {
+            uri,
+            languageId: "funscript",
+            version: 1,
+            text: "myCustomVar = 123\n",
+          },
         },
       });
 
@@ -1510,7 +1962,12 @@ export schema Config = {
 
     it("returns rich Markdown hover documentation for language keywords (service, effect, match, mut)", async () => {
       const server = new FunScriptLspServer();
-      await server.handleMessage({ jsonrpc: "2.0", id: 1, method: "initialize", params: {} });
+      await server.handleMessage({
+        jsonrpc: "2.0",
+        id: 1,
+        method: "initialize",
+        params: {},
+      });
 
       const uri = "file:///keywords.fun";
       const text = [
@@ -1550,7 +2007,7 @@ export schema Config = {
       expect(serviceHover.contents).toEqual(
         expect.objectContaining({
           kind: MarkupKind.Markdown,
-        })
+        }),
       );
       expect((serviceHover.contents as any).value).toContain("Context.Service");
       expect((serviceHover.contents as any).value).toContain("```funscript");
@@ -1611,12 +2068,17 @@ export schema Config = {
 
     it("returns rich Markdown hover documentation for interop keywords (js, ts)", async () => {
       const server = new FunScriptLspServer();
-      await server.handleMessage({ jsonrpc: "2.0", id: 1, method: "initialize", params: {} });
+      await server.handleMessage({
+        jsonrpc: "2.0",
+        id: 1,
+        method: "initialize",
+        params: {},
+      });
 
       const uri = "file:///interop.fun";
       const text = [
         "schema Config = {",
-        "  options: ts \"Record<string, unknown>\"",
+        '  options: ts "Record<string, unknown>"',
         "}",
         "",
         "fetchData = (url: String) ->",
@@ -1644,7 +2106,9 @@ export schema Config = {
         },
       })) as ResponseMessage;
       const tsHover = tsRes.result as Hover;
-      expect((tsHover.contents as any).value).toContain("TypeScript type system escape hatch");
+      expect((tsHover.contents as any).value).toContain(
+        "TypeScript type system escape hatch",
+      );
 
       // Hover on 'js'
       const jsRes = (await server.handleMessage({
@@ -1657,15 +2121,23 @@ export schema Config = {
         },
       })) as ResponseMessage;
       const jsHover = jsRes.result as Hover;
-      expect((jsHover.contents as any).value).toContain("JavaScript and npm interop");
+      expect((jsHover.contents as any).value).toContain(
+        "JavaScript and npm interop",
+      );
     });
 
     it("returns rich Markdown hover documentation for primitives and built-in types", async () => {
       const server = new FunScriptLspServer();
-      await server.handleMessage({ jsonrpc: "2.0", id: 1, method: "initialize", params: {} });
+      await server.handleMessage({
+        jsonrpc: "2.0",
+        id: 1,
+        method: "initialize",
+        params: {},
+      });
 
       const uri = "file:///types.fun";
-      const text = "fn = (name: String, count: Number, flag: Boolean) -> Option<Array<String>>\n";
+      const text =
+        "fn = (name: String, count: Number, flag: Boolean) -> Option<Array<String>>\n";
 
       await server.handleMessage({
         jsonrpc: "2.0",
@@ -1686,7 +2158,9 @@ export schema Config = {
         },
       })) as ResponseMessage;
       const stringHover = stringRes.result as Hover;
-      expect((stringHover.contents as any).value).toContain("UTF-16 text string primitive");
+      expect((stringHover.contents as any).value).toContain(
+        "UTF-16 text string primitive",
+      );
 
       // Hover on 'Option'
       const optionRes = (await server.handleMessage({
@@ -1704,7 +2178,12 @@ export schema Config = {
 
     it("returns rich Markdown hover documentation for syntax operators (<- , |> , -> , ???)", async () => {
       const server = new FunScriptLspServer();
-      await server.handleMessage({ jsonrpc: "2.0", id: 1, method: "initialize", params: {} });
+      await server.handleMessage({
+        jsonrpc: "2.0",
+        id: 1,
+        method: "initialize",
+        params: {},
+      });
 
       const uri = "file:///operators.fun";
       const text = [
@@ -1782,7 +2261,12 @@ export schema Config = {
 
     it("returns rich Markdown hover documentation for Effect methods and Layer methods", async () => {
       const server = new FunScriptLspServer();
-      await server.handleMessage({ jsonrpc: "2.0", id: 1, method: "initialize", params: {} });
+      await server.handleMessage({
+        jsonrpc: "2.0",
+        id: 1,
+        method: "initialize",
+        params: {},
+      });
 
       const uri = "file:///effect-members.fun";
       const text = [
@@ -1838,12 +2322,19 @@ export schema Config = {
       })) as ResponseMessage;
       const layerSucceedHover = layerSucceedRes.result as Hover;
       expect(layerSucceedHover).toBeDefined();
-      expect((layerSucceedHover.contents as any).value).toContain("Layer.succeed");
+      expect((layerSucceedHover.contents as any).value).toContain(
+        "Layer.succeed",
+      );
     });
 
     it("returns helpful disallowed keyword explanation when hovering over banned keywords", async () => {
       const server = new FunScriptLspServer();
-      await server.handleMessage({ jsonrpc: "2.0", id: 1, method: "initialize", params: {} });
+      await server.handleMessage({
+        jsonrpc: "2.0",
+        id: 1,
+        method: "initialize",
+        params: {},
+      });
 
       const uri = "file:///banned.fun";
       const text = "let x = 10\nvar y = 20\nconst z = 30\n";
@@ -1868,12 +2359,19 @@ export schema Config = {
 
       const letHover = letRes.result as Hover;
       expect(letHover).toBeDefined();
-      expect((letHover.contents as any).value).toContain("FunScript has no 'let'");
+      expect((letHover.contents as any).value).toContain(
+        "FunScript has no 'let'",
+      );
     });
 
     it("resiliently provides hover documentation even in files with parse errors", async () => {
       const server = new FunScriptLspServer();
-      await server.handleMessage({ jsonrpc: "2.0", id: 1, method: "initialize", params: {} });
+      await server.handleMessage({
+        jsonrpc: "2.0",
+        id: 1,
+        method: "initialize",
+        params: {},
+      });
 
       const uri = "file:///syntax-error.fun";
       const text = "service BadService\n  !@#$ invalid syntax error\n";
@@ -1961,7 +2459,11 @@ export schema Config = {
       const received: any[] = [];
       reader.listen((msg) => received.push(msg));
 
-      const payload = JSON.stringify({ jsonrpc: "2.0", id: 7, method: "test/extraHeaders" });
+      const payload = JSON.stringify({
+        jsonrpc: "2.0",
+        id: 7,
+        method: "test/extraHeaders",
+      });
       const byteLength = Buffer.byteLength(payload, "utf-8");
       const messageWithHeaders = `Content-Type: application/vscode-jsonrpc; charset=utf-8\r\nContent-Length: ${byteLength}\r\n\r\n${payload}`;
 
@@ -1998,11 +2500,13 @@ export schema Config = {
         () => {
           expect(responses.some((r) => r.id === 1)).toBe(true);
         },
-        { timeout: 10000, interval: 50 }
+        { timeout: 10000, interval: 50 },
       );
 
       const initRes = responses.find((r) => r.id === 1);
-      expect(initRes.result.capabilities.textDocumentSync).toBe(TextDocumentSyncKind.Full);
+      expect(initRes.result.capabilities.textDocumentSync).toBe(
+        TextDocumentSyncKind.Full,
+      );
       expect(initRes.result.capabilities.documentFormattingProvider).toBe(true);
       expect(initRes.result.capabilities.definitionProvider).toBe(true);
       expect(initRes.result.capabilities.hoverProvider).toBe(true);
@@ -2025,15 +2529,21 @@ export schema Config = {
         () => {
           expect(
             responses.some(
-              (r) => r.method === "textDocument/publishDiagnostics" && r.params.diagnostics.length > 0
-            )
+              (r) =>
+                r.method === "textDocument/publishDiagnostics" &&
+                r.params.diagnostics.length > 0,
+            ),
           ).toBe(true);
         },
-        { timeout: 10000, interval: 50 }
+        { timeout: 10000, interval: 50 },
       );
 
-      const diagNotif = responses.find((r) => r.method === "textDocument/publishDiagnostics");
-      expect(diagNotif.params.diagnostics[0].message).toContain("FunScript has no 'let'");
+      const diagNotif = responses.find(
+        (r) => r.method === "textDocument/publishDiagnostics",
+      );
+      expect(diagNotif.params.diagnostics[0].message).toContain(
+        "FunScript has no 'let'",
+      );
 
       // 3. Open unformatted valid document and request formatting over stdio
       writer.write({
@@ -2068,7 +2578,7 @@ export schema Config = {
         () => {
           expect(responses.some((r) => r.id === 100)).toBe(true);
         },
-        { timeout: 10000, interval: 50 }
+        { timeout: 10000, interval: 50 },
       );
 
       const fmtRes = responses.find((r) => r.id === 100);
@@ -2103,7 +2613,7 @@ export schema Config = {
         () => {
           expect(responses.some((r) => r.id === 101)).toBe(true);
         },
-        { timeout: 10000, interval: 50 }
+        { timeout: 10000, interval: 50 },
       );
 
       const defRes = responses.find((r) => r.id === 101);
@@ -2139,9 +2649,12 @@ export schema Config = {
         },
       } as any);
 
-      await vi.waitFor(() => {
-        expect(responses.some((r) => r.id === 102)).toBe(true);
-      }, { timeout: 5000 });
+      await vi.waitFor(
+        () => {
+          expect(responses.some((r) => r.id === 102)).toBe(true);
+        },
+        { timeout: 5000 },
+      );
 
       const hoverRes = responses.find((r) => r.id === 102);
       expect(hoverRes.result).toBeDefined();
@@ -2158,7 +2671,7 @@ export schema Config = {
         () => {
           expect(responses.some((r) => r.id === 2)).toBe(true);
         },
-        { timeout: 10000, interval: 50 }
+        { timeout: 10000, interval: 50 },
       );
 
       // 4. Send exit
