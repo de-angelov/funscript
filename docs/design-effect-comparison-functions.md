@@ -81,5 +81,6 @@ match score
 
 Should implementation expose **both** `Type.lessThan(a, b)` direct calls and
 `a |> Type.lessThan(b)` data-last pipeline use, with one typed operation behind both
-forms? The recommendation is yes; approval of this choice is the sole design decision
-needed before implementation planning.
+forms? Approved by the user on 2026-10-30. All comparisons use the typed comparison
+methods supplied by Effect TS companion modules; do not add comparison-operator
+syntax. Arrows keep their established yield/return meaning.
