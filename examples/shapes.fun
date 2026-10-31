@@ -7,16 +7,16 @@ export schema Shape =
   | Circle(radius: Number)
   | Rect(width: Number, height: Number)
 
-export area = (shape: Shape) ->
+export area = (shape: Shape) =>
   match shape
-    | Circle(r) -> Math.PI * r * r
-    | Rect(w, h) -> w * h
+    | Circle(r) => Math.PI * r * r
+    | Rect(w, h) => w * h
 
-export describe = (shape: Shape) ->
+export describe = (shape: Shape) =>
   match shape
-    | Circle(r) when r |> greaterThan(10) -> "large circle ({r})"
-    | Circle(r) -> "circle ({r})"
-    | Rect(w, h) -> "rectangle {w}x{h}"
+    | Circle(r) when r |> Number.greaterThan(10) => "large circle ({r})"
+    | Circle(r) => "circle ({r})"
+    | Rect(w, h) => "rectangle {w}x{h}"
 
 export main =
   [Circle(2), Rect(3, 4), Circle(12)]

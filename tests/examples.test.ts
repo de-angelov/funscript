@@ -13,6 +13,18 @@ describe("Sample Applications & Real-World Programs", () => {
   const programsDir = path.resolve("programs");
   const examplesDir = path.resolve("examples");
 
+  describe("canonical showcase examples", () => {
+    for (const name of ["hello.fun", "shapes.fun", "todo-http.fun", "greeter-service.fun"]) {
+      it(`compiles ${name}`, async () => {
+        const examplePath = path.join(examplesDir, name);
+        const source = await fs.readFile(examplePath, "utf-8");
+        const res = await Effect.runPromise(compileString(source, examplePath));
+
+        expect(res.typescript).toBeDefined();
+      });
+    }
+  });
+
   describe("04-order-fulfillment.fun end-to-end showcase", () => {
     const programPath = path.join(programsDir, "04-order-fulfillment.fun");
     const examplePath = path.join(examplesDir, "order-fulfillment.fun");
