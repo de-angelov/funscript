@@ -38,6 +38,8 @@ import {
   type PrepareRenameParams,
   type RenameParams,
   type WorkspaceEdit,
+  type CodeActionParams,
+  type CodeAction,
   type DocumentSymbol,
   type SymbolInformation,
   type PrepareRenameResult,
@@ -99,7 +101,13 @@ export function toDiagnostic(error: any): Diagnostic {
     },
     severity: DiagnosticSeverity.Error,
     source: "funscript",
+    code: error?.code ?? (error?.constructor?.name === "LexerError" ? "FS_LEXER" : "FS_SYNTAX"),
     message: rawMessage,
+    data: {
+      primaryMessage: rawMessage,
+      explanation: "The FunScript source could not be parsed.",
+      suggestedAction: "Fix the highlighted syntax and validate the file again.",
+    },
   };
 }
 
@@ -239,6 +247,7 @@ export class FunScriptLspServer extends EventEmitter {
           resolveProvider: false,
           triggerCharacters: [".", "<"],
         },
+        codeActionProvider: true,
       },
       serverInfo: {
         name: "funscript-lsp",
@@ -355,6 +364,27 @@ export class FunScriptLspServer extends EventEmitter {
       return [edit];
     } catch {
       return null;
+    }
+  }
+
+  public onCodeActionHandler(params: CodeActionParams): CodeAction[] {
+    const uri = params?.textDocument?.uri;
+    const doc = uri ? this.documents.get(uri) : undefined;
+    if (!doc || !doc.text.trim()) return [];
+    try {
+      const formatted = format(doc.text, { filename: uri ? new URL(uri).pathname : undefined });
+      if (formatted === doc.text) return [];
+      const lines = doc.text.split("\n");
+      return [{
+        title: "Format document",
+        kind: "source",
+        edit: { changes: { [uri!]: [{
+          range: { start: { line: 0, character: 0 }, end: { line: lines.length - 1, character: lines.at(-1)!.length } },
+          newText: formatted,
+        }] } },
+      }];
+    } catch {
+      return [];
     }
   }
 
@@ -508,6 +538,10 @@ export class FunScriptLspServer extends EventEmitter {
         id: req.id,
         result,
       };
+    }
+
+    if (req.method === "textDocument/codeAction") {
+      return { jsonrpc: "2.0", id: req.id, result: this.onCodeActionHandler(req.params as CodeActionParams) };
     }
 
     if (req.method === "textDocument/definition") {
