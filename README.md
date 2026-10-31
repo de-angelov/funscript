@@ -27,6 +27,7 @@ FunScript is a _notation_ for that stack. It keeps Effect's semantics and ts-pat
 exhaustiveness, removes the ceremony, and compiles to TypeScript you can still read,
 debug, and eject from.
 
+<!-- prettier-ignore -->
 ```funscript
 export schema Shape =
   | Circle(radius: Number)
@@ -143,6 +144,8 @@ For CI checks and maintainer release steps, see [CI and npm release operations](
   using standard project tools such as Vite and Vitest.
 - **[docs/rejected-syntax.md](docs/rejected-syntax.md)** — the one-way surface: what the
   parser rejects, why, and the Effect-first replacement.
+- **[docs/llm-first-audit.md](docs/llm-first-audit.md)** — prioritized guidance gaps,
+  concrete examples, and independently tracked follow-up work.
 
 ## Examples
 
@@ -151,22 +154,28 @@ For CI checks and maintainer release steps, see [CI and npm release operations](
 - [examples/todo-http.fun](examples/todo-http.fun) — effect blocks, Schema, retry, layers.
 - [examples/greeter-service.fun](examples/greeter-service.fun) — services, dependency injection.
 
-## Planned repository layout
+## Repository layout
 
 ```
-packages/
-  compiler/         # lexer, parser, AST, emitter; the source-to-source core
-  vite-plugin/      # @funscript/vite, the default build/dev integration
-  formatter/        # canonical formatter
-  cli/              # funscript build / emit / check / fmt / run / repl / lsp
-  language-server/  # LSP built on the TypeScript language service
-  vscode/           # editor integration
-tests/
-  golden/           # .fun to .ts snapshots
-  runtime/          # compiled examples executed with Vitest
+src/
+  lexer/            # tokenization and layout
+  parser/           # FunScript and JSX parsing
+  emitter/          # TypeScript / TSX generation
+  compiler/         # static checking
+  formatter/        # source formatter and Prettier plugin
+  cli/              # build / emit / check / fmt / run / repl / lsp
+  lsp/              # language server features
+  plugins/          # Vite integration
+editors/vscode/     # VS Code extension
+tests/              # compiler, CLI, LSP, formatter, and example tests
+docs/               # language and tooling references
+examples/           # showcase programs and fixtures
 ```
 
-The current repository contains the design docs and examples only.
+The repository includes the compiler, CLI, formatter, Vite plugin, language server,
+VS Code extension, tests, documentation, and examples. The implementation is still in
+development; check the command table above and [tooling.md](docs/tooling.md) for the
+supported surface rather than assuming planned commands exist.
 
 ## Working name
 
