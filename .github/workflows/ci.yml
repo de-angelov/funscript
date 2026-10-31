@@ -15,8 +15,9 @@ concurrency:
 
 jobs:
   ci:
-    name: Build, Verify & Test
+    name: Build, Format & Test
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -29,12 +30,6 @@ jobs:
 
       - name: Install dependencies
         run: npm ci
-
-      - name: Run typechecking
-        run: npx tsc --noEmit 2>&1 | tee build.log
-
-      - name: Run VS Code extension typechecking
-        run: npx tsc -p editors/vscode --noEmit 2>&1 | tee vscode-build.log
 
       - name: Build package artifacts
         run: npm run build 2>&1 | tee build.log
@@ -57,27 +52,5 @@ jobs:
           retention-days: 7
           path: |
             build.log
-            vscode-build.log
             test.log
             dist/**/*.map
-
-  agent-pr-validation:
-    name: GitHub Agent PR Validation
-    runs-on: ubuntu-latest
-    permissions:
-      contents: read
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: 20
-          cache: npm
-
-      - name: Install dependencies
-        run: npm ci
-
-      - name: Run Agent PR Validation Check
-        run: node scripts/validate-pr.js

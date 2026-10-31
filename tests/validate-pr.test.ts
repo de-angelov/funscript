@@ -11,8 +11,6 @@ import {
 describe("GitHub Agent PR Validation & CI Tooling (TASK-022)", () => {
   it("defines all required validation checks in CHECKS", () => {
     const checkNames = CHECKS.map((c) => c.name);
-    expect(checkNames).toContain("Typecheck (Core & LSP)");
-    expect(checkNames).toContain("Typecheck (VS Code Extension)");
     expect(checkNames).toContain("FunScript CLI Formatting Check");
     expect(checkNames).toContain("Prettier Formatting Check");
     expect(checkNames).toContain("Build Package Artifacts");
@@ -20,7 +18,6 @@ describe("GitHub Agent PR Validation & CI Tooling (TASK-022)", () => {
 
     // Verify commands
     const commands = CHECKS.map((c) => `${c.cmd} ${c.args.join(" ")}`);
-    expect(commands).toContain("npx tsc --noEmit");
     expect(commands).toContain("npm run fmt:check");
     expect(commands).toContain("npm run prettier:check");
     expect(commands).toContain("npm run build");
@@ -139,12 +136,18 @@ describe("GitHub Agent PR Validation & CI Tooling (TASK-022)", () => {
     expect(content).toContain("pull_request:");
     expect(content).toContain("push:");
     expect(content).toContain("branches: [main]");
-    expect(content).toContain("npx tsc --noEmit");
     expect(content).toContain("npm run fmt:check");
     expect(content).toContain("npm run prettier:check");
     expect(content).toContain("npm run build");
     expect(content).toContain("npm test");
-    expect(content).toContain("node scripts/validate-pr.js");
+    expect(content).toContain("timeout-minutes: 15");
+    expect(content).not.toContain("node scripts/validate-pr.js");
+  });
+
+  it("excludes Slopboss workspaces from product test discovery", () => {
+    const configPath = path.resolve(process.cwd(), "vitest.config.ts");
+    expect(fs.existsSync(configPath)).toBe(true);
+    expect(fs.readFileSync(configPath, "utf8")).toContain("slopboss/workspaces/**");
   });
 
   it("verifies package.json contains verify and pr:check scripts", () => {

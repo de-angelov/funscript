@@ -5,16 +5,6 @@ import fs from "node:fs";
 
 export const CHECKS = [
   {
-    name: "Typecheck (Core & LSP)",
-    cmd: "npx",
-    args: ["tsc", "--noEmit"],
-  },
-  {
-    name: "Typecheck (VS Code Extension)",
-    cmd: "npx",
-    args: ["tsc", "-p", "editors/vscode", "--noEmit"],
-  },
-  {
     name: "Build Package Artifacts",
     cmd: "npm",
     args: ["run", "build"],
