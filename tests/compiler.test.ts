@@ -161,6 +161,13 @@ export getUser = (id: String) ->
     expect(res.typescript).toContain(`return user;`);
   });
 
+  it("compiles brace-delimited effects as pipeline expressions", async () => {
+    const res = await Effect.runPromise(compileString(`result = effect {\n  user <- fetchUser()\n  user |> summarize\n}`));
+    expect(res.typescript).toContain("Effect.gen(function* () {");
+    expect(res.typescript).toContain("const user = yield* fetchUser();");
+    expect(res.typescript).toContain("summarize");
+  });
+
   it("compiles when statements inside effect blocks", async () => {
     const code = `
 export earlyValue = (skip: Boolean) ->

@@ -29,6 +29,18 @@ describe("In-Memory Type-Checking (funscript check via TypeScript API)", () => {
   });
 
   describe("typeCheckSource unit checks", () => {
+    it("type-checks brace-delimited Effect expressions", async () => {
+      const result = await Effect.runPromise(typeCheckSource(`
+fetchValue = () -> Effect.succeed(42)
+export result: Effect<Number> = effect {
+  value <- fetchValue()
+  value + 1
+}
+`.trim(), "brace-effect.fun"));
+      expect(result.success).toBe(true);
+      expect(result.diagnostics).toHaveLength(0);
+    });
+
     it("passes cleanly on valid FunScript code with no diagnostics", async () => {
       const code = `
 export name: String = "Ada"

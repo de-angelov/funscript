@@ -424,6 +424,12 @@ getUser = () ->
       expect(diagnostics[0].severity).toBe(DiagnosticSeverity.Error);
       expect(diagnostics[0].message).toContain("Effect block must end with a return expression");
     });
+
+    it("reports a missing brace at the end of an effect expression", () => {
+      const diagnostics = validateFunScript("result = effect {\n  user <- fetchUser()", "file:///test.fun");
+      expect(diagnostics).toHaveLength(1);
+      expect(diagnostics[0].message).toContain("Expected '}' to close effect block");
+    });
   });
 
   describe("Document Formatting (textDocument/formatting)", () => {

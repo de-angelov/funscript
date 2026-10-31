@@ -556,6 +556,13 @@ grade = match
   });
 
   describe("Effect Blocks", () => {
+    it("parses a brace-delimited effect expression", () => {
+      const ast = parse(`result = effect {\n  user <- fetchUser()\n  user |> summarize\n}`);
+      const eff = (ast.body[0] as BindingDeclaration).init as EffectBlockExpression;
+      expect(eff.body[0].kind).toBe("EffectBindStatement");
+      expect(eff.finalExpression.kind).toBe("PipelineExpression");
+    });
+
     it("parses effect block with binds, discards, local bindings, and final return", () => {
       const ast = parse(`
 getUser = (id: String) -> effect

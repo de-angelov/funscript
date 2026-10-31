@@ -27,7 +27,7 @@ automatically discover `.fun` tests or start through a FunScript wrapper.
 
 ## Minimal command-line project
 
-In FunScript source, use `effect { ... }` for Effect sequencing. The existing
+In FunScript source, use brace-delimited `effect { ... }` as the canonical form for Effect sequencing. The existing
 indentation-based `effect` block remains compatible syntax; both forms compile through
 the same `Effect.gen` support.
 
