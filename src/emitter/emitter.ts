@@ -104,6 +104,7 @@ const EFFECT_COMPANION_METHODS = new Set([
   "catchTag",
   "catchAll",
   "catchSome",
+  "mapError",
   "provide",
   "provideService",
   "scoped",

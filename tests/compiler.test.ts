@@ -30,6 +30,16 @@ export res = 5 |> add(10, _)
     expect(res.typescript).toContain(`(__p) => add(10, __p)`);
   });
 
+  it("auto-resolves mapError as an Effect pipeline stage", async () => {
+    const code = `export safe = Effect.fail("network") |> mapError((reason) => "mapped")`;
+
+    const res = await Effect.runPromise(compileString(code));
+    expect(res.typescript).toContain(`Effect.mapError((reason) => "mapped")`);
+
+    const checked = await Effect.runPromise(typeCheckSource(code, "map-error.fun"));
+    expect(checked.success, checked.formattedOutput).toBe(true);
+  });
+
   it("compiles pipeline placeholder binary, member, unary, and logical expressions", async () => {
     const code = `
 export resAdd = 5 |> (_ + 1)
