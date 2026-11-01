@@ -599,7 +599,7 @@ export class Emitter {
         if (binding.typeAnnotation.kind === "ArrayTypeNode") return "Array";
         if (binding.typeAnnotation.kind === "TypeReferenceNode") {
           const module = binding.typeAnnotation.name.name;
-          if (module === "Option" || module === "Result" || module === "Chunk" || module === "Array" || module === "Schedule" || module === "Layer") return module;
+          if (module === "Option" || module === "Result" || module === "Chunk" || module === "Array" || module === "Schedule" || module === "Layer" || module === "Stream") return module;
         }
       }
       // Local bindings preserve enough AST to prove ordinary initializers even
@@ -613,7 +613,7 @@ export class Emitter {
       : undefined;
     if (companionSource) {
       const module = companionSource.name;
-      if (module === "Effect" || module === "Option" || module === "Result" || module === "Chunk" || module === "Array" || module === "Schedule" || module === "Layer") return module;
+      if (module === "Effect" || module === "Option" || module === "Result" || module === "Chunk" || module === "Array" || module === "Schedule" || module === "Layer" || module === "Stream") return module;
     }
     return undefined;
   }

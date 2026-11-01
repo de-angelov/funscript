@@ -10,7 +10,7 @@
  */
 export const EFFECT_PIPELINE_CATALOG_VERSION = "4.1.1";
 
-export type PipelineCompanionModule = "Array" | "Option" | "Result" | "Chunk" | "Effect" | "Schedule" | "Layer";
+export type PipelineCompanionModule = "Array" | "Option" | "Result" | "Chunk" | "Effect" | "Schedule" | "Layer" | "Stream";
 
 const entries = <const T extends readonly string[]>(...operations: T) => operations;
 
@@ -35,6 +35,11 @@ export const PIPELINE_COMPANION_CATALOG: Readonly<Record<PipelineCompanionModule
   Schedule: entries("addDelay", "concat", "concatResult", "map", "modifyDelay", "jittered", "passthrough", "tap", "upTo", "setInputType"),
   // Layer composition has environment semantics distinct from Effect.provide.
   Layer: entries("buildWithMemoMap", "build", "buildWithScope", "unwrap", "merge", "provide", "provideMerge", "flatMap", "tap", "tapError", "tapCause", "orDie", "catchTag", "catchCause", "fresh", "launch", "withSpan", "withParentSpan"),
+  // Stream operations are self transforms only. Constructors and `run*` / `to*`
+  // runners remain explicit because they terminate or escape the stream domain.
+  Stream: entries(
+    "transformPull", "transformPullBracket", "scoped", "map", "as", "mapBoth", "mapArray", "mapEffect", "flattenEffect", "mapArrayEffect", "result", "tap", "tapBoth", "tapSink", "flatMap", "switchMap", "flatten", "flattenArray", "drain", "drainFork", "repeat", "schedule", "timeout", "timeoutOrElse", "repeatElements", "forever", "flattenIterable", "flattenTake", "concat", "prepend", "merge", "mergeEffect", "mergeResult", "zip", "zipFlatten", "zipWithIndex", "zipWithNext", "zipWithPrevious", "zipWithPreviousAndNext", "filter", "filterMap", "filterEffect", "filterMapEffect", "partitionQueue", "partitionEffect", "partition", "when", "peel", "buffer", "bufferArray", "catchCause", "catchDefect", "tapCause", "tapError", "tapErrorTag", "tapDefect", "catchIf", "catchFilter", "catchTag", "catchTags", "catchReason", "catchReasons", "unwrapReason", "mapError", "catchCauseIf", "catchCauseFilter", "orElseIfEmpty", "orElseSucceed", "orDie", "ignore", "ignoreCause", "retry", "withExecutionPlan", "take", "limitBytes", "takeRight", "takeUntil", "takeUntilEffect", "takeWhile", "takeWhileFilter", "takeWhileEffect", "drop", "dropUntil", "dropUntilEffect", "dropWhile", "dropWhileFilter", "dropWhileEffect", "dropRight", "chunks", "rechunk", "sliding", "slidingSize", "split", "combine", "combineArray", "mapAccum", "mapAccumArray", "mapAccumEffect", "mapAccumArrayEffect", "scan", "scanEffect", "debounce", "throttleEffect", "throttle", "grouped", "groupedWithin", "groupBy", "groupByKey", "groupAdjacentBy", "transduce", "aggregate", "aggregateWithin", "broadcastN", "broadcast", "share", "pipeThroughChannel", "pipeThroughChannelOrFail", "pipeThrough", "collect", "accumulate", "changes", "changesWith", "changesWithEffect", "decodeText", "encodeText", "splitLines", "intersperse", "intersperseAffixes", "interleave", "interleaveWith", "interruptWhen", "haltWhen", "onExit", "onError", "onStart", "onFirst", "onEnd", "ensuring", "provide", "provideContext", "provideService", "provideServiceEffect", "updateContext", "updateService", "withSpan", "bind", "bindEffect", "bindTo",
+  ),
 };
 
 /** FunScript spellings retained while Effect v4 uses a renamed export. */
@@ -50,7 +55,7 @@ export const pipelineCompanionCandidates = (operation: string): PipelineCompanio
     );
 
 /** Modules considered separately because their pipeline semantics are broader. */
-export const DEFERRED_PIPELINE_COMPANION_MODULES = ["Stream", "Schema"] as const;
+export const DEFERRED_PIPELINE_COMPANION_MODULES = ["Schema"] as const;
 
 /** Effect 4 has no public Either module; Result is its supported equivalent. */
 export const UNAVAILABLE_PIPELINE_COMPANION_MODULES = ["Either"] as const;

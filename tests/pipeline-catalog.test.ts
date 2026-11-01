@@ -29,7 +29,7 @@ describe("pipeline companion catalog", () => {
         expect(namespace[operation], `${module}.${operation} must be a public Effect export`).toBeTypeOf("function");
         const declaration = exported.get(operation);
         expect(declaration, `${module}.${operation} must be declared`).toBeDefined();
-        expect(hasPipelineSignature(declaration!, declarationFile), `${module}.${operation} must retain a data-first or data-last pipeline signature`).toBe(true);
+        expect(hasPipelineSignature(declaration!, declarationFile, module), `${module}.${operation} must retain a data-first or data-last pipeline signature`).toBe(true);
       }
     }
   });
@@ -42,7 +42,7 @@ describe("pipeline companion catalog", () => {
   });
 });
 
-function hasPipelineSignature(declaration: ts.VariableDeclaration, sourceFile: ts.SourceFile): boolean {
+function hasPipelineSignature(declaration: ts.VariableDeclaration, sourceFile: ts.SourceFile, module: string): boolean {
   const acceptsSelf = (signature: ts.SignatureDeclarationBase): boolean =>
     signature.parameters.some((parameter) => parameter.name.getText(sourceFile) === "self");
   const callableAcceptsSelf = (type: ts.TypeNode | undefined): boolean => {
@@ -57,7 +57,7 @@ function hasPipelineSignature(declaration: ts.VariableDeclaration, sourceFile: t
   const type = declaration.type;
   if (!type) return false;
   if (callableAcceptsSelf(type)) return true;
-  // A small set of Effect APIs use a generic first argument constrained to
-  // Effect rather than naming it `self` (for example `forkDetach`).
-  return /\bEffect\b/.test(type.getText(sourceFile));
+  // Some APIs use a generic first argument constrained to their companion
+  // container rather than naming it `self` (for example Stream.flatten).
+  return new RegExp(`\\b${module}\\b`).test(type.getText(sourceFile));
 }

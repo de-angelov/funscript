@@ -57,6 +57,15 @@ export layer = Layer.empty |> fresh
     expect(checked.success, checked.formattedOutput).toBe(true);
   });
 
+  it("resolves Stream stages from a proven Stream source", async () => {
+    const source = `export values = Stream.succeed(1) |> map((value) => value + 1) |> flatMap((value) => Stream.succeed(value))`;
+    const result = await Effect.runPromise(compileString(source));
+    expect(result.typescript).toContain("Stream.map((value) => (value + 1))");
+    expect(result.typescript).toContain("Stream.flatMap((value) => Stream.succeed(value))");
+    const checked = await Effect.runPromise(typeCheckSource(source, "stream.fun"));
+    expect(checked.success, checked.formattedOutput).toBe(true);
+  });
+
   it("auto-resolves Effect operations, including names shared with Array, in Effect pipelines", async () => {
     const code = `
 export transformed =
