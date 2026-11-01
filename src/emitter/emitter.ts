@@ -67,75 +67,27 @@ import {
   JSXChild,
   JSXTagName,
 } from "../ast/types.js";
+import {
+  PIPELINE_COMPANION_CATALOG,
+  type PipelineCompanionModule,
+} from "./pipeline-catalog.js";
 
-const ARRAY_COMPANION_METHODS = new Set([
-  "map",
-  "filter",
-  "reduce",
-  "append",
-  "prepend",
-  "findFirst",
-  "findLast",
-  "filterMap",
-  "take",
-  "drop",
-  "sortBy",
-  "sortWith",
-  "join",
-  "length",
-  "head",
-  "tail",
-  "reverse",
-  "flatMap",
-  "flatten",
-  "zip",
-  "every",
-  "some",
-  "compact",
-  "dedupe",
-  "partition",
-  "groupBy",
-]);
+export interface EmitterOptions {
+  /** TypeScript-directed companion facts keyed by the pipeline source offset. */
+  pipelineCompanions?: ReadonlyMap<number, PipelineCompanionModule>;
+  /** Used only for the checker pre-pass, whose unresolved stage names are intentional. */
+  allowAmbiguousPipeline?: boolean;
+  /** Wrap pipeline sources so the checker can locate their exact inferred type. */
+  markPipelineSources?: boolean;
+}
 
-type CompanionModule = "Array" | "Effect" | "Option" | "Number" | "String" | "Duration" | "Struct";
+const ARRAY_COMPANION_METHODS = new Set(PIPELINE_COMPANION_CATALOG.Array);
+const EFFECT_COMPANION_METHODS = new Set(PIPELINE_COMPANION_CATALOG.Effect);
+const OPTION_COMPANION_METHODS = new Set(PIPELINE_COMPANION_CATALOG.Option);
+const RESULT_COMPANION_METHODS = new Set(PIPELINE_COMPANION_CATALOG.Result);
+const CHUNK_COMPANION_METHODS = new Set(PIPELINE_COMPANION_CATALOG.Chunk);
 
-// Effect exports that accept an Effect as their first argument or expose a
-// data-last overload. Keep this list aligned with the installed Effect API.
-// Names shared with another companion (for example `map` or `flatMap`) resolve
-// to Effect only when the pipeline source is known to produce an Effect.
-const EFFECT_COMPANION_METHODS = new Set([
-  "andThen", "as", "asSome", "asVoid", "awaitAllChildren", "bind", "bindTo",
-  "cached", "cachedInvalidateWithTTL", "cachedWithTTL", "catchCause", "catchCauseFilter",
-  "catchCauseIf", "catchDefect", "catchEager", "catchFilter", "catchIf", "catchNoSuchElement",
-  "catchReason", "catchReasons",
-  "orDie",
-  "catchTag",
-  "catchAll",
-  "catchSome",
-  "catchTags", "delay", "ensuring", "eventually", "exit", "filterMapOrElse", "filterMapOrFail",
-  "filterOrElse", "filterOrFail", "flatMap", "flatMapEager", "flatten", "flip", "forever",
-  "forkChild", "forkDetach", "forkIn", "head", "ignore", "ignoreCause", "interruptible",
-  "isFailure", "isSuccess", "linkSpans", "map", "mapBoth", "mapBothEager", "mapEager",
-  "mapError",
-  "mapErrorEager", "match", "matchCause", "matchCauseEager", "matchCauseEffect",
-  "matchCauseEffectEager", "matchEager", "matchEffect", "onError", "onErrorFilter", "onErrorIf",
-  "onExit", "onExitFilter", "onExitIf", "onExitPrimitive", "onInterrupt", "option", "orElseSucceed",
-  "provide", "provideContext", "provideService", "provideServiceEffect", "race", "raceFirst", "repeat",
-  "repeatOrElse", "replicate", "replicateEffect", "result", "retry", "retryOrElse", "sandbox",
-  "schedule", "scheduleFrom", "scoped", "setContext", "forkScoped", "tap", "tapCause", "tapCauseFilter",
-  "tapCauseIf", "tapDefect", "tapError", "tapErrorTag", "timed", "timeout", "timeoutOption",
-  "timeoutOrElse", "track", "trackDefects", "trackDuration", "trackErrors", "trackSuccesses",
-  "uninterruptible", "unwrapReason", "updateContext", "updateService", "when", "withErrorReporting",
-  "withParentSpan", "withSpan", "withSpanScoped", "zip", "zipWith",
-]);
-
-const OPTION_COMPANION_METHODS = new Set([
-  "getOrElse",
-  "getOrThrow",
-  "isSome",
-  "isNone",
-  "orElse",
-]);
+type CompanionModule = PipelineCompanionModule | "Number" | "String" | "Duration" | "Struct";
 
 const NUMBER_COMPANION_METHODS = new Set([
   "greaterThan",
@@ -163,6 +115,13 @@ const NUMBER_V4_MEMBER_RENAMES: Readonly<Record<string, string>> = {
 const STRING_COMPANION_METHODS = new Set(["trim", "trimStart", "trimEnd", "split", "lines", "toUpperCase", "toLowerCase"]);
 const RECORD_COMPANION_METHODS = new Set(["omit", "pick"]);
 const DURATION_COMPANION_METHODS = new Set(["seconds", "millis", "minutes", "hours", "days"]);
+
+class PipelineResolutionError extends Error {
+  constructor(message: string, readonly span: Expression["span"]) {
+    super(message);
+    this.name = "PipelineResolutionError";
+  }
+}
 
 const PRIMITIVE_TYPES: Readonly<Record<string, string>> = {
   String: "string",
@@ -206,11 +165,14 @@ export class Emitter {
   private needsJsInterop = false;
   private primitiveIdentifiers = new Set<string>();
   private currentPlaceholderParam: string | null = null;
+  private bindings = new Map<string, BindingDeclaration>();
 
   private declaredTypeNames = new Set<string>();
 
-  constructor(private program?: Program) {
-    for (const item of program?.body ?? []) {
+  constructor(private program?: Program, contextProgram?: Program, private options: EmitterOptions = {}) {
+    // Source-map emission renders declarations individually, but resolution
+    // still needs the bindings from the complete source program.
+    for (const item of (contextProgram ?? program)?.body ?? []) {
       const decl = item.kind === "ExportDeclaration" ? item.declaration : item;
       if (item.kind === "ImportDeclaration" && item.source.raw === '"effect"') {
         for (const spec of item.specifiers) this.userEffectBindings.add(spec.local.name);
@@ -221,6 +183,7 @@ export class Emitter {
       if (decl.kind === "SchemaDeclaration" || decl.kind === "ErrorDeclaration" || decl.kind === "ServiceDeclaration") {
         this.declaredTypeNames.add(decl.id.name);
       }
+      if (decl.kind === "BindingDeclaration") this.bindings.set(decl.id.name, decl);
     }
   }
 
@@ -581,7 +544,12 @@ export class Emitter {
 
     let preferredCompanion = this.inferPipelineCompanion(stages[0]);
     const emittedStages = stages.map((s, idx) => {
-      if (idx === 0) return this.emitExpression(s);
+      if (idx === 0) {
+        const emitted = this.emitExpression(s);
+        return this.options.markPipelineSources
+          ? `__funscriptPipelineSource(${s.span.start.offset}, ${emitted})`
+          : emitted;
+      }
 
       if (s.kind === "MutBlockExpression") {
         this.needsMutative = true;
@@ -589,6 +557,7 @@ export class Emitter {
       }
 
       // Auto-namespace resolution for pipeline stage callee
+      this.assertPipelineStageIsNotAmbiguous(s, preferredCompanion);
       const resolvedStage = this.resolvePipelineStage(s, preferredCompanion);
 
       // `js` runs an Effect and leaves the Effect pipeline domain.
@@ -615,9 +584,29 @@ export class Emitter {
   }
 
   private inferPipelineCompanion(source: Expression): CompanionModule | undefined {
+    const inferred = this.options.pipelineCompanions?.get(source.span.start.offset);
+    if (inferred) return inferred;
+    if (source.kind === "ArrayExpression") return "Array";
+    if (source.kind === "StringLiteral") return "String";
+    if (source.kind === "RecordExpression") return "Struct";
     if (source.kind === "EffectBlockExpression" || source.kind === "JsExpression") return "Effect";
-    if (source.kind === "CallExpression" && source.callee.kind === "MemberExpression" && source.callee.object.kind === "UpperIdentifier" && source.callee.object.name === "Effect") {
-      return "Effect";
+    if (source.kind === "Identifier") {
+      const binding = this.bindings.get(source.name);
+      if (binding?.typeAnnotation) {
+        if (binding.typeAnnotation.kind === "EffectTypeNode") return "Effect";
+        if (binding.typeAnnotation.kind === "ArrayTypeNode") return "Array";
+        if (binding.typeAnnotation.kind === "TypeReferenceNode") {
+          const module = binding.typeAnnotation.name.name;
+          if (module === "Option" || module === "Result" || module === "Chunk" || module === "Array") return module;
+        }
+      }
+      // Local bindings preserve enough AST to prove ordinary initializers even
+      // before the TypeScript checker handles imported values in the next pass.
+      if (binding && binding.init !== source) return this.inferPipelineCompanion(binding.init);
+    }
+    if (source.kind === "CallExpression" && source.callee.kind === "MemberExpression" && source.callee.object.kind === "UpperIdentifier") {
+      const module = source.callee.object.name;
+      if (module === "Effect" || module === "Option" || module === "Result" || module === "Chunk" || module === "Array") return module;
     }
     return undefined;
   }
@@ -692,8 +681,8 @@ export class Emitter {
       const obj = stage.callee.object;
       const prop = stage.callee.property;
       if (obj.kind === "UpperIdentifier") {
-        const companion = this.getCompanionModule(prop.name);
-        if (companion === obj.name) {
+        const companion = obj.name as CompanionModule;
+        if (this.isCompanionOperation(companion, prop.name)) {
           this.effectImports.add(companion);
           if (companion === "Struct" && (prop.name === "pick" || prop.name === "omit")) {
             return {
@@ -728,15 +717,48 @@ export class Emitter {
   }
 
   private getCompanionModule(name: string, preferredCompanion?: CompanionModule): CompanionModule | undefined {
-    if (preferredCompanion === "Effect" && EFFECT_COMPANION_METHODS.has(name)) return "Effect";
-    if (ARRAY_COMPANION_METHODS.has(name)) return "Array";
-    if (EFFECT_COMPANION_METHODS.has(name)) return "Effect";
-    if (OPTION_COMPANION_METHODS.has(name)) return "Option";
+    if (preferredCompanion && this.isCompanionOperation(preferredCompanion, name)) return preferredCompanion;
+    const candidates: CompanionModule[] = [];
+    if (ARRAY_COMPANION_METHODS.has(name)) candidates.push("Array");
+    if (EFFECT_COMPANION_METHODS.has(name)) candidates.push("Effect");
+    if (OPTION_COMPANION_METHODS.has(name)) candidates.push("Option");
+    if (RESULT_COMPANION_METHODS.has(name)) candidates.push("Result");
+    if (CHUNK_COMPANION_METHODS.has(name)) candidates.push("Chunk");
+    if (preferredCompanion && candidates.includes(preferredCompanion)) return preferredCompanion;
+    if (candidates.length === 1) return candidates[0];
+    // The caller turns an ambiguous core companion into a source diagnostic.
+    // Keeping the sentinel local avoids silently reintroducing priority order.
+    if (candidates.length > 1) return undefined;
     if (NUMBER_COMPANION_METHODS.has(name)) return "Number";
     if (STRING_COMPANION_METHODS.has(name)) return "String";
     if (RECORD_COMPANION_METHODS.has(name)) return "Struct";
     if (DURATION_COMPANION_METHODS.has(name)) return "Duration";
     return undefined;
+  }
+
+  private isCompanionOperation(module: CompanionModule, operation: string): boolean {
+    if (module === "Number") return NUMBER_COMPANION_METHODS.has(operation);
+    if (module === "String") return STRING_COMPANION_METHODS.has(operation);
+    if (module === "Struct") return RECORD_COMPANION_METHODS.has(operation);
+    if (module === "Duration") return DURATION_COMPANION_METHODS.has(operation);
+    return PIPELINE_COMPANION_CATALOG[module].includes(operation);
+  }
+
+  private assertPipelineStageIsNotAmbiguous(stage: Expression, preferredCompanion?: CompanionModule): void {
+    const name = stage.kind === "Identifier"
+      ? stage.name
+      : stage.kind === "CallExpression" && stage.callee.kind === "Identifier"
+      ? stage.callee.name
+      : undefined;
+    if (!name || preferredCompanion) return;
+    const candidates = (Object.keys(PIPELINE_COMPANION_CATALOG) as PipelineCompanionModule[])
+      .filter((module) => PIPELINE_COMPANION_CATALOG[module].includes(name));
+    if (candidates.length > 1 && !this.options.allowAmbiguousPipeline) {
+      throw new PipelineResolutionError(
+        `${name} is ambiguous for this pipeline; write ${candidates.map((module) => `${module}.${name}(...)`).join(" or ")}`,
+        stage.span,
+      );
+    }
   }
 
   private emitBinaryExpression(expr: BinaryExpression): string {

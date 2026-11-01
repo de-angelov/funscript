@@ -60,9 +60,39 @@ export transformed =
     expect(checked.success, checked.formattedOutput).toBe(true);
   });
 
-  it("preserves Array resolution for ambiguous bare operations outside Effect pipelines", async () => {
+  it("uses a proven array source to resolve an otherwise ambiguous bare operation", async () => {
     const res = await Effect.runPromise(compileString(`export values = [1, 2] |> map((value) => value + 1)`));
     expect(res.typescript).toContain(`Array.map((value) => (value + 1))`);
+  });
+
+  it("proves companion modules through local pipeline bindings", async () => {
+    const res = await Effect.runPromise(compileString(`
+export value = Option.some(1)
+export mapped = value |> map((item) => item + 1)
+`.trim()));
+    expect(res.typescript).toContain(`Option.map((item) => (item + 1))`);
+    const checked = await Effect.runPromise(typeCheckSource(`
+export value = Option.some(1)
+export mapped = value |> map((item) => item + 1)
+`.trim(), "option-binding.fun"));
+    expect(checked.success, checked.formattedOutput).toBe(true);
+  });
+
+  it("uses TypeScript inference for a pipeline source returned by a function", async () => {
+    const source = "export make = () => Option.some(1)\nexport mapped = make() |> map((item) => item + 1)";
+    const result = await Effect.runPromise(compileString(source, "function-result.fun"));
+    expect(result.typescript).toContain("Option.map((item) => (item + 1))");
+  });
+
+  it("uses TypeScript inference for an imported pipeline source", async () => {
+    const source = 'import { importedOption } from "./fixtures/pipeline-companion-source.js"\nexport mapped = importedOption |> map((item) => item + 1)';
+    const result = await Effect.runPromise(compileString(source, "tests/imported-pipeline.fun"));
+    expect(result.typescript).toContain("Option.map((item) => (item + 1))");
+  });
+
+  it("reports an actionable diagnostic for an unproven ambiguous bare operation", async () => {
+    await expect(Effect.runPromise(compileString(`export apply = (value) => value |> map((item) => item)`)))
+      .rejects.toThrow("map is ambiguous for this pipeline; write Array.map(...) or Option.map(...)");
   });
 
   it("compiles pipeline placeholder binary, member, unary, and logical expressions", async () => {

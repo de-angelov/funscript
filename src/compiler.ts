@@ -4,6 +4,7 @@ import ts from "typescript";
 import { Lexer, LexerError } from "./lexer/lexer.js";
 import { Parser, ParseError } from "./parser/parser.js";
 import { Emitter } from "./emitter/emitter.js";
+import { type PipelineCompanionModule } from "./emitter/pipeline-catalog.js";
 import { Program } from "./ast/types.js";
 import { FunScriptError } from "./errors.js";
 
@@ -31,6 +32,99 @@ export class CompilerError extends FunScriptError {
     super(message, span);
     this.name = "CompilerError";
   }
+}
+
+/**
+ * Finds the source type of every pipeline before final emission. The marker is
+ * an identity function, so TypeScript sees precisely the expression that will
+ * become the first argument to `pipe`, including imports and function calls.
+ */
+function inferPipelineCompanions(ast: Program, filename: string): ReadonlyMap<number, PipelineCompanionModule> {
+  const marked = new Emitter(ast, undefined, {
+    allowAmbiguousPipeline: true,
+    markPipelineSources: true,
+  }).emit();
+  if (!marked.includes("__funscriptPipelineSource(")) return new Map();
+
+  const virtualFile = filename.endsWith(".funx")
+    ? filename.slice(0, -5) + ".tsx"
+    : filename.endsWith(".fun")
+    ? filename.slice(0, -4) + ".ts"
+    : filename + ".ts";
+  // The provisional emitter deliberately leaves unresolved stages bare. Add
+  // companion imports here so source expressions such as `Option.some(...)`
+  // still receive their real TypeScript type during this analysis pass.
+  const source = `import { Array, Chunk, Effect, Option, Result } from "effect";\nconst __funscriptPipelineSource = <T>(_id: number, value: T): T => value;\n${marked}`;
+  const options: ts.CompilerOptions = {
+    strict: true,
+    target: ts.ScriptTarget.ES2022,
+    module: ts.ModuleKind.NodeNext,
+    moduleResolution: ts.ModuleResolutionKind.NodeNext,
+    skipLibCheck: true,
+    jsx: ts.JsxEmit.Preserve,
+  };
+  const host = ts.createCompilerHost(options, true);
+  const normalized = ts.sys.resolvePath(virtualFile);
+  const originalGetSourceFile = host.getSourceFile.bind(host);
+  host.getSourceFile = (fileName, languageVersion, onError, shouldCreateNewSourceFile) =>
+    ts.sys.resolvePath(fileName) === normalized
+      ? ts.createSourceFile(fileName, source, languageVersion, true)
+      : originalGetSourceFile(fileName, languageVersion, onError, shouldCreateNewSourceFile);
+  const originalReadFile = host.readFile.bind(host);
+  host.readFile = (fileName) => ts.sys.resolvePath(fileName) === normalized ? source : originalReadFile(fileName);
+  const originalFileExists = host.fileExists.bind(host);
+  host.fileExists = (fileName) => ts.sys.resolvePath(fileName) === normalized || originalFileExists(fileName);
+
+  const program = ts.createProgram({ rootNames: [virtualFile], options, host });
+  const sourceFile = program.getSourceFile(normalized) ?? program.getSourceFile(virtualFile);
+  if (!sourceFile) return new Map();
+  const checker = program.getTypeChecker();
+  const companions = new Map<number, PipelineCompanionModule>();
+
+  const companionForType = (type: ts.Type): PipelineCompanionModule | undefined => {
+    const printed = checker.typeToString(type);
+    if (/^Option(?:<|$)/.test(printed)) return "Option";
+    if (/^Result(?:<|$)/.test(printed)) return "Result";
+    if (/^Chunk(?:<|$)/.test(printed)) return "Chunk";
+    if (/^Effect(?:<|$)/.test(printed)) return "Effect";
+    if (type.isUnion()) {
+      const members = [...new Set(type.types.map(companionForType).filter((member): member is PipelineCompanionModule => Boolean(member)))];
+      return members.length === 1 ? members[0] : undefined;
+    }
+    if (type.flags & (ts.TypeFlags.Any | ts.TypeFlags.Unknown)) return undefined;
+    if (checker.isArrayType(type) || checker.isTupleType(type)) return "Array";
+    const symbol = type.aliasSymbol ?? type.getSymbol();
+    switch (symbol?.getName()) {
+      case "Option": return "Option";
+      case "Result": return "Result";
+      case "Chunk": return "Chunk";
+      case "Effect": return "Effect";
+      default: {
+        // Some Effect interfaces retain a concrete implementation symbol
+        // (for example `Some`) while printing as their public companion type.
+        if (/^Option(?:<|$)/.test(printed)) return "Option";
+        if (/^Result(?:<|$)/.test(printed)) return "Result";
+        if (/^Chunk(?:<|$)/.test(printed)) return "Chunk";
+        if (/^Effect(?:<|$)/.test(printed)) return "Effect";
+        return undefined;
+      }
+    }
+  };
+  const visit = (node: ts.Node): void => {
+    if (
+      ts.isCallExpression(node) &&
+      ts.isIdentifier(node.expression) &&
+      node.expression.text === "__funscriptPipelineSource" &&
+      node.arguments.length === 2 &&
+      ts.isNumericLiteral(node.arguments[0])
+    ) {
+      const companion = companionForType(checker.getTypeAtLocation(node.arguments[1]));
+      if (companion) companions.set(Number(node.arguments[0].text), companion);
+    }
+    ts.forEachChild(node, visit);
+  };
+  visit(sourceFile);
+  return companions;
 }
 
 /**
@@ -69,7 +163,7 @@ function applyJsInteropNullability(typescript: string, filename: string): string
     fileExists: (fileName) => ts.sys.resolvePath(fileName) === normalized || defaultHost.fileExists(fileName),
   };
   const program = ts.createProgram({ rootNames: [virtualFile], options: compilerOptions, host });
-  const sourceFile = program.getSourceFile(virtualFile);
+  const sourceFile = program.getSourceFile(normalized) ?? program.getSourceFile(virtualFile);
   if (!sourceFile) return typescript;
   const checker = program.getTypeChecker();
   const replacements: Array<{ start: number; end: number; value: "true" | "false" | '"unknown"' }> = [];
@@ -128,7 +222,8 @@ export const compileString = (
       const ast = parser.parse();
 
       // 3. Emit TypeScript
-      const emitter = new Emitter(ast);
+      const pipelineCompanions = inferPipelineCompanions(ast, filename);
+      const emitter = new Emitter(ast, undefined, { pipelineCompanions });
       const typescript = applyJsInteropNullability(emitter.emit(), filename);
       const targetExtension = filename.endsWith(".funx") ? ".tsx" : ".ts";
 
@@ -162,7 +257,11 @@ export const compileString = (
           for (let i = 0; i < ast.body.length; i++) {
             const decl = ast.body[i];
             const nextDecl = ast.body[i + 1];
-            const single = new Emitter({ kind: "Program", body: [decl], span: decl.span });
+            const single = new Emitter(
+              { kind: "Program", body: [decl], span: decl.span },
+              ast,
+              { pipelineCompanions },
+            );
             const singleOut = single.emit();
             const code = singleOut
               .split("\n")
