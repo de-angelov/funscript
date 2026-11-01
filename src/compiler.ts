@@ -54,7 +54,7 @@ function inferPipelineCompanions(ast: Program, filename: string): ReadonlyMap<nu
   // The provisional emitter deliberately leaves unresolved stages bare. Add
   // companion imports here so source expressions such as `Option.some(...)`
   // still receive their real TypeScript type during this analysis pass.
-  const source = `import { Array, Chunk, Effect, Layer, Option, Result, Schedule, Stream } from "effect";\nconst __funscriptPipelineSource = <T>(_id: number, value: T): T => value;\n${marked}`;
+  const source = `import { Array, Chunk, Effect, Layer, Option, Result, Schedule, Schema, Stream } from "effect";\nconst __funscriptPipelineSource = <T>(_id: number, value: T): T => value;\n${marked}`;
   const options: ts.CompilerOptions = {
     strict: true,
     target: ts.ScriptTarget.ES2022,
@@ -90,6 +90,7 @@ function inferPipelineCompanions(ast: Program, filename: string): ReadonlyMap<nu
     if (/^Schedule(?:<|$)/.test(printed)) return "Schedule";
     if (/^Layer(?:<|$)/.test(printed)) return "Layer";
     if (/^Stream(?:<|$)/.test(printed)) return "Stream";
+    if (/^Schema(?:<|$)/.test(printed)) return "Schema";
     if (type.isUnion()) {
       const members = [...new Set(type.types.map(companionForType).filter((member): member is PipelineCompanionModule => Boolean(member)))];
       return members.length === 1 ? members[0] : undefined;
@@ -112,6 +113,7 @@ function inferPipelineCompanions(ast: Program, filename: string): ReadonlyMap<nu
         if (/^Schedule(?:<|$)/.test(printed)) return "Schedule";
         if (/^Layer(?:<|$)/.test(printed)) return "Layer";
         if (/^Stream(?:<|$)/.test(printed)) return "Stream";
+        if (/^Schema(?:<|$)/.test(printed)) return "Schema";
         return undefined;
       }
     }

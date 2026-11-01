@@ -66,6 +66,14 @@ export layer = Layer.empty |> fresh
     expect(checked.success, checked.formattedOutput).toBe(true);
   });
 
+  it("resolves schema-to-schema combinators from a proven Schema source", async () => {
+    const source = `export Named = Schema.String |> annotate({ title: "Name" })`;
+    const result = await Effect.runPromise(compileString(source));
+    expect(result.typescript).toContain(`Schema.annotate({ title: "Name" })`);
+    const checked = await Effect.runPromise(typeCheckSource(source, "schema-pipeline.fun"));
+    expect(checked.success, checked.formattedOutput).toBe(true);
+  });
+
   it("auto-resolves Effect operations, including names shared with Array, in Effect pipelines", async () => {
     const code = `
 export transformed =
