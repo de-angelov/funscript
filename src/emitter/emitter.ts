@@ -187,6 +187,7 @@ export class Emitter {
   private needsTsPattern = false;
   private needsMutative = false;
   private needsReferenceEquality = false;
+  private needsJsInterop = false;
   private primitiveIdentifiers = new Set<string>();
   private currentPlaceholderParam: string | null = null;
 
@@ -231,6 +232,11 @@ export class Emitter {
     }
     if (this.needsReferenceEquality) {
       header += `const __funscriptReferenceEquals = <T extends object>(left: T, right: T): boolean => left === right;\n`;
+    }
+    if (this.needsJsInterop) {
+      header += `function __funscriptJs<A>(thunk: () => Promise<A>, nullable: true): Effect.Effect<Option.Option<NonNullable<A>>, unknown>;\n`;
+      header += `function __funscriptJs<A>(thunk: () => Promise<A>, nullable: false): Effect.Effect<A, unknown>;\n`;
+      header += `function __funscriptJs<A>(thunk: () => Promise<A>, nullable: boolean): Effect.Effect<A | Option.Option<NonNullable<A>>, unknown> {\n  const effect = Effect.tryPromise(thunk);\n  return nullable ? Effect.map(effect, Option.fromNullishOr) : effect;\n}\n`;
     }
 
     if (header.length > 0) {
@@ -494,11 +500,19 @@ export class Emitter {
       case "JSXSelfClosingElement":
         return this.emitJsxSelfClosingElement(expr);
       case "JsExpression":
-        this.effectImports.add("Effect");
-        return `Effect.tryPromise(() => ${this.emitExpression(expr.expression)})`;
+        return this.emitJsExpression(expr);
       case "TsEscapeExpression":
         return expr.code;
     }
+  }
+
+  private emitJsExpression(expr: JsExpression): string {
+    this.effectImports.add("Effect");
+    this.effectImports.add("Option");
+    this.needsJsInterop = true;
+    // compiler.ts replaces this provisional flag with the nullability inferred
+    // from the native TypeScript return type.
+    return `__funscriptJs(() => ${this.emitExpression(expr.expression)}, false)`;
   }
 
   private emitMemberProperty(expr: MemberExpression): string {
@@ -1031,8 +1045,7 @@ export class Emitter {
 
   private emitEffectCall(effectExpr: Expression): string {
     if (effectExpr.kind === "JsExpression") {
-      this.effectImports.add("Effect");
-      return `Effect.tryPromise(() => ${this.emitExpression(effectExpr.expression)})`;
+      return this.emitJsExpression(effectExpr);
     }
     // Check if this is a direct service call: Service.method(args)
     if (effectExpr.kind === "CallExpression" && effectExpr.callee.kind === "MemberExpression") {

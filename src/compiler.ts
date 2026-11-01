@@ -1,5 +1,6 @@
 import { Effect } from "effect";
 import MagicString, { type SourceMap } from "magic-string";
+import ts from "typescript";
 import { Lexer, LexerError } from "./lexer/lexer.js";
 import { Parser, ParseError } from "./parser/parser.js";
 import { Emitter } from "./emitter/emitter.js";
@@ -33,6 +34,74 @@ export class CompilerError extends FunScriptError {
 }
 
 /**
+ * Resolves the awaited TypeScript type of each generated js interop call. The
+ * emitter deliberately keeps its interface small: it always emits the same
+ * adapter and this pass supplies the one runtime fact that TypeScript erases —
+ * whether the resolved native value can be null or undefined.
+ */
+function applyJsInteropNullability(typescript: string, filename: string): string {
+  if (!typescript.includes("__funscriptJs(")) return typescript;
+
+  const virtualFile = filename.endsWith(".funx")
+    ? filename.slice(0, -5) + ".tsx"
+    : filename.endsWith(".fun")
+    ? filename.slice(0, -4) + ".ts"
+    : filename + ".ts";
+  const compilerOptions: ts.CompilerOptions = {
+    strict: true,
+    target: ts.ScriptTarget.ES2022,
+    module: ts.ModuleKind.NodeNext,
+    moduleResolution: ts.ModuleResolutionKind.NodeNext,
+    skipLibCheck: true,
+    jsx: ts.JsxEmit.Preserve,
+  };
+  const defaultHost = ts.createCompilerHost(compilerOptions, true);
+  const normalized = ts.sys.resolvePath(virtualFile);
+  const host: ts.CompilerHost = {
+    ...defaultHost,
+    getSourceFile: (fileName, languageVersion, onError, shouldCreateNewSourceFile) => {
+      if (ts.sys.resolvePath(fileName) === normalized) {
+        return ts.createSourceFile(fileName, typescript, languageVersion, true);
+      }
+      return defaultHost.getSourceFile(fileName, languageVersion, onError, shouldCreateNewSourceFile);
+    },
+    readFile: (fileName) => ts.sys.resolvePath(fileName) === normalized ? typescript : defaultHost.readFile(fileName),
+    fileExists: (fileName) => ts.sys.resolvePath(fileName) === normalized || defaultHost.fileExists(fileName),
+  };
+  const program = ts.createProgram({ rootNames: [virtualFile], options: compilerOptions, host });
+  const sourceFile = program.getSourceFile(virtualFile);
+  if (!sourceFile) return typescript;
+  const checker = program.getTypeChecker();
+  const replacements: Array<{ start: number; end: number; value: "true" | "false" }> = [];
+
+  const includesNullish = (type: ts.Type): boolean => {
+    if (type.isUnion()) return type.types.some(includesNullish);
+    return Boolean(type.flags & (ts.TypeFlags.Null | ts.TypeFlags.Undefined));
+  };
+  const visit = (node: ts.Node): void => {
+    if (
+      ts.isCallExpression(node) &&
+      ts.isIdentifier(node.expression) &&
+      node.expression.text === "__funscriptJs" &&
+      node.arguments.length === 2 &&
+      ts.isArrowFunction(node.arguments[0])
+    ) {
+      const returnType = checker.getTypeAtLocation(node.arguments[0].body);
+      const awaited = checker.getAwaitedType(returnType);
+      const flag = awaited && includesNullish(awaited) ? "true" : "false";
+      replacements.push({ start: node.arguments[1].getStart(sourceFile), end: node.arguments[1].getEnd(), value: flag });
+    }
+    ts.forEachChild(node, visit);
+  };
+  visit(sourceFile);
+
+  for (const replacement of replacements.sort((a, b) => b.start - a.start)) {
+    typescript = typescript.slice(0, replacement.start) + replacement.value + typescript.slice(replacement.end);
+  }
+  return typescript;
+}
+
+/**
  * Compiles FunScript source code directly to TypeScript code as an Effect.
  */
 export const compileString = (
@@ -52,7 +121,7 @@ export const compileString = (
 
       // 3. Emit TypeScript
       const emitter = new Emitter(ast);
-      const typescript = emitter.emit();
+      const typescript = applyJsInteropNullability(emitter.emit(), filename);
       const targetExtension = filename.endsWith(".funx") ? ".tsx" : ".ts";
 
       // 4. Source map generation using magic-string

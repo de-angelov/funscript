@@ -135,7 +135,9 @@ generated output, but not in idiomatic FunScript:
   local `export { ... }` without `from`.
 - **Formatting noise:** semicolons.
 
-Use `js` for JavaScript/Promise interop and `ts { ... }` for TypeScript escapes.
+Use `js` for JavaScript/Promise interop and `ts { ... }` for TypeScript escapes. `js`
+uses the resolved TypeScript type at that seam: a native `Promise<A | null | undefined>`
+becomes `Effect<Option<A>, Unknown>`, while `Promise<A>` becomes `Effect<A, Unknown>`.
 Raw TypeScript backtick blocks remain an explicit escape hatch. See §1.8. The complete rejected/replacement table is in
 [rejected-syntax.md](rejected-syntax.md).
 

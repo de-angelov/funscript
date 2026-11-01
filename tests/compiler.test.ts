@@ -104,12 +104,40 @@ export runPromiseTest = fetchUser("123") |> js
 `.trim();
 
     const res = await Effect.runPromise(compileString(code));
-    expect(res.typescript).toContain(`import { Effect, Schema, pipe } from "effect";`);
+      expect(res.typescript).toContain(`import { Effect, Option, Schema, pipe } from "effect";`);
     expect(res.typescript).toContain(`export const fetchUser = (id: string) => {`);
     expect(res.typescript).toContain(`id = Schema.decodeUnknownSync(Schema.String)(id);`);
-    expect(res.typescript).toContain(`const res = yield* Effect.tryPromise(() => fetch(("https://api.com/users/" + id)));`);
-    expect(res.typescript).toContain(`const payload = yield* Effect.tryPromise(() => res.json());`);
+      expect(res.typescript).toContain(`const res = yield* __funscriptJs(() => fetch(("https://api.com/users/" + id)), false);`);
+      expect(res.typescript).toContain(`const payload = yield* __funscriptJs(() => res.json(), false);`);
     expect(res.typescript).toContain(`Effect.runPromise`);
+  });
+
+  it("uses TypeScript return types to normalize nullable js results to Option", async () => {
+    const code = `
+ts {
+declare function nullableNative(): Promise<string | null | undefined>
+declare function requiredNative(): Promise<string>
+}
+
+export nullable = effect {
+  value <- js nullableNative()
+  value
+}
+
+export required = effect {
+  value <- js requiredNative()
+  value
+}
+`.trim();
+
+    const res = await Effect.runPromise(compileString(code, "native-interop.fun"));
+    expect(res.typescript).toContain('import { Effect, Option } from "effect";');
+    expect(res.typescript).toContain("__funscriptJs(() => nullableNative(), true)");
+    expect(res.typescript).toContain("__funscriptJs(() => requiredNative(), false)");
+    expect(res.typescript).toContain("Option.fromNullishOr");
+
+    const checked = await Effect.runPromise(typeCheckSource(code, "native-interop.fun"));
+    expect(checked.success, checked.formattedOutput).toBe(true);
   });
 
   it("compiles 'ts' keyword for TypeScript escape hatches", async () => {
