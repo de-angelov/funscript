@@ -32,9 +32,17 @@ export const PIPELINE_COMPANION_CATALOG: Readonly<Record<PipelineCompanionModule
   ),
 };
 
+/** FunScript spellings retained while Effect v4 uses a renamed export. */
+export const EFFECT_PIPELINE_COMPATIBILITY_ALIASES: Readonly<Record<string, string>> = {
+  catchAll: "catch",
+};
+
 export const pipelineCompanionCandidates = (operation: string): PipelineCompanionModule[] =>
   (Object.keys(PIPELINE_COMPANION_CATALOG) as PipelineCompanionModule[])
-    .filter((module) => PIPELINE_COMPANION_CATALOG[module].includes(operation));
+    .filter((module) =>
+      PIPELINE_COMPANION_CATALOG[module].includes(operation) ||
+      (module === "Effect" && operation in EFFECT_PIPELINE_COMPATIBILITY_ALIASES),
+    );
 
 /** Modules considered separately because their pipeline semantics are broader. */
 export const DEFERRED_PIPELINE_COMPANION_MODULES = ["Schedule", "Layer", "Stream", "Schema"] as const;

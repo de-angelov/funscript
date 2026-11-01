@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import * as EffectPackage from "effect";
 import {
   EFFECT_PIPELINE_CATALOG_VERSION,
+  EFFECT_PIPELINE_COMPATIBILITY_ALIASES,
   PIPELINE_COMPANION_CATALOG,
 } from "../src/emitter/pipeline-catalog.js";
 
@@ -18,6 +19,13 @@ describe("pipeline companion catalog", () => {
         expect(namespace[operation], `${module}.${operation} must be a public Effect export`).toBeTypeOf("function");
         expect(declarations, `${module}.${operation} must retain a data-last self overload`).toContain(`export declare const ${operation}`);
       }
+    }
+  });
+
+  it("keeps compatibility aliases mapped to public Effect exports", () => {
+    for (const [alias, target] of Object.entries(EFFECT_PIPELINE_COMPATIBILITY_ALIASES)) {
+      expect(alias).not.toBe(target);
+      expect(EffectPackage.Effect[target as keyof typeof EffectPackage.Effect]).toBeTypeOf("function");
     }
   });
 });

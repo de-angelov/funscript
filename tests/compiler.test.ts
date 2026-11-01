@@ -40,6 +40,11 @@ export res = 5 |> add(10, _)
     expect(checked.success, checked.formattedOutput).toBe(true);
   });
 
+  it("keeps Effect compatibility aliases available as bare Effect stages", async () => {
+    const result = await Effect.runPromise(compileString(`export recovered = Effect.fail("nope") |> catchAll(() => Effect.succeed("ok"))`));
+    expect(result.typescript).toContain(`Effect.catch(() => Effect.succeed("ok"))`);
+  });
+
   it("auto-resolves Effect operations, including names shared with Array, in Effect pipelines", async () => {
     const code = `
 export transformed =

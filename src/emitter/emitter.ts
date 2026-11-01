@@ -68,7 +68,9 @@ import {
   JSXTagName,
 } from "../ast/types.js";
 import {
+  EFFECT_PIPELINE_COMPATIBILITY_ALIASES,
   PIPELINE_COMPANION_CATALOG,
+  pipelineCompanionCandidates,
   type PipelineCompanionModule,
 } from "./pipeline-catalog.js";
 
@@ -101,7 +103,7 @@ const NUMBER_COMPANION_METHODS = new Set([
 ]);
 
 const EFFECT_V4_MEMBER_RENAMES: Readonly<Record<string, string>> = {
-  catchAll: "catch",
+  ...EFFECT_PIPELINE_COMPATIBILITY_ALIASES,
   fork: "forkChild",
 };
 
@@ -741,7 +743,8 @@ export class Emitter {
     if (module === "String") return STRING_COMPANION_METHODS.has(operation);
     if (module === "Struct") return RECORD_COMPANION_METHODS.has(operation);
     if (module === "Duration") return DURATION_COMPANION_METHODS.has(operation);
-    return PIPELINE_COMPANION_CATALOG[module].includes(operation);
+    return PIPELINE_COMPANION_CATALOG[module].includes(operation) ||
+      (module === "Effect" && operation in EFFECT_PIPELINE_COMPATIBILITY_ALIASES);
   }
 
   private assertPipelineStageIsNotAmbiguous(stage: Expression, preferredCompanion?: CompanionModule): void {
@@ -751,8 +754,7 @@ export class Emitter {
       ? stage.callee.name
       : undefined;
     if (!name || preferredCompanion) return;
-    const candidates = (Object.keys(PIPELINE_COMPANION_CATALOG) as PipelineCompanionModule[])
-      .filter((module) => PIPELINE_COMPANION_CATALOG[module].includes(name));
+    const candidates = pipelineCompanionCandidates(name);
     if (candidates.length > 1 && !this.options.allowAmbiguousPipeline) {
       throw new PipelineResolutionError(
         `${name} is ambiguous for this pipeline; write ${candidates.map((module) => `${module}.${name}(...)`).join(" or ")}`,
