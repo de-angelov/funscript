@@ -45,6 +45,18 @@ export res = 5 |> add(10, _)
     expect(result.typescript).toContain(`Effect.catch(() => Effect.succeed("ok"))`);
   });
 
+  it("resolves Schedule and Layer stages from their proven sources", async () => {
+    const source = `
+export schedule = Schedule.recurs(1) |> map((metadata) => metadata.output)
+export layer = Layer.empty |> fresh
+`.trim();
+    const result = await Effect.runPromise(compileString(source));
+    expect(result.typescript).toContain("Schedule.map((metadata) => metadata.output)");
+    expect(result.typescript).toContain("Layer.fresh");
+    const checked = await Effect.runPromise(typeCheckSource(source, "schedule-layer.fun"));
+    expect(checked.success, checked.formattedOutput).toBe(true);
+  });
+
   it("auto-resolves Effect operations, including names shared with Array, in Effect pipelines", async () => {
     const code = `
 export transformed =

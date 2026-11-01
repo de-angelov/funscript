@@ -599,16 +599,21 @@ export class Emitter {
         if (binding.typeAnnotation.kind === "ArrayTypeNode") return "Array";
         if (binding.typeAnnotation.kind === "TypeReferenceNode") {
           const module = binding.typeAnnotation.name.name;
-          if (module === "Option" || module === "Result" || module === "Chunk" || module === "Array") return module;
+          if (module === "Option" || module === "Result" || module === "Chunk" || module === "Array" || module === "Schedule" || module === "Layer") return module;
         }
       }
       // Local bindings preserve enough AST to prove ordinary initializers even
       // before the TypeScript checker handles imported values in the next pass.
       if (binding && binding.init !== source) return this.inferPipelineCompanion(binding.init);
     }
-    if (source.kind === "CallExpression" && source.callee.kind === "MemberExpression" && source.callee.object.kind === "UpperIdentifier") {
-      const module = source.callee.object.name;
-      if (module === "Effect" || module === "Option" || module === "Result" || module === "Chunk" || module === "Array") return module;
+    const companionSource = source.kind === "CallExpression" && source.callee.kind === "MemberExpression" && source.callee.object.kind === "UpperIdentifier"
+      ? source.callee.object
+      : source.kind === "MemberExpression" && source.object.kind === "UpperIdentifier"
+      ? source.object
+      : undefined;
+    if (companionSource) {
+      const module = companionSource.name;
+      if (module === "Effect" || module === "Option" || module === "Result" || module === "Chunk" || module === "Array" || module === "Schedule" || module === "Layer") return module;
     }
     return undefined;
   }

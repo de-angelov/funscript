@@ -10,7 +10,7 @@
  */
 export const EFFECT_PIPELINE_CATALOG_VERSION = "4.1.1";
 
-export type PipelineCompanionModule = "Array" | "Option" | "Result" | "Chunk" | "Effect";
+export type PipelineCompanionModule = "Array" | "Option" | "Result" | "Chunk" | "Effect" | "Schedule" | "Layer";
 
 const entries = <const T extends readonly string[]>(...operations: T) => operations;
 
@@ -30,6 +30,11 @@ export const PIPELINE_COMPANION_CATALOG: Readonly<Record<PipelineCompanionModule
   Effect: entries(
     "forEach", "head", "bindTo", "bind", "transposeOption", "flatMap", "flatten", "andThen", "tap", "result", "option", "exit", "map", "as", "asSome", "asVoid", "flip", "zip", "zipWith", "catchTag", "catchTags", "catchReason", "catchReasons", "unwrapReason", "catchCause", "catchDefect", "catchIf", "catchFilter", "catchNoSuchElement", "catchCauseIf", "catchCauseFilter", "mapError", "mapBoth", "orDie", "tapError", "tapErrorTag", "tapCause", "tapCauseIf", "tapCauseFilter", "tapDefect", "eventually", "retry", "retryOrElse", "sandbox", "ignore", "ignoreCause", "withErrorReporting", "orElseSucceed", "timeout", "timeoutOption", "timeoutOrElse", "delay", "timed", "race", "raceFirst", "filterOrElse", "filterMapOrElse", "filterOrFail", "filterMapOrFail", "when", "match", "matchEager", "matchCause", "matchCauseEager", "matchCauseEffectEager", "matchCauseEffect", "matchEffect", "provide", "provideContext", "setContext", "updateContext", "updateService", "provideService", "provideServiceEffect", "scoped", "ensuring", "onError", "onErrorIf", "onErrorFilter", "onExitPrimitive", "onExit", "onExitIf", "onExitFilter", "cached", "cachedWithTTL", "cachedInvalidateWithTTL", "interruptible", "onInterrupt", "uninterruptible", "forever", "repeat", "repeatOrElse", "replicate", "replicateEffect", "schedule", "scheduleFrom", "linkSpans", "withSpan", "withSpanScoped", "withParentSpan", "request", "requestUnsafe", "forkChild", "forkIn", "forkScoped", "forkDetach", "awaitAllChildren", "track", "trackSuccesses", "trackErrors", "trackDefects", "trackDuration", "mapEager", "mapErrorEager", "mapBothEager", "flatMapEager", "catchEager",
   ),
+  // Schedule transforms recurrence decisions; only Schedule self transforms
+  // participate in bare-stage resolution.
+  Schedule: entries("addDelay", "concat", "concatResult", "map", "modifyDelay", "jittered", "passthrough", "tap", "upTo", "setInputType"),
+  // Layer composition has environment semantics distinct from Effect.provide.
+  Layer: entries("buildWithMemoMap", "build", "buildWithScope", "unwrap", "merge", "provide", "provideMerge", "flatMap", "tap", "tapError", "tapCause", "orDie", "catchTag", "catchCause", "fresh", "launch", "withSpan", "withParentSpan"),
 };
 
 /** FunScript spellings retained while Effect v4 uses a renamed export. */
@@ -45,7 +50,7 @@ export const pipelineCompanionCandidates = (operation: string): PipelineCompanio
     );
 
 /** Modules considered separately because their pipeline semantics are broader. */
-export const DEFERRED_PIPELINE_COMPANION_MODULES = ["Schedule", "Layer", "Stream", "Schema"] as const;
+export const DEFERRED_PIPELINE_COMPANION_MODULES = ["Stream", "Schema"] as const;
 
 /** Effect 4 has no public Either module; Result is its supported equivalent. */
 export const UNAVAILABLE_PIPELINE_COMPANION_MODULES = ["Either"] as const;
