@@ -284,8 +284,12 @@ block
       expect(() => new Lexer("a !== b").tokenize()).toThrow(/'@!'/);
     });
 
+    it("rejects nullish coalescing in favor of Option", () => {
+      expect(() => new Lexer("value ?? fallback").tokenize()).toThrow(/model absence with Option/);
+    });
+
     it("tokenizes all multi-character operators", () => {
-      const code = `=> <- |> #= #! ** ?? ... ???`;
+      const code = `=> <- |> #= #! ** ... ???`;
       const lexer = new Lexer(code);
       const tokens = lexer.tokenize();
 
@@ -296,7 +300,6 @@ block
         TokenType.VALUE_EQ,
         TokenType.VALUE_NEQ,
         TokenType.STARSTAR,
-        TokenType.QUESTIONQUESTION,
         TokenType.DOTDOTDOT,
         TokenType.TYPED_HOLE,
         TokenType.EOF,

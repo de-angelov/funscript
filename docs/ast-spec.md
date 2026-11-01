@@ -186,7 +186,7 @@ export interface PipelineExpression extends NodeBase {
 
 export interface BinaryExpression extends NodeBase {
   kind: "BinaryExpression";
-  operator: "or" | "and" | "??" | "#=" | "#!" | "@=" | "@!" | "+" | "-" | "*" | "/" | "%" | "**";
+  operator: "or" | "and" | "#=" | "#!" | "@=" | "@!" | "+" | "-" | "*" | "/" | "%" | "**";
   left: Expression;
   right: Expression;
 }

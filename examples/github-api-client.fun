@@ -38,7 +38,7 @@ export const makeGithubApiError = (statusCode: number, message: string) =>
     status: number;
     headers?: Record<string, string>;
     json?: any;
-    message?: string;
+    message: string;
   }
 
   // Simulated REST API fetch client with deterministic test fixtures
@@ -46,6 +46,7 @@ export const makeGithubApiError = (statusCode: number, message: string) =>
     if (repoPath === "effect-ts/effect") {
       return {
         status: 200,
+        message: "",
         json: {
           id: 101,
           name: "effect",
@@ -60,6 +61,7 @@ export const makeGithubApiError = (statusCode: number, message: string) =>
     if (repoPath === "funscript/funscript") {
       return {
         status: 200,
+        message: "",
         json: {
           id: 202,
           name: "funscript",
@@ -74,6 +76,7 @@ export const makeGithubApiError = (statusCode: number, message: string) =>
     if (repoPath === "rate/limit") {
       return {
         status: 403,
+        message: "Rate limit exceeded",
         json: { resetTime: 1730000000, remaining: 0 }
       };
     }
@@ -97,7 +100,7 @@ export parseResponse = (repoPath: String, raw: ts { RawApiResponse }): ApiRespon
     | 200 => Success(raw.json |> Schema.decodeUnknownSync(Repository))
     | 403 => RateLimited(raw.json.resetTime, raw.json.remaining)
     | 404 => NotFound(repoPath)
-    | _ => ServerError(raw.status, raw.message ?? "Unknown error")
+    | _ => ServerError(raw.status, raw.message)
 
 // Pattern matching on ApiResponse variants
 export formatApiResponse = (res: ApiResponse) =>

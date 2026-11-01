@@ -149,8 +149,7 @@ export class Lexer {
         continue;
       }
       if (this.matchAhead("??")) {
-        this.emitToken(TokenType.QUESTIONQUESTION, "??", 2);
-        continue;
+        throw new LexerError(BANNED_SYMBOLS["??"], this.currentSpan(2));
       }
 
       // Strings

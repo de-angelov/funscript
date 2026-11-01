@@ -127,8 +127,8 @@ generated output, but not in idiomatic FunScript:
 - **Runtime reflection and mutation:** `typeof`, `instanceof`, `in`, `delete`, `eval`,
   `arguments`, `debugger`, `with`, `Object.assign`, and `Object.defineProperty`. Use
   `Schema.is(MySchema)`, `match`, and `{ ...x, a.b: 1 }` / `mut` instead. Type-level `typeof`
-  inside a raw TypeScript type is still allowed. Nullish operators (`??`, `?.`) are allowed
-  for interop; they do not introduce `null` or `undefined` literals.
+  inside a raw TypeScript type is still allowed. Convert nullable JavaScript values to `Option`
+  at an interop boundary rather than using nullish operators in FunScript.
 - **Other function forms:** `fn`, `function`, unparenthesized `x =>`, default
   parameters, rest parameters, point-free `>>`.
 - **CommonJS and export variants:** `require`, `module.exports`, `export default`,
@@ -591,13 +591,12 @@ From lowest to highest:
 | 1     | `\|>`                    | pipeline, left-associative                                                          |
 | 2     | `or`                     | logical or                                                                          |
 | 3     | `and`                    | logical and                                                                         |
-| 4     | `??`                     | nullish coalescing                                                                  |
-| 5     | `#=`, `#!`, `@=`, `@!` | value equality and reference identity; relational operators also compare primitives |
-| 6     | `+`, `-`                 | additive                                                                            |
-| 7     | `*`, `/`, `%`            | multiplicative                                                                      |
-| 8     | `**`                     | exponent, right-associative                                                         |
-| 9     | `not`, unary `-`         | prefix                                                                              |
-| 10    | call, member, index      | postfix                                                                             |
+| 4     | `#=`, `#!`, `@=`, `@!` | value equality and reference identity; relational operators also compare primitives |
+| 5     | `+`, `-`                 | additive                                                                            |
+| 6     | `*`, `/`, `%`            | multiplicative                                                                      |
+| 7     | `**`                     | exponent, right-associative                                                         |
+| 8     | `not`, unary `-`         | prefix                                                                              |
+| 9     | call, member, index      | postfix                                                                             |
 
 `match`, `effect`, functions, records, arrays, and literals are primary expressions.
 
@@ -651,18 +650,7 @@ match
 `&&`, `||`, and `!` are rejected. There is one spelling for each operator, and it reads
 like the logic it represents.
 
-### 4.4 Nullish and optional chaining
-
-```funscript
-city = user.address?.city ?? "Unknown"
-```
-
-These compile directly to JavaScript's `?.` and `??`. Mixing `??` with `and`/`or`
-requires parentheses, matching JavaScript's rule; the parser reports an error rather
-than guessing. They are an interop convenience for legacy nullable/optional fields; when
-absence is meaningful in FunScript domain types, use `Option`.
-
-### 4.5 No bitwise operators
+### 4.4 No bitwise operators
 
 There are no `&`, `|`, `^`, `<<`, `>>`, or `>>>` operators in V1.
 
@@ -2168,7 +2156,6 @@ pipeMatch      = "match" INDENT { matchArm } DEDENT ;
 mutStage       = "mut" "(" identifier ")" "=>" ( expression | block ) ;
 logicalOr      = logicalAnd { "or" logicalAnd } ;
 logicalAnd     = nullish { "and" nullish } ;
-nullish        = equality { "??" equality } ;
 equality       = comparison { ( "#=" | "#!" | "@=" | "@!" ) comparison } ;
 comparison     = additive { ( "<" | "<=" | ">" | ">=" ) additive } ;
 additive       = multiplicative { ( "+" | "-" ) multiplicative } ;

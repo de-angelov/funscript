@@ -548,7 +548,6 @@ visited =
     draft.visits = draft.visits + 1
     draft.address.city = "Paris"
 
-city = user.address?.city ?? "Unknown"
 
 numbers = [1, 2, 3, 4]
 
@@ -570,7 +569,6 @@ const visited = create(user, (draft) => {
   draft.visits = draft.visits + 1;
   draft.address.city = "Paris";
 });
-const city = user.address?.city ?? "unknown";
 const numbers = [1, 2, 3, 4];
 
 const squares = pipe(

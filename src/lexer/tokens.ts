@@ -60,7 +60,6 @@ export enum TokenType {
   COMMA = ",",
   DOT = ".",
   DOTDOTDOT = "...",
-  QUESTIONQUESTION = "??",
   LPAREN = "(",
   RPAREN = ")",
   LBRACE = "{",
@@ -146,6 +145,7 @@ export const BANNED_SYMBOLS: Record<string, string> = {
   "!=": "FunScript inequality uses '#!' for value inequality or '@!' for reference identity.",
   "===": "FunScript reference identity uses '@='.",
   "!==": "FunScript reference inequality uses '@!'.",
+  "??": "FunScript has no nullish coalescing; model absence with Option instead.",
 };
 
 // JSX token constants for direct imports

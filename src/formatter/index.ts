@@ -174,7 +174,6 @@ export function extractComments(source: string): Comment[] {
 const PRECEDENCE: Record<string, number> = {
   "or": 1,
   "and": 2,
-  "??": 3,
   "#=": 4,
   "#!": 4,
   "@=": 4,

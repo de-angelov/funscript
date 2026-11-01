@@ -758,27 +758,12 @@ export class Parser {
   }
 
   private parseLogicalAnd(): Expression {
-    let expr = this.parseNullishCoalescing();
-    while (this.match(TokenType.AND)) {
-      const right = this.parseNullishCoalescing();
-      expr = {
-        kind: "BinaryExpression",
-        operator: "and",
-        left: expr,
-        right,
-        span: { start: expr.span.start, end: right.span.end },
-      };
-    }
-    return expr;
-  }
-
-  private parseNullishCoalescing(): Expression {
     let expr = this.parseEquality();
-    while (this.match(TokenType.QUESTIONQUESTION)) {
+    while (this.match(TokenType.AND)) {
       const right = this.parseEquality();
       expr = {
         kind: "BinaryExpression",
-        operator: "??",
+        operator: "and",
         left: expr,
         right,
         span: { start: expr.span.start, end: right.span.end },
