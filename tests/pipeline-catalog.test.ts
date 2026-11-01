@@ -1,4 +1,5 @@
 import { readFile } from "node:fs/promises";
+import ts from "typescript";
 import { describe, expect, it } from "vitest";
 import * as EffectPackage from "effect";
 import {
@@ -14,10 +15,21 @@ describe("pipeline companion catalog", () => {
 
     for (const [module, operations] of Object.entries(PIPELINE_COMPANION_CATALOG)) {
       const namespace = EffectPackage[module as keyof typeof EffectPackage] as Record<string, unknown>;
-      const declarations = await readFile(`node_modules/effect/dist/${module}.d.ts`, "utf8");
+      const declarationPath = `node_modules/effect/dist/${module}.d.ts`;
+      const declarations = await readFile(declarationPath, "utf8");
+      const declarationFile = ts.createSourceFile(declarationPath, declarations, ts.ScriptTarget.Latest, true);
+      const exported = new Map<string, ts.VariableDeclaration>();
+      for (const statement of declarationFile.statements) {
+        if (!ts.isVariableStatement(statement) || !statement.modifiers?.some((modifier) => modifier.kind === ts.SyntaxKind.ExportKeyword)) continue;
+        for (const declaration of statement.declarationList.declarations) {
+          if (ts.isIdentifier(declaration.name)) exported.set(declaration.name.text, declaration);
+        }
+      }
       for (const operation of operations) {
         expect(namespace[operation], `${module}.${operation} must be a public Effect export`).toBeTypeOf("function");
-        expect(declarations, `${module}.${operation} must retain a data-last self overload`).toContain(`export declare const ${operation}`);
+        const declaration = exported.get(operation);
+        expect(declaration, `${module}.${operation} must be declared`).toBeDefined();
+        expect(hasPipelineSignature(declaration!, declarationFile), `${module}.${operation} must retain a data-first or data-last pipeline signature`).toBe(true);
       }
     }
   });
@@ -29,3 +41,23 @@ describe("pipeline companion catalog", () => {
     }
   });
 });
+
+function hasPipelineSignature(declaration: ts.VariableDeclaration, sourceFile: ts.SourceFile): boolean {
+  const acceptsSelf = (signature: ts.SignatureDeclarationBase): boolean =>
+    signature.parameters.some((parameter) => parameter.name.getText(sourceFile) === "self");
+  const callableAcceptsSelf = (type: ts.TypeNode | undefined): boolean => {
+    if (!type) return false;
+    if (ts.isFunctionTypeNode(type)) return acceptsSelf(type) || callableAcceptsSelf(type.type);
+    if (ts.isParenthesizedTypeNode(type)) return callableAcceptsSelf(type.type);
+    if (ts.isIntersectionTypeNode(type)) return type.types.some(callableAcceptsSelf);
+    return ts.isTypeLiteralNode(type) && type.members.some((member) =>
+      ts.isCallSignatureDeclaration(member) && (acceptsSelf(member) || callableAcceptsSelf(member.type)),
+    );
+  };
+  const type = declaration.type;
+  if (!type) return false;
+  if (callableAcceptsSelf(type)) return true;
+  // A small set of Effect APIs use a generic first argument constrained to
+  // Effect rather than naming it `self` (for example `forkDetach`).
+  return /\bEffect\b/.test(type.getText(sourceFile));
+}
