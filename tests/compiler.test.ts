@@ -138,10 +138,12 @@ export untrusted = effect {
 
     const res = await Effect.runPromise(compileString(code, "native-interop.fun"));
     expect(res.typescript).toContain('import { Effect, Option } from "effect";');
+    expect(res.typescript).toContain('class JsInteropError extends Error');
     expect(res.typescript).toContain("__funscriptJs(() => nullableNative(), true)");
     expect(res.typescript).toContain("__funscriptJs(() => requiredNative(), false)");
     expect(res.typescript).toContain('__funscriptJs(() => untrustedNative(), "unknown")');
     expect(res.typescript).toContain("Option.fromNullishOr");
+    expect(res.typescript).toContain("catch: (cause) => new JsInteropError(cause)");
 
     const checked = await Effect.runPromise(typeCheckSource(code, "native-interop.fun"));
     expect(checked.success, checked.formattedOutput).toBe(true);

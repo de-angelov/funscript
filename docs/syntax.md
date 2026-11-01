@@ -137,9 +137,11 @@ generated output, but not in idiomatic FunScript:
 
 Use `js` for JavaScript/Promise interop and `ts { ... }` for TypeScript escapes. `js`
 uses the resolved TypeScript type at that seam: a native `Promise<A | null | undefined>`
-becomes `Effect<Option<A>, Unknown>`, while `Promise<A>` becomes `Effect<A, Unknown>`.
-An `any`, `unknown`, or unresolved native result becomes `Effect<Option<Unknown>, Unknown>`;
+becomes `Effect<Option<A>, JsInteropError>`, while `Promise<A>` becomes `Effect<A, JsInteropError>`.
+An `any`, `unknown`, or unresolved native result becomes `Effect<Option<Unknown>, JsInteropError>`;
 callers must handle `None` and decode `Some` values with a schema before use.
+Native throws and Promise rejections become the typed `JsInteropError` channel, which callers
+can handle with `Effect.catchTag("JsInteropError", ...)` or map into an application error.
 Raw TypeScript backtick blocks remain an explicit escape hatch. See §1.8. The complete rejected/replacement table is in
 [rejected-syntax.md](rejected-syntax.md).
 

@@ -234,10 +234,11 @@ export class Emitter {
       header += `const __funscriptReferenceEquals = <T extends object>(left: T, right: T): boolean => left === right;\n`;
     }
     if (this.needsJsInterop) {
-      header += `function __funscriptJs<A>(thunk: () => Promise<A>, nullable: true): Effect.Effect<Option.Option<NonNullable<A>>, unknown>;\n`;
-      header += `function __funscriptJs<A>(thunk: () => Promise<A>, nullable: false): Effect.Effect<A, unknown>;\n`;
-      header += `function __funscriptJs<A>(thunk: () => Promise<A>, nullable: "unknown"): Effect.Effect<Option.Option<unknown>, unknown>;\n`;
-      header += `function __funscriptJs<A>(thunk: () => Promise<A>, nullable: boolean | "unknown"): Effect.Effect<A | Option.Option<NonNullable<A>> | Option.Option<unknown>, unknown> {\n  const effect = Effect.tryPromise(thunk);\n  return nullable === false ? effect : Effect.map(effect, Option.fromNullishOr);\n}\n`;
+      header += `class JsInteropError extends Error {\n  readonly _tag = "JsInteropError" as const;\n  readonly cause: unknown;\n  constructor(cause: unknown) {\n    super("Native JavaScript interop failed");\n    this.name = "JsInteropError";\n    this.cause = cause;\n  }\n}\n`;
+      header += `function __funscriptJs<A>(thunk: () => Promise<A>, nullable: true): Effect.Effect<Option.Option<NonNullable<A>>, JsInteropError>;\n`;
+      header += `function __funscriptJs<A>(thunk: () => Promise<A>, nullable: false): Effect.Effect<A, JsInteropError>;\n`;
+      header += `function __funscriptJs<A>(thunk: () => Promise<A>, nullable: "unknown"): Effect.Effect<Option.Option<unknown>, JsInteropError>;\n`;
+      header += `function __funscriptJs<A>(thunk: () => Promise<A>, nullable: boolean | "unknown"): Effect.Effect<A | Option.Option<NonNullable<A>> | Option.Option<unknown>, JsInteropError> {\n  const effect = Effect.tryPromise({ try: thunk, catch: (cause) => new JsInteropError(cause) });\n  return nullable === false ? effect : Effect.map(effect, Option.fromNullishOr);\n}\n`;
     }
 
     if (header.length > 0) {
