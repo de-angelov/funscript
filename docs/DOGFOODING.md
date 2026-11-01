@@ -7,7 +7,7 @@ This dogfooding exercise stress-tested FunScript across realistic, non-trivial a
 Three complete applications were built and verified:
 
 1. **GitHub REST API Client (`programs/05-github-api-client.fun` & `examples/github-api-client.fun`)**: REST API client leveraging foreign Promise interop via `js`, runtime JSON schema decoding via `Schema.Struct` and `Schema.decodeUnknownSync`, functional pipelines with `|>`, Effect tagged error declarations, and exhaustive pattern matching on response states (`Success`, `RateLimited`, `NotFound`, `ServerError`).
-2. **Markdown Task Manager CLI (`programs/06-markdown-task-manager.fun` & `examples/markdown-task-manager.fun`)**: Local task manager featuring Mutative `draft` state updates, Effect file system I/O, `when` early returns (`when (title == "") => ...`), conditional block execution (`when (idx != -1) { ... }`), and explicit returns (`=> expr`).
+2. **Markdown Task Manager CLI (`programs/06-markdown-task-manager.fun` & `examples/markdown-task-manager.fun`)**: Local task manager featuring Mutative `draft` state updates, Effect file system I/O, `when` early returns (`when (title #= "") => ...`), conditional block execution (`when (idx #! -1) { ... }`), and explicit returns (`=> expr`).
 3. **Reactive UI Widget Component (`programs/07-reactive-widget.funx` & `examples/reactive-widget.funx`)**: Native JSX component compiling to `.tsx`, typed props, tagged union view states, attribute string template interpolation (`className="widget-card variant-${props.variant}"`), child expressions, and conditional rendering.
 
 In addition to building and executing these applications, extensive stress testing uncovered **8 critical compiler/runtime edge cases and ergonomic friction points**, detailed below with minimal reproducible examples, analysis, and recommendations.
@@ -45,7 +45,7 @@ In addition to building and executing these applications, extensive stress testi
   - Typed props via `WidgetProps = { title: String, initialCount: Number, step: Number, min: Number, max: Number, variant: String }`.
   - Pattern matching directly returning JSX branches (`renderStatusBadge`).
   - JSX attribute template interpolation: `className="widget-card variant-${props.variant}"`.
-  - Conditional child rendering: `{props.initialCount == props.max and <p>Maximum boundary reached!</p>}`.
+  - Conditional child rendering: `{props.initialCount #= props.max and <p>Maximum boundary reached!</p>}`.
   - Event callback bindings (`onClick={() => Console.log(...)}`).
 
 ---
@@ -89,7 +89,7 @@ In addition to building and executing these applications, extensive stress testi
 - **Minimal Repro**:
   ```funscript
   main = effect
-    when (flag == true) => 0
+    when (flag #= true) => 0
     1
   ```
 - **Parser Error**: `Unexpected token 'when' (when) at line 2, col 3`.
@@ -98,7 +98,7 @@ In addition to building and executing these applications, extensive stress testi
 
 ---
 
-### Edge Case 4: Deep Structural Equality (`==`) on Schema Records vs Tagged Enums
+### Edge Case 4: Deep Structural Equality (`#=`) on Schema Records vs Tagged Enums
 
 - **Symptom**: Comparing two schema record instances with identical contents returns `false` at runtime.
 - **Minimal Repro**:
@@ -110,12 +110,12 @@ In addition to building and executing these applications, extensive stress testi
 
   p1: Point = { x: 1, y: 2 }
   p2: Point = { x: 1, y: 2 }
-  isEqual = p1 == p2
+  isEqual = p1 #= p2
   ```
 - **Emitted Code**: `Equal.equals(p1, p2)`.
 - **Runtime Value**: `false`.
 - **Root Cause**: FunScript record schemas emit plain JavaScript object literals `{ x: 1, y: 2 }`. Effect's `Equal.equals` only performs deep structural equality on objects implementing the `Equal.Equal` interface (symbols `Equal.symbol` and `Hash.symbol`, e.g. `Data.struct` or `Data.TaggedEnum`). Plain objects fall back to reference equality (`===`).
-- **Contrast**: `s1 = Active(1); s2 = Active(1); s1 == s2` correctly returns `true` because `Data.TaggedEnum` implements `Equal.Equal`.
+- **Contrast**: `s1 = Active(1); s2 = Active(1); s1 #= s2` correctly returns `true` because `Data.TaggedEnum` implements `Equal.Equal`.
 - **Recommendation**: When emitting RecordSchema instances or constructors, wrap record creation in `Data.struct(...)` so `Equal.equals` performs recursive structural comparison as intended by TECH.md.
 
 ---
@@ -216,7 +216,7 @@ In addition to building and executing these applications, extensive stress testi
 
 1. **Implement Relational Operators (`<`, `>`, `<=`, `>=`)**: Introduce `parseRelational` with grammar disambiguation so standard numeric and date comparisons can be written directly in expressions and `when` conditions.
 2. **Support `when` in `effect` Blocks**: Update `parseEffectBlock` to support `WhenStatement`, allowing early returns and conditional checks directly within effect workflows.
-3. **Enhance Record Schema Equality**: Emit `Data.struct(...)` for record schemas so that `==` evaluates structural equality recursively as specified in TECH.md.
+3. **Enhance Record Schema Equality**: Emit `Data.struct(...)` for record schemas so that `#=` evaluates structural equality recursively as specified in TECH.md.
 4. **Auto-Generate Factory Functions for Tagged Errors**: Emit `export const ErrorName = (fields) => new ErrorName$Class(fields)` for all `error` declarations.
 5. **Support Member and Index Assignment in Statements**: Expand assignment parsing to allow `target.prop = val` and `target[idx] = val` within mutable and `mut (draft)` scopes.
 6. **Fix `Array<T>` Schema Emission**: Map `Array<T>` to `Schema.Array(...)` in `emitSchemaTypeField`.

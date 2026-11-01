@@ -22,10 +22,10 @@ describe("FunScript Code Formatter", () => {
   });
 
   it("preserves JSX source and comments across repeated formatting", () => {
-    const source = `# greeting comment\nexport Message = (name: String) => <section class="message"><p>Hello, {name}!</p></section>`;
+    const source = `// greeting comment\nexport Message = (name: String) => <section class="message"><p>Hello, {name}!</p></section>`;
     const formatted = format(source, { filename: "message.funx" });
     expect(formatted).toContain('<section class="message">');
-    expect(formatted).toContain("# greeting comment");
+    expect(formatted).toContain("// greeting comment");
     expect(format(formatted, { filename: "message.funx" })).toBe(formatted);
   });
 
@@ -40,11 +40,11 @@ describe("FunScript Code Formatter", () => {
   it("normalizes indentation to 2 spaces", () => {
     const unformatted = `
 export greet = (name: String) =>
-    # greeting message
+    // greeting message
     "Hello, {name}!"
 `.trim();
     const formatted = format(unformatted);
-    expect(formatted).toBe(`export greet = (name: String) =>\n  # greeting message\n  "Hello, {name}!"\n`);
+    expect(formatted).toBe(`export greet = (name: String) =>\n  // greeting message\n  "Hello, {name}!"\n`);
     expect(format(formatted)).toBe(formatted);
   });
 
@@ -112,12 +112,12 @@ export classify = (shape: Shape) =>
 export checkNumber = (n: Number) =>
   match
       | n |> Number.lessThan(0) => "negative"
-      | n == 0 => "zero"
+      | n #= 0 => "zero"
       | _ => "positive"
 `.trim();
     const formatted = format(unformatted);
     expect(formatted).toBe(
-      `export checkNumber = (n: Number) =>\n  match\n    | n |> Number.lessThan(0) => "negative"\n    | n == 0 => "zero"\n    | _ => "positive"\n`
+      `export checkNumber = (n: Number) =>\n  match\n    | n |> Number.lessThan(0) => "negative"\n    | n #= 0 => "zero"\n    | _ => "positive"\n`
     );
     expect(format(formatted)).toBe(formatted);
   });
@@ -168,18 +168,18 @@ export appendTag = (p: Profile, tag: String) =>
     expect(format(formatted)).toBe(formatted);
   });
 
-  it("normalizes comments (#without-space => # with-space, indentation, trailing)", () => {
+  it("normalizes TypeScript-style comments, indentation, and trailing comments", () => {
     const unformatted = `
-#file header comment
-export x = 10 #trailing comment on x
+//file header comment
+export x = 10 //trailing comment on x
 
-#another section
+//another section
 export y = 20
 `.trim();
     const formatted = format(unformatted);
-    expect(formatted).toContain("# file header comment");
-    expect(formatted).toContain("export x = 10  # trailing comment on x");
-    expect(formatted).toContain("# another section");
+    expect(formatted).toContain("// file header comment");
+    expect(formatted).toContain("export x = 10  // trailing comment on x");
+    expect(formatted).toContain("// another section");
     expect(format(formatted)).toBe(formatted);
   });
 

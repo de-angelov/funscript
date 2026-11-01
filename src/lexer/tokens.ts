@@ -46,10 +46,10 @@ export enum TokenType {
   UNDERSCORE = "_",
   TYPED_HOLE = "???",
   EQ = "=",
-  EQEQ = "==",
-  EQEQEQ = "===",
-  NEQ = "!=",
-  NEQEQ = "!==",
+  VALUE_EQ = "#=",
+  VALUE_NEQ = "#!",
+  REF_EQ = "@=",
+  REF_NEQ = "@!",
   PLUS = "+",
   MINUS = "-",
   STAR = "*",
@@ -142,6 +142,10 @@ export const BANNED_SYMBOLS: Record<string, string> = {
   "&&": "FunScript logical AND is 'and'.",
   "||": "FunScript logical OR is 'or'.",
   "!": "FunScript logical NOT is 'not'.",
+  "==": "FunScript equality uses '#=' for value equality or '@=' for reference identity.",
+  "!=": "FunScript inequality uses '#!' for value inequality or '@!' for reference identity.",
+  "===": "FunScript reference identity uses '@='.",
+  "!==": "FunScript reference inequality uses '@!'.",
 };
 
 // JSX token constants for direct imports

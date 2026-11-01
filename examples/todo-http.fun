@@ -1,4 +1,4 @@
-# FunScript — effect blocks, `schema` declarations, record spread updates, retry, and layers.
+// FunScript — effect blocks, `schema` declarations, record spread updates, retry, and layers.
 
 import { Console, Effect, Schedule } from "effect"
 import { FetchHttpClient, HttpClient, HttpClientResponse } from "effect/http"

@@ -82,12 +82,6 @@ export class Lexer {
         continue;
       }
 
-      // Comments
-      if (char === "#") {
-        this.skipComment();
-        continue;
-      }
-
       // Banned multi-character operators check
       if (this.matchAhead("&&")) {
         throw new LexerError(BANNED_SYMBOLS["&&"], this.currentSpan(2));
@@ -96,15 +90,40 @@ export class Lexer {
         throw new LexerError(BANNED_SYMBOLS["||"], this.currentSpan(2));
       }
 
+      // Equality operators must precede comments: '#' starts a comment unless
+      // it is immediately followed by '=' or '!'.
+      if (this.matchAhead("#=")) {
+        this.emitToken(TokenType.VALUE_EQ, "#=", 2);
+        continue;
+      }
+      if (this.matchAhead("#!")) {
+        this.emitToken(TokenType.VALUE_NEQ, "#!", 2);
+        continue;
+      }
+      if (this.matchAhead("@=")) {
+        this.emitToken(TokenType.REF_EQ, "@=", 2);
+        continue;
+      }
+      if (this.matchAhead("@!")) {
+        this.emitToken(TokenType.REF_NEQ, "@!", 2);
+        continue;
+      }
+      if (this.matchAhead("===") || this.matchAhead("!==")) {
+        const op = this.source.slice(this.offset, this.offset + 3);
+        throw new LexerError(BANNED_SYMBOLS[op], this.currentSpan(3));
+      }
+      if (this.matchAhead("==") || this.matchAhead("!=")) {
+        const op = this.source.slice(this.offset, this.offset + 2);
+        throw new LexerError(BANNED_SYMBOLS[op], this.currentSpan(2));
+      }
+
+      // TypeScript-style line comments
+      if (this.matchAhead("//")) {
+        this.skipComment();
+        continue;
+      }
+
       // Multi-character operators
-      if (this.matchAhead("===")) {
-        this.emitToken(TokenType.EQEQEQ, "===", 3);
-        continue;
-      }
-      if (this.matchAhead("!==")) {
-        this.emitToken(TokenType.NEQEQ, "!==", 3);
-        continue;
-      }
       if (this.matchAhead("???")) {
         this.emitToken(TokenType.TYPED_HOLE, "???", 3);
         continue;
@@ -123,14 +142,6 @@ export class Lexer {
       }
       if (this.matchAhead("|>")) {
         this.emitToken(TokenType.PIPE, "|>", 2);
-        continue;
-      }
-      if (this.matchAhead("==")) {
-        this.emitToken(TokenType.EQEQ, "==", 2);
-        continue;
-      }
-      if (this.matchAhead("!=")) {
-        this.emitToken(TokenType.NEQ, "!=", 2);
         continue;
       }
       if (this.matchAhead("**")) {
@@ -290,8 +301,8 @@ export class Lexer {
       }
     }
 
-    // If entire line is blank or comment, ignore indentation
-    if (this.peek() === "\r" || this.peek() === "\n" || this.peek() === "#" || this.isAtEnd()) {
+    // If entire line is blank or a comment, ignore indentation.
+    if (this.peek() === "\r" || this.peek() === "\n" || this.matchAhead("//") || this.isAtEnd()) {
       this.atLineStart = false;
       return;
     }
@@ -792,7 +803,7 @@ export class Lexer {
     }
 
     // Comments within tags
-    if (char === "#") {
+    if (this.matchAhead("//")) {
       this.skipComment();
       return;
     }

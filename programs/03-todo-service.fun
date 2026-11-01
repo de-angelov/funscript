@@ -1,4 +1,4 @@
-# Program 03: Todo Service with Direct Service Calls and Layers
+// Program 03: Todo Service with Direct Service Calls and Layers
 
 import { Console, Effect, Layer, Array, pipe } from "effect"
 
@@ -16,7 +16,7 @@ export service TodoRepo
   complete: (id: Number) => Effect<Todo, TodoNotFound>
   all: () => Effect<Array<Todo>>
 
-# In-memory layer implementation using local store:
+// In-memory layer implementation using local store:
 mut store: ts { Todo[] } = []
 
 export TodoRepoLive =
@@ -30,9 +30,9 @@ export TodoRepoLive =
       }
 
     complete: (id) =>
-      idx = store.findIndex((t) => t.id == id)
+      idx = store.findIndex((t) => t.id #= id)
       match
-        | idx == -1 => Effect.fail(TodoNotFound({ id }))
+        | idx #= -1 => Effect.fail(TodoNotFound({ id }))
         | _ =>
             updated = { ...store[idx], completed: true }
             _ = replaceTodo(store, idx, updated)

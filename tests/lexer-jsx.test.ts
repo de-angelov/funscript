@@ -524,8 +524,8 @@ arr = [<li />, <li />]
     });
 
     it("handles comments inside JSX tags and expression containers", () => {
-      const code = `<div # tag comment
-  count={# expr comment
+      const code = `<div // tag comment
+  count={// expr comment
     42}
 >
   Hello

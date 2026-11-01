@@ -1,5 +1,5 @@
-# FunScript — hello world
-# Indentation, interpolation, pipelines, and an Effect entry point.
+// FunScript — hello world
+// Indentation, interpolation, pipelines, and an Effect entry point.
 
 import { Array, Console } from "effect"
 

@@ -1,14 +1,14 @@
-# Program 05: GitHub REST API Client & Response Handler
-# Demonstrates:
-# 1. Foreign Promise / fetch interop via 'js' in Effect blocks
-# 2. Schema decoding and validation with Schema.Struct & Schema.decodeUnknownSync
-# 3. Pipelines with '|>' for data transformation
-# 4. Error handling with Effect TaggedError
-# 5. Pattern matching on response states (Success, RateLimited, NotFound, ServerError)
+// Program 05: GitHub REST API Client & Response Handler
+// Demonstrates:
+// 1. Foreign Promise / fetch interop via 'js' in Effect blocks
+// 2. Schema decoding and validation with Schema.Struct & Schema.decodeUnknownSync
+// 3. Pipelines with '|>' for data transformation
+// 4. Error handling with Effect TaggedError
+// 5. Pattern matching on response states (Success, RateLimited, NotFound, ServerError)
 
 import { Console } from "effect"
 
-# --- Domain Data Model & Schemas ---
+// --- Domain Data Model & Schemas ---
 
 export schema Repository = {
   id: Number
@@ -26,10 +26,10 @@ export schema ApiResponse =
   | NotFound(repoName: String)
   | ServerError(statusCode: Number, message: String)
 
-# Effect TaggedError representation
+// Effect TaggedError representation
 export error GithubApiError(statusCode: Number, message: String)
 
-# TypeScript escape hatch for foreign fetch execution & error instantiation
+// TypeScript escape hatch for foreign fetch execution & error instantiation
 ts {
 export const makeGithubApiError = (statusCode: number, message: string) =>
     new GithubApiError({ statusCode, message });
@@ -90,7 +90,7 @@ export const makeGithubApiError = (statusCode: number, message: string) =>
   }
 }
 
-# --- Response Parsing & Pipelines ---
+// --- Response Parsing & Pipelines ---
 
 export parseResponse = (repoPath: String, raw: ts { RawApiResponse }): ApiResponse =>
   match raw.status
@@ -99,7 +99,7 @@ export parseResponse = (repoPath: String, raw: ts { RawApiResponse }): ApiRespon
     | 404 => NotFound(repoPath)
     | _ => ServerError(raw.status, raw.message ?? "Unknown error")
 
-# Pattern matching on ApiResponse variants
+// Pattern matching on ApiResponse variants
 export formatApiResponse = (res: ApiResponse) =>
   match res
     | Success(repo) =>
@@ -109,7 +109,7 @@ export formatApiResponse = (res: ApiResponse) =>
     | NotFound(repoName) =>
         "[404 Not Found] Repository '" + repoName + "' does not exist"
     | ServerError(statusCode, message) =>
-        # Client function using 'js' interop in Effect block
+        // Client function using 'js' interop in Effect block
         "[Error " + statusCode + "] " + message
 
 export fetchRepo = (repoPath: String) =>
@@ -120,29 +120,29 @@ export fetchRepo = (repoPath: String) =>
     parsed
   }
 
-# Summary formatter for a batch of repositories
+// Summary formatter for a batch of repositories
 export summarizeRepo = (repo: Repository) =>
   repo.fullName + " (⭐ " + repo.stargazersCount + " | 🍴 " + repo.forksCount + " | ⚠️ " + repo.openIssuesCount + ")"
 
-# --- Main Program Runner ---
+// --- Main Program Runner ---
 
 export main =
   effect {
     _ <- Console.log("=== GitHub API Client Dogfooding ===")
 
-    # 1. Fetch valid repository
+    // 1. Fetch valid repository
     r1 <- fetchRepo("effect-ts/effect")
     _ <- Console.log(formatApiResponse(r1))
 
-    # 2. Fetch second valid repository
+    // 2. Fetch second valid repository
     r2 <- fetchRepo("funscript/funscript")
     _ <- Console.log(formatApiResponse(r2))
 
-    # 3. Handle 403 Rate Limited response
+    // 3. Handle 403 Rate Limited response
     r3 <- fetchRepo("rate/limit")
     _ <- Console.log(formatApiResponse(r3))
 
-    # 4. Handle 404 Not Found response
+    // 4. Handle 404 Not Found response
     r4 <- fetchRepo("ghost/nonexistent")
     _ <- Console.log(formatApiResponse(r4))
 

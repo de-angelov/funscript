@@ -5,78 +5,78 @@ import { compileString, CompilerError } from "../src/compiler.js";
 import { format } from "../src/formatter/index.js";
 
 describe("Equality Type Constraints & Match Forms Test Suite Matrix (TASK-026)", () => {
-  describe("1. Reference Identity Type Constraints (=== and !==)", () => {
+  describe("1. Reference Identity Type Constraints (@= and @!)", () => {
     it("rejects reference equality on primitive number literals", async () => {
-      const code1 = "x = 1 === 2";
+      const code1 = "x = 1 @= 2";
       const failure1 = await Effect.runPromise(Effect.flip(compileString(code1)));
       expect(failure1).toBeInstanceOf(CompilerError);
-      expect(failure1.message).toContain("Reference identity operator '===' cannot be used with primitive types");
+      expect(failure1.message).toContain("Reference identity operator '@=' cannot be used with primitive values");
 
-      const code2 = "x = 10 !== 20";
+      const code2 = "x = 10 @! 20";
       const failure2 = await Effect.runPromise(Effect.flip(compileString(code2)));
       expect(failure2).toBeInstanceOf(CompilerError);
-      expect(failure2.message).toContain("Reference identity operator '!==' cannot be used with primitive types");
+      expect(failure2.message).toContain("Reference identity operator '@!' cannot be used with primitive values");
     });
 
     it("rejects reference equality on primitive string literals", async () => {
-      const code = 'res = "hello" === "world"';
+      const code = 'res = "hello" @= "world"';
       const failure = await Effect.runPromise(Effect.flip(compileString(code)));
       expect(failure).toBeInstanceOf(CompilerError);
-      expect(failure.message).toContain("Reference identity operator '===' cannot be used with primitive types");
+      expect(failure.message).toContain("Reference identity operator '@=' cannot be used with primitive values");
     });
 
     it("rejects reference equality on boolean literals", async () => {
-      const code = "res = true !== false";
+      const code = "res = true @! false";
       const failure = await Effect.runPromise(Effect.flip(compileString(code)));
       expect(failure).toBeInstanceOf(CompilerError);
-      expect(failure.message).toContain("Reference identity operator '!==' cannot be used with primitive types");
+      expect(failure.message).toContain("Reference identity operator '@!' cannot be used with primitive values");
     });
 
     it("rejects reference equality on expressions with primitive literals", async () => {
-      const code1 = "checkZero = (x) => x === 0";
+      const code1 = "checkZero = (x) => x @= 0";
       const failure1 = await Effect.runPromise(Effect.flip(compileString(code1)));
       expect(failure1).toBeInstanceOf(CompilerError);
-      expect(failure1.message).toContain("Reference identity operator '===' cannot be used with primitive types");
+      expect(failure1.message).toContain("Reference identity operator '@=' cannot be used with primitive values");
 
-      const code2 = 'checkEmpty = (x) => "" !== x';
+      const code2 = 'checkEmpty = (x) => "" @! x';
       const failure2 = await Effect.runPromise(Effect.flip(compileString(code2)));
       expect(failure2).toBeInstanceOf(CompilerError);
-      expect(failure2.message).toContain("Reference identity operator '!==' cannot be used with primitive types");
+      expect(failure2.message).toContain("Reference identity operator '@!' cannot be used with primitive values");
     });
 
     it("rejects reference equality on typed primitive variables", async () => {
       const code = `
 export fn checkNums(a: Number, b: Number) => Boolean {
-  => a === b
+  => a @= b
 }
 `.trim();
       const failure = await Effect.runPromise(Effect.flip(compileString(code)));
       expect(failure).toBeInstanceOf(CompilerError);
-      expect(failure.message).toContain("Reference identity operator '===' cannot be used with primitive types");
+      expect(failure.message).toContain("Reference identity operator '@=' cannot be used with primitive values");
     });
 
     it("allows reference equality on reference objects, schemas, and untyped parameters", async () => {
       const code = `
 schema Point = { x: Number, y: Number }
-export checkPointRef = (p1: Point, p2: Point) => p1 === p2
-export checkPointRefNeq = (p1: Point, p2: Point) => p1 !== p2
-export checkGeneric = (a, b) => a === b
+export checkPointRef = (p1: Point, p2: Point) => p1 @= p2
+export checkPointRefNeq = (p1: Point, p2: Point) => p1 @! p2
+export checkGeneric = (a, b) => a @= b
 `.trim();
       const res = await Effect.runPromise(compileString(code));
-      expect(res.typescript).toContain("(p1 === p2)");
-      expect(res.typescript).toContain("(p1 !== p2)");
-      expect(res.typescript).toContain("(a === b)");
+      expect(res.typescript).toContain("__funscriptReferenceEquals(p1, p2)");
+      expect(res.typescript).toContain("(!__funscriptReferenceEquals(p1, p2))");
+      expect(res.typescript).toContain("__funscriptReferenceEquals(a, b)");
     });
   });
 
-  describe("2. Structural Equality '==' Semantics across Schemas, , & Tagged Unions", () => {
+  describe("2. Structural Equality '#=' Semantics across Schemas, , & Tagged Unions", () => {
     it("lowers nested schema equality to Effect's Equal.equals", async () => {
       const code = `
 schema Geo = { lat: Number, lng: Number }
 schema Venue = { name: String, location: Geo }
 
-export compareVenues = (v1: Venue, v2: Venue) => v1 == v2
-export compareVenuesNeq = (v1: Venue, v2: Venue) => v1 != v2
+export compareVenues = (v1: Venue, v2: Venue) => v1 #= v2
+export compareVenuesNeq = (v1: Venue, v2: Venue) => v1 #! v2
 `.trim();
       const res = await Effect.runPromise(compileString(code));
       expect(res.typescript).toContain('import { Equal, Schema } from "effect";');

@@ -1,4 +1,4 @@
-# Fixture 03: Schemas and Tagged Unions
+// Fixture 03: Schemas and Tagged Unions
 
 import { Option } from "effect"
 

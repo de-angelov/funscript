@@ -186,6 +186,7 @@ export class Emitter {
   private effectModuleBindings = new Set<string>();
   private needsTsPattern = false;
   private needsMutative = false;
+  private needsReferenceEquality = false;
   private primitiveIdentifiers = new Set<string>();
   private currentPlaceholderParam: string | null = null;
 
@@ -227,6 +228,9 @@ export class Emitter {
     }
     if (this.needsMutative) {
       header += `import { create } from "mutative";\n`;
+    }
+    if (this.needsReferenceEquality) {
+      header += `const __funscriptReferenceEquals = <T extends object>(left: T, right: T): boolean => left === right;\n`;
     }
 
     if (header.length > 0) {
@@ -698,21 +702,25 @@ export class Emitter {
         return `(${left} && ${right})`;
       case "or":
         return `(${left} || ${right})`;
-      case "===":
-      case "!==":
+      case "@=":
         if (this.isPrimitive(expr.left) || this.isPrimitive(expr.right)) {
-          throw new Error(
-            `Reference identity operator '${expr.operator}' cannot be used with primitive types; use '==' or '!=' for structural/value equality`
-          );
+          throw new Error(`Reference identity operator '@=' cannot be used with primitive values; use '#=' or '#!' for value equality`);
         }
-        return `(${left} ${expr.operator} ${right})`;
-      case "==":
+        this.needsReferenceEquality = true;
+        return `__funscriptReferenceEquals(${left}, ${right})`;
+      case "@!":
+        if (this.isPrimitive(expr.left) || this.isPrimitive(expr.right)) {
+          throw new Error(`Reference identity operator '@!' cannot be used with primitive values; use '#=' or '#!' for value equality`);
+        }
+        this.needsReferenceEquality = true;
+        return `(!__funscriptReferenceEquals(${left}, ${right}))`;
+      case "#=":
         if (this.isPrimitive(expr.left) || this.isPrimitive(expr.right)) {
           return `(${left} === ${right})`;
         }
         this.effectImports.add("Equal");
         return `Equal.equals(${left}, ${right})`;
-      case "!=":
+      case "#!":
         if (this.isPrimitive(expr.left) || this.isPrimitive(expr.right)) {
           return `(${left} !== ${right})`;
         }

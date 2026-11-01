@@ -1,14 +1,14 @@
-# Program 06: Markdown Task Manager CLI & State Engine
-# Demonstrates:
-# 1. Mutative 'draft' state recipes for immutable task list updates
-# 2. 'when' early returns: 'when (cond) => expr'
-# 3. 'when' conditional execution blocks: 'when (cond) { ... }'
-# 4. Explicit return statements: '=> expr'
-# 5. Effect file system I/O via 'js' Promise interop
+// Program 06: Markdown Task Manager CLI & State Engine
+// Demonstrates:
+// 1. Mutative 'draft' state recipes for immutable task list updates
+// 2. 'when' early returns: 'when (cond) => expr'
+// 3. 'when' conditional execution blocks: 'when (cond) { ... }'
+// 4. Explicit return statements: '=> expr'
+// 5. Effect file system I/O via 'js' Promise interop
 
 import { Console } from "effect"
 
-# --- Domain Data Model & Schemas ---
+// --- Domain Data Model & Schemas ---
 
 export schema Task = {
   id: Number
@@ -19,7 +19,7 @@ export schema Task = {
 
 export schema TaskManager = ts { { tasks: Task[]; nextId: number; } }
 
-# --- File System I/O Helpers via TypeScript Interop ---
+// --- File System I/O Helpers via TypeScript Interop ---
 
 ts {
 import * as fs from "node:fs/promises";
@@ -47,17 +47,17 @@ import * as fs from "node:fs/promises";
   }
 }
 
-# --- Pure Domain Operations (Mutative & Control Flow) ---
+// --- Pure Domain Operations (Mutative & Control Flow) ---
 
 export emptyManager: TaskManager = {
   tasks: []
   nextId: 1
 }
 
-# 1. addTask with 'when' early return, Mutative draft array update, and explicit return '=>'
+// 1. addTask with 'when' early return, Mutative draft array update, and explicit return '=>'
 export addTask = (manager: TaskManager, title: String, tag: String) =>
-  # Early return guard for invalid/empty title
-  when (title == "") => manager
+  // Early return guard for invalid/empty title
+  when (title #= "") => manager
 
   newId = manager.nextId
   newTask: Task = {
@@ -67,7 +67,7 @@ export addTask = (manager: TaskManager, title: String, tag: String) =>
     tag
   }
 
-  # Mutative draft scope updating task collection
+  // Mutative draft scope updating task collection
   updatedTasks = manager.tasks |> mut (draft) =>
     draft.push(newTask)
     draft
@@ -78,36 +78,36 @@ export addTask = (manager: TaskManager, title: String, tag: String) =>
     nextId: newId + 1
   }
 
-  # Explicit return statement
+  // Explicit return statement
   => updated
 
-# 2. completeTask with 'when' early return and block 'when' condition
+// 2. completeTask with 'when' early return and block 'when' condition
 export completeTask = (manager: TaskManager, targetId: Number) =>
-  # Early return when collection is empty
-  when (manager.tasks.length == 0) => manager
+  // Early return when collection is empty
+  when (manager.tasks.length #= 0) => manager
 
   updatedTasks = manager.tasks |> mut (draft) =>
-    idx = draft.findIndex((t) => t.id == targetId)
+    idx = draft.findIndex((t) => t.id #= targetId)
 
-    when (idx != -1) {
+    when (idx #! -1) {
       existing = draft[idx]
       updatedItem = { ...existing, completed: true }
       draft.splice(idx, 1, updatedItem)
     }
     draft
 
-  # Conditional block execution form
+  // Conditional block execution form
 
   updated = { ...manager, tasks: updatedTasks }
   => updated
 
-# 3. removeTask with block 'when'
+// 3. removeTask with block 'when'
 export removeTask = (manager: TaskManager, targetId: Number) =>
-  when (manager.tasks.length == 0) => manager
+  when (manager.tasks.length #= 0) => manager
 
   updatedTasks = manager.tasks |> mut (draft) =>
-    idx = draft.findIndex((t) => t.id == targetId)
-    when (idx != -1) {
+    idx = draft.findIndex((t) => t.id #= targetId)
+    when (idx #! -1) {
       draft.splice(idx, 1)
     }
     draft
@@ -115,17 +115,17 @@ export removeTask = (manager: TaskManager, targetId: Number) =>
   updated = { ...manager, tasks: updatedTasks }
   => updated
 
-# 4. Markdown Formatter and Serializer
+// 4. Markdown Formatter and Serializer
 export formatTaskLine = (task: Task) =>
   marker =
     match
-      | task.completed == true => "[x]"
+      | task.completed #= true => "[x]"
       | _ => "[ ]"
   => "- " + marker + " #" + task.id + ": " + task.title + " (tag: #" + task.tag + ")"
 
 export serializeToMarkdown = (manager: TaskManager) =>
-  # Early return for empty task manager
-  when (manager.tasks.length == 0) => "# Task List\n\nNo active tasks.\n"
+  // Early return for empty task manager
+  when (manager.tasks.length #= 0) => "# Task List\n\nNo active tasks.\n"
 
   lines =
     manager.tasks
@@ -133,7 +133,7 @@ export serializeToMarkdown = (manager: TaskManager) =>
     |> join("\n")
   => "# Task List\n\n" + lines + "\n"
 
-# --- Effect File System I/O Workflows ---
+// --- Effect File System I/O Workflows ---
 
 export saveTasks = (filePath: String, manager: TaskManager) =>
   effect {
@@ -150,35 +150,35 @@ export loadTasks = (filePath: String) =>
     content
   }
 
-# --- Main CLI Flow ---
+// --- Main CLI Flow ---
 
 export main =
   effect {
     _ <- Console.log("=== Markdown Task Manager Starting ===")
 
-    # 1. Initialize empty manager and add tasks
+    // 1. Initialize empty manager and add tasks
     m0 = emptyManager
     m1 = addTask(m0, "Set up FunScript dogfood suite", "dev")
     m2 = addTask(m1, "Stress-test Mutative draft updates", "compiler")
     m3 = addTask(m2, "Document findings in docs/DOGFOODING.md", "docs")
-    m4 = addTask(m3, "", "ignored")  # should be skipped by early return
+    m4 = addTask(m3, "", "ignored")  // should be skipped by early return
 
     _ <- Console.log("[TaskManager] Initialized 3 tasks.")
 
-    # 2. Complete tasks #1 and #2
+    // 2. Complete tasks #1 and #2
     m5 = completeTask(m4, 1)
     m6 = completeTask(m5, 2)
 
-    # 3. Serialize and save to disk
+    // 3. Serialize and save to disk
     filePath = ".funscript-cache/tasks-dogfood.md"
     _ <- saveTasks(filePath, m6)
 
-    # 4. Read back and verify output
+    // 4. Read back and verify output
     savedContent <- loadTasks(filePath)
     _ <- Console.log("--- Persisted Markdown Content ---")
     _ <- Console.log(savedContent)
 
-    # 5. Clean up temporary test file
+    // 5. Clean up temporary test file
     _ <- js deleteTaskFile(filePath)
     _ <- Console.log("[TaskManager] Cleaned up temporary test file.")
     _ <- Console.log("=== Markdown Task Manager Completed Successfully ===")

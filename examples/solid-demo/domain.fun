@@ -1,4 +1,4 @@
-# Domain models and business logic for SolidJS integration demo
+// Domain models and business logic for SolidJS integration demo
 import { Effect, Console, Array } from "effect"
 
 export schema Todo = {
@@ -19,10 +19,10 @@ export reduceTodos = (todos: Array<Todo>, action: Action): Array<Todo> =>
     | AddTodo(title, priority) =>
         todos |> append({ id: todos.length + 1, title, priority, completed: false })
     | ToggleTodo(id) =>
-        todos |> map((t) => match | t.id == id => { ...t, completed: not t.completed } | _ => t
+        todos |> map((t) => match | t.id #= id => { ...t, completed: not t.completed } | _ => t
         )
     | RemoveTodo(id) =>
-        todos |> filter((t) => t.id != id)
+        todos |> filter((t) => t.id #! id)
     | ClearCompleted =>
         todos |> filter((t) => not t.completed)
 
@@ -32,7 +32,7 @@ export getVisibleTodos = (todos: Array<Todo>, filterName: String): Array<Todo> =
     | "completed" => todos |> filter((t) => t.completed)
     | _ => todos
 
-# Async Effect service simulating API loading
+// Async Effect service simulating API loading
 export fetchInitialTodos =
   effect {
     _ <- Console.log("[FunScript API] Fetching initial todos...")

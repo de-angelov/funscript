@@ -138,17 +138,17 @@ export function extractComments(source: string): Comment[] {
       continue;
     }
 
-    if (c === "#") {
+    if (c === "/" && source[i + 1] === "/") {
       let end = i;
       while (end < source.length && source[end] !== "\n" && source[end] !== "\r") {
         end++;
       }
       const rawText = source.slice(i, end).trimEnd();
       let text = rawText;
-      if (rawText.startsWith("#") && !rawText.startsWith("#!") && !rawText.startsWith("##")) {
-        const afterHash = rawText.slice(1);
-        if (afterHash.length > 0 && !afterHash.startsWith(" ")) {
-          text = "# " + afterHash;
+      if (rawText.startsWith("//")) {
+        const afterSlashes = rawText.slice(2);
+        if (afterSlashes.length > 0 && !afterSlashes.startsWith(" ")) {
+          text = "// " + afterSlashes;
         }
       }
       comments.push({
@@ -175,10 +175,10 @@ const PRECEDENCE: Record<string, number> = {
   "or": 1,
   "and": 2,
   "??": 3,
-  "==": 4,
-  "!=": 4,
-  "===": 4,
-  "!==": 4,
+  "#=": 4,
+  "#!": 4,
+  "@=": 4,
+  "@!": 4,
   "+": 5,
   "-": 5,
   "*": 6,

@@ -41,8 +41,8 @@
     "comments": {
       "patterns": [
         {
-          "name": "comment.line.number-sign.funscript",
-          "match": "#.*$"
+          "name": "comment.line.double-slash.funscript",
+          "match": "//.*$"
         }
       ]
     },
@@ -198,7 +198,7 @@
       "patterns": [
         {
           "name": "keyword.operator.comparison.funscript",
-          "match": "(==|!=|<=|>=|<|>)"
+          "match": "(#=|#!|@=|@!|<=|>=|<|>)"
         },
         {
           "name": "keyword.operator.arithmetic.funscript",

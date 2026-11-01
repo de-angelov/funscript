@@ -1,4 +1,4 @@
-# Fixture 02: Functions & Pipelines
+// Fixture 02: Functions & Pipelines
 
 export add = (a: Number, b: Number) => a + b
 

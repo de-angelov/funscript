@@ -230,7 +230,7 @@ export schema Status =
   | Active(id: Number)
   | Done
 
-export isSameTag = (a: Status, b: Status) => a == b
+export isSameTag = (a: Status, b: Status) => a #= b
 `.trim();
 
       const res = await Effect.runPromise(compileString(adtCode, "eq.fun"));

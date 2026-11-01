@@ -6,7 +6,7 @@
 
 whitespace           = " " | "\t" ;
 newline              = "\r\n" | "\n" | "\r" ;
-comment              = "#", { all_characters - newline }, (newline | EOF) ;
+comment              = "//", { all_characters - newline }, (newline | EOF) ;
 
 (* Layout tokens emitted by indentation-aware lexer *)
 INDENT               = (* increase in indentation level (2 spaces) *) ;
@@ -135,8 +135,8 @@ logical_and_expr     = equality_expr, { "and", equality_expr } ;
 (* Level 4: Nullish Coalescing ?? *)
 equality_expr        = relational_expr, { "??", relational_expr } ;
 
-(* Level 5: Equality == / != *)
-relational_expr      = comparison_expr, { ( "==" | "!=" | "===" | "!==" ), comparison_expr } ;
+(* Level 5: Value equality #= / #! and reference equality @= / @! *)
+relational_expr      = comparison_expr, { ( "#=" | "#!" | "@=" | "@!" ), comparison_expr } ;
 comparison_expr      = additive_expr, { ( "<" | "<=" | ">" | ">=" ), additive_expr } ;
 
 (* Level 6: Additive + / - *)

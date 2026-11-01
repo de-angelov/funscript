@@ -1,4 +1,4 @@
-# Fixture 04: Pattern Matching
+// Fixture 04: Pattern Matching
 
 import { Shape, Circle, Rect, Point } from "./03-schemas-and-unions.fun"
 

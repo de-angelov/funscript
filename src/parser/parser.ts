@@ -806,14 +806,14 @@ export class Parser {
 
   private parseEquality(): Expression {
     let expr = this.parseAdditive();
-    while (this.match(TokenType.EQEQ, TokenType.NEQ, TokenType.EQEQEQ, TokenType.NEQEQ)) {
+    while (this.match(TokenType.VALUE_EQ, TokenType.VALUE_NEQ, TokenType.REF_EQ, TokenType.REF_NEQ)) {
       const opTok = this.previous();
-      const op = opTok.value as "==" | "!=" | "===" | "!==";
+      const op = opTok.value as "#=" | "#!" | "@=" | "@!";
       const right = this.parseAdditive();
-      if (op === "===" || op === "!==") {
+      if (op === "@=" || op === "@!") {
         if (this.isPrimitiveLiteral(expr) || this.isPrimitiveLiteral(right)) {
           throw new ParseError(
-            `Reference identity operator '${op}' cannot be used with primitive types; use '==' or '!=' for structural/value equality`,
+            `Reference identity operator '${op}' cannot be used with primitive values; use '#=' or '#!' for value equality`,
             opTok.span
           );
         }

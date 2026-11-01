@@ -54,7 +54,7 @@ The design rule is simple:
 | Export                       | `export area = (shape: Shape) => ...`                                                            |
 | Barrel re-export             | `export { Circle, Shape } from "./shapes.fun"`                                                   |
 | Raw TS                       | `` `const x = process.env.X` ``                                                                  |
-| Comment                      | `# line comment`                                                                                 |
+| Comment                      | `// line comment`                                                                                |
 
 ---
 
@@ -84,7 +84,7 @@ form and rejects the other one.
 | Validated data & tagged unions | `schema` (records, `?`, `= default`, `\|> Schema.*`, `\| Variant(...)`) | `Schema` + `Data.TaggedEnum` + `typeof Name.Type`                                                | duplicate TS `type` + validator, `enum`, `interface` |
 | Absent / optional value        | `Option` (`Some` / `None`)                                              | `Option`                                                                                         | `null`, `undefined` literals                         |
 | Boundary decoding              | `Unknown` + `Schema.decodeUnknown(MyType)`                              | `Unknown`, `Schema`                                                                              | `any`, `as any`                                      |
-| Value / identity equality      | `==` / `!=`; `===` / `!==`                                              | `Equal.equals` for structured values; strict JS equality for primitives; identity for references | coercing equality                                    |
+| Value / identity equality      | `#=` / `#!`; `@=` / `@!`                                                | `Equal.equals` for structured values; strict JS equality for primitives; identity for references | coercing equality                                    |
 | Boolean                        | `and` / `or` / `not`                                                    | `&&` / `\|\|` / `!`                                                                              | `&&`, `\|\|`, `!`                                    |
 | Conditional & pattern match    | `match` (value, boolean, `\|> match`, `\| A \| B =>`)                   | ts-pattern (value) / conditional & `if` (boolean)                                                | `if`, `else`, `switch`, ternary `? :`, `return`      |
 | Type-driven placeholder        | `???`                                                                   | `Never` throw + `checker.getContextualType`                                                      | `TODO as any`                                        |
@@ -119,7 +119,7 @@ generated output, but not in idiomatic FunScript:
 - **Running effects mid-program:** `Effect.runPromise`, `runSync`, `runFork`,
   `runCallback`, `run*Exit`, `Runtime.run*`, and `ManagedRuntime` outside modules listed
   as `entry` in `funscript.json` (see §9.7).
-- **Equality:** `==` / `!=` compare values; `===` / `!==` compare reference identity on reference-like values.
+- **Equality:** `#=` / `#!` compare values; `@=` / `@!` compare reference identity on reference-like values.
 - **Symbol booleans:** `&&`, `||`, `!` (use `and`, `or`, `not`).
 - **Competing control flow:** `if`, `else`, `then`, `switch`, ternary `? :`, `return`
   (use `match` or `when`; functions/blocks return their final
@@ -198,15 +198,10 @@ The formatter always produces 2-space indentation. There is no configuration.
 ### 1.3 Comments
 
 ```funscript
-# A line comment.
-
-###
-A block comment.
-It can span lines.
-###
+// A line comment.
 ```
 
-Block comments do not nest. `#` inside a string is not a comment.
+FunScript supports TypeScript-style line comments only. `//` inside a string is not a comment.
 
 ### 1.4 Identifiers and naming
 
@@ -597,7 +592,7 @@ From lowest to highest:
 | 2     | `or`                     | logical or                                                                          |
 | 3     | `and`                    | logical and                                                                         |
 | 4     | `??`                     | nullish coalescing                                                                  |
-| 5     | `==`, `!=`, `===`, `!==` | value equality and reference identity; relational operators also compare primitives |
+| 5     | `#=`, `#!`, `@=`, `@!` | value equality and reference identity; relational operators also compare primitives |
 | 6     | `+`, `-`                 | additive                                                                            |
 | 7     | `*`, `/`, `%`            | multiplicative                                                                      |
 | 8     | `**`                     | exponent, right-associative                                                         |
@@ -608,13 +603,15 @@ From lowest to highest:
 
 ### 4.2 Equality and comparisons
 
-`==` and `!=` compare by value: structured values use Effect `Equal.equals`,
-while primitives use strict JavaScript equality. `===` and `!==` compare reference
-identity and are restricted to reference-like values:
+`#=` and `#!` compare by value: structured values use Effect `Equal.equals`,
+while primitives use strict JavaScript equality. `@=` and `@!` compare reference
+identity and are restricted to reference-like values (objects, arrays, functions, and schemas):
 
 ```funscript
-a == b   # value equality
-a != b   # value inequality
+a #= b   // value equality
+a #! b   // value inequality
+a @= b   // reference identity
+a @! b   // reference inequality
 ```
 
 #### Comparisons
@@ -988,7 +985,7 @@ Multi-branch block form:
 label =
   match
     | n > 0 => "positive"
-    | n == 0 => "zero"
+    | n #= 0 => "zero"
     | _ => "negative"
 ```
 
@@ -1088,7 +1085,7 @@ directly without introducing a temporary variable:
 ```funscript
 displayName =
   users
-  |> Array.findFirst((u) => u.id == targetId)
+  |> Array.findFirst((u) => u.id #= targetId)
   |> match
     | Some(user) => user.name
     | None => "Guest"
@@ -1185,7 +1182,7 @@ narrowing.
 
 Capitalization matters: lowercase names bind, uppercase names are constructors. This is
 the syntax's main pattern-disambiguation rule. To compare against a variable value, use a
-guard: `| value when value == expected => ...`.
+guard: `| value when value #= expected => ...`.
 
 There is no `null` or `undefined` pattern. A nullable interop value is converted with
 `Option.fromNullable` and matched as `Some`/`None`.
@@ -2103,7 +2100,7 @@ export error NotFound(id: String)
 
 export findUser = (users: Array<User>, id: String) =>
   users
-  |> Array.findFirst((u) => u.id == id)
+  |> Array.findFirst((u) => u.id #= id)
   |> Effect.fromOption(() => NotFound(id))
 
 export recordLogin = (user: User) =>
@@ -2172,7 +2169,7 @@ mutStage       = "mut" "(" identifier ")" "=>" ( expression | block ) ;
 logicalOr      = logicalAnd { "or" logicalAnd } ;
 logicalAnd     = nullish { "and" nullish } ;
 nullish        = equality { "??" equality } ;
-equality       = comparison { ( "==" | "!=" | "===" | "!==" ) comparison } ;
+equality       = comparison { ( "#=" | "#!" | "@=" | "@!" ) comparison } ;
 comparison     = additive { ( "<" | "<=" | ">" | ">=" ) additive } ;
 additive       = multiplicative { ( "+" | "-" ) multiplicative } ;
 multiplicative = exponent { ( "*" | "/" | "%" ) exponent } ;

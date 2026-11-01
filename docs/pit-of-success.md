@@ -42,7 +42,7 @@ flagged by `funscript check`, not left as style advice.
 | Typed errors                           | `error`                                                                                         | error classes written by hand                                    |
 | Primitive numbers                      | `Number`, refined with `Int` / `Float` / `Decimal` when needed                                  | unchecked external numeric input                                 |
 | Nullable values                        | `Option`                                                                                        | `null`, `undefined`, `any`                                       |
-| Equality & comparisons                 | value `==` / `!=`, reference `===` / `!==`; primitive comparisons or Effect companion functions | coercing equality                                                |
+| Equality & comparisons                 | value `#=` / `#!`, reference `@=` / `@!`; primitive comparisons or Effect companion functions | coercing equality                                                |
 | Booleans                               | `and` / `or` / `not`                                                                            | `&&`, `                                                          |     | `, `!` |
 | Runtime reflection                     | `Schema.is(MyType)` / `match`                                                                   | `typeof`, `instanceof`, `eval`                                   |
 | Functions                              | `=>` lambda (implicit final expression)                                                         | `function`, `return`, method shorthand                           |
@@ -666,7 +666,7 @@ with an explicitly managed `Scope`.
 **The failure:** in JavaScript, `<, <=, >, >=` operators only work on primitive numbers and
 strings. When applied to `BigDecimal`, `DateTime`, `Duration`, or complex domain objects,
 they coerce to `NaN` or compare by object reference, failing silently. Furthermore, floating
-point math produces `0.1 + 0.2 == 0.3` bugs.
+point math produces `0.1 + 0.2 #= 0.3` bugs.
 
 **The FunScript path:** comparisons are pure, data-last functions that work on any type:
 
@@ -741,7 +741,7 @@ or Decimal for exact math; invalid external input fails schema decoding.
 | Thrown exception                   | invisible in signature                      | `error` declarations + `E` channel                                                     | parser + `tsc`                         |
 | Accidental mutation                | `let`, `++`, mutable fields/arrays          | immutable by default; `{ ...x, a.b: 1 }`, explicit local `mut`, or `Effect.Ref`        | parser + resolver + `tsc`              |
 | Type/validator drift               | separate TS `type` and runtime schema       | data & tagged-union `schema` compile to both `Schema` and TS `type`                    | emitter + `tsc`                        |
-| Loose equality                     | coercing `==`                               | value equality via `Equal.equals` for structures and strict JS equality for primitives | emitter                                |
+| Loose equality                     | coercing `#=`                               | value equality via `Equal.equals` for structures and strict JS equality for primitives | emitter                                |
 | Null/`undefined`/`any` soup        | `null`/`undefined` checks, `any`            | `Option`; `Unknown` + `Schema.decodeUnknown(MyType)`                                   | parser + `tsc`                         |
 | Ad-hoc OOP                         | `class`, `new`, `this`                      | records, `type`, `service`                                                             | parser                                 |
 | Promise concurrency                | `async`/`await`, `Promise.all`              | Effect fibers                                                                          | parser                                 |

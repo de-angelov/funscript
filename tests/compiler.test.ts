@@ -35,7 +35,7 @@ export res = 5 |> add(10, _)
 export resAdd = 5 |> (_ + 1)
 export resMember = user |> _.profile.name
 export resUnary = true |> not _
-export resLogical = 7 |> (_ == 7 and _ != 0)
+export resLogical = 7 |> (_ #= 7 and _ #! 0)
 export resChained = 5 |> (_ + 1) |> (_ * 2)
 `.trim();
 

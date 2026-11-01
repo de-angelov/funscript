@@ -1,11 +1,11 @@
-# Program 01: Fibonacci & Math Pipelines
+// Program 01: Fibonacci & Math Pipelines
 
 import { Console } from "effect"
 
 export fib = (n: Number): Number =>
   match
     | n |> lessThanOrEqualTo(0) => 0
-    | n == 1 => 1
+    | n #= 1 => 1
     | _ => fib(n - 1) + fib(n - 2)
 
 export formatFib = (n: Number) => "fib({n}) = {fib(n)}"

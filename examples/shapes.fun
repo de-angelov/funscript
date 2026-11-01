@@ -1,5 +1,5 @@
-# FunScript — algebraic data types and exhaustive matching.
-# Tagged-union `schema` lowers to Effect's Data.TaggedEnum + Schema; `match` lowers to ts-pattern.
+// FunScript — algebraic data types and exhaustive matching.
+// Tagged-union `schema` lowers to Effect's Data.TaggedEnum + Schema; `match` lowers to ts-pattern.
 
 import { Array, Console } from "effect"
 

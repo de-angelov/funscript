@@ -113,7 +113,7 @@ service UserRepo
 UserRepoLive = Layer.succeed(UserRepo, {
   find: (id) =>
     match
-      | id == "1" => Effect.succeed({ id, name: "Ada" })
+      | id #= "1" => Effect.succeed({ id, name: "Ada" })
       | _ => Effect.fail(NotFound(id))
 })
 
@@ -1127,7 +1127,7 @@ Multi-branch block form:
 label =
   match
     | n > 0 => "positive"
-    | n == 0 => "zero"
+    | n #= 0 => "zero"
     | _ => "negative"
 ```
 

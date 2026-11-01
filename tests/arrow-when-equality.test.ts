@@ -7,41 +7,41 @@ import { compileString, CompilerError } from "../src/compiler.js";
 describe("Unified '=>' Arrow, 'when' Keyword Forms & Equality Operators", () => {
   describe("1. Lexer Tokenization", () => {
 
-    it("tokenizes '===' and '!==' as reference equality operators", () => {
-      const tokens = new Lexer("a === b\nc !== d").tokenize();
+    it("tokenizes '@=' and '@!' as reference equality operators", () => {
+      const tokens = new Lexer("a @= b\nc @! d").tokenize();
       expect(tokens.map((t) => t.type)).toEqual([
         TokenType.IDENTIFIER,
-        TokenType.EQEQEQ,
+        TokenType.REF_EQ,
         TokenType.IDENTIFIER,
         TokenType.NEWLINE,
         TokenType.IDENTIFIER,
-        TokenType.NEQEQ,
+        TokenType.REF_NEQ,
         TokenType.IDENTIFIER,
         TokenType.EOF,
       ]);
     });
 
-    it("disambiguates '=', '==', and '==='", () => {
-      const tokens = new Lexer("x = a == b === c").tokenize();
+    it("disambiguates assignment, value equality, and reference equality", () => {
+      const tokens = new Lexer("x = a #= b @= c").tokenize();
       expect(tokens.map((t) => t.type)).toEqual([
         TokenType.IDENTIFIER,
         TokenType.EQ,
         TokenType.IDENTIFIER,
-        TokenType.EQEQ,
+        TokenType.VALUE_EQ,
         TokenType.IDENTIFIER,
-        TokenType.EQEQEQ,
+        TokenType.REF_EQ,
         TokenType.IDENTIFIER,
         TokenType.EOF,
       ]);
     });
 
-    it("disambiguates '!=' and '!=='", () => {
-      const tokens = new Lexer("a != b !== c").tokenize();
+    it("tokenizes both inequality operators", () => {
+      const tokens = new Lexer("a #! b @! c").tokenize();
       expect(tokens.map((t) => t.type)).toEqual([
         TokenType.IDENTIFIER,
-        TokenType.NEQ,
+        TokenType.VALUE_NEQ,
         TokenType.IDENTIFIER,
-        TokenType.NEQEQ,
+        TokenType.REF_NEQ,
         TokenType.IDENTIFIER,
         TokenType.EOF,
       ]);
@@ -103,7 +103,7 @@ export label = (s: Status) =>
     it("supports explicit return statement '=> expr' emitted as 'return (expr);'", async () => {
       const code = `
 export fn compute(x: Number) => Number {
-  when (x == 0) => 0
+  when (x #= 0) => 0
   => x * 10
 }
 `.trim();
@@ -117,7 +117,7 @@ export fn compute(x: Number) => Number {
     it("Form 1 (Early return): emits 'if (cond) return expr;' inside functions", async () => {
       const code = `
 export fn divide(a: Number, b: Number) => Number {
-  when (b == 0) => 0
+  when (b #= 0) => 0
   => a / b
 }
 `.trim();
@@ -142,7 +142,7 @@ x = 10
       const code = `
 export fn test(x: Number) => Number {
   mut result = 0
-  when (x == 10) {
+  when (x #= 10) {
     result = x * 2
   }
   => result
@@ -159,7 +159,7 @@ export fn test(x: Number) => Number {
       const code = `
 export fn testIndented(x: Number) => Number {
   mut result = 0
-  when (x == 5)
+  when (x #= 5)
     result = 100
   => result
 }
@@ -195,11 +195,11 @@ export apply = (act: Action) =>
   });
 
   describe("4. Structural Equality vs Reference Identity", () => {
-    it("lowers structural equality '==' to Effect's Equal.equals for structural types", async () => {
+    it("lowers value equality '#=' to Effect's Equal.equals for structural types", async () => {
       const code = `
 schema Point = { x: Number, y: Number }
-export checkEqual = (p1: Point, p2: Point) => p1 == p2
-export checkNotEqual = (p1: Point, p2: Point) => p1 != p2
+export checkEqual = (p1: Point, p2: Point) => p1 #= p2
+export checkNotEqual = (p1: Point, p2: Point) => p1 #! p2
 `.trim();
 
       const res = await Effect.runPromise(compileString(code));
@@ -208,9 +208,9 @@ export checkNotEqual = (p1: Point, p2: Point) => p1 != p2
       expect(res.typescript).toContain("(!Equal.equals(p1, p2))");
     });
 
-    it("lowers structural equality '==' on records to Equal.equals", async () => {
+    it("lowers value equality '#=' on records to Equal.equals", async () => {
       const code = `
-export compareRecords = (a, b) => a == b
+export compareRecords = (a, b) => a #= b
 `.trim();
 
       const res = await Effect.runPromise(compileString(code));
@@ -218,12 +218,12 @@ export compareRecords = (a, b) => a == b
       expect(res.typescript).toContain("Equal.equals(a, b)");
     });
 
-    it("lowers primitive equality '==' to '==='", async () => {
+    it("lowers primitive value equality '#=' to strict JavaScript equality", async () => {
       const code = `
-export checkNums = (1 == 2)
-export checkStrings = ("hello" == "world")
-export checkBools = (true == false)
-export checkIdentNum = (n: Number) => n == 0
+export checkNums = (1 #= 2)
+export checkStrings = ("hello" #= "world")
+export checkBools = (true #= false)
+export checkIdentNum = (n: Number) => n #= 0
 `.trim();
 
       const res = await Effect.runPromise(compileString(code));
@@ -233,15 +233,16 @@ export checkIdentNum = (n: Number) => n == 0
       expect(res.typescript).toContain("(n === 0)");
     });
 
-    it("lowers reference identity '===' and '!==' directly", async () => {
+    it("lowers reference identity '@=' and '@!' through a reference-only helper", async () => {
       const code = `
-export checkRefEq = (a, b) => a === b
-export checkRefNeq = (a, b) => a !== b
+export checkRefEq = (a, b) => a @= b
+export checkRefNeq = (a, b) => a @! b
 `.trim();
 
       const res = await Effect.runPromise(compileString(code));
-      expect(res.typescript).toContain("(a === b)");
-      expect(res.typescript).toContain("(a !== b)");
+      expect(res.typescript).toContain("const __funscriptReferenceEquals");
+      expect(res.typescript).toContain("__funscriptReferenceEquals(a, b)");
+      expect(res.typescript).toContain("(!__funscriptReferenceEquals(a, b))");
     });
   });
 
@@ -269,7 +270,7 @@ export checkRefNeq = (a, b) => a !== b
     it("executes early return 'when' branching logic", async () => {
       const code = `
 export fn safeDiv(num, den) => {
-  when (den == 0) => -1
+  when (den #= 0) => -1
   => num / den
 }
 `.trim();
@@ -285,7 +286,7 @@ export fn safeDiv(num, den) => {
       const code = `
 export fn threshold(x) => {
   mut bonus = 0
-  when (x == 100) {
+  when (x #= 100) {
     bonus = 50
   }
   => x + bonus
@@ -335,10 +336,10 @@ export fn getName(user) => {
     it("handles placeholder in unary, logical and equality expressions", async () => {
       const code = `
 export fn isNotZero(x) => {
-  => x |> not (_ == 0)
+  => x |> not (_ #= 0)
 }
 export fn checkInRange(x) => {
-  => x |> (_ != 0 and _ != 100)
+  => x |> (_ #! 0 and _ #! 100)
 }
 `.trim();
 

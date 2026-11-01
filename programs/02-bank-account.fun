@@ -1,4 +1,4 @@
-# Program 02: Bank Account with Tagged Unions, Pattern Matching & Immutability
+// Program 02: Bank Account with Tagged Unions, Pattern Matching & Immutability
 
 import { Console } from "effect"
 

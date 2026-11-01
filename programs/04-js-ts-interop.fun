@@ -1,17 +1,17 @@
-# Program 04: JS & TS Interop with Effect Fibers
+// Program 04: JS & TS Interop with Effect Fibers
 
 import { Effect, Console } from "effect"
 
-# 1. 'ts' escape hatch for raw TypeScript types
+// 1. 'ts' escape hatch for raw TypeScript types
 ts { type Timestamp = number; }
 
 export schema Settings = ts { Record<string, string> }
 
-# 2. Foreign JavaScript Promise simulation
+// 2. Foreign JavaScript Promise simulation
 jsGetGreeting = (name: String) =>
   Promise.resolve("Hello " + name + " from native JavaScript Promise!")
 
-# 3. 'js' in Effect block: auto-wrapped with Effect.tryPromise
+// 3. 'js' in Effect block: auto-wrapped with Effect.tryPromise
 export fetchUserGreeting = (name: String) =>
   effect {
     _ <- Console.log("[FunScript] Starting async fiber...")
@@ -20,14 +20,14 @@ export fetchUserGreeting = (name: String) =>
     greeting
   }
 
-# 4. 'export js': Emits a function returning a native Promise for outside JS/TS
+// 4. 'export js': Emits a function returning a native Promise for outside JS/TS
 export js getPublicGreeting = (name: String) =>
   effect {
     res <- fetchUserGreeting(name)
     res
   }
 
-# 5. 'eff |> js': Converts Effect to Promise in pipeline
+// 5. 'eff |> js': Converts Effect to Promise in pipeline
 export main = () =>
   effect {
     _ <- fetchUserGreeting("Ada Lovelace")

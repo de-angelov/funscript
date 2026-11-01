@@ -1,4 +1,4 @@
-# Fixture 05: Mutative Deep Spreads and Local Drafts
+// Fixture 05: Mutative Deep Spreads and Local Drafts
 
 export schema Profile = {
   name: String

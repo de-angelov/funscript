@@ -117,7 +117,7 @@ describe("VS Code Extension Package (TASK-018)", () => {
       const content = await fs.readFile(langConfigPath, "utf-8");
       const config = JSON.parse(content);
 
-      expect(config.comments?.lineComment).toBe("#");
+      expect(config.comments?.lineComment).toBe("//");
       expect(config.brackets).toEqual(
         expect.arrayContaining([
           ["{", "}"],
@@ -286,7 +286,7 @@ describe("VS Code Extension Package (TASK-018)", () => {
       const grammar = JSON.parse(content);
 
       const commentRule = grammar.repository.comments.patterns[0];
-      expect(new RegExp(commentRule.match).test("# This is a comment")).toBe(true);
+      expect(new RegExp(commentRule.match).test("// This is a comment")).toBe(true);
 
       const tsRule = grammar.repository["ts-escape"].patterns[0];
       const tsMatch = "ts { import('effect').Effect }".match(

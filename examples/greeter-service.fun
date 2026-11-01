@@ -1,4 +1,4 @@
-# FunScript — services, layers, and dependency injection.
+// FunScript — services, layers, and dependency injection.
 
 import { Console, Effect, Layer } from "effect"
 

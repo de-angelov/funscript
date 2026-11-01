@@ -1,15 +1,15 @@
-# Program 07: Reactive UI Widget Component (.funx)
-# Demonstrates:
-# 1. Native JSX elements and TSX code generation
-# 2. Typed component props with Schema.Struct
-# 3. Pattern matching returning JSX branches (ts-pattern integration)
-# 4. JSX attribute string interpolation: className="btn-${variant}"
-# 5. Conditional JSX rendering and child expression containers
-# 6. Event callbacks and functional event handler bindings
+// Program 07: Reactive UI Widget Component (.funx)
+// Demonstrates:
+// 1. Native JSX elements and TSX code generation
+// 2. Typed component props with Schema.Struct
+// 3. Pattern matching returning JSX branches (ts-pattern integration)
+// 4. JSX attribute string interpolation: className="btn-${variant}"
+// 5. Conditional JSX rendering and child expression containers
+// 6. Event callbacks and functional event handler bindings
 
 import { Console } from "effect"
 
-# --- TypeScript & JSX Environment Types ---
+// --- TypeScript & JSX Environment Types ---
 
 ts {
 declare global {
@@ -30,7 +30,7 @@ declare global {
   };
 }
 
-# --- Component Schemas & Tagged Unions ---
+// --- Component Schemas & Tagged Unions ---
 
 export schema WidgetProps = {
   title: String
@@ -46,7 +46,7 @@ export schema WidgetState =
   | Active(current: Number)
   | LimitReached(limit: Number)
 
-# --- Pattern Matching View Helper ---
+// --- Pattern Matching View Helper ---
 
 export renderStatusBadge = (state: WidgetState) =>
   match state
@@ -55,7 +55,7 @@ export renderStatusBadge = (state: WidgetState) =>
     | Active(current) =>
         <span className="badge badge-active">Active: {current}</span>
     | LimitReached(limit) =>
-        # --- Reactive Widget Component ---
+        // --- Reactive Widget Component ---
         <span className="badge badge-limit">Warning: Max Limit {limit} Reached</span>
 
 export CounterWidget = (props: WidgetProps) =>
@@ -78,7 +78,7 @@ export CounterWidget = (props: WidgetProps) =>
       <div className="widget-controls">
         <button
           className="btn btn-decrement"
-          disabled={props.initialCount == props.min}
+          disabled={props.initialCount #= props.min}
           onClick={() => Console.log("Decrement clicked")}
         >
           - Decrement
@@ -86,7 +86,7 @@ export CounterWidget = (props: WidgetProps) =>
 
         <button
           className="btn btn-increment"
-          disabled={props.initialCount == props.max}
+          disabled={props.initialCount #= props.max}
           onClick={() => Console.log("Increment clicked")}
         >
           + Increment
@@ -100,8 +100,8 @@ export CounterWidget = (props: WidgetProps) =>
         </button>
       </div>
 
-      {props.initialCount == props.max and <p className="alert alert-warning">Maximum boundary reached!</p>}
-      {props.initialCount == props.min and <p className="alert alert-info">Minimum boundary reached.</p>}
+      {props.initialCount #= props.max and <p className="alert alert-warning">Maximum boundary reached!</p>}
+      {props.initialCount #= props.min and <p className="alert alert-info">Minimum boundary reached.</p>}
     </div>
 
     <footer className="widget-footer">
@@ -109,13 +109,13 @@ export CounterWidget = (props: WidgetProps) =>
     </footer>
   </div>
 
-# --- Main Demonstration Runner ---
+// --- Main Demonstration Runner ---
 
 export main =
   effect {
     _ <- Console.log("=== Reactive Widget (.funx) Starting ===")
 
-    # 1. Render Normal Counter Widget
+    // 1. Render Normal Counter Widget
     p1: WidgetProps = {
       title: "Task Queue Throughput"
       initialCount: 5
@@ -128,7 +128,7 @@ export main =
     _ <- Console.log("[Widget] Rendered root tag: <" + w1.tag + " className=\"" + w1.props.className + "\">")
     _ <- Console.log("[Widget] Child elements: " + w1.children.length)
 
-    # 2. Render Widget at boundary
+    // 2. Render Widget at boundary
     p2: WidgetProps = {
       title: "CPU Utilization Alert"
       initialCount: 100
@@ -140,7 +140,7 @@ export main =
     w2 = CounterWidget(p2)
     _ <- Console.log("[Widget] Boundary root tag: <" + w2.tag + " className=\"" + w2.props.className + "\">")
 
-    # 3. Test Pattern Matching Badges
+    // 3. Test Pattern Matching Badges
     b1 = renderStatusBadge(Idle)
     b2 = renderStatusBadge(Active(42))
     b3 = renderStatusBadge(LimitReached(100))

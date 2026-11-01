@@ -1,4 +1,4 @@
-# Fixture 06: Effects, Services, Error Union Tracking & orDie
+// Fixture 06: Effects, Services, Error Union Tracking & orDie
 
 import { Console, Effect, Layer } from "effect"
 

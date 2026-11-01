@@ -56,6 +56,15 @@ export message = greet(name)
       expect(result.formattedOutput).toBe("");
     });
 
+    it("rejects reference equality for value-only types", async () => {
+      const result = await Effect.runPromise(typeCheckSource(`
+export same = (left: Number, right: Number) => left @= right
+`.trim(), "reference-equality.fun"));
+
+      expect(result.success).toBe(false);
+      expect(result.diagnostics.some((d) => d.message.includes("cannot be used with primitive values"))).toBe(true);
+    });
+
     it("detects variable type mismatch and maps back to original line and column", async () => {
       const code = `
 export title: String = "FunScript"

@@ -324,7 +324,7 @@ mut flag: Boolean = true
     });
 
     it("parses logical and equality expressions", () => {
-      const ast = parse(`res = a and b or c == d != e ?? f`);
+      const ast = parse(`res = a and b or c #= d #! e ?? f`);
       const binding = ast.body[0] as BindingDeclaration;
       expect(binding.init.kind).toBe("BinaryExpression");
     });

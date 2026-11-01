@@ -217,7 +217,7 @@ first
 
   describe("Comments handling", () => {
     it("skips full-line comments", () => {
-      const code = `# This is a comment\nx = 1\n# Another comment\ny = 2`;
+      const code = `// This is a comment\nx = 1\n// Another comment\ny = 2`;
       const lexer = new Lexer(code);
       const tokens = lexer.tokenize();
 
@@ -234,7 +234,7 @@ first
     });
 
     it("skips inline trailing comments", () => {
-      const code = `x = 10 # trailing comment\ny = 20 # another comment`;
+      const code = `x = 10 // trailing comment\ny = 20 // another comment`;
       const lexer = new Lexer(code);
       const tokens = lexer.tokenize();
 
@@ -251,7 +251,7 @@ first
     });
 
     it("handles comment at EOF without trailing newline", () => {
-      const code = `x = 1\n# trailing comment at EOF`;
+      const code = `x = 1\n// trailing comment at EOF`;
       const lexer = new Lexer(code);
       const tokens = lexer.tokenize();
 
@@ -267,7 +267,7 @@ first
     it("handles comments within indented blocks without altering indentation", () => {
       const code = `
 block
-  # comment line inside indent
+  // comment line inside indent
   val = 42
 `;
       const lexer = new Lexer(code.trim());
@@ -279,8 +279,13 @@ block
   });
 
   describe("Operators and Delimiters", () => {
+    it("rejects legacy equality syntax with a migration hint", () => {
+      expect(() => new Lexer("a == b").tokenize()).toThrow(/'#=' for value equality or '@=' for reference identity/);
+      expect(() => new Lexer("a !== b").tokenize()).toThrow(/'@!'/);
+    });
+
     it("tokenizes all multi-character operators", () => {
-      const code = `=> <- |> == != ** ?? ... ???`;
+      const code = `=> <- |> #= #! ** ?? ... ???`;
       const lexer = new Lexer(code);
       const tokens = lexer.tokenize();
 
@@ -288,8 +293,8 @@ block
         TokenType.ARROW,
         TokenType.LARROW,
         TokenType.PIPE,
-        TokenType.EQEQ,
-        TokenType.NEQ,
+        TokenType.VALUE_EQ,
+        TokenType.VALUE_NEQ,
         TokenType.STARSTAR,
         TokenType.QUESTIONQUESTION,
         TokenType.DOTDOTDOT,
@@ -351,14 +356,14 @@ block
         TokenType.EOF,
       ]);
 
-      // = vs ==
-      const eqCode = `a = b == c`;
+      // = vs #=
+      const eqCode = `a = b #= c`;
       const eqTokens = new Lexer(eqCode).tokenize();
       expect(eqTokens.map((t) => t.type)).toEqual([
         TokenType.IDENTIFIER,
         TokenType.EQ,
         TokenType.IDENTIFIER,
-        TokenType.EQEQ,
+        TokenType.VALUE_EQ,
         TokenType.IDENTIFIER,
         TokenType.EOF,
       ]);

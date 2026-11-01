@@ -1,5 +1,5 @@
-# Program 08: Todo Dashboard (.funx)
-# Demonstrates typed props, filter matching, composed JSX, and immutable event updates.
+// Program 08: Todo Dashboard (.funx)
+// Demonstrates typed props, filter matching, composed JSX, and immutable event updates.
 
 import { Console } from "effect"
 
@@ -11,7 +11,7 @@ import { create } from "mutative";
     });
 }
 
-# --- Standalone JSX runtime for deterministic CLI rendering ---
+// --- Standalone JSX runtime for deterministic CLI rendering ---
 
 ts {
 export const React = {
@@ -23,7 +23,7 @@ export const React = {
   };
 }
 
-# --- Domain types ---
+// --- Domain types ---
 
 export schema Todo = {
   id: String
@@ -42,7 +42,7 @@ export schema DashboardProps = {
   draft: String
 }
 
-# --- Reusable dashboard components ---
+// --- Reusable dashboard components ---
 
 export StatCard = (label: String, value: Number) =>
   <div className="stat-card">
@@ -84,19 +84,19 @@ export TodoDashboard = (props: DashboardProps) =>
       <button type="submit" onClick={() => handleAdd(props.todos, props.draft)}>Add task</button>
     </form>
     <nav className="filters" aria-label="Filter tasks">
-      {FilterButton("All", props.filter == "All")}
-      {FilterButton("Active", props.filter == "Active")}
-      {FilterButton("Completed", props.filter == "Completed")}
+      {FilterButton("All", props.filter #= "All")}
+      {FilterButton("Active", props.filter #= "Active")}
+      {FilterButton("Completed", props.filter #= "Completed")}
     </nav>
     <ul className="todo-list">
       {visibleTodos(props) |> Array.map((todo) => TodoItemRow(todo))}
     </ul>
   </main>
 
-# Immutable state update example used by the UI add handler.
+// Immutable state update example used by the UI add handler.
 export js handleAdd = (todos: Array<Todo>, title: String) => Effect.succeed(addTodo(todos, title))
 
-# --- Deterministic render demonstration ---
+// --- Deterministic render demonstration ---
 
 export main =
   effect {
