@@ -22,11 +22,32 @@ import {
   type Hover,
   type HoverParams,
   MarkupKind,
+  findHover,
 } from "../src/lsp/index.js";
 import { format } from "../src/formatter/index.js";
 
 describe("FunScript LSP Server", () => {
+  it("explains explicit alternatives when hovering an ambiguous bare stage", () => {
+    const hover = findHover("value |> map((item) => item)", "file:///pipeline.fun", { line: 0, character: 10 });
+    expect(hover?.contents).toMatchObject({
+      value: expect.stringContaining("Array.map"),
+    });
+  });
+
   describe("Completion", () => {
+    it("offers explicit companion alternatives for ambiguous bare pipeline stages", () => {
+      const server = new FunScriptLspServer();
+      server.onDidOpenHandler({ textDocument: {
+        uri: "file:///project/pipeline.fun", languageId: "funscript", version: 1,
+        text: "value |> ma",
+      }});
+      const items = server.onCompletionHandler({
+        textDocument: { uri: "file:///project/pipeline.fun" },
+        position: { line: 0, character: 11 },
+      });
+      expect(items.map((item) => item.label)).toContain("Array.map");
+      expect(items.map((item) => item.label)).toContain("Option.map");
+    });
     it("returns local, Effect, JSX and imported workspace symbols for partial source", async () => {
       const server = new FunScriptLspServer();
       await server.handleMessage({

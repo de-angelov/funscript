@@ -5,6 +5,10 @@ import {
   type Range,
 } from "vscode-languageserver/node";
 import { DOC_CATALOG, getAllDocKeywords } from "./docs.js";
+import {
+  PIPELINE_COMPANION_CATALOG,
+  pipelineCompanionCandidates,
+} from "../emitter/pipeline-catalog.js";
 
 export interface IndexedDocument {
   uri: string;
@@ -128,6 +132,25 @@ export function complete(
         doc.signature,
         doc.summary,
       );
+    }
+    if (pipelineContext) {
+      const operations = new Set(Object.values(PIPELINE_COMPANION_CATALOG).flat());
+      for (const operation of operations) {
+        if (typedPrefix && !operation.toLowerCase().startsWith(typedPrefix.toLowerCase())) continue;
+        const candidates = pipelineCompanionCandidates(operation);
+        if (candidates.length < 2) continue;
+        for (const module of candidates) {
+          const label = `${module}.${operation}`;
+          items.set(label, {
+            label,
+            kind: CompletionItemKind.Function,
+            detail: `Explicit pipeline stage — ${operation} is shared by ${candidates.join(", ")}`,
+            documentation: `Use \`${label}(...)\` to avoid an ambiguous bare pipeline stage.`,
+            textEdit: { range, newText: label },
+            sortText: `0-${label.toLowerCase()}`,
+          });
+        }
+      }
     }
     if (/\.funx?$/.test(uri) && jsxContext)
       for (const tag of [

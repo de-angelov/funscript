@@ -13,6 +13,7 @@ import {
 } from "../lexer/tokens.js";
 import { getDocItem, getHoverDocumentation } from "./docs.js";
 import { spanToRange } from "./definition.js";
+import { pipelineCompanionCandidates } from "../emitter/pipeline-catalog.js";
 
 function isWordChar(ch: string): boolean {
   return /[A-Za-z0-9_]/.test(ch);
@@ -157,6 +158,21 @@ function findHoverInTokens(
       },
       range: spanToRange(token.span),
     };
+  }
+
+  // A bare stage can be legal only when the source proves its companion. Give
+  // the user the exact explicit alternatives before they invoke the compiler.
+  if (currentLine.slice(0, token.span.start.column - 1).includes("|>")) {
+    const candidates = pipelineCompanionCandidates(token.value);
+    if (candidates.length > 1) {
+      return {
+        contents: {
+          kind: MarkupKind.Markdown,
+          value: `**Potentially ambiguous pipeline stage** \`${token.value}\` is provided by ${candidates.map((module) => `\`${module}.${token.value}\``).join(", ")}. If the pipeline source cannot prove one module, write an explicit namespace.`,
+        },
+        range: spanToRange(token.span),
+      };
+    }
   }
 
   // Case D: Individual keyword, operator, primitive, or Effect function
