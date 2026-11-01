@@ -108,7 +108,7 @@ export runPromiseTest = fetchUser("123") |> js
     expect(res.typescript).toContain(`export const fetchUser = (id: string) => {`);
     expect(res.typescript).toContain(`id = Schema.decodeUnknownSync(Schema.String)(id);`);
       expect(res.typescript).toContain(`const res = yield* __funscriptJs(() => fetch(("https://api.com/users/" + id)), false);`);
-      expect(res.typescript).toContain(`const payload = yield* __funscriptJs(() => res.json(), false);`);
+      expect(res.typescript).toContain(`const payload = yield* __funscriptJs(() => res.json(), "unknown");`);
     expect(res.typescript).toContain(`Effect.runPromise`);
   });
 
@@ -117,6 +117,7 @@ export runPromiseTest = fetchUser("123") |> js
 ts {
 declare function nullableNative(): Promise<string | null | undefined>
 declare function requiredNative(): Promise<string>
+declare function untrustedNative(): Promise<any>
 }
 
 export nullable = effect {
@@ -128,12 +129,18 @@ export required = effect {
   value <- js requiredNative()
   value
 }
+
+export untrusted = effect {
+  value <- js untrustedNative()
+  value
+}
 `.trim();
 
     const res = await Effect.runPromise(compileString(code, "native-interop.fun"));
     expect(res.typescript).toContain('import { Effect, Option } from "effect";');
     expect(res.typescript).toContain("__funscriptJs(() => nullableNative(), true)");
     expect(res.typescript).toContain("__funscriptJs(() => requiredNative(), false)");
+    expect(res.typescript).toContain('__funscriptJs(() => untrustedNative(), "unknown")');
     expect(res.typescript).toContain("Option.fromNullishOr");
 
     const checked = await Effect.runPromise(typeCheckSource(code, "native-interop.fun"));

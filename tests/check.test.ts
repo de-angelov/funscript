@@ -65,6 +65,19 @@ export same = (left: Number, right: Number) => left @= right
       expect(result.diagnostics.some((d) => d.message.includes("cannot be used with primitive values"))).toBe(true);
     });
 
+    it("requires handling and validation for an untrusted js result", async () => {
+      const result = await Effect.runPromise(typeCheckSource(`
+ts { declare function nativeJson(): Promise<any> }
+export result = effect {
+  payload <- js nativeJson()
+  payload.name
+}
+`.trim(), "untrusted-js.fun"));
+
+      expect(result.success).toBe(false);
+      expect(result.diagnostics.some((d) => d.message.includes("Property 'name' does not exist"))).toBe(true);
+    });
+
     it("detects variable type mismatch and maps back to original line and column", async () => {
       const code = `
 export title: String = "FunScript"

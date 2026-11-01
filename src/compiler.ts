@@ -72,11 +72,15 @@ function applyJsInteropNullability(typescript: string, filename: string): string
   const sourceFile = program.getSourceFile(virtualFile);
   if (!sourceFile) return typescript;
   const checker = program.getTypeChecker();
-  const replacements: Array<{ start: number; end: number; value: "true" | "false" }> = [];
+  const replacements: Array<{ start: number; end: number; value: "true" | "false" | '"unknown"' }> = [];
 
   const includesNullish = (type: ts.Type): boolean => {
     if (type.isUnion()) return type.types.some(includesNullish);
     return Boolean(type.flags & (ts.TypeFlags.Null | ts.TypeFlags.Undefined));
+  };
+  const isUntrusted = (type: ts.Type): boolean => {
+    if (type.isUnion()) return type.types.some(isUntrusted);
+    return Boolean(type.flags & (ts.TypeFlags.Any | ts.TypeFlags.Unknown));
   };
   const visit = (node: ts.Node): void => {
     if (
@@ -88,7 +92,11 @@ function applyJsInteropNullability(typescript: string, filename: string): string
     ) {
       const returnType = checker.getTypeAtLocation(node.arguments[0].body);
       const awaited = checker.getAwaitedType(returnType);
-      const flag = awaited && includesNullish(awaited) ? "true" : "false";
+      const flag = !awaited || isUntrusted(awaited)
+        ? '"unknown"'
+        : includesNullish(awaited)
+        ? "true"
+        : "false";
       replacements.push({ start: node.arguments[1].getStart(sourceFile), end: node.arguments[1].getEnd(), value: flag });
     }
     ts.forEachChild(node, visit);

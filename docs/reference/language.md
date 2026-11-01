@@ -585,7 +585,7 @@ export js fn = (...) => ...
 eff |> js
 ```
 
-Lifts JS Promises into Effects inside effect blocks (`res <- js promiseFn()`). When TypeScript declares the resolved value as `A | null | undefined`, js converts it to `Option<A>` with `Option.fromNullishOr`; non-nullable values remain `A`. It also compiles exported functions to Promise-returning JS functions (`export js fn`) and pipes Effects to JS Promises (`eff |> js`).
+Lifts JS Promises into Effects inside effect blocks (`res <- js promiseFn()`). When TypeScript declares the resolved value as `A | null | undefined`, js converts it to `Option<A>` with `Option.fromNullishOr`; non-nullable values remain `A`. An `any`, `unknown`, or unresolved native result becomes `Option<Unknown>`, requiring both absence handling and schema validation. It also compiles exported functions to Promise-returning JS functions (`export js fn`) and pipes Effects to JS Promises (`eff |> js`).
 
 
 See also: `ts`, `effect`, `export`.

@@ -236,7 +236,8 @@ export class Emitter {
     if (this.needsJsInterop) {
       header += `function __funscriptJs<A>(thunk: () => Promise<A>, nullable: true): Effect.Effect<Option.Option<NonNullable<A>>, unknown>;\n`;
       header += `function __funscriptJs<A>(thunk: () => Promise<A>, nullable: false): Effect.Effect<A, unknown>;\n`;
-      header += `function __funscriptJs<A>(thunk: () => Promise<A>, nullable: boolean): Effect.Effect<A | Option.Option<NonNullable<A>>, unknown> {\n  const effect = Effect.tryPromise(thunk);\n  return nullable ? Effect.map(effect, Option.fromNullishOr) : effect;\n}\n`;
+      header += `function __funscriptJs<A>(thunk: () => Promise<A>, nullable: "unknown"): Effect.Effect<Option.Option<unknown>, unknown>;\n`;
+      header += `function __funscriptJs<A>(thunk: () => Promise<A>, nullable: boolean | "unknown"): Effect.Effect<A | Option.Option<NonNullable<A>> | Option.Option<unknown>, unknown> {\n  const effect = Effect.tryPromise(thunk);\n  return nullable === false ? effect : Effect.map(effect, Option.fromNullishOr);\n}\n`;
     }
 
     if (header.length > 0) {
