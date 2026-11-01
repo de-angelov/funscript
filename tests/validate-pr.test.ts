@@ -145,6 +145,7 @@ describe("GitHub Agent PR Validation & CI Tooling (TASK-022)", () => {
     expect(content).toContain("npm run prettier:check");
     expect(content).toContain("npm run build");
     expect(content).toContain("npm test");
+    expect(content).toContain("npm pack --dry-run");
     expect(content).toContain("timeout-minutes: 15");
     expect(content).not.toContain("node scripts/validate-pr.js");
   });
