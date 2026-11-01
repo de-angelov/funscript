@@ -18,6 +18,12 @@ export nextAge = age + 1
     expect(res.typescript).toContain(`export const nextAge = (age + 1);`);
   });
 
+  it("preserves numeric separators while evaluating their numeric value", async () => {
+    const result = await Effect.runPromise(compileString("export total = 110_110 + 0.5_0"));
+    expect(result.typescript).toContain("110_110");
+    expect(result.typescript).toContain("0.5_0");
+  });
+
   it("compiles lambdas and pipelines", async () => {
     const code = `
 export add = (a: Number, b: Number) => a + b

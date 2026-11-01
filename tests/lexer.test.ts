@@ -23,6 +23,18 @@ describe("FunScript Lexer", () => {
       expect(tokens[6].value).toBe("3.14");
     });
 
+    it("accepts TypeScript-style numeric separators", () => {
+      const tokens = new Lexer("whole = 110_110\ndecimal = 1_024.5_0").tokenize();
+      expect(tokens.filter((token) => token.type === TokenType.NUMBER).map((token) => token.value))
+        .toEqual(["110_110", "1_024.5_0"]);
+    });
+
+    it("rejects numeric separators outside digit groups", () => {
+      for (const source of ["value = 1_", "value = 1__0", "value = 1._0"]) {
+        expect(() => new Lexer(source).tokenize()).toThrow(/Numeric separator must appear between two digits/);
+      }
+    });
+
     it("tokenizes identifiers and upper identifiers", () => {
       const code = `foo barBaz UserShape _`;
       const lexer = new Lexer(code);

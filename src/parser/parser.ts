@@ -954,7 +954,7 @@ export class Parser {
       const tok = this.previous();
       return {
         kind: "NumberLiteral",
-        value: parseFloat(tok.value),
+        value: parseFloat(tok.value.replaceAll("_", "")),
         raw: tok.value,
         span: tok.span,
       };
@@ -1355,7 +1355,7 @@ export class Parser {
     if (this.match(TokenType.NUMBER)) {
       return {
         kind: "LiteralPattern",
-        literal: { kind: "NumberLiteral", value: parseFloat(this.previous().value), raw: this.previous().value, span: this.previous().span },
+        literal: { kind: "NumberLiteral", value: parseFloat(this.previous().value.replaceAll("_", "")), raw: this.previous().value, span: this.previous().span },
         span: this.previous().span,
       };
     }

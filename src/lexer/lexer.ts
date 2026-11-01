@@ -534,15 +534,13 @@ export class Lexer {
     const startPos = this.currentPosition();
     let raw = "";
 
-    while (!this.isAtEnd() && this.isDigit(this.peek())) {
-      raw += this.advance();
-    }
+    raw += this.readDigitsWithSeparators();
 
     if (!this.isAtEnd() && this.peek() === "." && this.isDigit(this.peekAhead(1))) {
       raw += this.advance(); // consume '.'
-      while (!this.isAtEnd() && this.isDigit(this.peek())) {
-        raw += this.advance();
-      }
+      raw += this.readDigitsWithSeparators();
+    } else if (!this.isAtEnd() && this.peek() === "." && this.peekAhead(1) === "_") {
+      throw new LexerError("Numeric separator must appear between two digits", this.currentSpan(2));
     }
 
     this.tokens.push({
@@ -550,6 +548,20 @@ export class Lexer {
       value: raw,
       span: { start: startPos, end: this.currentPosition() },
     });
+  }
+
+  /** Reads decimal digits, allowing `_` only between two digits. */
+  private readDigitsWithSeparators(): string {
+    let raw = "";
+    while (!this.isAtEnd() && this.isDigit(this.peek())) raw += this.advance();
+    while (!this.isAtEnd() && this.peek() === "_") {
+      if (!this.isDigit(this.peekAhead(1))) {
+        throw new LexerError("Numeric separator must appear between two digits", this.currentSpan(1));
+      }
+      raw += this.advance();
+      while (!this.isAtEnd() && this.isDigit(this.peek())) raw += this.advance();
+    }
+    return raw;
   }
 
   private readIdentifierOrKeyword(): void {
