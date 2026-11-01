@@ -45,7 +45,7 @@ flagged by `funscript check`, not left as style advice.
 | Equality & comparisons                 | value `#=` / `#!`, reference `@=` / `@!`; primitive comparisons or Effect companion functions | coercing equality                                                |
 | Booleans                               | `and` / `or` / `not`                                                                            | `&&`, `                                                          |     | `, `!` |
 | Runtime reflection                     | `Schema.is(MyType)` / `match`                                                                   | `typeof`, `instanceof`, `eval`                                   |
-| Functions                              | `=>` lambda (implicit final expression)                                                         | `function`, `return`, method shorthand                           |
+| Functions                              | `=>` lambda; `=> value` closes block bodies                                                     | `function`, `return`, method shorthand                           |
 | Branching & conditionals               | `match` (structural or subjectless boolean), `when` for conditional execution and early returns | `if`, `then`, `else`, ternary, `switch`                          |
 | Modules                                | ESM named exports, `export` prefix, `export { ... } from`                                       | CommonJS, default exports, local `export { ... }`                |
 | Build / test                           | Vite / Vitest via `funscript`                                                                   | a second bundler or test runner by default                       |

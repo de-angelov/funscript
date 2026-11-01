@@ -614,6 +614,30 @@ run = () =>
     });
   });
 
+  describe("Explicit block returns", () => {
+    it("requires an explicit => returnValue at the end of function blocks", () => {
+      expect(() => parse(`
+increment = (value) =>
+  next = value + 1
+  next
+`)).toThrow(/Function block must end with an explicit '=> returnValue'/);
+
+      const ast = parse(`
+increment = (value) =>
+  next = value + 1
+  => next
+`);
+      const fn = (ast.body[0] as BindingDeclaration).init as FunctionExpression;
+      expect((fn.body as BlockStatement).statements.at(-1)?.kind).toBe("ReturnStatement");
+    });
+
+    it("keeps expression-bodied lambdas concise", () => {
+      const ast = parse(`increment = (value) => value + 1`);
+      const fn = (ast.body[0] as BindingDeclaration).init as FunctionExpression;
+      expect(fn.body.kind).toBe("BinaryExpression");
+    });
+  });
+
   describe("Parser Error Handling", () => {
     it("throws ParseError on empty parens not followed by arrow", () => {
       expect(() => parse(`x = () + 1`)).toThrow(ParseError);

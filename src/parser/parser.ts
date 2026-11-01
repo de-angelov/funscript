@@ -584,16 +584,16 @@ export class Parser {
         if (this.match(TokenType.ARROW)) {
           // consumed arrow before expression body
         }
-        body = this.parseFunctionBody();
+        body = this.parseFunctionBody(true);
       } else {
-        body = this.parseFunctionBody();
+        body = this.parseFunctionBody(true);
       }
     } else if (this.check(TokenType.LBRACE)) {
       this.consume(TokenType.LBRACE, "Expected '{'");
-      body = this.parseBraceBlock();
+      body = this.parseBraceBlock(true);
     } else if (this.match(TokenType.NEWLINE)) {
       this.consume(TokenType.INDENT, "Expected indent for function body block");
-      body = this.parseIndentedBlock();
+      body = this.parseIndentedBlock(true);
     } else {
       throw new ParseError("Expected '=>', '{', or newline for function body", this.peek().span);
     }
@@ -995,7 +995,7 @@ export class Parser {
       if (this.match(TokenType.RPAREN)) {
         // Zero-argument lambda: () => ...
         if (this.match(TokenType.ARROW)) {
-          const body = this.parseFunctionBody();
+          const body = this.parseFunctionBody(true);
           return {
             kind: "FunctionExpression",
             params: [],
@@ -1053,7 +1053,7 @@ export class Parser {
         if (!this.match(TokenType.ARROW)) {
           throw new ParseError("Expected '=>' after parameters", this.peek().span);
         }
-        const body = this.parseFunctionBody();
+        const body = this.parseFunctionBody(true);
         return {
           kind: "FunctionExpression",
           params,
@@ -1080,7 +1080,7 @@ export class Parser {
       }
 
       if (this.match(TokenType.ARROW)) {
-        const body = this.parseFunctionBody();
+        const body = this.parseFunctionBody(true);
         return {
           kind: "FunctionExpression",
           params: [{ kind: "Parameter", name: firstExpr as Identifier, span: firstExpr.span }],
@@ -1096,7 +1096,7 @@ export class Parser {
     // 6. Zero-argument function: => body
     if (this.match(TokenType.ARROW)) {
       const start = this.previous().span.start;
-      const body = this.parseFunctionBody();
+      const body = this.parseFunctionBody(true);
       return {
         kind: "FunctionExpression",
         params: [],
@@ -1606,16 +1606,16 @@ export class Parser {
     throw new ParseError("Invalid assignment target", expr.span);
   }
 
-  private parseFunctionBody(): FunctionBody {
+  private parseFunctionBody(requireExplicitReturn = false): FunctionBody {
     this.functionDepth++;
     try {
       if (this.isBraceBlock()) {
         this.consume(TokenType.LBRACE, "Expected '{'");
-        return this.parseBraceBlock();
+        return this.parseBraceBlock(requireExplicitReturn);
       }
       if (this.match(TokenType.NEWLINE)) {
         this.consume(TokenType.INDENT, "Expected indent for function body block");
-        return this.parseIndentedBlock();
+        return this.parseIndentedBlock(requireExplicitReturn);
       }
       return this.parseExpression();
     } finally {
@@ -1623,7 +1623,7 @@ export class Parser {
     }
   }
 
-  private parseBraceBlock(): BlockStatement {
+  private parseBraceBlock(requireExplicitReturn = false): BlockStatement {
     const start = this.previous().span.start;
     const statements: Statement[] = [];
     let finalExpression: Expression | undefined;
@@ -1705,6 +1705,7 @@ export class Parser {
         this.skipNewlines();
 
         if (this.check(TokenType.RBRACE) || this.check(TokenType.DEDENT)) {
+          if (requireExplicitReturn) throw new ParseError("Function block must end with an explicit '=> returnValue'", expr.span);
           finalExpression = expr;
           break;
         } else {
@@ -1724,6 +1725,9 @@ export class Parser {
       }
     }
 
+    if (requireExplicitReturn && statements.at(-1)?.kind !== "ReturnStatement") {
+      throw new ParseError("Function block must end with an explicit '=> returnValue'", { start, end: this.previous().span.end });
+    }
     if (hasIndent) {
       this.consume(TokenType.DEDENT, "Expected unindent after brace block");
     }
@@ -1737,7 +1741,7 @@ export class Parser {
     };
   }
 
-  private parseIndentedBlock(): BlockStatement {
+  private parseIndentedBlock(requireExplicitReturn = false): BlockStatement {
     const start = this.previous().span.start;
     const statements: Statement[] = [];
     let finalExpression: Expression | undefined;
@@ -1808,6 +1812,7 @@ export class Parser {
             const bind = this.parseBindingDeclaration();
             this.skipNewlines();
             if (this.check(TokenType.DEDENT)) {
+              if (requireExplicitReturn) throw new ParseError("Function block must end with an explicit '=> returnValue'", bind.span);
               statements.push(bind);
               finalExpression = bind.id;
               break;
@@ -1820,6 +1825,7 @@ export class Parser {
           this.skipNewlines();
 
           if (this.check(TokenType.DEDENT)) {
+            if (requireExplicitReturn) throw new ParseError("Function block must end with an explicit '=> returnValue'", expr.span);
             finalExpression = expr;
             break;
           } else {
@@ -1840,6 +1846,9 @@ export class Parser {
       }
     }
 
+    if (requireExplicitReturn && statements.at(-1)?.kind !== "ReturnStatement") {
+      throw new ParseError("Function block must end with an explicit '=> returnValue'", { start, end: this.previous().span.end });
+    }
     this.consume(TokenType.DEDENT, "Expected unindent after function body");
     const fallbackExpr: Expression = {
       kind: "Identifier",

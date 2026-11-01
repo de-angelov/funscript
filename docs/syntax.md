@@ -88,7 +88,7 @@ form and rejects the other one.
 | Boolean                        | `and` / `or` / `not`                                                    | `&&` / `\|\|` / `!`                                                                              | `&&`, `\|\|`, `!`                                    |
 | Conditional & pattern match    | `match` (value, boolean, `\|> match`, `\| A \| B =>`)                   | ts-pattern (value) / conditional & `if` (boolean)                                                | `if`, `else`, `switch`, ternary `? :`, `return`      |
 | Type-driven placeholder        | `???`                                                                   | `Never` throw + `checker.getContextualType`                                                      | `TODO as any`                                        |
-| Function                       | `=>` lambda (implicit final-expression return)                          | arrow function                                                                                   | `function`, method shorthand, classes, `return`      |
+| Function                       | `=>` lambda; block bodies end in `=> value`                             | arrow function                                                                                   | `function`, method shorthand, classes, `return`      |
 | Module                         | ESM named exports, `export` prefix, `export { ... } from`               | ESM                                                                                              | CommonJS, default exports, local `export { ... }`    |
 | Package                        | npm/pnpm/Bun via `funscript add`                                        | npm                                                                                              | a FunScript registry                                 |
 | Build/test                     | Vite/Vitest via `funscript`                                             | Vite/Vitest                                                                                      | a second bundler/test runner by default              |
@@ -528,7 +528,8 @@ const answer = () => 42;
 - Function parameters are always immutable (`readonly`); they cannot be marked `mut` or
   reassigned.
 - A function body is either an inline expression or an indented block.
-- The last expression of a block is returned; `=> expr` explicitly returns.
+- An inline expression is the concise return form. Every function block must end in
+  `=> expr`; the final bare expression is never returned implicitly.
   Use `when` for early returns, `match` for branching, and `<- Effect.fail(...)` for typed Effect failure.
 - A trailing binding or `mut` assignment returns the bound/assigned value.
 - Functions use `name = (params) => ...`. Neither `fn` nor `function` is supported; there is no second function keyword, no method
@@ -539,8 +540,9 @@ const answer = () => 42;
 
 ### 3.1.1 Explicit returns and conditional execution
 
-A final expression returns implicitly. `=> expression` explicitly returns from a
-function or block. A return type can precede a braced body:
+An inline expression returns from a lambda. In a braced or indented function block,
+`=> expression` is required for the final return and can also be used for an early
+return. A return type can precede a braced body:
 
 ```funscript
 absolute = (value: Number) => Number {
