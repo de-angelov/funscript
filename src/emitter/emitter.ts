@@ -97,21 +97,36 @@ const ARRAY_COMPANION_METHODS = new Set([
   "groupBy",
 ]);
 
+type CompanionModule = "Array" | "Effect" | "Option" | "Number" | "String" | "Duration" | "Struct";
+
+// Effect exports that accept an Effect as their first argument or expose a
+// data-last overload. Keep this list aligned with the installed Effect API.
+// Names shared with another companion (for example `map` or `flatMap`) resolve
+// to Effect only when the pipeline source is known to produce an Effect.
 const EFFECT_COMPANION_METHODS = new Set([
+  "andThen", "as", "asSome", "asVoid", "awaitAllChildren", "bind", "bindTo",
+  "cached", "cachedInvalidateWithTTL", "cachedWithTTL", "catchCause", "catchCauseFilter",
+  "catchCauseIf", "catchDefect", "catchEager", "catchFilter", "catchIf", "catchNoSuchElement",
+  "catchReason", "catchReasons",
   "orDie",
-  "retry",
-  "timeout",
   "catchTag",
   "catchAll",
   "catchSome",
+  "catchTags", "delay", "ensuring", "eventually", "exit", "filterMapOrElse", "filterMapOrFail",
+  "filterOrElse", "filterOrFail", "flatMap", "flatMapEager", "flatten", "flip", "forever",
+  "forkChild", "forkDetach", "forkIn", "head", "ignore", "ignoreCause", "interruptible",
+  "isFailure", "isSuccess", "linkSpans", "map", "mapBoth", "mapBothEager", "mapEager",
   "mapError",
-  "provide",
-  "provideService",
-  "scoped",
-  "forkScoped",
-  "forever",
-  "repeat",
-  "tap",
+  "mapErrorEager", "match", "matchCause", "matchCauseEager", "matchCauseEffect",
+  "matchCauseEffectEager", "matchEager", "matchEffect", "onError", "onErrorFilter", "onErrorIf",
+  "onExit", "onExitFilter", "onExitIf", "onExitPrimitive", "onInterrupt", "option", "orElseSucceed",
+  "provide", "provideContext", "provideService", "provideServiceEffect", "race", "raceFirst", "repeat",
+  "repeatOrElse", "replicate", "replicateEffect", "result", "retry", "retryOrElse", "sandbox",
+  "schedule", "scheduleFrom", "scoped", "setContext", "forkScoped", "tap", "tapCause", "tapCauseFilter",
+  "tapCauseIf", "tapDefect", "tapError", "tapErrorTag", "timed", "timeout", "timeoutOption",
+  "timeoutOrElse", "track", "trackDefects", "trackDuration", "trackErrors", "trackSuccesses",
+  "uninterruptible", "unwrapReason", "updateContext", "updateService", "when", "withErrorReporting",
+  "withParentSpan", "withSpan", "withSpanScoped", "zip", "zipWith",
 ]);
 
 const OPTION_COMPANION_METHODS = new Set([
@@ -564,6 +579,7 @@ export class Emitter {
     }
     stages.unshift(curr);
 
+    let preferredCompanion = this.inferPipelineCompanion(stages[0]);
     const emittedStages = stages.map((s, idx) => {
       if (idx === 0) return this.emitExpression(s);
 
@@ -573,7 +589,10 @@ export class Emitter {
       }
 
       // Auto-namespace resolution for pipeline stage callee
-      const resolvedStage = this.resolvePipelineStage(s);
+      const resolvedStage = this.resolvePipelineStage(s, preferredCompanion);
+
+      // `js` runs an Effect and leaves the Effect pipeline domain.
+      if (s.kind === "Identifier" && s.name === "js") preferredCompanion = undefined;
 
       // Check if stage has placeholder '_'
       if (this.hasPlaceholder(resolvedStage)) {
@@ -593,6 +612,14 @@ export class Emitter {
     });
 
     return `pipe(\n  ${emittedStages.join(",\n  ")}\n)`;
+  }
+
+  private inferPipelineCompanion(source: Expression): CompanionModule | undefined {
+    if (source.kind === "EffectBlockExpression" || source.kind === "JsExpression") return "Effect";
+    if (source.kind === "CallExpression" && source.callee.kind === "MemberExpression" && source.callee.object.kind === "UpperIdentifier" && source.callee.object.name === "Effect") {
+      return "Effect";
+    }
+    return undefined;
   }
 
   private hasPlaceholder(expr: Expression): boolean {
@@ -627,7 +654,7 @@ export class Emitter {
     }
   }
 
-  private resolvePipelineStage(stage: Expression): Expression {
+  private resolvePipelineStage(stage: Expression, preferredCompanion?: CompanionModule): Expression {
     // 0. 'js' pipeline stage: eff |> js => pipe(eff, Effect.runPromise)
     if (stage.kind === "Identifier" && stage.name === "js") {
       this.effectImports.add("Effect");
@@ -642,7 +669,7 @@ export class Emitter {
     // 1. Bare CallExpression: reduce(acc, f), map(f), lessThanOrEqualTo(0), orDie()
     if (stage.kind === "CallExpression" && stage.callee.kind === "Identifier") {
       const name = stage.callee.name;
-      const companion = this.getCompanionModule(name);
+      const companion = this.getCompanionModule(name, preferredCompanion);
       if (companion) {
         this.effectImports.add(companion);
         return {
@@ -685,7 +712,7 @@ export class Emitter {
     // 2. Bare Identifier in pipeline: orDie, length, etc.
     if (stage.kind === "Identifier") {
       const name = stage.name;
-      const companion = this.getCompanionModule(name);
+      const companion = this.getCompanionModule(name, preferredCompanion);
       if (companion) {
         this.effectImports.add(companion);
         return {
@@ -700,7 +727,8 @@ export class Emitter {
     return stage;
   }
 
-  private getCompanionModule(name: string): "Array" | "Effect" | "Option" | "Number" | "String" | "Record" | "Duration" | "Struct" | undefined {
+  private getCompanionModule(name: string, preferredCompanion?: CompanionModule): CompanionModule | undefined {
+    if (preferredCompanion === "Effect" && EFFECT_COMPANION_METHODS.has(name)) return "Effect";
     if (ARRAY_COMPANION_METHODS.has(name)) return "Array";
     if (EFFECT_COMPANION_METHODS.has(name)) return "Effect";
     if (OPTION_COMPANION_METHODS.has(name)) return "Option";

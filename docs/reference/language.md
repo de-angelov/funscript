@@ -52,10 +52,10 @@ Pipeline composition operator.
 expression |> function(args...)
 ```
 
-Passes the value of the left expression as the first argument (or into placeholder `_`) of the right expression. Compiles to `pipe(...)` or direct function invocation.
+Passes the value of the left expression as the first argument (or into placeholder `_`) of the right expression. Compiles to `pipe(...)` or direct function invocation. In a known Effect pipeline (`effect { ... }`, `js`, or `Effect.*`), supported bare Effect operations resolve automatically; ambiguous operations outside that context retain their normal companion module.
 
 
-See also: `pipe`.
+See also: `pipe`, `Effect.map`, `Effect.timeout`.
 
 ## `and`
 

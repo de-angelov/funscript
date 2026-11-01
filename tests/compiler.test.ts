@@ -40,6 +40,31 @@ export res = 5 |> add(10, _)
     expect(checked.success, checked.formattedOutput).toBe(true);
   });
 
+  it("auto-resolves Effect operations, including names shared with Array, in Effect pipelines", async () => {
+    const code = `
+export transformed =
+  Effect.succeed(1)
+  |> map((value) => value + 1)
+  |> flatMap((value) => Effect.succeed(value * 2))
+  |> as("done")
+  |> timeout("1 second")
+`.trim();
+
+    const res = await Effect.runPromise(compileString(code));
+    expect(res.typescript).toContain(`Effect.map((value) => (value + 1))`);
+    expect(res.typescript).toContain(`Effect.flatMap((value) => Effect.succeed((value * 2)))`);
+    expect(res.typescript).toContain(`Effect.as("done")`);
+    expect(res.typescript).toContain(`Effect.timeout("1 second")`);
+
+    const checked = await Effect.runPromise(typeCheckSource(code, "effect-pipeline.fun"));
+    expect(checked.success, checked.formattedOutput).toBe(true);
+  });
+
+  it("preserves Array resolution for ambiguous bare operations outside Effect pipelines", async () => {
+    const res = await Effect.runPromise(compileString(`export values = [1, 2] |> map((value) => value + 1)`));
+    expect(res.typescript).toContain(`Array.map((value) => (value + 1))`);
+  });
+
   it("compiles pipeline placeholder binary, member, unary, and logical expressions", async () => {
     const code = `
 export resAdd = 5 |> (_ + 1)
