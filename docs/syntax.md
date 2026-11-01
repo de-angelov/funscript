@@ -628,8 +628,8 @@ support pipelines and comparisons on `BigDecimal`, `DateTime`, and `Duration`:
 
 ```funscript
 # Numbers (using Effect's Number module)
-isValid = score |> Number.greaterThanOrEqualTo(0)
-isPass = Number.greaterThan(score, 50)
+isValid = score |> Number.isGreaterThanOrEqualTo(0)
+isPass = Number.isGreaterThan(score, 50)
 
 # Dates and Times
 isExpired = DateTime.greaterThan(now, token.expiresAt)
@@ -640,8 +640,8 @@ isPositive = BigDecimal.greaterThan(price, BigDecimal.fromNumber(0))
 # In a match expression:
 tier =
   match
-    | score |> Number.greaterThanOrEqualTo(90) => "Platinum"
-    | score |> Number.greaterThanOrEqualTo(75) => "Gold"
+    | score |> Number.isGreaterThanOrEqualTo(90) => "Platinum"
+    | score |> Number.isGreaterThanOrEqualTo(75) => "Gold"
     | _ => "Silver"
 ```
 

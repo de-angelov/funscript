@@ -16,7 +16,7 @@ export schema Action =
 export applyAction = (acc: Account, action: Action): Account =>
   match action
     | Deposit(amount) => { ...acc, balance: acc.balance + amount }
-    | Withdraw(amount) when acc.balance |> greaterThanOrEqualTo(amount) =>
+    | Withdraw(amount) when acc.balance |> isGreaterThanOrEqualTo(amount) =>
         { ...acc, balance: acc.balance - amount }
     | Withdraw(amount) => acc
     | Freeze => acc

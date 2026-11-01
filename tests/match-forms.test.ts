@@ -174,9 +174,9 @@ export label = (code: Number) =>
       const code = `
 export grade = (score) =>
   match
-    | score |> greaterThan(90) => "A"
-    | score |> greaterThan(80) => "B"
-    | score |> greaterThan(70) => "C"
+    | score |> isGreaterThan(90) => "A"
+    | score |> isGreaterThan(80) => "B"
+    | score |> isGreaterThan(70) => "C"
     | _ => "F"
 `.trim();
 
@@ -400,10 +400,10 @@ schema Action =
 
 export classifyAction = (act: Action) =>
   match act
-    | Deposit(amount) when amount |> greaterThan(1000) => "huge deposit"
-    | Deposit(amount) when amount |> greaterThan(100) => "medium deposit"
+    | Deposit(amount) when amount |> isGreaterThan(1000) => "huge deposit"
+    | Deposit(amount) when amount |> isGreaterThan(100) => "medium deposit"
     | Deposit(_) => "small deposit"
-    | Withdraw(amount) when amount |> greaterThan(500) => "large withdrawal"
+    | Withdraw(amount) when amount |> isGreaterThan(500) => "large withdrawal"
     | Withdraw(_) => "normal withdrawal"
     | Reset => "reset"
 `.trim();

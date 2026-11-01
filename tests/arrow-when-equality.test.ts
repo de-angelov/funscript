@@ -179,9 +179,9 @@ export schema Action =
 
 export apply = (act: Action) =>
   match act
-    | Deposit(amount) when amount |> greaterThan(1000) => "large deposit"
+    | Deposit(amount) when amount |> isGreaterThan(1000) => "large deposit"
     | Deposit(_) => "normal deposit"
-    | Withdraw(amount) when amount |> greaterThan(500) => "large withdrawal"
+    | Withdraw(amount) when amount |> isGreaterThan(500) => "large withdrawal"
     | _ => "other"
 `.trim();
 

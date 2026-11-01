@@ -1614,6 +1614,12 @@ export class Parser {
         return this.parseBraceBlock(requireExplicitReturn);
       }
       if (this.match(TokenType.NEWLINE)) {
+        // A multiline `match` or `effect` is still one expression-bodied
+        // lambda. Its enclosing arrow supplies the return, rather than making
+        // the match/effect's final expression an implicit function return.
+        if (this.check(TokenType.MATCH) || this.check(TokenType.EFFECT)) {
+          return this.parseExpression();
+        }
         this.consume(TokenType.INDENT, "Expected indent for function body block");
         return this.parseIndentedBlock(requireExplicitReturn);
       }
@@ -1705,7 +1711,7 @@ export class Parser {
         this.skipNewlines();
 
         if (this.check(TokenType.RBRACE) || this.check(TokenType.DEDENT)) {
-          if (requireExplicitReturn) throw new ParseError("Function block must end with an explicit '=> returnValue'", expr.span);
+          if (requireExplicitReturn && expr.kind !== "MatchExpression" && expr.kind !== "EffectBlockExpression") throw new ParseError("Function block must end with an explicit '=> returnValue'", expr.span);
           finalExpression = expr;
           break;
         } else {
@@ -1725,7 +1731,7 @@ export class Parser {
       }
     }
 
-    if (requireExplicitReturn && statements.at(-1)?.kind !== "ReturnStatement") {
+    if (requireExplicitReturn && !finalExpression && statements.at(-1)?.kind !== "ReturnStatement") {
       throw new ParseError("Function block must end with an explicit '=> returnValue'", { start, end: this.previous().span.end });
     }
     if (hasIndent) {
@@ -1825,7 +1831,7 @@ export class Parser {
           this.skipNewlines();
 
           if (this.check(TokenType.DEDENT)) {
-            if (requireExplicitReturn) throw new ParseError("Function block must end with an explicit '=> returnValue'", expr.span);
+            if (requireExplicitReturn && expr.kind !== "MatchExpression" && expr.kind !== "EffectBlockExpression") throw new ParseError("Function block must end with an explicit '=> returnValue'", expr.span);
             finalExpression = expr;
             break;
           } else {
@@ -1846,7 +1852,7 @@ export class Parser {
       }
     }
 
-    if (requireExplicitReturn && statements.at(-1)?.kind !== "ReturnStatement") {
+    if (requireExplicitReturn && !finalExpression && statements.at(-1)?.kind !== "ReturnStatement") {
       throw new ParseError("Function block must end with an explicit '=> returnValue'", { start, end: this.previous().span.end });
     }
     this.consume(TokenType.DEDENT, "Expected unindent after function body");

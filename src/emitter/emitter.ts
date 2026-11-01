@@ -92,10 +92,10 @@ const CHUNK_COMPANION_METHODS = new Set(PIPELINE_COMPANION_CATALOG.Chunk);
 type CompanionModule = PipelineCompanionModule | "Number" | "String" | "Duration" | "Struct";
 
 const NUMBER_COMPANION_METHODS = new Set([
-  "greaterThan",
-  "greaterThanOrEqualTo",
-  "lessThan",
-  "lessThanOrEqualTo",
+  "isGreaterThan",
+  "isGreaterThanOrEqualTo",
+  "isLessThan",
+  "isLessThanOrEqualTo",
   "between",
   "clamp",
   "increment",
@@ -105,13 +105,6 @@ const NUMBER_COMPANION_METHODS = new Set([
 const EFFECT_V4_MEMBER_RENAMES: Readonly<Record<string, string>> = {
   ...EFFECT_PIPELINE_COMPATIBILITY_ALIASES,
   fork: "forkChild",
-};
-
-const NUMBER_V4_MEMBER_RENAMES: Readonly<Record<string, string>> = {
-  greaterThan: "isGreaterThan",
-  greaterThanOrEqualTo: "isGreaterThanOrEqualTo",
-  lessThan: "isLessThan",
-  lessThanOrEqualTo: "isLessThanOrEqualTo",
 };
 
 const STRING_COMPANION_METHODS = new Set(["trim", "trimStart", "trimEnd", "split", "lines", "toUpperCase", "toLowerCase"]);
@@ -501,7 +494,6 @@ export class Emitter {
   private emitMemberProperty(expr: MemberExpression): string {
     if (expr.object.kind === "UpperIdentifier") {
       if (expr.object.name === "Effect") return EFFECT_V4_MEMBER_RENAMES[expr.property.name] ?? expr.property.name;
-      if (expr.object.name === "Number") return NUMBER_V4_MEMBER_RENAMES[expr.property.name] ?? expr.property.name;
     }
     return expr.property.name;
   }
@@ -676,7 +668,7 @@ export class Emitter {
           callee: {
             kind: "MemberExpression",
             object: { kind: "UpperIdentifier", name: companion, span: stage.callee.span },
-            property: { ...stage.callee, name: name === "lines" ? "linesIterator" : NUMBER_V4_MEMBER_RENAMES[name] ?? name },
+            property: { ...stage.callee, name: name === "lines" ? "linesIterator" : name },
             span: stage.callee.span,
           },
         };

@@ -165,7 +165,7 @@ schema Result<T, E> =
     });
 
     it("parses RefinementSchema", () => {
-      const ast = parse(`schema Positive = Number |> Number.greaterThan(0)`);
+      const ast = parse(`schema Positive = Number |> Number.isGreaterThan(0)`);
       const decl = ast.body[0] as SchemaDeclaration;
       expect(decl.id.name).toBe("Positive");
 
@@ -507,7 +507,7 @@ res = match shape
     it("parses match arm guards (when)", () => {
       const ast = parse(`
 res = match shape
-  | Circle(r) when r |> Number.greaterThan(0) => r
+  | Circle(r) when r |> Number.isGreaterThan(0) => r
   | _ => 0
 `);
       const matchExpr = (ast.body[0] as BindingDeclaration).init as MatchExpression;
@@ -542,8 +542,8 @@ res = match code
     it("parses subjectless boolean match expressions", () => {
       const ast = parse(`
 grade = match
-  | score |> Number.greaterThan(90) => "A"
-  | score |> Number.greaterThan(80) => "B"
+  | score |> Number.isGreaterThan(90) => "A"
+  | score |> Number.isGreaterThan(80) => "B"
   | _ => "C"
 `);
       const matchExpr = (ast.body[0] as BindingDeclaration).init as MatchExpression;

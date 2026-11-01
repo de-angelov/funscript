@@ -4,7 +4,7 @@ import { Console } from "effect"
 
 export fib = (n: Number): Number =>
   match
-    | n |> lessThanOrEqualTo(0) => 0
+    | n |> isLessThanOrEqualTo(0) => 0
     | n #= 1 => 1
     | _ => fib(n - 1) + fib(n - 2)
 

@@ -95,14 +95,14 @@ export service Greeter "greeter-v1"
     const unformatted = `
 export classify = (shape: Shape) =>
   match shape
-      | Circle(r) when r |> Number.greaterThan(10) => "large"
+      | Circle(r) when r |> Number.isGreaterThan(10) => "large"
       | Circle(_) => "circle"
       | Rect(w, h) => "rect"
       | _ => "unknown"
 `.trim();
     const formatted = format(unformatted);
     expect(formatted).toBe(
-      `export classify = (shape: Shape) =>\n  match shape\n    | Circle(r) when r |> Number.greaterThan(10) => "large"\n    | Circle(_) => "circle"\n    | Rect(w, h) => "rect"\n    | _ => "unknown"\n`
+      `export classify = (shape: Shape) =>\n  match shape\n    | Circle(r) when r |> Number.isGreaterThan(10) => "large"\n    | Circle(_) => "circle"\n    | Rect(w, h) => "rect"\n    | _ => "unknown"\n`
     );
     expect(format(formatted)).toBe(formatted);
   });
@@ -111,13 +111,13 @@ export classify = (shape: Shape) =>
     const unformatted = `
 export checkNumber = (n: Number) =>
   match
-      | n |> Number.lessThan(0) => "negative"
+      | n |> Number.isLessThan(0) => "negative"
       | n #= 0 => "zero"
       | _ => "positive"
 `.trim();
     const formatted = format(unformatted);
     expect(formatted).toBe(
-      `export checkNumber = (n: Number) =>\n  match\n    | n |> Number.lessThan(0) => "negative"\n    | n #= 0 => "zero"\n    | _ => "positive"\n`
+      `export checkNumber = (n: Number) =>\n  match\n    | n |> Number.isLessThan(0) => "negative"\n    | n #= 0 => "zero"\n    | _ => "positive"\n`
     );
     expect(format(formatted)).toBe(formatted);
   });

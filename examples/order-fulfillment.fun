@@ -125,7 +125,7 @@ export PaymentGatewayLive =
         _ = paymentCallCount.push(1)
         calls = paymentCallCount.length
         res <- match
-          | amount |> greaterThan(50000) =>
+          | amount |> isGreaterThan(50000) =>
               effect {
                 _ <- Console.log("  [PaymentGateway] Transaction denied: credit limit exceeded")
                 _ <- Effect.fail("CreditLimitExceeded")

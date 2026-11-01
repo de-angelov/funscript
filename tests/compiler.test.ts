@@ -24,6 +24,12 @@ export nextAge = age + 1
     expect(result.typescript).toContain("0.5_0");
   });
 
+  it("uses Effect v4 Number.is* comparison names without legacy aliases", async () => {
+    const result = await Effect.runPromise(compileString("export valid = 5 |> isGreaterThan(3)"));
+    expect(result.typescript).toContain("Number.isGreaterThan(3)");
+    expect(result.typescript).not.toContain("Number.greaterThan");
+  });
+
   it("compiles lambdas and pipelines", async () => {
     const code = `
 export add = (a: Number, b: Number) => a + b
@@ -420,7 +426,7 @@ export task = Effect.succeed(1)
       const code = `
 export describeShape = (shape: Shape) =>
   match shape
-    | Circle(r) when r |> Number.greaterThan(0) => r * 2
+    | Circle(r) when r |> Number.isGreaterThan(0) => r * 2
     | Rect(w, h) => w * h
     | Point => 0
     | _ => -1
@@ -478,8 +484,8 @@ export boolToString = (flag: Boolean) =>
       const code = `
 export classify = (score: Number) =>
   match
-    | score |> Number.greaterThan(90) => "A"
-    | score |> Number.greaterThan(80) => "B"
+    | score |> Number.isGreaterThan(90) => "A"
+    | score |> Number.isGreaterThan(80) => "B"
     | _ => "C"
 `.trim();
 
