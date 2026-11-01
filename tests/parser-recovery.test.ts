@@ -84,7 +84,7 @@ describe("Parser Error Recovery & Multi-Diagnostic Reporting", () => {
   describe("Block Statement Synchronization", () => {
     it("recovers and collects multiple errors inside a function body", () => {
       const source = [
-        "compute = (x: Int) ->",
+        "compute = (x: Int) =>",
         "  a = 1 +",
         "  b = 10",
         "  c = 2 +",
@@ -149,7 +149,7 @@ describe("Parser Error Recovery & Multi-Diagnostic Reporting", () => {
     it("produces zero diagnostics and complete AST for valid FunScript code", () => {
       const source = [
         "name = \"FunScript\"",
-        "add = (a: Int, b: Int) -> a + b",
+        "add = (a: Int, b: Int) => a + b",
         "total = add(10, 20)",
       ].join("\n");
 

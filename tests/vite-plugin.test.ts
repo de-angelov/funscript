@@ -67,7 +67,7 @@ export greeting = "hello world"
     it("transforms .funx files into valid TSX with standard JSX intact and attached source maps", async () => {
       const plugin = funscriptPlugin();
       const code = `
-export Button = (props: Props) -> <button className="btn">{props.label}</button>
+export Button = (props: Props) => <button className="btn">{props.label}</button>
 `.trim();
 
       const transformFn = plugin.transform as Function;

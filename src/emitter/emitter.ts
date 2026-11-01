@@ -342,7 +342,7 @@ export class Emitter {
         return `Schema.Array(${this.emitSchemaTypeField(typeNode.typeArgs[0])})`;
       }
       if (tName === "Record" && typeNode.typeArgs?.length === 2) {
-        return `Schema.Record({ key: ${this.emitSchemaTypeField(typeNode.typeArgs[0])}, value: ${this.emitSchemaTypeField(typeNode.typeArgs[1])} })`;
+        return `Schema.Record(${this.emitSchemaTypeField(typeNode.typeArgs[0])}, ${this.emitSchemaTypeField(typeNode.typeArgs[1])})`;
       }
       return tName;
     }
@@ -607,7 +607,7 @@ export class Emitter {
   }
 
   private resolvePipelineStage(stage: Expression): Expression {
-    // 0. 'js' pipeline stage: eff |> js -> pipe(eff, Effect.runPromise)
+    // 0. 'js' pipeline stage: eff |> js => pipe(eff, Effect.runPromise)
     if (stage.kind === "Identifier" && stage.name === "js") {
       this.effectImports.add("Effect");
       return {
@@ -626,6 +626,9 @@ export class Emitter {
         this.effectImports.add(companion);
         return {
           ...stage,
+          args: companion === "Struct" && (name === "pick" || name === "omit")
+            ? [{ kind: "ArrayExpression", elements: stage.args, span: stage.span }]
+            : stage.args,
           callee: {
             kind: "MemberExpression",
             object: { kind: "UpperIdentifier", name: companion, span: stage.callee.span },
@@ -644,6 +647,16 @@ export class Emitter {
         const companion = this.getCompanionModule(prop.name);
         if (companion === obj.name) {
           this.effectImports.add(companion);
+          if (companion === "Struct" && (prop.name === "pick" || prop.name === "omit")) {
+            return {
+              ...stage,
+              args: [{
+                kind: "ArrayExpression",
+                elements: stage.args,
+                span: stage.args.length > 0 ? { start: stage.args[0].span.start, end: stage.args[stage.args.length - 1].span.end } : stage.span,
+              }],
+            };
+          }
         }
       }
     }
@@ -831,7 +844,7 @@ export class Emitter {
 
   private emitMatchExpression(expr: MatchExpression): string {
     if (!expr.scrutinee && !expr.isPipeline) {
-      // Subjectless boolean match -> ? : ternary or if / else
+      // Subjectless boolean match => ? : ternary or if / else
       let code = "";
       for (let i = 0; i < expr.arms.length; i++) {
         const arm = expr.arms[i];
@@ -849,7 +862,7 @@ export class Emitter {
       return `(${code})`;
     }
 
-    // Scrutinee match or pipeline match -> ts-pattern
+    // Scrutinee match or pipeline match => ts-pattern
     this.needsTsPattern = true;
     const isPipe = Boolean(expr.isPipeline);
     let code = isPipe ? `(($v) => match($v)` : `match(${this.emitExpression(expr.scrutinee!)})`;
@@ -1020,7 +1033,7 @@ export class Emitter {
         if (EFFECT_BUILTIN_MODULES.has(obj.name) || this.effectModuleBindings.has(obj.name)) {
           return `${obj.name}.${this.emitMemberProperty(effectExpr.callee)}(${effectExpr.args.map((a) => this.emitExpression(a)).join(", ")})`;
         }
-        // Direct Service Call: Service.method(...) -> (yield* Service).method(...)
+        // Direct Service Call: Service.method(...) => (yield* Service).method(...)
         return `(yield* ${obj.name}).${effectExpr.callee.property.name}(${effectExpr.args.map((a) => this.emitExpression(a)).join(", ")})`;
       }
     }

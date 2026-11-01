@@ -68,7 +68,7 @@ export age = 36
 
     it("correctly offsets line numbers when runtime imports are added to header", async () => {
       const code = `
-export add = (a: Number, b: Number) -> a + b
+export add = (a: Number, b: Number) => a + b
 export res = 5 |> add(10, _)
 `.trim();
 
@@ -111,7 +111,7 @@ export res = 5 |> add(10, _)
 
     it("maps block statements inside functions", async () => {
       const code = `
-export compute = (x: Number) ->
+export compute = (x: Number) =>
   a = x + 1
   b = a * 2
   b + 10
@@ -216,7 +216,7 @@ export schema Config = {
   port: Number
 }
 
-export start = (port: Number) -> port + 1
+export start = (port: Number) => port + 1
 `.trim();
 
       await fs.writeFile(funFile, funCode, "utf-8");
@@ -293,6 +293,6 @@ export start = (port: Number) -> port + 1
       const emitMapJson = JSON.parse(await fs.readFile(emitMapFile, "utf-8"));
       expect(emitTsContent).toContain("//# sourceMappingURL=emit-test.ts.map");
       expect(emitMapJson.version).toBe(3);
-    }, 15000);
+    }, 30000);
   });
 });

@@ -42,27 +42,27 @@ export schema Order = {
 # --- Pure Domain Logic (ts-pattern & Mutative) ---
 
 # Exhaustive pattern matching on DeliveryTier
-export calculateShippingFee = (tier: DeliveryTier) ->
+export calculateShippingFee = (tier: DeliveryTier) =>
   match tier
-    | Standard -> 5
-    | Express -> 15
-    | Overnight -> 30
+    | Standard => 5
+    | Express => 15
+    | Overnight => 30
 
 # Exhaustive pattern matching on PaymentMethod with field deconstruction
-export formatPaymentMethod = (method: PaymentMethod) ->
+export formatPaymentMethod = (method: PaymentMethod) =>
   match method
-    | CreditCard(last4, brand) -> "{brand} ending in {last4}"
-    | DigitalWallet(provider, email) -> "{provider} wallet ({email})"
-    | Crypto(network, txHash) -> "Crypto on {network} ({txHash})"
+    | CreditCard(last4, brand) => "{brand} ending in {last4}"
+    | DigitalWallet(provider, email) => "{provider} wallet ({email})"
+    | Crypto(network, txHash) => "Crypto on {network} ({txHash})"
 
 # Pattern matching on OrderResult
-export describeResult = (res: OrderResult) ->
+export describeResult = (res: OrderResult) =>
   match res
-    | Success(id, tx, tracking) -> "SUCCESS: Order {id} settled (Tx: {tx}) and dispatched with tracking #{tracking}"
-    | Failed(id, reason) -> "FAILED: Order {id} processing stopped: {reason}"
+    | Success(id, tx, tracking) => "SUCCESS: Order {id} settled (Tx: {tx}) and dispatched with tracking #{tracking}"
+    | Failed(id, reason) => "FAILED: Order {id} processing stopped: {reason}"
 
 # Mutative deep record updates (dot-path syntax)
-export updateShipping = (order: Order, carrier: String, trackingNumber: String, estimatedDays: Number) ->
+export updateShipping = (order: Order, carrier: String, trackingNumber: String, estimatedDays: Number) =>
   {
     ...order
     shipping.carrier: carrier
@@ -72,30 +72,30 @@ export updateShipping = (order: Order, carrier: String, trackingNumber: String, 
   }
 
 # Pure discount calculation using pipe
-export applyDiscount = (order: Order, discount: Number) ->
+export applyDiscount = (order: Order, discount: Number) =>
   {
     ...order
     total: order.total - discount
   }
 
 # Mutative array draft recipe
-export appendAuditEntry = (logs: ts { string[] }, entry: String) ->
+export appendAuditEntry = (logs: ts { string[] }, entry: String) =>
   logs
-  |> mut (draft) ->
+  |> mut (draft) =>
     draft.push(entry)
     draft
 
 # --- Effect Services & Dependencies ---
 
 export service InventoryService
-  checkAvailability: (sku: String) -> Effect<Boolean>
-  reserveStock: (sku: String, qty: Number) -> Effect<Boolean>
+  checkAvailability: (sku: String) => Effect<Boolean>
+  reserveStock: (sku: String, qty: Number) => Effect<Boolean>
 
 export service PaymentGateway
-  charge: (orderId: String, amount: Number, method: PaymentMethod) -> Effect<String, String>
+  charge: (orderId: String, amount: Number, method: PaymentMethod) => Effect<String, String>
 
 export service NotificationService
-  sendConfirmation: (customer: String, message: String) -> Effect<Void>
+  sendConfirmation: (customer: String, message: String) => Effect<Void>
 
 # --- Live Layer Implementations ---
 
@@ -103,13 +103,13 @@ mut paymentCallCount: ts { number[] } = []
 
 export InventoryServiceLive =
   Layer.succeed(InventoryService, {
-    checkAvailability: (sku) ->
+    checkAvailability: (sku) =>
       effect {
         _ <- Console.log("  [InventoryService] Checking stock for {sku}...")
         true
       }
 
-    reserveStock: (sku, qty) ->
+    reserveStock: (sku, qty) =>
       effect {
         _ <- Console.log("  [InventoryService] Reserved {qty} unit(s) of {sku}")
         true
@@ -118,26 +118,26 @@ export InventoryServiceLive =
 
 export PaymentGatewayLive =
   Layer.succeed(PaymentGateway, {
-    charge: (orderId, amount, method) ->
+    charge: (orderId, amount, method) =>
       effect {
         methodDesc = formatPaymentMethod(method)
         _ <- Console.log("  [PaymentGateway] Attempting to charge ${amount} via {methodDesc}")
         _ = paymentCallCount.push(1)
         calls = paymentCallCount.length
         res <- match
-          | amount |> greaterThan(50000) ->
+          | amount |> greaterThan(50000) =>
               effect {
                 _ <- Console.log("  [PaymentGateway] Transaction denied: credit limit exceeded")
                 _ <- Effect.fail("CreditLimitExceeded")
                 ""
               }
-          | calls == 1 ->
+          | calls == 1 =>
               effect {
                 _ <- Console.log("  [PaymentGateway] Transient network glitch on attempt 1! Retrying...")
                 _ <- Effect.fail("GatewayTimeout")
                 ""
               }
-          | _ ->
+          | _ =>
               effect {
                 _ <- Console.log("  [PaymentGateway] Payment authorized successfully!")
                 "TXN-90210"
@@ -149,7 +149,7 @@ export PaymentGatewayLive =
 
 export NotificationServiceLive =
   Layer.succeed(NotificationService, {
-    sendConfirmation: (customer, message) ->
+    sendConfirmation: (customer, message) =>
       Console.log("  [NotificationService] Sent confirmation to {customer}: {message}")
   })
 
@@ -159,19 +159,19 @@ export AppLive =
   |> Layer.merge(NotificationServiceLive)
 
 # Helper for service call wrapped in effect
-export checkSku = (sku: String) ->
+export checkSku = (sku: String) =>
   effect {
     avail <- InventoryService.checkAvailability(sku)
     avail
   }
 
-export executePayment = (orderId: String, amount: Number, method: PaymentMethod) ->
+export executePayment = (orderId: String, amount: Number, method: PaymentMethod) =>
   effect {
     tx <- PaymentGateway.charge(orderId, amount, method)
     tx
   }
 
-export notifyCustomer = (customer: String, message: String) ->
+export notifyCustomer = (customer: String, message: String) =>
   effect {
     _ <- NotificationService.sendConfirmation(customer, message)
     true
@@ -179,7 +179,7 @@ export notifyCustomer = (customer: String, message: String) ->
 
 # --- Workflow Implementation ---
 
-export processOrderWorkflow = (order: Order, method: PaymentMethod, tier: DeliveryTier) ->
+export processOrderWorkflow = (order: Order, method: PaymentMethod, tier: DeliveryTier) =>
   effect {
     _ <- Console.log("=== Starting Fulfillment for Order {order.id} ===")
     _ <- Console.log("Customer: {order.customer}, Initial Total: ${order.total}")
@@ -229,9 +229,9 @@ export processOrderWorkflow = (order: Order, method: PaymentMethod, tier: Delive
     Success(finalOrder.id, txId, trackingNum)
   }
 
-export processOrderSafely = (order: Order, method: PaymentMethod, tier: DeliveryTier) ->
+export processOrderSafely = (order: Order, method: PaymentMethod, tier: DeliveryTier) =>
   processOrderWorkflow(order, method, tier)
-  |> Effect.catchAll((err) ->
+  |> Effect.catchAll((err) =>
     effect {
       _ <- Console.log("  [Workflow Recovery] Caught domain error: {err}")
       Failed(order.id, "{err}")

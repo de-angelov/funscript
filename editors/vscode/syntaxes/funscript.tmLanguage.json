@@ -116,13 +116,19 @@
       "patterns": [
         {
           "name": "meta.ts-escape.funscript",
-          "match": "\\b(ts)\\s+(\"([^\"\\\\]|\\\\.)*\")",
+          "match": "\\b(ts)\\s*(\\{)([^}]*)(\\})",
           "captures": {
             "1": {
               "name": "keyword.other.ts.funscript"
             },
             "2": {
-              "name": "string.quoted.ts.funscript"
+              "name": "punctuation.section.block.begin.funscript"
+            },
+            "3": {
+              "name": "meta.embedded.block.typescript"
+            },
+            "4": {
+              "name": "punctuation.section.block.end.funscript"
             }
           }
         }
@@ -180,7 +186,7 @@
         },
         {
           "name": "keyword.operator.arrow.right.funscript",
-          "match": "->"
+          "match": "=>"
         },
         {
           "name": "keyword.operator.typed-hole.funscript",

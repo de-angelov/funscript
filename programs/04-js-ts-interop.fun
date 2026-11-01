@@ -8,11 +8,11 @@ ts { type Timestamp = number; }
 export schema Settings = ts { Record<string, string> }
 
 # 2. Foreign JavaScript Promise simulation
-jsGetGreeting = (name: String) ->
+jsGetGreeting = (name: String) =>
   Promise.resolve("Hello " + name + " from native JavaScript Promise!")
 
 # 3. 'js' in Effect block: auto-wrapped with Effect.tryPromise
-export fetchUserGreeting = (name: String) ->
+export fetchUserGreeting = (name: String) =>
   effect {
     _ <- Console.log("[FunScript] Starting async fiber...")
     greeting <- js jsGetGreeting(name)
@@ -21,14 +21,14 @@ export fetchUserGreeting = (name: String) ->
   }
 
 # 4. 'export js': Emits a function returning a native Promise for outside JS/TS
-export js getPublicGreeting = (name: String) ->
+export js getPublicGreeting = (name: String) =>
   effect {
     res <- fetchUserGreeting(name)
     res
   }
 
 # 5. 'eff |> js': Converts Effect to Promise in pipeline
-export main = () ->
+export main = () =>
   effect {
     _ <- fetchUserGreeting("Ada Lovelace")
     _ <- Console.log("[FunScript] Done!")

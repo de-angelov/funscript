@@ -229,7 +229,7 @@ describe("VS Code Extension Package (TASK-018)", () => {
 
       const arrowRule = pipelinePatterns.find((p) => p.name === "keyword.operator.arrow.right.funscript");
       expect(arrowRule).toBeDefined();
-      expect(new RegExp(arrowRule.match).test("->")).toBe(true);
+      expect(new RegExp(arrowRule.match).test("=>")).toBe(true);
 
       const holeRule = pipelinePatterns.find((p) => p.name === "keyword.operator.typed-hole.funscript");
       expect(holeRule).toBeDefined();
@@ -289,10 +289,15 @@ describe("VS Code Extension Package (TASK-018)", () => {
       expect(new RegExp(commentRule.match).test("# This is a comment")).toBe(true);
 
       const tsRule = grammar.repository["ts-escape"].patterns[0];
-      const tsMatch = "ts { import('effect').Effect }".match(new RegExp(tsRule.match));
+      const tsMatch = "ts { import('effect').Effect }".match(
+        new RegExp(tsRule.match)
+      );
+
       expect(tsMatch).not.toBeNull();
       expect(tsMatch?.[1]).toBe("ts");
-      expect(tsMatch?.[2]).toBe('"import(\'effect\').Effect"');
+      expect(tsMatch?.[2]).toBe("{");
+      expect(tsMatch?.[3]?.trim()).toBe("import('effect').Effect");
+      expect(tsMatch?.[4]).toBe("}");
     });
   });
 

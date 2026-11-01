@@ -2,7 +2,7 @@
  * SolidJS + FunScript Integration Demo
  *
  * Demonstrates:
- * 1. Loading async data via FunScript Effect pipeline -> Solid createResource
+ * 1. Loading async data via FunScript Effect pipeline => Solid createResource
  * 2. Solid fine-grained signals & stores powered by FunScript's pure reducer
  * 3. FunScript Schema validation on UI inputs
  * 4. Solid createMemo deriving visible todos via FunScript's pattern-matched filter
@@ -34,7 +34,7 @@ createRoot(async () => {
   console.log("=== SolidJS + FunScript Integration Demo ===\n");
 
   // 1. Bridge FunScript Effect with Solid createResource
-  console.log("-> 1. Testing Effect -> Solid createResource bridge:");
+  console.log("=> 1. Testing Effect => Solid createResource bridge:");
   const initialTodos = await Effect.runPromise(fetchInitialTodos);
   
   // 2. Solid Fine-Grained Reactive State
@@ -65,7 +65,7 @@ createRoot(async () => {
   });
 
   // 5. Schema Validation Demo
-  console.log("\n-> 2. Testing FunScript Schema validation for UI inputs:");
+  console.log("\n=> 2. Testing FunScript Schema validation for UI inputs:");
   const rawInputValid = { id: 99, title: "Valid user todo", completed: false, priority: "high" };
   const rawInputInvalid = { id: "not-a-number", title: 123, completed: "nope" };
 
@@ -76,7 +76,7 @@ createRoot(async () => {
   console.log("  Invalid input rejected by Schema:", Either.isLeft(check2));
 
   // 6. Dispatching FunScript actions to test fine-grained reactive updates
-  console.log("\n-> 3. Dispatching Actions through FunScript Reducer:");
+  console.log("\n=> 3. Dispatching Actions through FunScript Reducer:");
 
   console.log("\n[Action] AddTodo('Ship FunScript 1.0', 'high')");
   dispatch(AddTodo("Ship FunScript 1.0", "high"));

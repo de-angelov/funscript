@@ -9,14 +9,14 @@ export schema Profile = {
   tags: Array<String>
 }
 
-export updateCity = (p: Profile, newCity: String) ->
+export updateCity = (p: Profile, newCity: String) =>
   {
     ...p
     address.city: newCity
   }
 
-export appendTag = (p: Profile, tag: String) ->
+export appendTag = (p: Profile, tag: String) =>
   p
-  |> mut (draft) ->
+  |> mut (draft) =>
     draft.tags.push(tag)
     draft

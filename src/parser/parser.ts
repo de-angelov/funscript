@@ -572,17 +572,16 @@ export class Parser {
     }
 
     let body: FunctionBody;
-    if (this.match(TokenType.FAT_ARROW) || this.match(TokenType.ARROW)) {
+    if (this.match(TokenType.ARROW)) {
       if (
         !returnType &&
         (this.check(TokenType.UPPER_IDENTIFIER) || this.check(TokenType.IDENTIFIER)) &&
         (this.peekAhead(1).type === TokenType.LBRACE ||
           this.peekAhead(1).type === TokenType.NEWLINE ||
-          this.peekAhead(1).type === TokenType.FAT_ARROW ||
           this.peekAhead(1).type === TokenType.ARROW)
       ) {
         returnType = this.parseTypeNode();
-        if (this.match(TokenType.FAT_ARROW) || this.match(TokenType.ARROW)) {
+        if (this.match(TokenType.ARROW)) {
           // consumed arrow before expression body
         }
         body = this.parseFunctionBody();
@@ -627,7 +626,7 @@ export class Parser {
       condition = this.parseExpression();
     }
 
-    if (this.match(TokenType.FAT_ARROW) || this.match(TokenType.ARROW)) {
+    if (this.match(TokenType.ARROW)) {
       if (this.functionDepth === 0) {
         throw new ParseError("Early return 'when (...) =>' is rejected outside function context", this.previous().span);
       }
@@ -724,8 +723,8 @@ export class Parser {
     this.consume(TokenType.LPAREN, "Expected '(' after 'mut'");
     const draftParam = this.parseIdentifier();
     this.consume(TokenType.RPAREN, "Expected ')' after draft param");
-    if (!this.match(TokenType.ARROW) && !this.match(TokenType.FAT_ARROW)) {
-      throw new ParseError("Expected '->' or '=>' in mut block", this.peek().span);
+    if (!this.match(TokenType.ARROW)) {
+      throw new ParseError("Expected '=>' in mut block", this.peek().span);
     }
 
     this.mutDraftVariables.add(draftParam.name);
@@ -1009,8 +1008,8 @@ export class Parser {
     if (this.match(TokenType.LPAREN)) {
       const start = this.previous().span.start;
       if (this.match(TokenType.RPAREN)) {
-        // Zero-arg lambda: () -> ... or () => ...
-        if (this.match(TokenType.ARROW) || this.match(TokenType.FAT_ARROW)) {
+        // Zero-argument lambda: () => ...
+        if (this.match(TokenType.ARROW)) {
           const body = this.parseFunctionBody();
           return {
             kind: "FunctionExpression",
@@ -1019,10 +1018,10 @@ export class Parser {
             span: { start, end: body.span.end },
           };
         }
-        throw new ParseError("Empty parentheses '()' must be followed by '->' or '=>'", this.previous().span);
+        throw new ParseError("Empty parentheses '()' must be followed by '=>'", this.previous().span);
       }
 
-      // Check if this looks like function params (param: Type, ...) ->
+      // Check if this looks like function params (param: Type, ...) =>
       const firstExpr = this.parseExpression();
 
       if (this.check(TokenType.COLON) || this.check(TokenType.COMMA)) {
@@ -1057,17 +1056,17 @@ export class Parser {
         if (this.match(TokenType.COLON)) {
           returnType = this.parseTypeNode();
         } else if (
-          this.check(TokenType.FAT_ARROW) &&
+          this.check(TokenType.ARROW) &&
           (this.peekAhead(1).type === TokenType.UPPER_IDENTIFIER || this.peekAhead(1).type === TokenType.IDENTIFIER) &&
-          (this.peekAhead(2).type === TokenType.FAT_ARROW ||
+          (this.peekAhead(2).type === TokenType.ARROW ||
             this.peekAhead(2).type === TokenType.LBRACE ||
             this.peekAhead(2).type === TokenType.NEWLINE)
         ) {
           this.advance(); // consume '=>'
           returnType = this.parseTypeNode();
         }
-        if (!this.match(TokenType.ARROW) && !this.match(TokenType.FAT_ARROW)) {
-          throw new ParseError("Expected '=>' or '->' after parameters", this.peek().span);
+        if (!this.match(TokenType.ARROW)) {
+          throw new ParseError("Expected '=>' after parameters", this.peek().span);
         }
         const body = this.parseFunctionBody();
         return {
@@ -1085,9 +1084,9 @@ export class Parser {
       if (this.match(TokenType.COLON)) {
         singleReturnType = this.parseTypeNode();
       } else if (
-        this.check(TokenType.FAT_ARROW) &&
+        this.check(TokenType.ARROW) &&
         (this.peekAhead(1).type === TokenType.UPPER_IDENTIFIER || this.peekAhead(1).type === TokenType.IDENTIFIER) &&
-        (this.peekAhead(2).type === TokenType.FAT_ARROW ||
+        (this.peekAhead(2).type === TokenType.ARROW ||
           this.peekAhead(2).type === TokenType.LBRACE ||
           this.peekAhead(2).type === TokenType.NEWLINE)
       ) {
@@ -1095,7 +1094,7 @@ export class Parser {
         singleReturnType = this.parseTypeNode();
       }
 
-      if (this.match(TokenType.ARROW) || this.match(TokenType.FAT_ARROW)) {
+      if (this.match(TokenType.ARROW)) {
         const body = this.parseFunctionBody();
         return {
           kind: "FunctionExpression",
@@ -1109,8 +1108,8 @@ export class Parser {
       return firstExpr;
     }
 
-    // 6. Zero-arg function: -> body or => body
-    if (this.match(TokenType.ARROW) || this.match(TokenType.FAT_ARROW)) {
+    // 6. Zero-argument function: => body
+    if (this.match(TokenType.ARROW)) {
       const start = this.previous().span.start;
       const body = this.parseFunctionBody();
       return {
@@ -1318,8 +1317,8 @@ export class Parser {
         guard = this.parseExpression();
       }
 
-      if (!this.match(TokenType.ARROW) && !this.match(TokenType.FAT_ARROW)) {
-        throw new ParseError("Expected '->' or '=>' in match arm", this.peek().span);
+      if (!this.match(TokenType.ARROW)) {
+        throw new ParseError("Expected '=>' in match arm", this.peek().span);
       }
       const body = this.parseFunctionBody();
 
@@ -1551,14 +1550,14 @@ export class Parser {
     const firstTok = this.tokens[this.current + i];
     if (firstTok.type === TokenType.DOTDOTDOT) return false;
     if (firstTok.type === TokenType.RBRACE) return false;
-    if (firstTok.type === TokenType.WHEN || firstTok.type === TokenType.MUT || firstTok.type === TokenType.FAT_ARROW) return true;
+    if (firstTok.type === TokenType.WHEN || firstTok.type === TokenType.MUT || firstTok.type === TokenType.ARROW) return true;
     if (firstTok.type === TokenType.IDENTIFIER && firstTok.value === "fn") return true;
     if (this.current + i + 1 < this.tokens.length && this.tokens[this.current + i + 1].type === TokenType.EQ) return true;
 
     while (this.current + i < this.tokens.length) {
       const tok = this.tokens[this.current + i];
       if (tok.type === TokenType.RBRACE || tok.type === TokenType.DEDENT) break;
-      if (tok.type === TokenType.FAT_ARROW || tok.type === TokenType.ARROW) return true;
+      if (tok.type === TokenType.ARROW) return true;
       if (tok.type === TokenType.WHEN || tok.type === TokenType.MUT) return true;
       if (tok.type === TokenType.DOTDOTDOT) return false;
       if (tok.type === TokenType.COLON) {
@@ -1658,7 +1657,7 @@ export class Parser {
           continue;
         }
 
-        if (this.match(TokenType.FAT_ARROW)) {
+        if (this.match(TokenType.ARROW)) {
           const retStart = this.previous().span.start;
           const retExpr = this.parseExpression();
           this.consumeNewlineOrEof();
@@ -1769,7 +1768,8 @@ export class Parser {
           continue;
         }
 
-        if (this.match(TokenType.FAT_ARROW)) {
+
+        if (this.match(TokenType.ARROW)) {
           const retStart = this.previous().span.start;
           const retExpr = this.parseExpression();
           this.consumeNewlineOrEof();
@@ -1781,7 +1781,6 @@ export class Parser {
           this.skipNewlines();
           continue;
         }
-
         if (this.check(TokenType.IDENTIFIER) && this.peek().value === "fn") {
           statements.push(this.parseFunctionDeclaration(false));
           this.skipNewlines();
@@ -1894,8 +1893,8 @@ export class Parser {
         } while (this.match(TokenType.COMMA) && !this.check(TokenType.RPAREN));
       }
       this.consume(TokenType.RPAREN, "Expected ')'");
-      if (!this.match(TokenType.ARROW) && !this.match(TokenType.FAT_ARROW)) {
-        throw new ParseError("Expected '->' or '=>' in function type", this.peek().span);
+      if (!this.match(TokenType.ARROW)) {
+        throw new ParseError("Expected '=>' in function type", this.peek().span);
       }
       const ret = this.parsePrimaryType();
       return {

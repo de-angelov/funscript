@@ -73,7 +73,7 @@ Status: Backlog
 Dependencies: none
 Blocking tasks: none
 
-Objective: Make the formatter preserve the canonical => function syntax used by the migrated showcase examples. Scope: Update formatter emission and focused formatter coverage so canonical => arrows stay canonical; ensure the four showcase examples format cleanly. Out of Scope: Broad formatter redesign or unrelated legacy formatting failures. Acceptance Criteria: Formatting the canonical showcase examples does not rewrite => arrows to legacy -> syntax, and focused formatter/example verification passes. Verification: npx vitest run tests/formatter.test.ts tests/examples.test.ts --reporter=basic --no-color; npm run fmt:check.
+Objective: Make the formatter preserve the canonical => function syntax used by the migrated showcase examples. Scope: Update formatter emission and focused formatter coverage so canonical => arrows stay canonical; ensure the four showcase examples format cleanly. Out of Scope: Broad formatter redesign or unrelated legacy formatting failures. Acceptance Criteria: Formatting the canonical showcase examples does not rewrite => arrows to legacy => syntax, and focused formatter/example verification passes. Verification: npx vitest run tests/formatter.test.ts tests/examples.test.ts --reporter=basic --no-color; npm run fmt:check.
 
 ### Add Type-Directed Abstract Function Resolution
 

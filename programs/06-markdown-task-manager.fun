@@ -55,7 +55,7 @@ export emptyManager: TaskManager = {
 }
 
 # 1. addTask with 'when' early return, Mutative draft array update, and explicit return '=>'
-export addTask = (manager: TaskManager, title: String, tag: String) ->
+export addTask = (manager: TaskManager, title: String, tag: String) =>
   # Early return guard for invalid/empty title
   when (title == "") => manager
 
@@ -68,7 +68,7 @@ export addTask = (manager: TaskManager, title: String, tag: String) ->
   }
 
   # Mutative draft scope updating task collection
-  updatedTasks = manager.tasks |> mut (draft) ->
+  updatedTasks = manager.tasks |> mut (draft) =>
     draft.push(newTask)
     draft
 
@@ -82,12 +82,12 @@ export addTask = (manager: TaskManager, title: String, tag: String) ->
   => updated
 
 # 2. completeTask with 'when' early return and block 'when' condition
-export completeTask = (manager: TaskManager, targetId: Number) ->
+export completeTask = (manager: TaskManager, targetId: Number) =>
   # Early return when collection is empty
   when (manager.tasks.length == 0) => manager
 
-  updatedTasks = manager.tasks |> mut (draft) ->
-    idx = draft.findIndex((t) -> t.id == targetId)
+  updatedTasks = manager.tasks |> mut (draft) =>
+    idx = draft.findIndex((t) => t.id == targetId)
 
     when (idx != -1) {
       existing = draft[idx]
@@ -102,11 +102,11 @@ export completeTask = (manager: TaskManager, targetId: Number) ->
   => updated
 
 # 3. removeTask with block 'when'
-export removeTask = (manager: TaskManager, targetId: Number) ->
+export removeTask = (manager: TaskManager, targetId: Number) =>
   when (manager.tasks.length == 0) => manager
 
-  updatedTasks = manager.tasks |> mut (draft) ->
-    idx = draft.findIndex((t) -> t.id == targetId)
+  updatedTasks = manager.tasks |> mut (draft) =>
+    idx = draft.findIndex((t) => t.id == targetId)
     when (idx != -1) {
       draft.splice(idx, 1)
     }
@@ -116,14 +116,14 @@ export removeTask = (manager: TaskManager, targetId: Number) ->
   => updated
 
 # 4. Markdown Formatter and Serializer
-export formatTaskLine = (task: Task) ->
+export formatTaskLine = (task: Task) =>
   marker =
     match
-      | task.completed == true -> "[x]"
-      | _ -> "[ ]"
+      | task.completed == true => "[x]"
+      | _ => "[ ]"
   => "- " + marker + " #" + task.id + ": " + task.title + " (tag: #" + task.tag + ")"
 
-export serializeToMarkdown = (manager: TaskManager) ->
+export serializeToMarkdown = (manager: TaskManager) =>
   # Early return for empty task manager
   when (manager.tasks.length == 0) => "# Task List\n\nNo active tasks.\n"
 
@@ -135,7 +135,7 @@ export serializeToMarkdown = (manager: TaskManager) ->
 
 # --- Effect File System I/O Workflows ---
 
-export saveTasks = (filePath: String, manager: TaskManager) ->
+export saveTasks = (filePath: String, manager: TaskManager) =>
   effect {
     md = serializeToMarkdown(manager)
     _ <- js writeTaskFile(filePath, md)
@@ -143,7 +143,7 @@ export saveTasks = (filePath: String, manager: TaskManager) ->
     md
   }
 
-export loadTasks = (filePath: String) ->
+export loadTasks = (filePath: String) =>
   effect {
     content <- js readTaskFile(filePath)
     _ <- Console.log("[TaskManager] Loaded markdown file from " + filePath + " (" + content.length + " bytes)")

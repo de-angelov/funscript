@@ -6,15 +6,15 @@ export error NotFound(id: String)
 export error PaymentDeclined(reason: String)
 
 export service UserRepo
-  find: (id: String) -> Effect<String, NotFound>
+  find: (id: String) => Effect<String, NotFound>
 
 export service PaymentGateway
-  charge: (amount: Number) -> Effect<Void, PaymentDeclined>
+  charge: (amount: Number) => Effect<Void, PaymentDeclined>
 
 export service ConfigRepo
-  loadDefaults: () -> Effect<String, NotFound>
+  loadDefaults: () => Effect<String, NotFound>
 
-export checkout = (userId: String, amount: Number) ->
+export checkout = (userId: String, amount: Number) =>
   effect {
     user <- UserRepo.find(userId)
     _ <- PaymentGateway.charge(amount)

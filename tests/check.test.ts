@@ -31,7 +31,7 @@ describe("In-Memory Type-Checking (funscript check via TypeScript API)", () => {
   describe("typeCheckSource unit checks", () => {
     it("type-checks brace-delimited Effect expressions", async () => {
       const result = await Effect.runPromise(typeCheckSource(`
-fetchValue = () -> Effect.succeed(42)
+fetchValue = () => Effect.succeed(42)
 export result: Effect<Number> = effect {
   value <- fetchValue()
   value + 1
@@ -224,7 +224,7 @@ schema Props = {
   label: String
 }
 
-export Button = (props: Props) ->
+export Button = (props: Props) =>
   <button>{props.unknownProp}</button>
 `.trim();
 

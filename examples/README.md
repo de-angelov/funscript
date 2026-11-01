@@ -1,7 +1,7 @@
 # Examples
 
 These files demonstrate FunScript features, but the showcase files listed below have
-not yet been migrated to the current canonical syntax. They use the older `->` arrow
+not yet been migrated to the current canonical syntax. They use the older `=>` arrow
 spelling; current FunScript source uses `=>` for function definitions, function types,
 and match arms. Treat [docs/syntax.md](../docs/syntax.md) as the source of truth when
 writing new code. Run `funscript check <file.fun>` before adapting an example.

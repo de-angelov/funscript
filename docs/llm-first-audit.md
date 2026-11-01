@@ -21,7 +21,7 @@ After: the README describes the actual `src/`, `editors/vscode/`, `tests/`, `doc
 
 ### P0: Featured examples teach a non-canonical function arrow
 
-`examples/hello.fun`, `shapes.fun`, `todo-http.fun`, and `greeter-service.fun` use `->`;
+`examples/hello.fun`, `shapes.fun`, `todo-http.fun`, and `greeter-service.fun` use `=>`;
 the current reference and canonical examples use `=>`. The former Examples README
 mentioned the canonical arrow but did not disclose that its featured code contradicted
 it. LLMs commonly copy the nearest runnable example, so this is a direct syntax error

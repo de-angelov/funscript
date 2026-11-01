@@ -99,7 +99,7 @@ All established match variations are preserved:
 - `src/core/`: AST definitions, interfaces, core abstractions
 - `src/lexer/`: Tokenizer, indentation tracking, layout rules (including `.funx` JSX tokenization)
 - `src/parser/`: Indentation-based syntax parser producing AST + JSX tree parsing
-- `src/compiler/` & `src/emitter/`: AST -> TypeScript / TSX emitter with Effect/ts-pattern integrations
+- `src/compiler/` & `src/emitter/`: AST => TypeScript / TSX emitter with Effect/ts-pattern integrations
 - `src/lsp/`: Language Server Protocol implementation using standard LSP libraries
 - `src/formatter/`: FunScript source code formatter / pretty printer
 - `src/cli/`: Command line tool (`funscript run`, `funscript build`, `funscript fmt`, `funscript lsp`)

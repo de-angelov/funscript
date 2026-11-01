@@ -453,7 +453,7 @@ describe("JSX Lexer Tokenization (.funx mode)", () => {
 
     it("tokenizes JSX after function arrow, effect larrow, match, and array bracket", () => {
       const code = `
-f = () -> <div />
+f = () => <div />
 e = effect
   x <- <span />
 arr = [<li />, <li />]

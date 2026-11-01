@@ -195,7 +195,7 @@ schema ServerConfig = {
 
     it("parses schema with Effect types including error and requirements channels", () => {
       const ast = parse(`
-schema Action = (id: String) -> Effect<User, NotFound, Database>
+schema Action = (id: String) => Effect<User, NotFound, Database>
 `);
       const decl = ast.body[0] as SchemaDeclaration;
       const body = decl.body as TypeSignatureSchema;
@@ -235,8 +235,8 @@ schema Action = (id: String) -> Effect<User, NotFound, Database>
     it("parses ServiceDeclaration with members and default tag", () => {
       const ast = parse(`
 service UserRepo
-  find: (id: String) -> Effect<User, NotFound>
-  save: (user: User) -> Effect<Void>
+  find: (id: String) => Effect<User, NotFound>
+  save: (user: User) => Effect<Void>
 `);
       const svc = ast.body[0] as ServiceDeclaration;
 
@@ -253,7 +253,7 @@ service UserRepo
     it("parses ServiceDeclaration with custom tag string", () => {
       const ast = parse(`
 service PaymentGateway "custom/payment/gateway"
-  charge: (amount: Number) -> Effect<Receipt, PaymentFailed>
+  charge: (amount: Number) => Effect<Receipt, PaymentFailed>
 `);
       const svc = ast.body[0] as ServiceDeclaration;
 
@@ -408,10 +408,10 @@ user = {
 
     it("parses lambda expressions with single and multiple parameters", () => {
       const ast = parse(`
-f1 = () -> 42
-f2 = -> 100
-f3 = (x) -> x + 1
-f4 = (a: Number, b: Number): Number -> a + b
+f1 = () => 42
+f2 = => 100
+f3 = (x) => x + 1
+f4 = (a: Number, b: Number): Number => a + b
 `);
       const l1 = (ast.body[0] as BindingDeclaration).init as FunctionExpression;
       expect(l1.kind).toBe("FunctionExpression");
@@ -431,7 +431,7 @@ f4 = (a: Number, b: Number): Number -> a + b
 
     it("parses multiline block function body with local statements", () => {
       const ast = parse(`
-calculate = (x: Number) ->
+calculate = (x: Number) =>
   multiplier = 2
   temp = x * multiplier
   temp + 1
@@ -448,7 +448,7 @@ calculate = (x: Number) ->
   describe("Mut Block Expressions", () => {
     it("parses mut blocks in pipelines", () => {
       const ast = parse(`
-updated = user |> mut(draft) ->
+updated = user |> mut(draft) =>
   draft.tags.push("active")
   draft
 `);
@@ -469,11 +469,11 @@ updated = user |> mut(draft) ->
     it("parses scrutinee match with constructor patterns, variables, and wildcards", () => {
       const ast = parse(`
 res = match shape
-  | Circle(r) -> r * 2
-  | Rect(w, h) -> w * h
-  | Point -> 0
-  | other -> other
-  | _ -> -1
+  | Circle(r) => r * 2
+  | Rect(w, h) => w * h
+  | Point => 0
+  | other => other
+  | _ => -1
 `);
       const matchExpr = (ast.body[0] as BindingDeclaration).init as MatchExpression;
       expect(matchExpr.kind).toBe("MatchExpression");
@@ -507,8 +507,8 @@ res = match shape
     it("parses match arm guards (when)", () => {
       const ast = parse(`
 res = match shape
-  | Circle(r) when r |> Number.greaterThan(0) -> r
-  | _ -> 0
+  | Circle(r) when r |> Number.greaterThan(0) => r
+  | _ => 0
 `);
       const matchExpr = (ast.body[0] as BindingDeclaration).init as MatchExpression;
       expect(matchExpr.arms[0].guard).toBeDefined();
@@ -518,8 +518,8 @@ res = match shape
     it("parses literal patterns (numbers, booleans) in match arms", () => {
       const ast = parse(`
 res = match flag
-  | true -> 1
-  | false -> 0
+  | true => 1
+  | false => 0
 `);
       const matchExpr = (ast.body[0] as BindingDeclaration).init as MatchExpression;
       expect(matchExpr.arms.length).toBe(2);
@@ -530,8 +530,8 @@ res = match flag
     it("parses OrPattern in match arm", () => {
       const ast = parse(`
 res = match code
-  | 200 | 201 | 204 -> "ok"
-  | _ -> "err"
+  | 200 | 201 | 204 => "ok"
+  | _ => "err"
 `);
       const matchExpr = (ast.body[0] as BindingDeclaration).init as MatchExpression;
       const orPat = matchExpr.arms[0].pattern as OrPattern;
@@ -542,9 +542,9 @@ res = match code
     it("parses subjectless boolean match expressions", () => {
       const ast = parse(`
 grade = match
-  | score |> Number.greaterThan(90) -> "A"
-  | score |> Number.greaterThan(80) -> "B"
-  | _ -> "C"
+  | score |> Number.greaterThan(90) => "A"
+  | score |> Number.greaterThan(80) => "B"
+  | _ => "C"
 `);
       const matchExpr = (ast.body[0] as BindingDeclaration).init as MatchExpression;
       expect(matchExpr.scrutinee).toBeUndefined();
@@ -565,7 +565,7 @@ grade = match
 
     it("parses effect block with binds, discards, local bindings, and final return", () => {
       const ast = parse(`
-getUser = (id: String) -> effect
+getUser = (id: String) => effect
   user <- UserRepo.find(id)
   _ <- Console.log(user)
   prefix = "User: "
@@ -594,7 +594,7 @@ getUser = (id: String) -> effect
 
     it("throws ParseError when non-final bare expression is placed in effect block", () => {
       const code = `
-run = () ->
+run = () =>
   effect
     Console.log("not bound with <-")
     "done"
@@ -605,7 +605,7 @@ run = () ->
 
     it("throws ParseError when effect block does not end with an expression", () => {
       const code = `
-run = () ->
+run = () =>
   effect
     user <- UserRepo.find("1")
 `;
@@ -617,7 +617,7 @@ run = () ->
   describe("Parser Error Handling", () => {
     it("throws ParseError on empty parens not followed by arrow", () => {
       expect(() => parse(`x = () + 1`)).toThrow(ParseError);
-      expect(() => parse(`x = () + 1`)).toThrow(/Empty parentheses '\(\)' must be followed by '->'/);
+      expect(() => parse(`x = () + 1`)).toThrow(/Empty parentheses '\(\)' must be followed by '=>'/);
     });
 
     it("throws ParseError on missing required tokens", () => {

@@ -13,15 +13,15 @@ export schema Action =
   | Withdraw(amount: Number)
   | Freeze
 
-export applyAction = (acc: Account, action: Action): Account ->
+export applyAction = (acc: Account, action: Action): Account =>
   match action
-    | Deposit(amount) -> { ...acc, balance: acc.balance + amount }
-    | Withdraw(amount) when acc.balance |> greaterThanOrEqualTo(amount) ->
+    | Deposit(amount) => { ...acc, balance: acc.balance + amount }
+    | Withdraw(amount) when acc.balance |> greaterThanOrEqualTo(amount) =>
         { ...acc, balance: acc.balance - amount }
-    | Withdraw(amount) -> acc
-    | Freeze -> acc
+    | Withdraw(amount) => acc
+    | Freeze => acc
 
-export formatAccount = (acc: Account) ->
+export formatAccount = (acc: Account) =>
   "Account {acc.id} ({acc.owner}): Balance = ${acc.balance}"
 
 export initialAccount: Account = {

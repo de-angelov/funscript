@@ -50,7 +50,7 @@ Acceptance Criteria:
 Verification:
 Run the documentation checks and focused compiler or tooling checks affected by the changes; record exact commands and results in task notes.
 
-Audit recorded in docs/llm-first-audit.md. Corrected README repository map and CLI status; clarified that featured examples use legacy -> arrows; linked audit from README. Follow-ups created: TASK-073 (migrate showcase examples) and TASK-074 (label implemented versus proposed behavior). Verification passed: npm run build; npx vitest run tests/examples.test.ts --reporter=basic --no-color (6 tests); node dist/cli/index.js check examples/shapes.fun (0 errors); npx prettier --check README.md examples/README.md docs/llm-first-audit.md; git diff --check.
+Audit recorded in docs/llm-first-audit.md. Corrected README repository map and CLI status; clarified that featured examples use legacy => arrows; linked audit from README. Follow-ups created: TASK-073 (migrate showcase examples) and TASK-074 (label implemented versus proposed behavior). Verification passed: npm run build; npx vitest run tests/examples.test.ts --reporter=basic --no-color (6 tests); node dist/cli/index.js check examples/shapes.fun (0 errors); npx prettier --check README.md examples/README.md docs/llm-first-audit.md; git diff --check.
 
 Merged to product main as squash commit 1dcdc50 (docs: audit LLM-first language guidance); pushed to origin/main and verified reachable with git merge-base --is-ancestor 1dcdc50 origin/main. Verification: npm run build passed; npx vitest run tests/examples.test.ts --reporter=basic --no-color passed (6 tests); node dist/cli/index.js check examples/shapes.fun passed (0 errors); npx prettier --check README.md examples/README.md docs/llm-first-audit.md passed; git diff --check passed.
 
@@ -396,7 +396,7 @@ Out-of-scope paths: tests/funx.test.ts:168; tests/examples.test.ts; programs/04-
 Exact output:
 ```text
 To github.com:de-angelov/funscript.git
- ! [rejected]        main -> main (fetch first)
+ ! [rejected]        main => main (fetch first)
 error: failed to push some refs to 'github.com:de-angelov/funscript.git'
 hint: Updates were rejected because the remote contains work that you do not
 hint: have locally. This is usually caused by another repository pushing to
@@ -556,7 +556,7 @@ Status: Done
 Dependencies: TASK-040
 Blocking tasks: none
 
-Objective: Support dot-path and index assignments inside `mut (draft) ->` scopes, and deduplicate auto-injected Effect header imports against user imports.
+Objective: Support dot-path and index assignments inside `mut (draft) =>` scopes, and deduplicate auto-injected Effect header imports against user imports.
 
 Scope:
 - In `src/parser/parser.ts`:
@@ -592,14 +592,14 @@ Blocking tasks: TASK-034
 Objective: Fix Mutative `create(...)` recipe emission so pipeline drafts do not return the `draft` proxy, eliminating TS2345 overload inference errors in `programs/06-markdown-task-manager.fun`.
 
 Scope:
-- In `src/emitter/emitter.ts`, update `emitMutBlockExpression` (or the lowering of `mut (draft) ->` recipes) to emit in-place mutation without returning the draft proxy; alternatively, use direct uncurried `create(target, (draft) => { ... })`.
-- Update `tests/compiler.test.ts` to prove `funscript check` succeeds for a pipeline using `mut (draft) ->`.
+- In `src/emitter/emitter.ts`, update `emitMutBlockExpression` (or the lowering of `mut (draft) =>` recipes) to emit in-place mutation without returning the draft proxy; alternatively, use direct uncurried `create(target, (draft) => { ... })`.
+- Update `tests/compiler.test.ts` to prove `funscript check` succeeds for a pipeline using `mut (draft) =>`.
 
 Out of Scope:
 - Replacing Mutative with another immutability library.
 
 Acceptance Criteria:
-- `tasks |> mut (draft) -> draft.push(item) \n draft` passes static type checking without TS2345 errors.
+- `tasks |> mut (draft) => draft.push(item) \n draft` passes static type checking without TS2345 errors.
 - The focused compiler tests and final full suite pass.
 
 Verification:
@@ -1729,7 +1729,7 @@ Verification:
 - `npx tsc --noEmit` and `npm run build` passed with zero errors.
 - Implemented JSX emission in `src/emitter/emitter.ts` (`emitJsxElement`, `emitJsxSelfClosingElement`, `emitJsxAttribute`, `emitJsxChild`, `emitJsxTagName`, `emitJsxExpressionContainer`, `emitJsxText`).
 - Extended `src/compiler.ts` `CompileResult` to record `targetExtension` (`.tsx` for `.funx` files and `.ts` for `.fun` files).
-- Added `funscript build` CLI command in `src/cli/index.ts` supporting `.funx` -> `.tsx` compilation, `--out`, `--outDir`, and recursive directory scanning.
+- Added `funscript build` CLI command in `src/cli/index.ts` supporting `.funx` => `.tsx` compilation, `--out`, `--outDir`, and recursive directory scanning.
 - Fixed template string interpolation in JSX attributes in `src/lexer/lexer.ts`.
 - Added unit and integration tests in `tests/emitter-jsx.test.ts` (32 tests) and `tests/funx.test.ts` (10 tests).
 - Squash commit merged to product main: 817b3ab (verified reachable from origin/main via `git merge-base --is-ancestor`).
@@ -1880,7 +1880,7 @@ Verification:
 - `npm test` passed: 9 test suites, 256 tests passing cleanly (including 85 tests in `tests/lsp-docs.test.ts`).
 - `npm run build` (`tsc`) compiled cleanly with 0 type errors.
 - Created `src/lsp/docs.ts` providing documentation database, `formatDocToMarkdown`, `getDocItem`, `getAllDocKeywords`, and `getHoverDocumentation` with code snippets, signatures, and explanations.
-- Supported keywords (`service`, `record`, `variant`, `effect`, `match`, `mut`, `fail`, `schema`, `error`, `import`, `export`, `when`, etc.), primitives (`string`, `number`, `boolean`, `void`, `unknown`, `never`, `Array`, `Record`, `Option`, `Either`, etc.), Effect functions (`Effect.succeed`, `Effect.fail`, `Effect.sync`, `Effect.tryPromise`, `Effect.map`, `Effect.flatMap`, `Effect.catchTag`, `Layer`, etc.), and operators (`|>`, `<-`, `->`, `???`).
+- Supported keywords (`service`, `record`, `variant`, `effect`, `match`, `mut`, `fail`, `schema`, `error`, `import`, `export`, `when`, etc.), primitives (`string`, `number`, `boolean`, `void`, `unknown`, `never`, `Array`, `Record`, `Option`, `Either`, etc.), Effect functions (`Effect.succeed`, `Effect.fail`, `Effect.sync`, `Effect.tryPromise`, `Effect.map`, `Effect.flatMap`, `Effect.catchTag`, `Layer`, etc.), and operators (`|>`, `<-`, `=>`, `???`).
 - Re-exported documentation API in `src/lsp/index.ts`.
 - Squash commit: `e2320fa` (`e2320faf07ee3e201dd79492c374710bbc6190cd`)
 - Verified reachable from origin/main via `git merge-base --is-ancestor e2320fa origin/main`.

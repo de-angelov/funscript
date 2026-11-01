@@ -20,7 +20,7 @@ export nextAge = age + 1
 
   it("compiles lambdas and pipelines", async () => {
     const code = `
-export add = (a: Number, b: Number) -> a + b
+export add = (a: Number, b: Number) => a + b
 export res = 5 |> add(10, _)
 `.trim();
 
@@ -94,7 +94,7 @@ export schema Shape =
 
   it("compiles 'js' keyword for interop (export js, effect ingress, pipeline js)", async () => {
     const code = `
-export js fetchUser = (id: String) ->
+export js fetchUser = (id: String) =>
   effect
     res <- js fetch("https://api.com/users/" + id)
     payload <- js res.json()
@@ -152,7 +152,7 @@ export host = "localhost"
 
   it("compiles effect blocks with direct service calls", async () => {
     const code = `
-export getUser = (id: String) ->
+export getUser = (id: String) =>
   effect
     user <- UserRepo.find(id)
     _ <- Console.log(user)
@@ -191,17 +191,17 @@ export fetch =
 
   it("compiles when statements inside effect blocks", async () => {
     const code = `
-export earlyValue = (skip: Boolean) ->
+export earlyValue = (skip: Boolean) =>
   effect
     when (skip) => "early"
     "done"
 
-export failEarly = (shouldFail: Boolean) ->
+export failEarly = (shouldFail: Boolean) =>
   effect
     when (shouldFail) => Effect.fail("failed")
     "done"
 
-export conditionalBlock = (enabled: Boolean) ->
+export conditionalBlock = (enabled: Boolean) =>
   effect
     when (enabled) {
       selected = "inside"
@@ -218,7 +218,7 @@ export conditionalBlock = (enabled: Boolean) ->
 
   it("compiles deep Mutative spreads", async () => {
     const code = `
-export updateCity = (user: User, city: String) ->
+export updateCity = (user: User, city: String) =>
   {
     ...user
     address.city: city
@@ -235,7 +235,7 @@ export updateCity = (user: User, city: String) ->
     const code = `
 tasks = ["existing"]
 item = "new"
-updated = tasks |> mut (draft) ->
+updated = tasks |> mut (draft) =>
   draft.push(item)
   draft
 `.trim();
@@ -251,7 +251,7 @@ updated = tasks |> mut (draft) ->
   it("supports member and index assignments in mut draft blocks", async () => {
     const code = `
 profile = { name: "Ada", tags: ["old"] }
-updated = profile |> mut (draft) ->
+updated = profile |> mut (draft) =>
   draft.name = "Grace"
   draft.tags[0] = "new"
   draft
@@ -276,12 +276,12 @@ export task = Effect.succeed(1)
   describe("Complex pattern matching code generation", () => {
     it("compiles constructor pattern matching with field unpack and guards using ts-pattern", async () => {
       const code = `
-export describeShape = (shape: Shape) ->
+export describeShape = (shape: Shape) =>
   match shape
-    | Circle(r) when r |> Number.greaterThan(0) -> r * 2
-    | Rect(w, h) -> w * h
-    | Point -> 0
-    | _ -> -1
+    | Circle(r) when r |> Number.greaterThan(0) => r * 2
+    | Rect(w, h) => w * h
+    | Point => 0
+    | _ => -1
 `.trim();
 
       const res = await Effect.runPromise(compileString(code));
@@ -297,11 +297,11 @@ export describeShape = (shape: Shape) ->
 
     it("compiles exhaustive pattern matching without otherwise arm", async () => {
       const code = `
-export getArea = (shape: Shape) ->
+export getArea = (shape: Shape) =>
   match shape
-    | Circle(r) -> r * r
-    | Rect(w, h) -> w * h
-    | Point -> 0
+    | Circle(r) => r * r
+    | Rect(w, h) => w * h
+    | Point => 0
 `.trim();
 
       const res = await Effect.runPromise(compileString(code));
@@ -311,16 +311,16 @@ export getArea = (shape: Shape) ->
 
     it("compiles literal pattern matching (numbers and booleans)", async () => {
       const code = `
-export httpStatus = (code: Number) ->
+export httpStatus = (code: Number) =>
   match code
-    | 200 -> "ok"
-    | 404 -> "not found"
-    | _ -> "error"
+    | 200 => "ok"
+    | 404 => "not found"
+    | _ => "error"
 
-export boolToString = (flag: Boolean) ->
+export boolToString = (flag: Boolean) =>
   match flag
-    | true -> "yes"
-    | false -> "no"
+    | true => "yes"
+    | false => "no"
 `.trim();
 
       const res = await Effect.runPromise(compileString(code));
@@ -334,11 +334,11 @@ export boolToString = (flag: Boolean) ->
 
     it("compiles subjectless boolean match expressions to ternary chains", async () => {
       const code = `
-export classify = (score: Number) ->
+export classify = (score: Number) =>
   match
-    | score |> Number.greaterThan(90) -> "A"
-    | score |> Number.greaterThan(80) -> "B"
-    | _ -> "C"
+    | score |> Number.greaterThan(90) => "A"
+    | score |> Number.greaterThan(80) => "B"
+    | _ => "C"
 `.trim();
 
       const res = await Effect.runPromise(compileString(code));
@@ -350,12 +350,12 @@ export classify = (score: Number) ->
 
     it("compiles subjectless match arm with block body to an IIFE", async () => {
       const code = `
-export check = (flag: Boolean) ->
+export check = (flag: Boolean) =>
   match
-    | flag ->
+    | flag =>
       step1 = 1
       step1 + 10
-    | _ -> 0
+    | _ => 0
 `.trim();
 
       const res = await Effect.runPromise(compileString(code));
@@ -389,7 +389,7 @@ export error UserNotFound(id: String, code: Number)
     it("compiles service declarations with custom tag to Context.Service", async () => {
       const code = `
 export service PaymentGateway "custom/payment/gateway"
-  charge: (amount: Number) -> Effect<Receipt, PaymentFailed>
+  charge: (amount: Number) => Effect<Receipt, PaymentFailed>
 `.trim();
 
       const res = await Effect.runPromise(compileString(code));
@@ -401,7 +401,7 @@ export service PaymentGateway "custom/payment/gateway"
 
     it("compiles typed holes to runtime throw expressions", async () => {
       const code = `
-export unfinished = () -> ??? "implement later"
+export unfinished = () => ??? "implement later"
 `.trim();
 
       const res = await Effect.runPromise(compileString(code));
@@ -440,7 +440,7 @@ export unfinished = () -> ??? "implement later"
 
     it("fails with CompilerError diagnostic for non-final bare expression in effect block", async () => {
       const code = `
-getUser = () ->
+getUser = () =>
   effect
     Console.log("test")
     "done"
@@ -452,7 +452,7 @@ getUser = () ->
 
     it("fails with CompilerError diagnostic when effect block misses return expression", async () => {
       const code = `
-getUser = () ->
+getUser = () =>
   effect
     user <- UserRepo.find("123")
 `;

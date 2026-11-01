@@ -52,31 +52,31 @@ export schema DashboardProps = {
 
 # --- Reusable dashboard components ---
 
-export StatCard = (label: String, value: Number) ->
+export StatCard = (label: String, value: Number) =>
   <div className="stat-card">
     <span className="stat-label">{label}</span>
     <strong className="stat-value">{value}</strong>
   </div>
 
-export FilterButton = (label: String, selected: Boolean) ->
+export FilterButton = (label: String, selected: Boolean) =>
   <button className={selected and "filter selected" or "filter"} aria-pressed={selected}>
     {label}
   </button>
 
-export TodoItemRow = (todo: Todo) ->
+export TodoItemRow = (todo: Todo) =>
   <li className={todo.completed and "todo completed" or "todo"} data-id={todo.id}>
     <input type="checkbox" checked={todo.completed} />
     <span>{todo.title}</span>
   </li>
 
-export visibleTodos = (props: DashboardProps) ->
+export visibleTodos = (props: DashboardProps) =>
   match props.filter
     | "All" => props.todos
-    | "Active" => props.todos |> Array.filter((todo) -> not todo.completed)
-    | "Completed" => props.todos |> Array.filter((todo) -> todo.completed)
+    | "Active" => props.todos |> Array.filter((todo) => not todo.completed)
+    | "Completed" => props.todos |> Array.filter((todo) => todo.completed)
     | _ => props.todos
 
-export TodoDashboard = (props: DashboardProps) ->
+export TodoDashboard = (props: DashboardProps) =>
   <main className="todo-dashboard">
     <header className="dashboard-header">
       <h1>Todo Dashboard</h1>
@@ -102,7 +102,7 @@ export TodoDashboard = (props: DashboardProps) ->
   </main>
 
 # Immutable state update example used by the UI add handler.
-export js handleAdd = (todos: Array<Todo>, title: String) -> Effect.succeed(addTodo(todos, title))
+export js handleAdd = (todos: Array<Todo>, title: String) => Effect.succeed(addTodo(todos, title))
 
 # --- Deterministic render demonstration ---
 
