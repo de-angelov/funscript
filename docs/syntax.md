@@ -122,8 +122,8 @@ generated output, but not in idiomatic FunScript:
 - **Equality:** `#=` / `#!` compare values; `@=` / `@!` compare reference identity on reference-like values.
 - **Symbol booleans:** `&&`, `||`, `!` (use `and`, `or`, `not`).
 - **Competing control flow:** `if`, `else`, `then`, `switch`, ternary `? :`, `return`
-  (use `match` or `when`; functions/blocks return their final
-  expression or an explicit `=> expr`).
+  (use `match` or `when`; expression-bodied functions return their expression,
+  while function and effect blocks require an explicit `=> value` return).
 - **Runtime reflection and mutation:** `typeof`, `instanceof`, `in`, `delete`, `eval`,
   `arguments`, `debugger`, `with`, `Object.assign`, and `Object.defineProperty`. Use
   `Schema.is(MySchema)`, `match`, and `{ ...x, a.b: 1 }` / `mut` instead. Type-level `typeof`
