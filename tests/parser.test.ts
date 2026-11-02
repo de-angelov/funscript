@@ -358,6 +358,34 @@ mut flag: Boolean = true
       expect((inequality.right as BinaryExpression).operator).toBe("<");
     });
 
+    it("groups arithmetic, comparisons, equality, and logic by precedence", () => {
+      const ast = parse(`res = 1 + 2 * 3 < 8 #= true and ready or fallback`);
+      let node = (ast.body[0] as BindingDeclaration).init as BinaryExpression;
+
+      expect(node.operator).toBe("or");
+      node = node.left as BinaryExpression;
+      expect(node.operator).toBe("and");
+      node = node.left as BinaryExpression;
+      expect(node.operator).toBe("#=");
+      const comparison = node.left as BinaryExpression;
+      expect(comparison.operator).toBe("<");
+      const addition = comparison.left as BinaryExpression;
+      expect(addition.operator).toBe("+");
+      expect((addition.right as BinaryExpression).operator).toBe("*");
+    });
+
+    it("lets parentheses override comparison and equality precedence", () => {
+      const ast = parse(`res = (1 < 2 #= true) and (3 + 4) * 5 < 40`);
+      const logical = (ast.body[0] as BindingDeclaration).init as BinaryExpression;
+
+      expect(logical.operator).toBe("and");
+      expect((logical.left as BinaryExpression).operator).toBe("#=");
+      const comparison = logical.right as BinaryExpression;
+      expect(comparison.operator).toBe("<");
+      expect((comparison.left as BinaryExpression).operator).toBe("*");
+      expect(((comparison.left as BinaryExpression).left as BinaryExpression).operator).toBe("+");
+    });
+
     it("parses unary expressions (not, -)", () => {
       const ast = parse(`
 a = not active

@@ -193,6 +193,13 @@ export y = 20
   it("formats numeric comparisons below arithmetic precedence", () => {
     const formatted = format(`export valid = (1 + 2) < 4 and 5 >= 3`);
     expect(formatted).toBe(`export valid = 1 + 2 < 4 and 5 >= 3\n`);
+    expect(format(formatted)).toBe(formatted);
+  });
+
+  it("formats mixed comparison, equality, and logical operators idempotently", () => {
+    const formatted = format(`export result = (4 + 5) * 6 < 60 #= true and ready or fallback`);
+    expect(formatted).toBe(`export result = (4 + 5) * 6 < 60 #= true and ready or fallback\n`);
+    expect(format(formatted)).toBe(formatted);
   });
 
   it("formats record literals with shorthand, spreads, and dot-paths", () => {
