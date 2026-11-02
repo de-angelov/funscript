@@ -41,6 +41,49 @@ class NumericComparisonError extends Error {
   }
 }
 
+/** Reuses the host, library files and previous program throughout one compilation. */
+class TypeScriptCompilationContext {
+  private readonly options: ts.CompilerOptions = {
+    strict: true, target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.NodeNext,
+    moduleResolution: ts.ModuleResolutionKind.NodeNext, skipLibCheck: true, jsx: ts.JsxEmit.Preserve,
+  };
+  private readonly virtualFile: string;
+  private readonly normalized: string;
+  private readonly host: ts.CompilerHost;
+  private source = "";
+  private program?: ts.Program;
+
+  constructor(filename: string) {
+    this.virtualFile = filename.endsWith(".funx") ? filename.slice(0, -5) + ".tsx"
+      : filename.endsWith(".fun") ? filename.slice(0, -4) + ".ts" : filename + ".ts";
+    this.normalized = ts.sys.resolvePath(this.virtualFile);
+    const host = ts.createCompilerHost(this.options, true);
+    const getSourceFile = host.getSourceFile.bind(host);
+    const sourceFiles = new Map<string, ts.SourceFile>();
+    const readFile = host.readFile.bind(host);
+    const fileExists = host.fileExists.bind(host);
+    host.getSourceFile = (name, version, onError, shouldCreateNewSourceFile) => {
+      const key = ts.sys.resolvePath(name);
+      if (key === this.normalized) return ts.createSourceFile(name, this.source, version, true);
+      const cached = sourceFiles.get(key);
+      if (cached && !shouldCreateNewSourceFile) return cached;
+      const file = getSourceFile(name, version, onError, shouldCreateNewSourceFile);
+      if (file) sourceFiles.set(key, file);
+      return file;
+    };
+    host.readFile = (name) => ts.sys.resolvePath(name) === this.normalized ? this.source : readFile(name);
+    host.fileExists = (name) => ts.sys.resolvePath(name) === this.normalized || fileExists(name);
+    this.host = host;
+  }
+
+  check(source: string): { sourceFile: ts.SourceFile; checker: ts.TypeChecker } | undefined {
+    this.source = source;
+    this.program = ts.createProgram({ rootNames: [this.virtualFile], options: this.options, host: this.host, oldProgram: this.program });
+    const sourceFile = this.program.getSourceFile(this.normalized) ?? this.program.getSourceFile(this.virtualFile);
+    return sourceFile ? { sourceFile, checker: this.program.getTypeChecker() } : undefined;
+  }
+}
+
 function spanAtOffset(source: string, offset: number): Span {
   const prefix = source.slice(0, offset);
   const lines = prefix.split(/\r?\n/);
@@ -57,43 +100,17 @@ function spanAtOffset(source: string, offset: number): Span {
  * JavaScript: both operands must be proven numbers. This keeps string,
  * locale, and domain ordering explicit through Effect's Order API.
  */
-function validateNumericComparisons(ast: Program, source: string, filename: string): void {
+function validateNumericComparisons(ast: Program, source: string, context: TypeScriptCompilationContext): void {
   const marked = new Emitter(ast, undefined, {
     allowAmbiguousPipeline: true,
     markNumericComparisonOperands: true,
   }).emit();
   if (!marked.includes("__funscriptNumericOperand(")) return;
 
-  const virtualFile = filename.endsWith(".funx")
-    ? filename.slice(0, -5) + ".tsx"
-    : filename.endsWith(".fun")
-    ? filename.slice(0, -4) + ".ts"
-    : filename + ".ts";
   const generated = `const __funscriptNumericOperand = <T,>(_offset: number, _operator: string, value: T): T => value;\n${marked}`;
-  const options: ts.CompilerOptions = {
-    strict: true,
-    target: ts.ScriptTarget.ES2022,
-    module: ts.ModuleKind.NodeNext,
-    moduleResolution: ts.ModuleResolutionKind.NodeNext,
-    skipLibCheck: true,
-    jsx: ts.JsxEmit.Preserve,
-  };
-  const host = ts.createCompilerHost(options, true);
-  const normalized = ts.sys.resolvePath(virtualFile);
-  const originalGetSourceFile = host.getSourceFile.bind(host);
-  host.getSourceFile = (fileName, languageVersion, onError, shouldCreateNewSourceFile) =>
-    ts.sys.resolvePath(fileName) === normalized
-      ? ts.createSourceFile(fileName, generated, languageVersion, true)
-      : originalGetSourceFile(fileName, languageVersion, onError, shouldCreateNewSourceFile);
-  const originalReadFile = host.readFile.bind(host);
-  host.readFile = (fileName) => ts.sys.resolvePath(fileName) === normalized ? generated : originalReadFile(fileName);
-  const originalFileExists = host.fileExists.bind(host);
-  host.fileExists = (fileName) => ts.sys.resolvePath(fileName) === normalized || originalFileExists(fileName);
-
-  const program = ts.createProgram({ rootNames: [virtualFile], options, host });
-  const sourceFile = program.getSourceFile(normalized) ?? program.getSourceFile(virtualFile);
-  if (!sourceFile) return;
-  const checker = program.getTypeChecker();
+  const checked = context.check(generated);
+  if (!checked) return;
+  const { sourceFile, checker } = checked;
 
   const isDefinitelyNumber = (type: ts.Type): boolean => {
     if (type.flags & (ts.TypeFlags.Any | ts.TypeFlags.Unknown | ts.TypeFlags.Never)) return false;
@@ -135,46 +152,20 @@ function validateNumericComparisons(ast: Program, source: string, filename: stri
  * an identity function, so TypeScript sees precisely the expression that will
  * become the first argument to `pipe`, including imports and function calls.
  */
-function inferPipelineCompanions(ast: Program, filename: string): ReadonlyMap<number, PipelineCompanionModule> {
+function inferPipelineCompanions(ast: Program, context: TypeScriptCompilationContext): ReadonlyMap<number, PipelineCompanionModule> {
   const marked = new Emitter(ast, undefined, {
     allowAmbiguousPipeline: true,
     markPipelineSources: true,
   }).emit();
   if (!marked.includes("__funscriptPipelineSource(")) return new Map();
 
-  const virtualFile = filename.endsWith(".funx")
-    ? filename.slice(0, -5) + ".tsx"
-    : filename.endsWith(".fun")
-    ? filename.slice(0, -4) + ".ts"
-    : filename + ".ts";
   // The provisional emitter deliberately leaves unresolved stages bare. Add
   // companion imports here so source expressions such as `Option.some(...)`
   // still receive their real TypeScript type during this analysis pass.
   const source = `import { Array, Chunk, Effect, Layer, Option, Result, Schedule, Schema, Stream } from "effect";\nconst __funscriptPipelineSource = <T>(_id: number, value: T): T => value;\n${marked}`;
-  const options: ts.CompilerOptions = {
-    strict: true,
-    target: ts.ScriptTarget.ES2022,
-    module: ts.ModuleKind.NodeNext,
-    moduleResolution: ts.ModuleResolutionKind.NodeNext,
-    skipLibCheck: true,
-    jsx: ts.JsxEmit.Preserve,
-  };
-  const host = ts.createCompilerHost(options, true);
-  const normalized = ts.sys.resolvePath(virtualFile);
-  const originalGetSourceFile = host.getSourceFile.bind(host);
-  host.getSourceFile = (fileName, languageVersion, onError, shouldCreateNewSourceFile) =>
-    ts.sys.resolvePath(fileName) === normalized
-      ? ts.createSourceFile(fileName, source, languageVersion, true)
-      : originalGetSourceFile(fileName, languageVersion, onError, shouldCreateNewSourceFile);
-  const originalReadFile = host.readFile.bind(host);
-  host.readFile = (fileName) => ts.sys.resolvePath(fileName) === normalized ? source : originalReadFile(fileName);
-  const originalFileExists = host.fileExists.bind(host);
-  host.fileExists = (fileName) => ts.sys.resolvePath(fileName) === normalized || originalFileExists(fileName);
-
-  const program = ts.createProgram({ rootNames: [virtualFile], options, host });
-  const sourceFile = program.getSourceFile(normalized) ?? program.getSourceFile(virtualFile);
-  if (!sourceFile) return new Map();
-  const checker = program.getTypeChecker();
+  const checked = context.check(source);
+  if (!checked) return new Map();
+  const { sourceFile, checker } = checked;
   const companions = new Map<number, PipelineCompanionModule>();
 
   const companionForType = (type: ts.Type): PipelineCompanionModule | undefined => {
@@ -237,39 +228,12 @@ function inferPipelineCompanions(ast: Program, filename: string): ReadonlyMap<nu
  * adapter and this pass supplies the one runtime fact that TypeScript erases —
  * whether the resolved native value can be null or undefined.
  */
-function applyJsInteropNullability(typescript: string, filename: string): string {
+function applyJsInteropNullability(typescript: string, context: TypeScriptCompilationContext): string {
   if (!typescript.includes("__funscriptJs(")) return typescript;
 
-  const virtualFile = filename.endsWith(".funx")
-    ? filename.slice(0, -5) + ".tsx"
-    : filename.endsWith(".fun")
-    ? filename.slice(0, -4) + ".ts"
-    : filename + ".ts";
-  const compilerOptions: ts.CompilerOptions = {
-    strict: true,
-    target: ts.ScriptTarget.ES2022,
-    module: ts.ModuleKind.NodeNext,
-    moduleResolution: ts.ModuleResolutionKind.NodeNext,
-    skipLibCheck: true,
-    jsx: ts.JsxEmit.Preserve,
-  };
-  const defaultHost = ts.createCompilerHost(compilerOptions, true);
-  const normalized = ts.sys.resolvePath(virtualFile);
-  const host: ts.CompilerHost = {
-    ...defaultHost,
-    getSourceFile: (fileName, languageVersion, onError, shouldCreateNewSourceFile) => {
-      if (ts.sys.resolvePath(fileName) === normalized) {
-        return ts.createSourceFile(fileName, typescript, languageVersion, true);
-      }
-      return defaultHost.getSourceFile(fileName, languageVersion, onError, shouldCreateNewSourceFile);
-    },
-    readFile: (fileName) => ts.sys.resolvePath(fileName) === normalized ? typescript : defaultHost.readFile(fileName),
-    fileExists: (fileName) => ts.sys.resolvePath(fileName) === normalized || defaultHost.fileExists(fileName),
-  };
-  const program = ts.createProgram({ rootNames: [virtualFile], options: compilerOptions, host });
-  const sourceFile = program.getSourceFile(normalized) ?? program.getSourceFile(virtualFile);
-  if (!sourceFile) return typescript;
-  const checker = program.getTypeChecker();
+  const checked = context.check(typescript);
+  if (!checked) return typescript;
+  const { sourceFile, checker } = checked;
   const replacements: Array<{ start: number; end: number; value: "true" | "false" | '"unknown"' }> = [];
 
   const includesNullish = (type: ts.Type): boolean => {
@@ -326,10 +290,11 @@ export const compileString = (
       const ast = parser.parse();
 
       // 3. Emit TypeScript
-      validateNumericComparisons(ast, source, filename);
-      const pipelineCompanions = inferPipelineCompanions(ast, filename);
+      const context = new TypeScriptCompilationContext(filename);
+      validateNumericComparisons(ast, source, context);
+      const pipelineCompanions = inferPipelineCompanions(ast, context);
       const emitter = new Emitter(ast, undefined, { pipelineCompanions });
-      const typescript = applyJsInteropNullability(emitter.emit(), filename);
+      const typescript = applyJsInteropNullability(emitter.emit(), context);
       const targetExtension = filename.endsWith(".funx") ? ".tsx" : ".ts";
 
       // 4. Source map generation using magic-string

@@ -52,6 +52,21 @@ export nextAge = age + 1
       .rejects.toThrow("< is only available for numbers");
   });
 
+  it("preserves checker facts across comparison, pipeline, and interop passes", async () => {
+    const code = `
+ts { declare function nativeValue(): Promise<number | null> }
+values = [1, 2]
+export result = effect {
+  value <- js nativeValue()
+  => values |> Array.filter((n: Number) => n > 0)
+}
+`.trim();
+    const result = await Effect.runPromise(compileString(code, "mixed-checks.fun"));
+    expect(result.typescript).toContain("__funscriptJs(() => nativeValue(), true)");
+    expect(result.typescript).toContain("Array.filter");
+    expect(result.typescript).toContain("(n > 0)");
+  });
+
   it("compiles lambdas and pipelines", async () => {
     const code = `
 export add = (a: Number, b: Number) => a + b
