@@ -134,7 +134,9 @@ function validateNumericComparisons(ast: Program, source: string, context: TypeS
       const type = checker.getTypeAtLocation(node.arguments[2]);
       if (!isDefinitelyNumber(type)) {
         const operator = node.arguments[1].text;
-        const helper = operator.startsWith(">") ? "isGreaterThan" : "isLessThan";
+        const helper = operator === ">=" ? "isGreaterThanOrEqualTo"
+          : operator === "<=" ? "isLessThanOrEqualTo"
+          : operator === ">" ? "isGreaterThan" : "isLessThan";
         const received = checker.typeToString(type);
         throw new NumericComparisonError(
           `${operator} is only available for numbers; this operand has type ${received}. Use Order.${helper}(String.Order)(...) or an explicit domain Order.`,
@@ -162,13 +164,22 @@ function inferPipelineCompanions(ast: Program, context: TypeScriptCompilationCon
   // The provisional emitter deliberately leaves unresolved stages bare. Add
   // companion imports here so source expressions such as `Option.some(...)`
   // still receive their real TypeScript type during this analysis pass.
-  const source = `import { Array, Chunk, Effect, Layer, Option, Result, Schedule, Schema, Stream } from "effect";\nconst __funscriptPipelineSource = <T>(_id: number, value: T): T => value;\n${marked}`;
+  const source = `import { Array, Chunk, Effect, Layer, Option, Result, Schedule, Schema, Stream } from "effect";\nconst __funscriptPipelineSource = <T,>(_id: number, value: T): T => value;\n${marked}`;
   const checked = context.check(source);
   if (!checked) return new Map();
   const { sourceFile, checker } = checked;
   const companions = new Map<number, PipelineCompanionModule>();
 
   const companionForType = (type: ts.Type): PipelineCompanionModule | undefined => {
+    // Effect's own Option and Result aliases are unions of their variants.
+    // The alias identifies the whole union, unlike a mixed outer union.
+    if (type.aliasSymbol?.getName() === "Option") return "Option";
+    if (type.aliasSymbol?.getName() === "Result") return "Result";
+    if (type.isUnion()) {
+      const members = type.types.map(companionForType);
+      const first = members[0];
+      return first && members.every((member) => member === first) ? first : undefined;
+    }
     const printed = checker.typeToString(type);
     if (/^Option(?:<|$)/.test(printed)) return "Option";
     if (/^Result(?:<|$)/.test(printed)) return "Result";
@@ -178,10 +189,6 @@ function inferPipelineCompanions(ast: Program, context: TypeScriptCompilationCon
     if (/^Layer(?:<|$)/.test(printed)) return "Layer";
     if (/^Stream(?:<|$)/.test(printed)) return "Stream";
     if (/^Schema(?:<|$)/.test(printed)) return "Schema";
-    if (type.isUnion()) {
-      const members = [...new Set(type.types.map(companionForType).filter((member): member is PipelineCompanionModule => Boolean(member)))];
-      return members.length === 1 ? members[0] : undefined;
-    }
     if (type.flags & (ts.TypeFlags.Any | ts.TypeFlags.Unknown)) return undefined;
     if (checker.isArrayType(type) || checker.isTupleType(type)) return "Array";
     const symbol = type.aliasSymbol ?? type.getSymbol();

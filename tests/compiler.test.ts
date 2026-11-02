@@ -45,6 +45,26 @@ export nextAge = age + 1
       .rejects.toThrow(">= is only available for numbers; this operand has type unknown");
   });
 
+  it("suggests inclusive Effect predicates for inclusive operators", async () => {
+    for (const [operator, method] of [[">=", "isGreaterThanOrEqualTo"], ["<=", "isLessThanOrEqualTo"]]) {
+      await expect(Effect.runPromise(compileString(`export invalid = (value: String) => value ${operator} "x"`)))
+        .rejects.toThrow(`Order.${method}(String.Order)`);
+    }
+  });
+
+  it("infers pipeline companions in funx files", async () => {
+    const source = "ts { declare function numbers(): ReadonlyArray<number> }\nexport result = numbers() |> map((x) => x + 1)";
+    const result = await Effect.runPromise(compileString(source, "inference.funx"));
+    expect(result.typescript).toContain("Array.map");
+  });
+
+  it("rejects ambiguous pipeline stages on mixed unions", async () => {
+    const source = "ts { declare const value: ReadonlyArray<number> | string }\nexport result = value |> map((x) => x)";
+    await expect(Effect.runPromise(compileString(source, "union.fun"))).rejects.toThrow("map is ambiguous");
+    const optional = "ts { declare const value: import('effect').Option.Option<number> | undefined }\nexport result = value |> map((x) => x)";
+    await expect(Effect.runPromise(compileString(optional, "optional-union.fun"))).rejects.toThrow("map is ambiguous");
+  });
+
   it("enforces numeric ordering in funx files", async () => {
     const result = await Effect.runPromise(compileString("export valid = 1 < 2", "comparison.funx"));
     expect(result.typescript).toContain("(1 < 2)");
