@@ -2,8 +2,9 @@
 
 ## Current, verified documentation
 
-These pages are generated from the implementation or validated by CI. They are the
-canonical contract for the released toolchain.
+The [syntax guide](syntax.md) describes the current language syntax. Generated language
+and reference pages are implementation-derived catalogues; they summarize the released
+toolchain rather than define syntax independently.
 
 - [CLI reference](reference/cli.md) — generated from `src/cli/commands.ts`.
 - [Package API](reference/api.md) — generated from `package.json` exports.
@@ -19,5 +20,5 @@ are useful context, but they are not the current implementation contract and the
 are not validated as runnable examples. When they disagree with the current documentation, the
 current verified documentation wins.
 
-- `proposal.md`, `pit-of-success.md`, `rejected-syntax.md`, `syntax.md`
+- `proposal.md`, `pit-of-success.md`, `rejected-syntax.md`
 - `DOGFOODING.md`, `llm-first-audit.md`, `design-effect-comparison-functions.md`, `ast-spec.md`
