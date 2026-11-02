@@ -339,6 +339,25 @@ mut flag: Boolean = true
       expect((logical.right as BinaryExpression).operator).toBe(">=");
     });
 
+    it("binds numeric comparisons more tightly than value equality", () => {
+      const ast = parse(`res = 1 < 2 #= 3 >= 4`);
+      const binding = ast.body[0] as BindingDeclaration;
+      const equality = binding.init as BinaryExpression;
+
+      expect(equality.operator).toBe("#=");
+      expect((equality.left as BinaryExpression).operator).toBe("<");
+      expect((equality.right as BinaryExpression).operator).toBe(">=");
+    });
+
+    it("binds numeric comparisons more tightly than value inequality", () => {
+      const ast = parse(`res = 1 #! 2 < 3`);
+      const binding = ast.body[0] as BindingDeclaration;
+      const inequality = binding.init as BinaryExpression;
+
+      expect(inequality.operator).toBe("#!");
+      expect((inequality.right as BinaryExpression).operator).toBe("<");
+    });
+
     it("parses unary expressions (not, -)", () => {
       const ast = parse(`
 a = not active
