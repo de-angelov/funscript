@@ -1483,7 +1483,7 @@ export getUser = (id: String) =>
   effect {
     user <- UserRepo.find(id)
     org <- OrgRepo.find(user.orgId)
-    { user, org }
+    => { user, org }
   }
 ```
 
