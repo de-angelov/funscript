@@ -46,7 +46,7 @@ The design rule is simple:
 | Error                        | `error NotFound(id: String)`                                                                     |
 | Service                      | `service Greeter` newline `greet: (name: String) => Effect<String>`                              |
 | Layer (pure / effectful)     | `Layer.succeed(Greeter, { ... })` or `Layer.effect(Greeter, effect { ... })`                    |
-| Effect block                 | `effect { user <- UserRepo.find(id); user }` (canonical; indentation form is implemented compatibility syntax) |
+| Effect block                 | `effect { user <- UserRepo.find(id); => user }` (canonical; indentation form is implemented compatibility syntax) |
 | Effect bind                  | `name <- effect`                                                                                 |
 | Discard effect               | `_ <- effect`                                                                                    |
 | Typed hole                   | `???` or `??? "todo: handle pagination"`                                                         |
