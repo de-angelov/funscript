@@ -4,6 +4,28 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 import { format, checkFormat, extractComments } from "../src/formatter/index.js";
 import prettierPlugin from "../src/formatter/prettier.js";
+import { Lexer } from "../src/lexer/lexer.js";
+import { Parser } from "../src/parser/parser.js";
+
+function operatorTree(source: string): unknown {
+  const program = new Parser(new Lexer(source, "test.fun").tokenize(), "test.fun").parse();
+  const declaration = program.body[0];
+  if (declaration?.kind !== "ExportDeclaration" || declaration.declaration.kind !== "BindingDeclaration") {
+    throw new Error("Expected an exported binding");
+  }
+
+  const withoutSpans = (value: unknown): unknown => {
+    if (Array.isArray(value)) return value.map(withoutSpans);
+    if (value !== null && typeof value === "object") {
+      return Object.fromEntries(
+        Object.entries(value).filter(([key]) => key !== "span").map(([key, child]) => [key, withoutSpans(child)])
+      );
+    }
+    return value;
+  };
+
+  return withoutSpans(declaration.declaration.init);
+}
 
 describe("FunScript Code Formatter", () => {
   it("formats basic bindings and expressions canonically", () => {
@@ -200,6 +222,25 @@ export y = 20
     const formatted = format(`export result = (4 + 5) * 6 < 60 #= true and ready or fallback`);
     expect(formatted).toBe(`export result = (4 + 5) * 6 < 60 #= true and ready or fallback\n`);
     expect(format(formatted)).toBe(formatted);
+  });
+
+  it("preserves operator grouping through formatting", () => {
+    const expressions = [
+      "1 + 2 * 3 - 4 / 2",
+      "2 ** 3 ** 2",
+      "1 + 2 #= 3 * 1",
+      "1 + 2 < 4 * 2",
+      "ready or fallback and enabled",
+      "(1 + 2) * 3",
+      "(1 - 2) - 3",
+      "1 - (2 - 3)",
+      "(ready or fallback) and enabled",
+    ];
+
+    for (const expression of expressions) {
+      const source = `export result = ${expression}`;
+      expect(operatorTree(format(source))).toEqual(operatorTree(source));
+    }
   });
 
   it("formats record literals with shorthand, spreads, and dot-paths", () => {
