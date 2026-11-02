@@ -81,6 +81,8 @@ export interface EmitterOptions {
   allowAmbiguousPipeline?: boolean;
   /** Wrap pipeline sources so the checker can locate their exact inferred type. */
   markPipelineSources?: boolean;
+  /** Wrap native comparison operands so the checker can enforce number-only use. */
+  markNumericComparisonOperands?: boolean;
 }
 
 const ARRAY_COMPANION_METHODS = new Set(PIPELINE_COMPANION_CATALOG.Array);
@@ -740,7 +742,7 @@ export class Emitter {
     if (module === "String") return STRING_COMPANION_METHODS.has(operation);
     if (module === "Struct") return RECORD_COMPANION_METHODS.has(operation);
     if (module === "Duration") return DURATION_COMPANION_METHODS.has(operation);
-    return PIPELINE_COMPANION_CATALOG[module].includes(operation) ||
+    return (PIPELINE_COMPANION_CATALOG[module]?.includes(operation) ?? false) ||
       (module === "Effect" && operation in EFFECT_PIPELINE_COMPATIBILITY_ALIASES);
   }
 
@@ -792,6 +794,17 @@ export class Emitter {
         }
         this.effectImports.add("Equal");
         return `(!Equal.equals(${left}, ${right}))`;
+      case "<":
+      case "<=":
+      case ">":
+      case ">=": {
+        if (!this.options.markNumericComparisonOperands) {
+          return `(${left} ${expr.operator} ${right})`;
+        }
+        const mark = (operand: string, offset: number) =>
+          `__funscriptNumericOperand(${offset}, ${JSON.stringify(expr.operator)}, ${operand})`;
+        return `(${mark(left, expr.left.span.start.offset)} ${expr.operator} ${mark(right, expr.right.span.start.offset)})`;
+      }
       default:
         return `(${left} ${expr.operator} ${right})`;
     }

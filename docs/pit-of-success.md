@@ -668,32 +668,32 @@ strings. When applied to `BigDecimal`, `DateTime`, `Duration`, or complex domain
 they coerce to `NaN` or compare by object reference, failing silently. Furthermore, floating
 point math produces `0.1 + 0.2 #= 0.3` bugs.
 
-**The FunScript path:** comparisons are pure, data-last functions that work on any type:
+**The FunScript path:** native operators are reserved for values TypeScript can prove are
+numbers. Every other ordering is explicit through Effect's `Order` API:
 
 ```funscript
 # Numbers
-isValid = score |> Number.greaterThanOrEqualTo(0)
+isValid = score >= 0
 
-# Dates and Times
-isExpired = DateTime.greaterThan(now, token.expiresAt)
+# Stable technical strings
+isBefore = name |> Order.isLessThan(String.Order)("m")
 
-# High-precision Decimals (no float rounding errors!)
-isProfit = BigDecimal.greaterThan(netIncome, BigDecimal.fromNumber(0))
+# Dates, decimals, durations, and domain values
+isExpired = now |> Order.isGreaterThan(DateTime.Order)(token.expiresAt)
 ```
 
-**The mechanism:** the parser rejects `<`, `<=`, `>`, and `>=` in expression position.
-Developers use the corresponding typed module (`Number.greaterThan`, `DateTime.greaterThan`,
-`BigDecimal.greaterThan`, `Number.between`).
+**The mechanism:** the compiler accepts `<`, `<=`, `>`, and `>=` only when both operands
+have a proven number type. It rejects strings, `any`, `unknown`, mixed types, and domain
+objects before emitting JavaScript.
 
 **The feedback:**
 
 ```text
-src/calc.fun:5:12  error  `<` is not a FunScript comparison operator
-  comparison operators fail silently on DateTime, BigDecimal, and custom types
-  try: score |> Number.greaterThan(10)   (or DateTime.greaterThan, BigDecimal.greaterThan)
+src/calc.fun:5:12  error  < is only available for numbers; this operand has type string
+  use Order.isLessThan(String.Order)(...) or an explicit domain Order
 ```
 
-**Enforced by:** grammar (no comparison operators) + typed ordering functions.
+**Enforced by:** grammar + TypeScript-directed operand validation + explicit Effect orders.
 
 ---
 

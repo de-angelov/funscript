@@ -30,7 +30,7 @@ describe("FunScript Code Formatter", () => {
   });
 
   it("formats Effect blocks and pipelines idempotently", () => {
-    const source = `result =\n  effect\n    value <- fetch()\n    value |> normalize`;
+    const source = `result =\n  effect\n    value <- fetch()\n    => value |> normalize`;
     const formatted = format(source);
     expect(formatted).toContain("effect {");
     expect(formatted).toContain("value |> normalize");
@@ -41,10 +41,10 @@ describe("FunScript Code Formatter", () => {
     const unformatted = `
 export greet = (name: String) =>
     // greeting message
-    "Hello, {name}!"
+    => "Hello, {name}!"
 `.trim();
     const formatted = format(unformatted);
-    expect(formatted).toBe(`export greet = (name: String) =>\n  // greeting message\n  "Hello, {name}!"\n`);
+    expect(formatted).toBe(`export greet = (name: String) =>\n  // greeting message\n  => "Hello, {name}!"\n`);
     expect(format(formatted)).toBe(formatted);
   });
 
@@ -129,11 +129,11 @@ export program =
       x <- fetchNumber()
       _ <- Console.log(x)
       y = x + 1
-      y
+      => y
 `.trim();
     const formatted = format(unformatted);
     expect(formatted).toBe(
-      `export program =\n  effect {\n    x <- fetchNumber()\n    _ <- Console.log(x)\n    y = x + 1\n    y\n  }\n`
+      `export program =\n  effect {\n    x <- fetchNumber()\n    _ <- Console.log(x)\n    y = x + 1\n    => y\n  }\n`
     );
     expect(format(formatted)).toBe(formatted);
   });
@@ -156,14 +156,14 @@ export main =
   it("formats copy-on-write mut draft blocks", () => {
     const unformatted = `
 export appendTag = (p: Profile, tag: String) =>
-  p
+  => p
   |> mut (draft) =>
       draft.tags.push(tag)
-      draft
+      => draft
 `.trim();
     const formatted = format(unformatted);
     expect(formatted).toBe(
-      `export appendTag = (p: Profile, tag: String) =>\n  p\n  |> mut (draft) =>\n    draft.tags.push(tag)\n    draft\n`
+      `export appendTag = (p: Profile, tag: String) =>\n  => p\n  |> mut (draft) =>\n    draft.tags.push(tag)\n    => draft\n`
     );
     expect(format(formatted)).toBe(formatted);
   });
@@ -188,6 +188,11 @@ export y = 20
     const formatted = format(unformatted);
     expect(formatted).toBe(`export calc = (1 + 2) * 3 - 4 / 2\n`);
     expect(format(formatted)).toBe(formatted);
+  });
+
+  it("formats numeric comparisons below arithmetic precedence", () => {
+    const formatted = format(`export valid = (1 + 2) < 4 and 5 >= 3`);
+    expect(formatted).toBe(`export valid = 1 + 2 < 4 and 5 >= 3\n`);
   });
 
   it("formats record literals with shorthand, spreads, and dot-paths", () => {

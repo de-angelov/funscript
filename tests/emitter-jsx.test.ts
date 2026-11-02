@@ -275,14 +275,14 @@ export Item = (props: Props) => <li className="item">{props.title}</li>
       const code = `
 export renderCard = (user: User) =>
   title = user.name
-  <div className="card">
+  => <div className="card">
     <h2>{title}</h2>
   </div>
 `.trim();
       const tsx = await compileFunx(code);
       expect(tsx).toContain("export const renderCard = (user: User) => {");
       expect(tsx).toContain("const title = user.name;");
-      expect(tsx).toContain('return <div className="card"><h2>{title}</h2></div>;');
+      expect(tsx).toContain('return (<div className="card"><h2>{title}</h2></div>);');
     });
 
     it("compiles JSX elements inside array literal", async () => {
@@ -311,7 +311,7 @@ export renderStatus = (state) =>
       const code = `
 export viewEffect = effect
   user <- fetchUser(userId)
-  <Profile user={user} />
+  => <Profile user={user} />
 `.trim();
       const tsx = await compileFunx(code);
       expect(tsx).toContain('import { Effect } from "effect";');

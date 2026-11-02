@@ -20,5 +20,5 @@ export checkout = (userId: String, amount: Number) =>
     _ <- PaymentGateway.charge(amount)
     defaultConfig <- ConfigRepo.loadDefaults() |> orDie
     _ <- Console.log("Completed checkout for {user}")
-    user
+    => user
   }

@@ -14,6 +14,6 @@ export main =
   effect {
     message <- Greeter.greet("Ada")
     _ <- Console.log(message)
-    message
+    => message
   }
   |> Effect.provide(GreeterLive)

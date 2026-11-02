@@ -34,7 +34,7 @@ describe("In-Memory Type-Checking (funscript check via TypeScript API)", () => {
 fetchValue = () => Effect.succeed(42)
 export result: Effect<Number> = effect {
   value <- fetchValue()
-  value + 1
+  => value + 1
 }
 `.trim(), "brace-effect.fun"));
       expect(result.success).toBe(true);
@@ -70,7 +70,7 @@ export same = (left: Number, right: Number) => left @= right
 ts { declare function nativeJson(): Promise<any> }
 export result = effect {
   payload <- js nativeJson()
-  payload.name
+  => payload.name
 }
 `.trim(), "untrusted-js.fun"));
 
@@ -247,7 +247,7 @@ schema Props = {
 }
 
 export Button = (props: Props) =>
-  <button>{props.unknownProp}</button>
+  => <button>{props.unknownProp}</button>
 `.trim();
 
       const result = await Effect.runPromise(typeCheckSource(code, "Button.funx"));

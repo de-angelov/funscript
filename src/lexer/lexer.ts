@@ -246,11 +246,13 @@ export class Lexer {
             this.emitToken(TokenType.JSX_TAG_OPEN, "<", 1);
             this.jsxStack.push({ kind: "tag", hasTagName: false });
           } else {
-            this.emitToken(TokenType.LT, "<", 1);
+            const isEqual = this.matchAhead("<=");
+            this.emitToken(isEqual ? TokenType.LTE : TokenType.LT, isEqual ? "<=" : "<", isEqual ? 2 : 1);
           }
           break;
         case ">":
-          this.emitToken(TokenType.GT, ">", 1);
+          const isEqual = this.matchAhead(">=");
+          this.emitToken(isEqual ? TokenType.GTE : TokenType.GT, isEqual ? ">=" : ">", isEqual ? 2 : 1);
           break;
         case "!":
           throw new LexerError(BANNED_SYMBOLS["!"], this.currentSpan(1));

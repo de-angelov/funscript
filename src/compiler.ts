@@ -5,7 +5,7 @@ import { Lexer, LexerError } from "./lexer/lexer.js";
 import { Parser, ParseError } from "./parser/parser.js";
 import { Emitter } from "./emitter/emitter.js";
 import { type PipelineCompanionModule } from "./emitter/pipeline-catalog.js";
-import { Program } from "./ast/types.js";
+import { Program, type Span } from "./ast/types.js";
 import { FunScriptError } from "./errors.js";
 
 export interface CompileOptions {
@@ -32,6 +32,102 @@ export class CompilerError extends FunScriptError {
     super(message, span);
     this.name = "CompilerError";
   }
+}
+
+class NumericComparisonError extends Error {
+  constructor(message: string, readonly span: Span) {
+    super(message);
+    this.name = "NumericComparisonError";
+  }
+}
+
+function spanAtOffset(source: string, offset: number): Span {
+  const prefix = source.slice(0, offset);
+  const lines = prefix.split(/\r?\n/);
+  const position = {
+    offset,
+    line: lines.length,
+    column: lines[lines.length - 1].length + 1,
+  };
+  return { start: position, end: position };
+}
+
+/**
+ * Native relational operators deliberately have a much narrower domain than
+ * JavaScript: both operands must be proven numbers. This keeps string,
+ * locale, and domain ordering explicit through Effect's Order API.
+ */
+function validateNumericComparisons(ast: Program, source: string, filename: string): void {
+  const marked = new Emitter(ast, undefined, {
+    allowAmbiguousPipeline: true,
+    markNumericComparisonOperands: true,
+  }).emit();
+  if (!marked.includes("__funscriptNumericOperand(")) return;
+
+  const virtualFile = filename.endsWith(".funx")
+    ? filename.slice(0, -5) + ".tsx"
+    : filename.endsWith(".fun")
+    ? filename.slice(0, -4) + ".ts"
+    : filename + ".ts";
+  const generated = `const __funscriptNumericOperand = <T,>(_offset: number, _operator: string, value: T): T => value;\n${marked}`;
+  const options: ts.CompilerOptions = {
+    strict: true,
+    target: ts.ScriptTarget.ES2022,
+    module: ts.ModuleKind.NodeNext,
+    moduleResolution: ts.ModuleResolutionKind.NodeNext,
+    skipLibCheck: true,
+    jsx: ts.JsxEmit.Preserve,
+  };
+  const host = ts.createCompilerHost(options, true);
+  const normalized = ts.sys.resolvePath(virtualFile);
+  const originalGetSourceFile = host.getSourceFile.bind(host);
+  host.getSourceFile = (fileName, languageVersion, onError, shouldCreateNewSourceFile) =>
+    ts.sys.resolvePath(fileName) === normalized
+      ? ts.createSourceFile(fileName, generated, languageVersion, true)
+      : originalGetSourceFile(fileName, languageVersion, onError, shouldCreateNewSourceFile);
+  const originalReadFile = host.readFile.bind(host);
+  host.readFile = (fileName) => ts.sys.resolvePath(fileName) === normalized ? generated : originalReadFile(fileName);
+  const originalFileExists = host.fileExists.bind(host);
+  host.fileExists = (fileName) => ts.sys.resolvePath(fileName) === normalized || originalFileExists(fileName);
+
+  const program = ts.createProgram({ rootNames: [virtualFile], options, host });
+  const sourceFile = program.getSourceFile(normalized) ?? program.getSourceFile(virtualFile);
+  if (!sourceFile) return;
+  const checker = program.getTypeChecker();
+
+  const isDefinitelyNumber = (type: ts.Type): boolean => {
+    if (type.flags & (ts.TypeFlags.Any | ts.TypeFlags.Unknown | ts.TypeFlags.Never)) return false;
+    if (type.isUnion()) return type.types.every(isDefinitelyNumber);
+    if (type.flags & ts.TypeFlags.TypeParameter) {
+      const constraint = checker.getBaseConstraintOfType(type);
+      return constraint !== undefined && constraint !== type && isDefinitelyNumber(constraint);
+    }
+    return Boolean(type.flags & ts.TypeFlags.NumberLike);
+  };
+
+  const visit = (node: ts.Node): void => {
+    if (
+      ts.isCallExpression(node) &&
+      ts.isIdentifier(node.expression) &&
+      node.expression.text === "__funscriptNumericOperand" &&
+      node.arguments.length === 3 &&
+      ts.isNumericLiteral(node.arguments[0]) &&
+      ts.isStringLiteral(node.arguments[1])
+    ) {
+      const type = checker.getTypeAtLocation(node.arguments[2]);
+      if (!isDefinitelyNumber(type)) {
+        const operator = node.arguments[1].text;
+        const helper = operator.startsWith(">") ? "isGreaterThan" : "isLessThan";
+        const received = checker.typeToString(type);
+        throw new NumericComparisonError(
+          `${operator} is only available for numbers; this operand has type ${received}. Use Order.${helper}(String.Order)(...) or an explicit domain Order.`,
+          spanAtOffset(source, Number(node.arguments[0].text)),
+        );
+      }
+    }
+    ts.forEachChild(node, visit);
+  };
+  visit(sourceFile);
 }
 
 /**
@@ -230,6 +326,7 @@ export const compileString = (
       const ast = parser.parse();
 
       // 3. Emit TypeScript
+      validateNumericComparisons(ast, source, filename);
       const pipelineCompanions = inferPipelineCompanions(ast, filename);
       const emitter = new Emitter(ast, undefined, { pipelineCompanions });
       const typescript = applyJsInteropNullability(emitter.emit(), filename);

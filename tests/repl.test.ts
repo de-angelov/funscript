@@ -118,7 +118,7 @@ describe("FunScript Interactive REPL (TASK-020)", () => {
         "effect",
         "  a <- Effect.succeed(15)",
         "  b <- Effect.succeed(25)",
-        "  a + b",
+        "  => a + b",
       ].join("\n");
 
       const val = await evaluateReplLine(effectBlock, ctx);
@@ -219,7 +219,7 @@ describe("FunScript Interactive REPL (TASK-020)", () => {
       await new Promise((resolve) => setTimeout(resolve, 50));
       input.write("  val <- Effect.succeed(77)\n");
       await new Promise((resolve) => setTimeout(resolve, 50));
-      input.write("  val + 3\n");
+      input.write("  => val + 3\n");
       await new Promise((resolve) => setTimeout(resolve, 50));
       input.write("\n");
       await new Promise((resolve) => setTimeout(resolve, 100));

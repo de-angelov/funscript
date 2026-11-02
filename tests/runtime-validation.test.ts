@@ -21,7 +21,7 @@ describe("runtime boundary validation", () => {
     const { greet } = await evaluate(`
 export js greet = (name: String) =>
   effect
-    "Hello, " + name
+    => "Hello, " + name
 `, ["greet"]);
 
     await expect(greet("Ada")).resolves.toBe("Hello, Ada");

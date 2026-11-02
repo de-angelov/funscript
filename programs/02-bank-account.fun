@@ -22,7 +22,7 @@ export applyAction = (acc: Account, action: Action): Account =>
     | Freeze => acc
 
 export formatAccount = (acc: Account) =>
-  "Account {acc.id} ({acc.owner}): Balance = ${acc.balance}"
+  => "Account {acc.id} ({acc.owner}): Balance = ${acc.balance}"
 
 export initialAccount: Account = {
   id: "ACC-101"

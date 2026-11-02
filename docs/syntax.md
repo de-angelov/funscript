@@ -623,27 +623,36 @@ a @! b   // reference inequality
 
 #### Comparisons
 
-Use `<`, `<=`, `>`, and `>=` for primitive comparisons. Effect companion functions
-support pipelines and comparisons on `BigDecimal`, `DateTime`, and `Duration`:
+Use `<`, `<=`, `>`, and `>=` only when TypeScript can prove that both operands
+are numbers. FunScript never applies these operators to strings or Effect domain
+values: their ordering must be explicit through Effect's `Order` API.
 
 ```funscript
-# Numbers (using Effect's Number module)
-isValid = score |> Number.isGreaterThanOrEqualTo(0)
-isPass = Number.isGreaterThan(score, 50)
+# Numbers
+isValid = score >= 0
+isPass = score > 50
 
-# Dates and Times
-isExpired = DateTime.greaterThan(now, token.expiresAt)
+# Stable machine-string ordering
+isBefore = name |> Order.isLessThan(String.Order)("m")
 
-# High-precision Decimals
-isPositive = BigDecimal.greaterThan(price, BigDecimal.fromNumber(0))
+# Domain ordering (dates, decimals, durations, or application values)
+isExpired = now |> Order.isGreaterThan(DateTime.Order)(token.expiresAt)
 
 # In a match expression:
 tier =
   match
-    | score |> Number.isGreaterThanOrEqualTo(90) => "Platinum"
-    | score |> Number.isGreaterThanOrEqualTo(75) => "Gold"
+    | score >= 90 => "Platinum"
+    | score >= 75 => "Gold"
     | _ => "Silver"
 ```
+
+String ordering is deliberately not implicit: choose `String.Order` for stable
+technical values, or construct an explicit locale-aware `Order<String>` with
+`Order.make` and `String.localeCompare` for user-facing text.
+
+Effect companion names follow the installed Effect API. Existing Effect pipeline
+compatibility aliases are retained explicitly in the compiler's catalog; they are
+exceptions for compatibility, not a general naming convention for new operations.
 
 ### 4.3 Boolean operators
 
@@ -1517,7 +1526,7 @@ Inside an `effect` block, every non-final statement must be one of:
 - an effect bind: `name <- expression` or `_ <- expression`
 - a control-flow statement: `match` (boolean or value) or a nested `effect` block
 
-A bare expression is allowed only as the **final** expression of the block.
+The block must end with an explicit return, `=> value`.
 
 Control-flow statements (`match` and nested `effect`) are effect-statement contexts:
 their branches follow the same rule, and effects inside them must use `<-` or `_ <-`.
@@ -1541,7 +1550,7 @@ This is a syntax rule, not a type-checking afterthought. It prevents the classic
 effect {
   user <- UserRepo.find(id)
   Console.log("loaded")      # syntax error: non-final bare expression
-  user
+  => user
 }
 ```
 
@@ -1551,20 +1560,17 @@ The fix is explicit:
 effect {
   user <- UserRepo.find(id)
   _ <- Console.log("loaded")
-  user
+  => user
 }
 ```
 
 ### 9.4 Return value
 
-- The final expression of an `effect` block is returned.
-- A final binding (`x = ...`) returns the bound value.
-- A final effect bind (`x <- ...`) returns the bound value.
-- A final `_ <- ...` returns `void` (`undefined` in emitted JS).
+- An `effect` block ends with `=> value`, which returns that value.
 - There is no `return` statement: branching uses `match`, and short-circuiting on a
   recoverable failure uses `<- Effect.fail(MyError(...))`.
 
-A final bare `Effect` value is **not** automatically yielded. It is returned as a value.
+An `Effect` value returned with `=>` is **not** automatically yielded. It is returned as a value.
 The compiler's post-typecheck pass warns when an `effect` block's return type is itself an
 `Effect`, because that is almost always a missing `_ <-`.
 
@@ -2299,7 +2305,7 @@ These are the choices that came out of checking the surface for ambiguity:
 | `\|> match` and `\| A \| B =>` or-patterns                                    | Eliminates dummy scrutinee names at the end of pipelines and maps multi-pattern arms directly to `ts-pattern`'s `.with(p1, p2, handler)`.                                                                                                                |
 | No dedicated `layer` keyword                                                  | Because `effect` is already an expression, `Layer.succeed(Svc, { ... })`, `Layer.effect(Svc, effect ...)`, and `Layer.scoped(Svc, effect ...)` are already concise and keep lifecycle semantics (`effect` vs `scoped`) explicit.                         |
 | No `>>` point-free composition operator                                       | Point-free `flow(f, g)` degrades TypeScript generic type inference; `(x) => x \|> f \|> g` is explicit and preserves contextual inference.                                                                                                               |
-| No `return` keyword                                                           | Blocks, functions, `match` arms, and `effect` blocks evaluate to their final expression; early failure in `effect` uses `<- Effect.fail(...)`.                                                                                                           |
+| No `return` keyword                                                           | Function and effect blocks return with `=> value`; expression-bodied functions and match arms produce their expression.                                                                                                           |
 | No `undefined` expression literal                                             | Alongside `null`, `undefined` is banned in expressions; use `Option` (`Option.none()`, `Option.fromNullable`, `Option.getOrUndefined`) or `Effect.void`.                                                                                                 |
 | Typed holes (`???`)                                                           | Lowers to `never`-typed throw and inspects `checker.getContextualType` + scope symbols; warns in `dev`/`check`, fails in `build`.                                                                                                                        |
 | Constructor-header cache for `match`                                          | Resolves tagged-union `schema` and `error` positional field names across `.fun` files so generated TypeScript keeps readable named destructuring without `_0`, `_1` tuple pollution.                                                                     |

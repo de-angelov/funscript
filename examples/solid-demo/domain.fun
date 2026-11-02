@@ -41,5 +41,5 @@ export fetchInitialTodos =
       { id: 2, title: "Design FunScript state machine", completed: true, priority: "high" },
       { id: 3, title: "Dogfood SolidJS + FunScript integration", completed: false, priority: "medium" }
     ]
-    todos
+    => todos
   }

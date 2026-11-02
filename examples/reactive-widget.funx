@@ -59,7 +59,7 @@ export renderStatusBadge = (state: WidgetState) =>
         <span className="badge badge-limit">Warning: Max Limit {limit} Reached</span>
 
 export CounterWidget = (props: WidgetProps) =>
-  <div className="widget-card variant-${props.variant}">
+  => <div className="widget-card variant-${props.variant}">
     <header className="widget-header">
       <h3 className="widget-title">{props.title}</h3>
       <span className="step-indicator">Step: {props.step}</span>
@@ -149,5 +149,5 @@ export main =
     _ <- Console.log("[Badge] Rendered Limit badge: <" + b3.tag + ">")
 
     _ <- Console.log("=== Reactive Widget (.funx) Completed Successfully ===")
-    0
+    => 0
   }

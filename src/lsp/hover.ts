@@ -197,7 +197,7 @@ function findHoverInLineText(
 ): Hover | null {
   // 1. Check multi-character operators first (e.g. `???`, `|>`, `<-`, `=>`, and banned symbols)
   const bannedOps = Object.keys(BANNED_SYMBOLS);
-  const operators = ["???", "|>", "<-", "=>", ...bannedOps];
+  const operators = ["???", "|>", "<-", "=>", "<=", ">=", "<", ">", ...bannedOps];
   for (const op of operators) {
     let searchIdx = 0;
     while (searchIdx < currentLine.length) {

@@ -790,11 +790,11 @@ export class Parser {
   }
 
   private parseEquality(): Expression {
-    let expr = this.parseAdditive();
+    let expr = this.parseComparison();
     while (this.match(TokenType.VALUE_EQ, TokenType.VALUE_NEQ, TokenType.REF_EQ, TokenType.REF_NEQ)) {
       const opTok = this.previous();
       const op = opTok.value as "#=" | "#!" | "@=" | "@!";
-      const right = this.parseAdditive();
+      const right = this.parseComparison();
       if (op === "@=" || op === "@!") {
         if (this.isPrimitiveLiteral(expr) || this.isPrimitiveLiteral(right)) {
           throw new ParseError(
@@ -803,6 +803,22 @@ export class Parser {
           );
         }
       }
+      expr = {
+        kind: "BinaryExpression",
+        operator: op,
+        left: expr,
+        right,
+        span: { start: expr.span.start, end: right.span.end },
+      };
+    }
+    return expr;
+  }
+
+  private parseComparison(): Expression {
+    let expr = this.parseAdditive();
+    while (this.match(TokenType.LT, TokenType.LTE, TokenType.GT, TokenType.GTE)) {
+      const op = this.previous().value as "<" | "<=" | ">" | ">=";
+      const right = this.parseAdditive();
       expr = {
         kind: "BinaryExpression",
         operator: op,
@@ -1426,7 +1442,13 @@ export class Parser {
       if (braced) while (this.match(TokenType.INDENT) || this.match(TokenType.DEDENT)) {}
       if (atEnd()) break;
 
-      if (this.check(TokenType.WHEN)) {
+      if (this.match(TokenType.ARROW)) {
+        finalExpression = this.parseExpression();
+        this.skipNewlines();
+        if (braced) while (this.match(TokenType.INDENT) || this.match(TokenType.DEDENT)) {}
+        if (!atEnd()) throw new ParseError("Effect block return must be the final statement", finalExpression.span);
+        break;
+      } else if (this.check(TokenType.WHEN)) {
         body.push(this.parseWhenStatement());
       // Check for effect bind: x <- eff or _ <- eff
       } else if (this.check(TokenType.UNDERSCORE) && this.peekAhead(1).type === TokenType.LARROW) {
@@ -1490,8 +1512,7 @@ export class Parser {
         this.skipNewlines();
         if (braced) while (this.match(TokenType.INDENT) || this.match(TokenType.DEDENT)) {}
         if (atEnd()) {
-          finalExpression = expr;
-          break;
+          throw new ParseError("Effect block must end with an explicit '=> returnValue'", expr.span);
         } else {
           throw new ParseError(
             "Non-final bare expression in effect block is not executed. Use '<-' to run an effect or '_ <-' to discard its value.",
@@ -1509,7 +1530,7 @@ export class Parser {
     }
 
     if (!finalExpression) {
-      throw new ParseError("Effect block must end with a return expression", { start, end: this.previous().span.end });
+      throw new ParseError("Effect block must end with an explicit '=> returnValue'", { start, end: this.previous().span.end });
     }
 
     return {

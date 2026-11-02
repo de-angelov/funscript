@@ -10,13 +10,13 @@ export schema Profile = {
 }
 
 export updateCity = (p: Profile, newCity: String) =>
-  {
+  => {
     ...p
     address.city: newCity
   }
 
 export appendTag = (p: Profile, tag: String) =>
-  p
+  => p
   |> mut (draft) =>
     draft.tags.push(tag)
     draft

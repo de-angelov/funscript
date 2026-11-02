@@ -68,6 +68,8 @@ export enum TokenType {
   RBRACKET = "]",
   LT = "<",
   GT = ">",
+  LTE = "<=",
+  GTE = ">=",
 
   // JSX Tokens
   JSX_TAG_OPEN = "JSX_TAG_OPEN",
@@ -118,7 +120,7 @@ export const BANNED_KEYWORDS: Record<string, string> = {
   const: "FunScript bindings are const by default; write 'name = value'.",
   function: "FunScript functions use the arrow syntax: '(args) => body'.",
   class: "FunScript has no classes; use 'schema' for data, 'error' for errors, and 'service' for services.",
-  return: "FunScript is expression-oriented; every block automatically evaluates to its final line.",
+  return: "FunScript uses '=> value' for explicit returns in function and effect blocks.",
   throw: "FunScript has no 'throw'; recoverable failures use Effect typed errors, and defects use 'Effect.die' or '|> orDie'.",
   try: "FunScript has no 'try/catch'; use typed errors in the E channel or 'Effect.tryPromise'.",
   catch: "FunScript has no 'try/catch'; handle errors with 'Effect.catchTag' or 'match'.",

@@ -140,14 +140,14 @@ export saveTasks = (filePath: String, manager: TaskManager) =>
     md = serializeToMarkdown(manager)
     _ <- js writeTaskFile(filePath, md)
     _ <- Console.log("[TaskManager] Successfully persisted " + manager.tasks.length + " tasks to " + filePath)
-    md
+    => md
   }
 
 export loadTasks = (filePath: String) =>
   effect {
     content <- js readTaskFile(filePath)
     _ <- Console.log("[TaskManager] Loaded markdown file from " + filePath + " (" + content.length + " bytes)")
-    content
+    => content
   }
 
 // --- Main CLI Flow ---
@@ -182,5 +182,5 @@ export main =
     _ <- js deleteTaskFile(filePath)
     _ <- Console.log("[TaskManager] Cleaned up temporary test file.")
     _ <- Console.log("=== Markdown Task Manager Completed Successfully ===")
-    0
+    => 0
   }

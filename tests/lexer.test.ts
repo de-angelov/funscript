@@ -29,6 +29,12 @@ describe("FunScript Lexer", () => {
         .toEqual(["110_110", "1_024.5_0"]);
     });
 
+    it("tokenizes native ordering operators", () => {
+      const tokens = new Lexer("a < b\nc <= d\ne > f\ng >= h").tokenize();
+      expect(tokens.filter((token) => [TokenType.LT, TokenType.LTE, TokenType.GT, TokenType.GTE].includes(token.type)).map((token) => token.type))
+        .toEqual([TokenType.LT, TokenType.LTE, TokenType.GT, TokenType.GTE]);
+    });
+
     it("rejects numeric separators outside digit groups", () => {
       for (const source of ["value = 1_", "value = 1__0", "value = 1._0"]) {
         expect(() => new Lexer(source).tokenize()).toThrow(/Numeric separator must appear between two digits/);

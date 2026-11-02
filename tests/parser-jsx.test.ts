@@ -284,7 +284,7 @@ describe("JSX Parser (.funx mode)", () => {
     it("parses function with indented block returning JSX as finalExpression", () => {
       const code = `renderCard = (user) =>
   title = user.name
-  <div className="card">
+  => <div className="card">
     <h2>{title}</h2>
   </div>`;
       const ast = parse(code);
@@ -293,8 +293,8 @@ describe("JSX Parser (.funx mode)", () => {
       const fn = decl.init as FunctionExpression;
       expect(fn.body.kind).toBe("BlockStatement");
       const block = fn.body as BlockStatement;
-      expect(block.statements.length).toBe(1);
-      expect(block.finalExpression.kind).toBe("JSXElement");
+      expect(block.statements.length).toBe(2);
+      expect(block.statements[1].kind).toBe("ReturnStatement");
     });
 
     it("parses JSX elements inside array literal", () => {
@@ -325,7 +325,7 @@ describe("JSX Parser (.funx mode)", () => {
     it("parses JSX inside effect block as final expression", () => {
       const code = `viewEffect = effect
   user <- fetchUser(userId)
-  <Profile user={user} />`;
+  => <Profile user={user} />`;
       const ast = parse(code);
 
       const decl = ast.body[0] as BindingDeclaration;

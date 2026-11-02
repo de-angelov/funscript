@@ -42,7 +42,7 @@ describe("Dogfooding Real-World Applications (TASK-027)", () => {
       expect(res.typescript).toContain('.with({ _tag: "ServerError" }');
 
       // Foreign promise interop
-      expect(res.typescript).toContain("Effect.tryPromise(() => executeFetch(repoPath))");
+      expect(res.typescript).toContain("__funscriptJs(() => executeFetch(repoPath), false)");
     });
 
     it("passes static type checking (funscript check) with 0 errors", async () => {
@@ -103,8 +103,8 @@ describe("Dogfooding Real-World Applications (TASK-027)", () => {
       expect(res.typescript).toContain("return (updated);");
 
       // Effect file system I/O
-      expect(res.typescript).toContain("Effect.tryPromise(() => writeTaskFile(filePath, md))");
-      expect(res.typescript).toContain("Effect.tryPromise(() => readTaskFile(filePath))");
+      expect(res.typescript).toContain("__funscriptJs(() => writeTaskFile(filePath, md), false)");
+      expect(res.typescript).toContain("__funscriptJs(() => readTaskFile(filePath), false)");
     });
 
     it("executes programs/06-markdown-task-manager.fun via CLI and persists/reloads markdown tasks", async () => {

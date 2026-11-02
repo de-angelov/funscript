@@ -88,7 +88,7 @@ describe("Parser Error Recovery & Multi-Diagnostic Reporting", () => {
         "  a = 1 +",
         "  b = 10",
         "  c = 2 +",
-        "  b + 5",
+        "  => b + 5",
       ].join("\n");
 
       const parser = createParser(source);

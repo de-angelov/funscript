@@ -114,7 +114,7 @@ export res = 5 |> add(10, _)
 export compute = (x: Number) =>
   a = x + 1
   b = a * 2
-  b + 10
+  => b + 10
 `.trim();
 
       const res = await Effect.runPromise(compileString(code, "compute.fun"));
@@ -138,7 +138,7 @@ export compute = (x: Number) =>
       const code = `
 export main = effect
   _ <- Console.log("Hello")
-  "Done"
+  => "Done"
 `.trim();
 
       const res = await Effect.runPromise(compileString(code, "effect.fun"));

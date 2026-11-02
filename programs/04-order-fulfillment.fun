@@ -63,7 +63,7 @@ export describeResult = (res: OrderResult) =>
 
 // Mutative deep record updates (dot-path syntax)
 export updateShipping = (order: Order, carrier: String, trackingNumber: String, estimatedDays: Number) =>
-  {
+  => {
     ...order
     shipping.carrier: carrier
     shipping.trackingNumber: trackingNumber
@@ -73,14 +73,14 @@ export updateShipping = (order: Order, carrier: String, trackingNumber: String, 
 
 // Pure discount calculation using pipe
 export applyDiscount = (order: Order, discount: Number) =>
-  {
+  => {
     ...order
     total: order.total - discount
   }
 
 // Mutative array draft recipe
 export appendAuditEntry = (logs: ts { string[] }, entry: String) =>
-  logs
+  => logs
   |> mut (draft) =>
     draft.push(entry)
     draft
@@ -106,13 +106,13 @@ export InventoryServiceLive =
     checkAvailability: (sku) =>
       effect {
         _ <- Console.log("  [InventoryService] Checking stock for {sku}...")
-        true
+        => true
       }
 
     reserveStock: (sku, qty) =>
       effect {
         _ <- Console.log("  [InventoryService] Reserved {qty} unit(s) of {sku}")
-        true
+        => true
       }
   })
 
@@ -129,28 +129,28 @@ export PaymentGatewayLive =
               effect {
                 _ <- Console.log("  [PaymentGateway] Transaction denied: credit limit exceeded")
                 _ <- Effect.fail("CreditLimitExceeded")
-                ""
+                => ""
               }
           | calls #= 1 =>
               effect {
                 _ <- Console.log("  [PaymentGateway] Transient network glitch on attempt 1! Retrying...")
                 _ <- Effect.fail("GatewayTimeout")
-                ""
+                => ""
               }
           | _ =>
               effect {
                 _ <- Console.log("  [PaymentGateway] Payment authorized successfully!")
-                "TXN-90210"
+                => "TXN-90210"
               }
 
-        res
+        => res
       }
   })
 
 export NotificationServiceLive =
   Layer.succeed(NotificationService, {
     sendConfirmation: (customer, message) =>
-      Console.log("  [NotificationService] Sent confirmation to {customer}: {message}")
+      => Console.log("  [NotificationService] Sent confirmation to {customer}: {message}")
   })
 
 export AppLive =
@@ -162,19 +162,19 @@ export AppLive =
 export checkSku = (sku: String) =>
   effect {
     avail <- InventoryService.checkAvailability(sku)
-    avail
+    => avail
   }
 
 export executePayment = (orderId: String, amount: Number, method: PaymentMethod) =>
   effect {
     tx <- PaymentGateway.charge(orderId, amount, method)
-    tx
+    => tx
   }
 
 export notifyCustomer = (customer: String, message: String) =>
   effect {
     _ <- NotificationService.sendConfirmation(customer, message)
-    true
+    => true
   }
 
 // --- Workflow Implementation ---
@@ -226,15 +226,15 @@ export processOrderWorkflow = (order: Order, method: PaymentMethod, tier: Delive
     log4 = appendAuditEntry(log3, "Dispatched via GlobalExpress")
     _ <- Console.log("  Audit trail: {log4.length} events logged immutably")
 
-    Success(finalOrder.id, txId, trackingNum)
+    => Success(finalOrder.id, txId, trackingNum)
   }
 
 export processOrderSafely = (order: Order, method: PaymentMethod, tier: DeliveryTier) =>
-  processOrderWorkflow(order, method, tier)
+  => processOrderWorkflow(order, method, tier)
   |> Effect.catchAll((err) =>
     effect {
       _ <- Console.log("  [Workflow Recovery] Caught domain error: {err}")
-      Failed(order.id, "{err}")
+      => Failed(order.id, "{err}")
     }
   )
 
@@ -287,7 +287,7 @@ export program =
     summary2 = describeResult(res2)
     _ <- Console.log("=== Scenario 2 Result ===")
     _ <- Console.log(summary2)
-    [res1, res2]
+    => [res1, res2]
   }
 
 export main =

@@ -199,7 +199,7 @@ describe("LSP Keyword & Built-in Documentation Catalog", () => {
   });
 
   describe("Syntax Operators", () => {
-    const operators = ["|>", "<-", "=>", "???"];
+    const operators = ["|>", "<-", "=>", "???", "<", "<=", ">", ">="];
 
     for (const op of operators) {
       it(`provides documentation for operator '${op}'`, () => {

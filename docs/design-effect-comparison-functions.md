@@ -1,5 +1,9 @@
 # Design: Effect comparison functions
 
+> Historical proposal. The current language permits `<`, `<=`, `>`, and `>=` for
+> proven numbers and uses Effect v4 names and explicit orders for other values.
+> See [the language syntax](syntax.md#comparisons). Examples below are not current API guidance.
+
 ## Recommendation
 
 Use typed, pure comparison functions supplied by the value type's Effect companion

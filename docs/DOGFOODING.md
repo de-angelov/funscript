@@ -1,5 +1,8 @@
 # FunScript Dogfooding Report: Applications, Edge Cases & Ergonomics
 
+> Historical report: the findings describe the compiler at the time of the
+> exercise. See the current syntax reference for return and comparison rules.
+
 ## 1. Executive Summary
 
 This dogfooding exercise stress-tested FunScript across realistic, non-trivial applications spanning backend API consumption, CLI state management with copy-on-write drafts, and reactive UI component authoring in `.funx`.

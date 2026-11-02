@@ -120,12 +120,12 @@ export fetchRepo = (repoPath: String) =>
     _ <- Console.log("[GitHub Client] Requesting repository: " + repoPath)
     raw <- js executeFetch(repoPath)
     parsed = parseResponse(repoPath, raw)
-    parsed
+    => parsed
   }
 
 // Summary formatter for a batch of repositories
 export summarizeRepo = (repo: Repository) =>
-  repo.fullName + " (⭐ " + repo.stargazersCount + " | 🍴 " + repo.forksCount + " | ⚠️ " + repo.openIssuesCount + ")"
+  => repo.fullName + " (⭐ " + repo.stargazersCount + " | 🍴 " + repo.forksCount + " | ⚠️ " + repo.openIssuesCount + ")"
 
 // --- Main Program Runner ---
 
@@ -150,5 +150,5 @@ export main =
     _ <- Console.log(formatApiResponse(r4))
 
     _ <- Console.log("=== GitHub API Client Completed Successfully ===")
-    0
+    => 0
   }

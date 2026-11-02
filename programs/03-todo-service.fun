@@ -26,7 +26,7 @@ export TodoRepoLive =
         id = store.length + 1
         newTodo: Todo = { id, title, completed: false }
         _ = pushTodo(store, newTodo)
-        newTodo
+        => newTodo
       }
 
     complete: (id) =>
@@ -39,12 +39,12 @@ export TodoRepoLive =
             Effect.succeed(updated)
 
     all: () =>
-      Effect.succeed(store)
+      => Effect.succeed(store)
   })
 
 export formatTodo = (t: Todo) =>
   status = match | t.completed => "[x]" | _ => "[ ]"
-  "{status} #{t.id}: {t.title}"
+  => "{status} #{t.id}: {t.title}"
 
 export program =
   effect {
@@ -64,7 +64,7 @@ export program =
       |> map(formatTodo)
       |> join("\n")
     _ <- Console.log(summary)
-    todos
+    => todos
   }
 
 export main =

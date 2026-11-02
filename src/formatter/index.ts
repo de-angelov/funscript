@@ -178,6 +178,10 @@ const PRECEDENCE: Record<string, number> = {
   "#!": 4,
   "@=": 4,
   "@!": 4,
+  "<": 4,
+  "<=": 4,
+  ">": 4,
+  ">=": 4,
   "+": 5,
   "-": 5,
   "*": 6,
@@ -697,7 +701,7 @@ export class Formatter {
 
     const leadingFinal = this.formatLeadingComments(expr.finalExpression, stmtIndent);
     const trailingFinal = this.getTrailingComment(expr.finalExpression.span.end.line);
-    lines.push(`${leadingFinal}${stmtIndent}${this.formatExpression(expr.finalExpression, indent + this.indentSize)}${trailingFinal}`);
+    lines.push(`${leadingFinal}${stmtIndent}=> ${this.formatExpression(expr.finalExpression, indent + this.indentSize)}${trailingFinal}`);
 
     return `effect {\n${lines.join("\n")}\n${this.spaces(indent)}}`;
   }

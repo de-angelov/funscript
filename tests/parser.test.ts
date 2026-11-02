@@ -329,6 +329,16 @@ mut flag: Boolean = true
       expect(binding.init.kind).toBe("BinaryExpression");
     });
 
+    it("parses numeric comparisons between equality and arithmetic precedence", () => {
+      const ast = parse(`res = 1 + 2 * 3 < 8 and 4 >= 4`);
+      const binding = ast.body[0] as BindingDeclaration;
+      const logical = binding.init as BinaryExpression;
+      expect(logical.operator).toBe("and");
+      expect((logical.left as BinaryExpression).operator).toBe("<");
+      expect(((logical.left as BinaryExpression).left as BinaryExpression).operator).toBe("+");
+      expect((logical.right as BinaryExpression).operator).toBe(">=");
+    });
+
     it("parses unary expressions (not, -)", () => {
       const ast = parse(`
 a = not active
@@ -434,14 +444,14 @@ f4 = (a: Number, b: Number): Number => a + b
 calculate = (x: Number) =>
   multiplier = 2
   temp = x * multiplier
-  temp + 1
+  => temp + 1
 `);
       const fn = (ast.body[0] as BindingDeclaration).init as FunctionExpression;
       expect(fn.body.kind).toBe("BlockStatement");
       const block = fn.body as BlockStatement;
-      expect(block.statements.length).toBe(2);
+      expect(block.statements.length).toBe(3);
       expect(block.statements[0].kind).toBe("BindingDeclaration");
-      expect(block.finalExpression.kind).toBe("BinaryExpression");
+      expect(block.statements[2].kind).toBe("ReturnStatement");
     });
   });
 
@@ -556,8 +566,12 @@ grade = match
   });
 
   describe("Effect Blocks", () => {
+    it("requires explicit returns in effect blocks", () => {
+      expect(() => parse("result = effect {\n  => 1\n}")).not.toThrow();
+      expect(() => parse("result = effect {\n  1\n}")).toThrow(/explicit '=> returnValue'/);
+    });
     it("parses a brace-delimited effect expression", () => {
-      const ast = parse(`result = effect {\n  user <- fetchUser()\n  user |> summarize\n}`);
+      const ast = parse(`result = effect {\n  user <- fetchUser()\n  => user |> summarize\n}`);
       const eff = (ast.body[0] as BindingDeclaration).init as EffectBlockExpression;
       expect(eff.body[0].kind).toBe("EffectBindStatement");
       expect(eff.finalExpression.kind).toBe("PipelineExpression");
@@ -569,7 +583,7 @@ getUser = (id: String) => effect
   user <- UserRepo.find(id)
   _ <- Console.log(user)
   prefix = "User: "
-  user
+  => user
 `);
       const fn = (ast.body[0] as BindingDeclaration).init as FunctionExpression;
       const eff = fn.body as EffectBlockExpression;
@@ -610,7 +624,7 @@ run = () =>
     user <- UserRepo.find("1")
 `;
       expect(() => parse(code)).toThrow(ParseError);
-      expect(() => parse(code)).toThrow(/Effect block must end with a return expression/);
+      expect(() => parse(code)).toThrow(/Effect block must end with an explicit/);
     });
   });
 

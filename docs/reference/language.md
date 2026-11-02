@@ -18,6 +18,19 @@ A hole placeholder that satisfies any type at compile time but raises a diagnost
 
 See also: `never`.
 
+## `<`
+
+Numeric less-than comparison.
+
+```funscript
+number < number
+```
+
+Native ordering operators are available only when both operands are proven numbers. Compare strings and domain values with an explicit Effect Order.
+
+
+See also: `Order.isLessThan`, `String.Order`.
+
 ## `<-`
 
 Effect bind operator inside effect blocks.
@@ -31,18 +44,57 @@ Extracts the success value from an Effect within an `effect` block, short-circui
 
 See also: `effect`, `Effect`.
 
+## `<=`
+
+Numeric less-than-or-equal comparison.
+
+```funscript
+number <= number
+```
+
+Native ordering operators are available only when both operands are proven numbers. Compare strings and domain values with an explicit Effect Order.
+
+
+See also: `Order.isLessThanOrEqualTo`, `String.Order`.
+
 ## `=>`
 
-Function and lambda declaration arrow.
+Function, match arm, and explicit return arrow.
 
 ```funscript
 (param: Type) => body
 ```
 
-Declares pure functions and lambdas in FunScript. FunScript functions automatically return their last evaluated expression without needing a `return` keyword.
+Expression-bodied functions return their expression. Function and effect blocks end with an explicit `=> value`; match arms use `=>` to introduce their result.
 
 
 See also: `effect`.
+
+## `>`
+
+Numeric greater-than comparison.
+
+```funscript
+number > number
+```
+
+Native ordering operators are available only when both operands are proven numbers. Compare strings and domain values with an explicit Effect Order.
+
+
+See also: `Order.isGreaterThan`, `String.Order`.
+
+## `>=`
+
+Numeric greater-than-or-equal comparison.
+
+```funscript
+number >= number
+```
+
+Native ordering operators are available only when both operands are proven numbers. Compare strings and domain values with an explicit Effect Order.
+
+
+See also: `Order.isGreaterThanOrEqualTo`, `String.Order`.
 
 ## `|>`
 
@@ -156,16 +208,10 @@ Introduces an effectful computation block with generator semantics.
 effect
   result <- effectfulCall
   _ <- logCall
-  finalExpression
+  => result
 ```
 
-Delimits an Effect workflow that compiles to `Effect.gen(function* () { ... })`.
-
-Inside an `effect` block:
-- `result <- effect` binds the success value of an Effect (equivalent to `yield*`).
-- `_ <- effect` executes an Effect and discards its result.
-- Plain statements evaluate sequentially, and the block automatically returns its final expression.
-- Early exits or error handling use typed error combinators or `Effect.fail`.
+Delimits an Effect workflow that compiles to `Effect.gen(function* () { ... })`. Bind effects with `<-`, discard results with `_ <-`, and finish with `=> value`. Early exits and errors use typed Effect operations.
 
 
 See also: `Effect`, `service`, `fail`, `<-`.

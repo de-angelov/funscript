@@ -3,7 +3,7 @@
 export add = (a: Number, b: Number) => a + b
 
 export multiplyBy = (factor: Number) =>
-  (n: Number) => n * factor
+  => (n: Number) => n * factor
 
 export clamp = (min: Number, max: Number, value: Number) =>
   match

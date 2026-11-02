@@ -72,7 +72,7 @@ export function isRecoverable(err: any): boolean {
     /unexpected token ''/i.test(msg) ||
     /expected unindent/i.test(msg) ||
     /expected expression/i.test(msg) ||
-    /effect block must end with a return expression/i.test(msg) ||
+    /effect block must end with an explicit/i.test(msg) ||
     /non-final bare expression in effect block/i.test(msg)
   );
 }

@@ -4,7 +4,7 @@
 import { Array, Console } from "effect"
 
 export greet = (name: String) =>
-  "Hello, {name}!"
+  => "Hello, {name}!"
 
 export main =
   ["Ada", "Grace", "Alan"]

@@ -269,7 +269,7 @@ schema Option =
   | None
 
 export getVal = (opt: Option) =>
-  opt |> match
+  => opt |> match
     | Some(v) => v * 10
     | None => -1
 `.trim();
@@ -319,13 +319,13 @@ export getVal = (opt: Option) =>
     it("formats multiline pipeline match expression cleanly", () => {
       const unformatted = `
 export unwrap = (opt: Option) =>
-  opt |> match
+  => opt |> match
     | Some(x) => x
     | None => 0
 `.trim();
 
       const formatted = format(unformatted);
-      expect(formatted).toContain("  opt |> match\n    | Some(x) => x\n    | None => 0\n");
+      expect(formatted).toContain("  => opt |> match\n    | Some(x) => x\n    | None => 0\n");
       expect(format(formatted)).toBe(formatted);
     });
   });

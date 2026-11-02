@@ -34,6 +34,13 @@ describe("FunScript LSP Server", () => {
     });
   });
 
+  it("explains that native ordering operators are number-only", () => {
+    const hover = findHover("name < other", "file:///comparison.fun", { line: 0, character: 5 });
+    expect(hover?.contents).toMatchObject({
+      value: expect.stringContaining("both operands are proven numbers"),
+    });
+  });
+
   describe("Completion", () => {
     it("offers explicit companion alternatives for ambiguous bare pipeline stages", () => {
       const server = new FunScriptLspServer();
@@ -627,7 +634,7 @@ getUser = () =>
       expect(diagnostics).toHaveLength(1);
       expect(diagnostics[0].severity).toBe(DiagnosticSeverity.Error);
       expect(diagnostics[0].message).toContain(
-        "Effect block must end with a return expression",
+        "Effect block must end with an explicit",
       );
     });
 
@@ -709,7 +716,7 @@ export schema User = {
 }
 
 export greet = (user: User) =>
-    "Hello, {user.name}!"
+    => "Hello, {user.name}!"
 `.trim();
 
       await server.handleMessage({
@@ -738,7 +745,7 @@ export greet = (user: User) =>
       expect(response.result).toHaveLength(1);
       const edit: TextEdit = response.result[0];
       expect(edit.newText).toBe(
-        'export schema User = {\n  id: String\n  name: String\n}\n\nexport greet = (user: User) =>\n  "Hello, {user.name}!"\n',
+        'export schema User = {\n  id: String\n  name: String\n}\n\nexport greet = (user: User) =>\n  => "Hello, {user.name}!"\n',
       );
     });
 
@@ -1376,7 +1383,7 @@ export schema Config = {
       const source = [
         "calculate = (n: Number) =>",
         "  subtotal = n * 10",
-        "  subtotal + 5",
+        "  => subtotal + 5",
       ].join("\n");
 
       await server.handleMessage({
@@ -1399,7 +1406,7 @@ export schema Config = {
         method: "textDocument/definition",
         params: {
           textDocument: { uri },
-          position: { line: 2, character: 4 },
+          position: { line: 2, character: 7 },
         },
       })) as ResponseMessage;
 
@@ -1593,7 +1600,7 @@ export schema Config = {
         "getAccount = () =>",
         "  effect",
         '    user <- findUser("123")',
-        "    user",
+        "    => user",
       ].join("\n");
 
       await server.handleMessage({
@@ -1616,7 +1623,7 @@ export schema Config = {
         method: "textDocument/definition",
         params: {
           textDocument: { uri },
-          position: { line: 3, character: 5 },
+          position: { line: 3, character: 8 },
         },
       })) as ResponseMessage;
 
@@ -1692,10 +1699,10 @@ export schema Config = {
       const uri = "file:///mut.fun";
       const source = [
         "appendTag = (p: Profile, tag: String) =>",
-        "  p",
+        "  => p",
         "  |> mut (draft) =>",
         "    draft.tags.push(tag)",
-        "    draft",
+        "    => draft",
       ].join("\n");
 
       await server.handleMessage({

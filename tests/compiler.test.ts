@@ -30,6 +30,28 @@ export nextAge = age + 1
     expect(result.typescript).not.toContain("Number.greaterThan");
   });
 
+  it("emits native ordering operators for number comparisons", async () => {
+    const result = await Effect.runPromise(compileString("export valid = 5 >= 3 and 2 < 4"));
+    expect(result.typescript).toContain("((5 >= 3) && (2 < 4))");
+  });
+
+  it("rejects native ordering operators for strings with an Effect Order diagnostic", async () => {
+    await expect(Effect.runPromise(compileString("export valid = (left: String, right: String) => left < right")))
+      .rejects.toThrow("< is only available for numbers; this operand has type string. Use Order.isLessThan(String.Order)(...) or an explicit domain Order.");
+  });
+
+  it("rejects unknown values in native ordering operators", async () => {
+    await expect(Effect.runPromise(compileString("export valid = (value: Unknown) => value >= 0")))
+      .rejects.toThrow(">= is only available for numbers; this operand has type unknown");
+  });
+
+  it("enforces numeric ordering in funx files", async () => {
+    const result = await Effect.runPromise(compileString("export valid = 1 < 2", "comparison.funx"));
+    expect(result.typescript).toContain("(1 < 2)");
+    await expect(Effect.runPromise(compileString('export invalid = "a" < "b"', "comparison.funx")))
+      .rejects.toThrow("< is only available for numbers");
+  });
+
   it("compiles lambdas and pipelines", async () => {
     const code = `
 export add = (a: Number, b: Number) => a + b
@@ -209,7 +231,7 @@ export js fetchUser = (id: String) =>
   effect
     res <- js fetch("https://api.com/users/" + id)
     payload <- js res.json()
-    payload
+    => payload
 
 export runPromiseTest = fetchUser("123") |> js
 `.trim();
@@ -233,17 +255,17 @@ declare function untrustedNative(): Promise<any>
 
 export nullable = effect {
   value <- js nullableNative()
-  value
+  => value
 }
 
 export required = effect {
   value <- js requiredNative()
-  value
+  => value
 }
 
 export untrusted = effect {
   value <- js untrustedNative()
-  value
+  => value
 }
 `.trim();
 
@@ -304,7 +326,7 @@ export getUser = (id: String) =>
   effect
     user <- UserRepo.find(id)
     _ <- Console.log(user)
-    user
+    => user
 `.trim();
 
     const res = await Effect.runPromise(compileString(code));
@@ -322,7 +344,7 @@ import { HttpClient } from "effect/http"
 export fetch =
   effect
     response <- HttpClient.get("https://example.com")
-    response
+    => response
 `.trim();
 
     const res = await Effect.runPromise(compileString(code));
@@ -331,10 +353,15 @@ export fetch =
   });
 
   it("compiles brace-delimited effects as pipeline expressions", async () => {
-    const res = await Effect.runPromise(compileString(`result = effect {\n  user <- fetchUser()\n  user |> summarize\n}`));
+    const res = await Effect.runPromise(compileString(`result = effect {\n  user <- fetchUser()\n  => user |> summarize\n}`));
     expect(res.typescript).toContain("Effect.gen(function* () {");
     expect(res.typescript).toContain("const user = yield* fetchUser();");
     expect(res.typescript).toContain("summarize");
+  });
+
+  it("keeps explicitly qualified non-companion pipeline stages intact", async () => {
+    const result = await Effect.runPromise(compileString("export result = value |> Custom.transform(1)"));
+    expect(result.typescript).toContain("Custom.transform(1)");
   });
 
   it("compiles when statements inside effect blocks", async () => {
@@ -342,19 +369,19 @@ export fetch =
 export earlyValue = (skip: Boolean) =>
   effect
     when (skip) => "early"
-    "done"
+    => "done"
 
 export failEarly = (shouldFail: Boolean) =>
   effect
     when (shouldFail) => Effect.fail("failed")
-    "done"
+    => "done"
 
 export conditionalBlock = (enabled: Boolean) =>
   effect
     when (enabled) {
       selected = "inside"
     }
-    "done"
+    => "done"
 `.trim();
 
     const res = await Effect.runPromise(compileString(code));
@@ -367,7 +394,7 @@ export conditionalBlock = (enabled: Boolean) =>
   it("compiles deep Mutative spreads", async () => {
     const code = `
 export updateCity = (user: User, city: String) =>
-  {
+  => {
     ...user
     address.city: city
   }
@@ -606,7 +633,7 @@ getUser = () =>
 `;
       const failure = await Effect.runPromise(Effect.flip(compileString(code)));
       expect(failure).toBeInstanceOf(CompilerError);
-      expect(failure.message).toContain("Effect block must end with a return expression");
+      expect(failure.message).toContain("Effect block must end with an explicit");
     });
 
     it("verifies checkString returns AST on success and CompilerError on failure", async () => {

@@ -56,7 +56,7 @@ schema TaskItem = {
 }
 
 export TaskList = (tasks: Array<TaskItem>) =>
-  <div className="task-container">
+  => <div className="task-container">
     <header className="header">
       <h1>Task Tracker</h1>
     </header>
@@ -70,7 +70,7 @@ export TaskList = (tasks: Array<TaskItem>) =>
       expect(res.typescript).toBeDefined();
       expect(res.typescript).toContain('import { Array, Schema, pipe } from "effect";');
       expect(res.typescript).toContain("export const TaskList = (tasks: ReadonlyArray<TaskItem>) => {");
-      expect(res.typescript).toContain('return <div className="task-container">');
+      expect(res.typescript).toContain('return (<div className="task-container">');
       expect(res.typescript).toContain('<header className="header"><h1>Task Tracker</h1></header>');
       expect(res.typescript).toContain('<ul className="tasks">');
       expect(res.typescript).toContain("pipe(");
@@ -103,7 +103,7 @@ export View = (state: ViewState) =>
     it("compiles attributes with string template interpolation correctly", async () => {
       const code = `
 export Card = (variant: String, size: String) =>
-  <div className="card-{variant}" data-size="size-{size}">
+  => <div className="card-{variant}" data-size="size-{size}">
     <span>Card content</span>
   </div>
 `.trim();
@@ -116,7 +116,7 @@ export Card = (variant: String, size: String) =>
     it("compiles attributes with dollar-prefixed template interpolation correctly", async () => {
       const code = `
 export Badge = (badgeKind: String) =>
-  <span className="badge-\${badgeKind}">
+  => <span className="badge-\${badgeKind}">
     Badge
   </span>
 `.trim();
@@ -128,7 +128,7 @@ export Badge = (badgeKind: String) =>
     it("compiles nested fragments with sibling children to TSX", async () => {
       const code = `
 export FragmentView = () =>
-  <>
+  => <>
     <span>First</span>
     <>
       <strong>Nested</strong>
@@ -140,7 +140,7 @@ export FragmentView = () =>
 
       const res = await Effect.runPromise(compileString(code, "FragmentView.funx"));
       expect(res.typescript).toContain(
-        "return <><span>First</span><><strong>Nested</strong><em>Sibling</em></><span>Last</span></>;",
+        "return (<><span>First</span><><strong>Nested</strong><em>Sibling</em></><span>Last</span></>);",
       );
     });
   });
@@ -165,8 +165,7 @@ export Widget = (props: Props) => <div className="widget"><h3>{props.name}</h3><
       expect(stdout).toContain(`✓ Built ${expectedTsxFile}`);
 
       const tsxContent = await fs.readFile(expectedTsxFile, "utf-8");
-      expect(tsxContent).toContain("export const Widget = (props: Props) => {");
-      expect(tsxContent).toContain('return <div className="widget"><h3>{props.name}</h3></div>;');
+      expect(tsxContent).toContain('export const Widget = (props: Props) => <div className="widget"><h3>{props.name}</h3></div>;');
     });
 
     it("builds a .fun file to .ts adjacent to source", async () => {
@@ -291,6 +290,6 @@ export Header = () => <header><h1>FunScript</h1></header>
       expect(buildOutput).toContain(`✓ Built ${path.join(distDir, "08-todo-dashboard.tsx")}`);
       const builtDashboard = await fs.readFile(path.join(distDir, "08-todo-dashboard.tsx"), "utf-8");
       expect(builtDashboard).toContain("export const TodoDashboard");
-    }, 30_000);
+    }, 120_000);
   });
 });
