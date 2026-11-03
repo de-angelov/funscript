@@ -104,3 +104,58 @@ export process = (data) => data |> map((x) => x + 1)
 # Canonical disambiguated call with explicit companion qualification:
 export process = (data) => data |> Array.map((x) => x + 1)
 ```
+
+## Explicit-return migration decision
+
+Under the human-approved decision for TASK-104, FunScript has **declined dedicated codemod tooling** for migrating legacy implicit-return syntax to explicit `=> returnValue` returns.
+
+### Decision rationale and compatibility policy
+
+In alignment with FunScript's [Strict Zero-Alias compatibility policy](#language-compatibility-policy):
+- FunScript is in early active development with zero external production consumers.
+- No automated migration command (such as `funscript migrate`) or automated AST codemod is provided or maintained.
+- Codebases rely strictly on immediate, actionable compiler diagnostics (`ParseError: Function block must end with an explicit '=> returnValue'` and `ParseError: Effect block must end with an explicit '=> returnValue'`) to guide developers during manual updates.
+
+### Ambiguous cases and safety risks
+
+Automated mechanical insertion of `=>` was rejected because semantic equivalence cannot be proven safely across several syntactic contexts:
+
+1. **Side effects vs. return values in function blocks**
+   In multi-statement functions, a trailing expression may be executed purely for side effects with an intended `Unit` or `void` return:
+   ```funscript
+   # Ambiguous legacy block:
+   saveState = (state: State) =>
+     serialized = serialize(state)
+     writeDisk(serialized)
+   ```
+   Mechanically rewriting the final line to `=> writeDisk(serialized)` alters the inferred return type and leaks internal state, breaking caller contracts when the author intended the return value to be discarded.
+
+2. **Yield (`<-`) vs. discard (`_ <-`) vs. return (`=>`) in effect blocks**
+   In FunScript `effect` blocks, returning an expression with `=>` does not execute or yield it; it returns the unyielded `Effect` generator:
+   ```funscript
+   # Ambiguous legacy effect block:
+   program = effect {
+     user <- fetchUser()
+     Console.log("Done")
+   }
+   ```
+   If a codemod mechanically prepends `=> Console.log("Done")`, `Console.log` is **never executed** at runtime, causing a silent defect. The developer's intent may instead have been:
+   ```funscript
+   program = effect {
+     user <- fetchUser()
+     _ <- Console.log("Done")
+     => Unit
+   }
+   ```
+   A mechanical migration tool cannot deduce whether an effect expression should be yielded, discarded, or returned.
+
+3. **Trailing binding declarations**
+   If a legacy block ends with an assignment such as `result = compute()`, prepending `=>` produces a syntax error (`=> result = compute()`). Synthesizing an additional statement (`result = compute()` followed by `=> result`) risks returning private state or dead assignments where `compute()` was only called for side effects.
+
+4. **Syntactic exemptions and expression bodies**
+   - Multi-statement function blocks ending in `match` or `effect` expressions are exempt from `=>` in the parser (for example, a trailing `match x ...` is accepted as the final block expression).
+   - Single-expression lambdas (`sum = (a, b) => a + b`) are expression bodies and do not use `=>` in the body.
+   Blind mechanical insertion risks corrupting valid syntax or introducing redundant tokens.
+
+5. **Mechanical irreversibility**
+   Because `=> expr` is identical for hand-authored code and migrated code, an automated transformation is mechanically irreversible. Version control (`git`) serves as the sole rollback mechanism for manual code updates.
