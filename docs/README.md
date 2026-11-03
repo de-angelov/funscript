@@ -2,10 +2,9 @@
 
 ## Current, verified documentation
 
-Authors should use the [syntax authoring reference](syntax.md) for the current language
-syntax. The [language catalogue](reference/language.md) and other reference pages are
-generated, implementation-derived catalogues; they summarize the toolchain rather than
-define syntax independently.
+The [syntax reference](syntax.md) is the current implemented reference for FunScript language
+syntax. The [language catalogue](reference/language.md) is generated from LSP documentation;
+it summarizes the language tooling and does not define syntax independently.
 
 - [CLI reference](reference/cli.md) — generated from `src/cli/commands.ts`.
 - [Package API](reference/api.md) — generated from `package.json` exports.
