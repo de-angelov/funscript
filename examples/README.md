@@ -13,6 +13,7 @@ writing new code. Run `funscript check <file.fun>` before adapting an example.
 | `todo-http.fun`         | `effect` blocks, `schema`, retry, layer provision                              |
 | `greeter-service.fun`   | services, layers, dependency injection                                         |
 | `order-fulfillment.fun` | end-to-end showcase: Effect (concurrency, retry, layers), ts-pattern, Mutative |
+| `ts-schema-validation.fun` | imported TypeScript schema (`from ts<Type>`), validation, error reporting |
 
 The current compiler dependencies are Effect 3.x, ts-pattern 5.x, and TypeScript
 5.6+. Static checking gates `run` and `build`; external inputs still require

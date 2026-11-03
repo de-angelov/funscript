@@ -42,6 +42,7 @@ The design rule is simple:
 | Or-pattern                   | `\| Admin \| Owner => "elevated"`                                                                |
 | Tagged union schema          | `schema Shape =` newline `\| Circle(radius: Number)`                                             |
 | Record schema                | `schema User = { id: UUID, name: NonEmptyString, role: String = "member", bio: Option<String> }` |
+| Imported TS schema           | `schema User = from ts<UserProfile>` (derives Effect Schema from TypeScript type)                 |
 | Refined schema               | `schema Age = Int \|> Schema.between(0, 150)`                                                    |
 | Schema constructor           | `UUID("1")`, `Age(36)`, `User({ id, name })` (literals validated at compile time)                |
 | Compile-time type alias      | `schema Lookup = (id: String) => Effect<User, NotFound>`                                         |
@@ -1215,6 +1216,8 @@ declarations:
    positional constructors + Effect `Schema.Union` + static TypeScript `type`.
 3. **Compile-time `schema` aliases** (functions `=>`, `Effect<...>`, generics) → pure
    TypeScript `type`.
+4. **Imported TypeScript schemas** (`schema Name = from ts<Type>`) → compile-time derived
+   Effect `Schema` + static TypeScript `type` + `NameFromUnknown` decoder.
 
 ### 8.1 Data-shape `schema`: Effect `Schema` + static TypeScript type
 
@@ -1474,6 +1477,186 @@ position with a suggestion to drop the parentheses.
 
 Error constructor names share the value namespace with tagged-union `schema` constructors.
 The compiler rejects collisions.
+
+### 8.4 Imported TypeScript schemas (`schema Name = from ts<Type>`)
+
+When interoperating with existing TypeScript libraries, SDK models, or external type definitions,
+FunScript allows automatically deriving Effect `Schema` values and companion static types directly
+from imported TypeScript types using the `schema Name = from ts<Type>` syntax:
+
+```funscript
+import type { UserProfile } from "./schema-types.js"
+
+export schema User = from ts<UserProfile>
+```
+
+(The alternative modifier form `export ts schema User = UserProfile` is also supported for backwards compatibility.)
+
+#### Generated code and exports
+
+For `export schema User = from ts<UserProfile>`, the compiler emits:
+
+1. **A runtime Effect `Schema`:** `export const User = Schema.Struct({ ... });`
+2. **A static TypeScript type alias:** `export type User = typeof User.Type;`
+3. **A synchronous decoding helper:** `export const UserFromUnknown = (input: unknown): User => Schema.decodeUnknownSync(User)(input);`
+
+This gives you a single source of truth: the imported TypeScript type becomes an actionable Effect Schema
+at compile time without manual duplication or drift.
+
+#### Supported TypeScript types
+
+The compiler introspects the imported type using the TypeScript compiler API and derives corresponding Effect schemas:
+
+| TypeScript construct | Derived Effect Schema | Notes |
+| -------------------- | --------------------- | ----- |
+| `string` | `Schema.String` | Primitives |
+| `number` | `Schema.Number` | Primitives |
+| `boolean` | `Schema.Boolean` | Primitives |
+| `null` | `Schema.Null` | Primitives |
+| `undefined` | `Schema.Undefined` | Primitives |
+| String literal (`"admin"`) | `Schema.Literal("admin")` | Exact string value |
+| Number literal (`200`) | `Schema.Literal(200)` | Exact numeric value |
+| Boolean literal (`true`) | `Schema.Literal(true)` | Literal boolean (or `Schema.Boolean` if both true and false are in a union) |
+| Arrays (`T[]`, `Array<T>`, `ReadonlyArray<T>`) | `Schema.Array(ElemSchema)` | Supports nested arrays (`T[][]`) |
+| Record index signatures (`Record<string, V>`) | `Schema.Record(Schema.String, ValSchema)` | Key must be string |
+| Object interfaces and type literals (`{ ... }`) | `Schema.Struct({ ... })` | Field names preserved; nested structs supported |
+| Optional properties (`field?: T`) | `field: Schema.optional(FieldSchema)` | Decodes omitted or `undefined` properties |
+| Nullable unions (`T \| null`) | `Schema.NullOr(InnerSchema)` | Explicit nullable wrapper |
+| Optional unions (`T \| undefined`) | `Schema.UndefinedOr(InnerSchema)` | Explicit undefined wrapper |
+| Nullish unions (`T \| null \| undefined`) | `Schema.NullishOr(InnerSchema)` | Null or undefined |
+| General unions (`A \| B`) | `Schema.Union([SchemaA, SchemaB])` | Disjoint or variant unions |
+
+#### Rejected types and strict diagnostics
+
+To preserve FunScript's runtime safety guarantees, the compiler strictly rejects types that cannot be safely converted to runtime data schemas without silent widening:
+
+- **`any`:** Strictly rejected. FunScript does not allow silent widening to `Schema.Unknown`.
+  `Type 'any' [in 'Path'] is not supported for schema derivation. FunScript does not allow silent widening to Schema.Unknown.`
+- **`unknown`:** Rejected as a target type for schema derivation.
+  `Type 'unknown' [in 'Path'] is not supported for schema derivation.`
+- **`never`:** Rejected.
+  `Type 'never' [in 'Path'] is not supported for schema derivation.`
+- **Functions and methods:** Types containing call signatures, construct signatures, or method declarations are rejected.
+  `Function type is not supported for schema derivation.` or `Method 'Path.method' is not supported for schema derivation.`
+- **Classes:** Class constructors and class instances are rejected (use structural interfaces instead).
+  `Class 'ClassName' is not supported for schema derivation.`
+- **Unsupported built-in objects:** JavaScript built-ins (`Date`, `RegExp`, `Map`, `Set`, `WeakMap`, `WeakSet`, `Promise`, `ArrayBuffer`, typed arrays, `Error`, etc.) are rejected with actionable diagnostics.
+  `Type 'Date' is not supported for schema derivation.`
+- **Recursive / cyclical types:** Types that reference themselves directly or indirectly cannot be lowered to static Schema expressions.
+  `Recursive type 'Tree' at 'Tree.children' is not supported for schema derivation.`
+- **Unresolved types:** Non-existent or un-imported type names produce clear compiler diagnostics locating the missing identifier.
+
+#### Limits and constraints
+
+1. **Source resolution:** The referenced TypeScript type must be imported into the FunScript file via an `import` declaration (`import type { Target } from "./types.js"`) or declared locally within a `ts { ... }` escape block.
+2. **NodeNext module resolution:** Imports are resolved relative to the FunScript file using standard NodeNext ECMAScript module resolution.
+3. **Monomorphic concrete types:** Schema derivation operates at compile time on concrete, resolved types. Generic schemas must provide concrete type arguments when deriving schemas.
+4. **Recompilation reflection:** The FunScript compiler reads external TypeScript source and declaration files during compilation. Modifying the external TypeScript types causes the derived schema to update automatically on the next compilation.
+
+#### End-to-end example: validation and error reporting
+
+The following example demonstrates declaring an Effect Schema from an external TypeScript interface, performing runtime validation on untrusted input, and reporting validation errors.
+
+##### 1. External TypeScript definitions (`schema-types.d.ts`)
+
+```ts
+export type UserRole = "admin" | "member" | "guest";
+
+export interface UserProfile {
+  id: string;
+  name: string;
+  email: string;
+  role: UserRole;
+  age?: number;
+  bio: string | null;
+  tags: string[];
+}
+```
+
+##### 2. FunScript schema and validation logic (`examples/ts-schema-validation.fun`)
+
+```funscript
+import type { UserProfile } from "./schema-types.js"
+import { Console, Option, Schema } from "effect"
+
+// Declare Effect Schema from the external TypeScript interface
+export schema User = from ts<UserProfile>
+
+// Decode unknown input returning Option<User> via Schema.decodeUnknownOption
+export decodeUserOption = (raw: Unknown) =>
+  => Schema.decodeUnknownOption(User)(raw)
+
+// Decode unknown input returning Result<User, SchemaError> via Schema.decodeUnknownResult
+export decodeUserResult = (raw: Unknown) =>
+  => Schema.decodeUnknownResult(User)(raw)
+
+export main =
+  effect {
+    _ <- Console.log("[FunScript] Validating imported TypeScript schema...")
+
+    // Valid payload satisfying UserProfile
+    validInput = {
+      id: "usr_100"
+      name: "Ada Lovelace"
+      email: "ada@example.com"
+      role: "admin"
+      bio: "Mathematician"
+      tags: ["math", "computing"]
+    }
+
+    // 1. Direct synchronous decoder generated by the compiler
+    directUser = UserFromUnknown(validInput)
+    _ <- Console.log("Direct UserFromUnknown decoded: {directUser.name} ({directUser.role})")
+
+    // 2. Option-based decoding: yields Option.Some(user)
+    userOpt = decodeUserOption(validInput)
+    _ <- match
+      | Option.isSome(userOpt) => Console.log("Option decoder: user validated successfully")
+      | _ => Console.log("Option decoder: unexpected failure")
+
+    // 3. Result-based decoding: yields Result.Success(user)
+    validRes = decodeUserResult(validInput)
+    _ <- match
+      | validRes._tag #= "Success" => Console.log("Result decoder: user validated successfully")
+      | _ => Console.log("Result decoder: unexpected failure")
+
+    // Invalid payload missing required email and providing an invalid role
+    invalidInput = {
+      id: "usr_200"
+      name: "Unknown Role"
+      email: "test@example.com"
+      role: "superadmin"
+      bio: "Developer"
+      tags: []
+    }
+
+    // Option decoder cleanly returns Option.None on validation failure
+    invalidOpt = decodeUserOption(invalidInput)
+    _ <- match
+      | Option.isNone(invalidOpt) => Console.log("Option decoder: correctly rejected invalid role")
+      | _ => Console.log("Option decoder: unexpected pass")
+
+    // Result decoder captures detailed SchemaError message
+    invalidRes = decodeUserResult(invalidInput)
+    _ <- match
+      | invalidRes._tag #= "Failure" => Console.log("Result decoder: rejected invalid input with error: {invalidRes.failure.message}")
+      | _ => Console.log("Result decoder: unexpected pass")
+
+    => 0
+  }
+```
+
+Running this program validates the payload against the generated Effect Schema and outputs:
+
+```text
+[FunScript] Validating imported TypeScript schema...
+Direct UserFromUnknown decoded: Ada Lovelace (admin)
+Option decoder: user validated successfully
+Result decoder: user validated successfully
+Option decoder: correctly rejected invalid role
+Result decoder: rejected invalid input with error: Expected "admin" | "member" | "guest"
+  at ["role"]
+```
 
 ---
 
@@ -2017,7 +2200,8 @@ its generated wrapper validates annotated parameters before running the body.
 Primitive parameters receive runtime type checks; schema-backed parameters use
 their schema validator. An invalid foreign argument fails at that boundary.
 Complex `ts` aliases have no runtime validator merely because they have a static
-type; provide a boundary schema and decode those values explicitly.
+type; provide a boundary schema and decode those values explicitly (or use
+`schema Name = from ts<Type>` (§8.4) to derive runtime schemas from imported TypeScript types).
 
 ```funscript
 export js greet = (name: String) =>
@@ -2237,7 +2421,8 @@ serviceDecl    = "service" UpperIdent [ string ] INDENT { serviceMember } DEDENT
 serviceMember  = identifier ":" type ;
 
 errorDecl      = "error" UpperIdent [ "(" [ field { "," field } ] ")" ] ;
-schemaDecl     = "schema" UpperIdent [ "<" typeParams ">" ] "=" ( variantBlock | typeExpr ) ;
+schemaDecl     = [ "ts" ] "schema" UpperIdent [ "<" typeParams ">" ] "=" ( variantBlock | importedTsSchema | typeExpr ) ;
+importedTsSchema = "from" "ts" "<" typeParams ">" ;
 variantBlock   = INDENT variant { variant } DEDENT
                | variant { variant } ;
 variant        = "|" UpperIdent [ "(" field { "," field } ")" ] ;

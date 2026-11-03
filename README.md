@@ -15,7 +15,7 @@ matching, and immutable updates less ceremonial.
 - Package: `funscript` `0.1.0`
 - Runtime: Effect `^4.1.1`
 - Source extensions: `.fun`, `.funx`
-- Runnable checked examples: 20
+- Runnable checked examples: 21
 
 The exact command surface is generated from the implementation in the [CLI reference](docs/reference/cli.md). The language catalogue used by editor hover help is generated in the [language reference](docs/reference/language.md).
 <!-- /GENERATED: project-facts -=>
@@ -98,6 +98,7 @@ For the current, verified contract and runnable source examples, read the
 | [`examples/solid-demo/domain.fun`](examples/solid-demo/domain.fun) | `FunScript` |
 | [`examples/solid-demo/solid-in-funscript.fun`](examples/solid-demo/solid-in-funscript.fun) | `FunScript` |
 | [`examples/todo-http.fun`](examples/todo-http.fun) | `FunScript` |
+| [`examples/ts-schema-validation.fun`](examples/ts-schema-validation.fun) | `FunScript` |
 | [`programs/01-fibonacci.fun`](programs/01-fibonacci.fun) | `FunScript` |
 | [`programs/02-bank-account.fun`](programs/02-bank-account.fun) | `FunScript` |
 | [`programs/03-todo-service.fun`](programs/03-todo-service.fun) | `FunScript` |

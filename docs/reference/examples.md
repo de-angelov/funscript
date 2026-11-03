@@ -17,6 +17,7 @@ Every entry below is compiled by `npm run test:examples`.
 | [`examples/solid-demo/domain.fun`](../examples/solid-demo/domain.fun) | `FunScript` |
 | [`examples/solid-demo/solid-in-funscript.fun`](../examples/solid-demo/solid-in-funscript.fun) | `FunScript` |
 | [`examples/todo-http.fun`](../examples/todo-http.fun) | `FunScript` |
+| [`examples/ts-schema-validation.fun`](../examples/ts-schema-validation.fun) | `FunScript` |
 | [`programs/01-fibonacci.fun`](../programs/01-fibonacci.fun) | `FunScript` |
 | [`programs/02-bank-account.fun`](../programs/02-bank-account.fun) | `FunScript` |
 | [`programs/03-todo-service.fun`](../programs/03-todo-service.fun) | `FunScript` |
