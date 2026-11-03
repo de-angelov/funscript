@@ -27,3 +27,4 @@ current verified documentation wins.
 
 - `proposal.md`, `pit-of-success.md`, `rejected-syntax.md`
 - `DOGFOODING.md`, `llm-first-audit.md`, `design-effect-comparison-functions.md`, `ast-spec.md`
+- [TypeScript schema conversion decision survey](design-typescript-schema.md) — a proposal brief for a possible feature, not implemented behavior.
