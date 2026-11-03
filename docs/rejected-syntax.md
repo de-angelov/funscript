@@ -1,5 +1,7 @@
 # Rejected syntax
 
+> **Historical:** This document describes rejected syntax from an earlier language snapshot. For the current language reference, see [syntax.md](syntax.md); for the documentation map, see [README.md](../README.md).
+
 FunScript is deliberately narrower than JavaScript and TypeScript. This page is the
 quick-reference list of what the toolchain rejects or flags, why, and what to write
 instead.
