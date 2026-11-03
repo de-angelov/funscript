@@ -48,6 +48,9 @@ or standard library behind the generated code.
 
 The exact CLI surface is generated from the implementation: see the [CLI reference](docs/reference/cli.md).
 Package entry points are likewise generated in the [API reference](docs/reference/api.md).
+For language rules accepted by the compiler, [the syntax guide](docs/syntax.md) is authoritative;
+sections marked **Planned** describe future work. The generated [language catalogue](docs/reference/language.md)
+comes from `src/lsp/docs.ts` and supplies editor hover help.
 
 ## Quick start from a checkout
 
@@ -140,7 +143,8 @@ tests/            Compiler, CLI, formatter, LSP, and integration coverage
 
 - [CLI reference](docs/reference/cli.md) — generated from the command catalogue.
 - [Package entry points](docs/reference/api.md) — generated from `package.json` exports.
-- [Language reference](docs/reference/language.md) — generated from the LSP hover catalogue.
+- [Language syntax guide](docs/syntax.md) — authoritative reference for implemented language rules; planned material is labeled.
+- [Language catalogue](docs/reference/language.md) — generated from `src/lsp/docs.ts` and used for language-server hover help.
 - [Example inventory](docs/reference/examples.md) — generated from the runnable example tree.
 - [Documentation map](docs/README.md) — separates current verified docs from proposals/history.
 - [Tooling guide](docs/tooling.md) — use FunScript in a normal Node project.
