@@ -55,3 +55,52 @@ proprietary project layout or package format.
 The repository's own scripts are defined in `package.json`: `build`, `test`, `test:watch`,
 `fmt`, `fmt:check`, `prettier:check`, `verify`, and `pr:check`. They are repository scripts,
 not additional `funscript` CLI commands.
+
+## Language compatibility policy
+
+Under the human-approved language compatibility policy (TASK-102), FunScript adopts a **Strict Zero-Alias Policy**. Because FunScript is in early active development with zero external production consumers, obsolete constructs and historical shims are removed immediately rather than maintained across deprecation windows or hidden behind edition flags.
+
+The policy governs three key evolutionary areas:
+
+### 1. Effect aliases
+
+Historical and obsolete Effect compatibility aliases (such as `catchAll` in favor of `catch`, or `fork` in favor of `forkChild`) are removed immediately to remain 100% synchronized with upstream Effect v4 public exports. There is no multi-release retention window or warning-only phase for obsolete aliases.
+
+```funscript
+# Obsolete Effect alias (rejected at compile time):
+export recover = task |> catchAll((err) => Effect.succeed("fallback"))
+
+# Canonical Effect operation:
+export recover = task |> catch((err) => Effect.succeed("fallback"))
+```
+
+### 2. Breaking syntax changes
+
+Outdated syntax and deprecated grammar constructs are statically rejected with actionable error diagnostics citing the canonical form, rather than supported through multi-release deprecation warnings or language edition configurations.
+
+For example, function blocks and effect blocks enforce the explicit return invariant (`=> value`). Trailing bare expressions without `=>` are rejected by the parser:
+
+```funscript
+# Outdated syntax (rejected by parser):
+sum = (a: Number, b: Number) => {
+  a + b
+}
+
+# Canonical syntax with explicit return:
+sum = (a: Number, b: Number) => {
+  => a + b
+}
+```
+
+### 3. Newly ambiguous pipeline operations
+
+FunScript disallows heuristic guessing, fallback priority, or companion precedence orders. If an untyped or unproven receiver type causes a bare pipeline stage to match multiple candidate companion modules in the catalog (such as `map` existing in `Array`, `Effect`, and `Option`), the compiler raises a compile-time `PipelineResolutionError` requiring explicit qualification.
+
+```funscript
+# Ambiguous bare call without a proven receiver type (rejected at compile time):
+# Error: map is ambiguous for this pipeline; write Array.map(...) or Option.map(...)
+export process = (data) => data |> map((x) => x + 1)
+
+# Canonical disambiguated call with explicit companion qualification:
+export process = (data) => data |> Array.map((x) => x + 1)
+```
