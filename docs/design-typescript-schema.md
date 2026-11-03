@@ -196,3 +196,36 @@ defined.
 - **Upstream Schema Preference:** Upstream runtime Effect schemas remain preferred whenever available from library authors; type derivation is only intended for un-schematized third-party TypeScript interfaces.
 - **Implementation Status:** TASK-095 records the human architectural decision only; parser grammar (`from ts<...>`) and compiler code generation will be implemented in subsequent tasks.
 
+## Recursive imported schemas investigation (TASK-171)
+
+The existing fixture `RecursiveTree` (`tests/fixtures/imported-schemas/model.ts`)
+is a concrete plain-data use case: each node has an `id` and recursively nested
+`children`. This shape appears in nested navigation trees, syntax trees, and
+category hierarchies, so supporting it would make imported-schema derivation
+useful for real data rather than only flat records. It is currently rejected
+with a source-located `Recursive type 'RecursiveTree' ... is not supported`
+diagnostic by the converter's type-identity cycle guard in
+`src/compiler/imported-schemas.ts`.
+
+Effect 4.1.1 exposes `Schema.suspend`, which provides the necessary lazy
+reference, but merely wrapping the repeated child is insufficient: recursive
+conversion needs a per-derivation identity table with an in-progress binding
+before descending, and a generated schema expression that refers to that
+binding. Otherwise the converter either recurses forever or duplicates a
+recursive expression without a stable reference. Generated declarations must
+also preserve the current schema binding and type inference behavior. The
+tradeoff is additional state and code-generation complexity; unsupported
+recursive constructs (for example cycles through a function or an unsupported
+class) must continue to fail with the existing actionable diagnostic.
+
+Recommendation: a focused follow-up is justified for recursive object records
+and arrays, using `Schema.suspend` plus a per-schema cache keyed by TypeScript
+type identity. Keep the current explicit rejection until that follow-up lands.
+Its acceptance cases should include: (1) derive `RecursiveTree` and assert the
+generated child reference is lazy; (2) decode a finite nested tree successfully;
+(3) reject an invalid leaf field at a nested depth; and (4) verify generation
+terminates for the recursive input and still rejects recursion that passes
+through unsupported members. These exercise both compiler termination and
+runtime traversal; no claim should be made that infinitely cyclic JavaScript
+object values are valid serialized data.
+
