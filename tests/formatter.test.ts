@@ -261,6 +261,40 @@ export y = 20
     }
   });
 
+  it("keeps mixed equality, comparison, and arithmetic grouping through formatting", () => {
+    const expressions = [
+      ["1 + 2 * 3 < 8 #= true", "1 + 2 * 3 < 8 #= true"],
+      ["(1 #= 2) < 3", "(1 #= 2) < 3"],
+      ["1 #= (2 < 3)", "1 #= 2 < 3"],
+      ["(1 + 2) * 3 < 10 #= true", "(1 + 2) * 3 < 10 #= true"],
+    ] as const;
+
+    for (const [expression, expected] of expressions) {
+      const source = `export result = ${expression}`;
+      const formatted = format(source);
+      expect(formatted).toBe(`export result = ${expected}\n`);
+      expect(operatorTree(formatted)).toEqual(operatorTree(source));
+      expect(operatorTree(format(formatted))).toEqual(operatorTree(source));
+    }
+  });
+
+  it("keeps subtraction and exponentiation associativity through formatting", () => {
+    const expressions = [
+      ["1 - 2 - 3", "1 - 2 - 3"],
+      ["1 - (2 - 3)", "1 - (2 - 3)"],
+      ["2 ** 3 ** 2", "2 ** 3 ** 2"],
+      ["(2 ** 3) ** 2", "(2 ** 3) ** 2"],
+    ] as const;
+
+    for (const [expression, expected] of expressions) {
+      const source = `export result = ${expression}`;
+      const formatted = format(source);
+      expect(formatted).toBe(`export result = ${expected}\n`);
+      expect(operatorTree(formatted)).toEqual(operatorTree(source));
+      expect(operatorTree(format(formatted))).toEqual(operatorTree(source));
+    }
+  });
+
   it("preserves equality and comparison grouping through formatting", () => {
     const expressions = [
       "1 < 2 #= true",
