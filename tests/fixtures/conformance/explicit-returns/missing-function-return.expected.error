@@ -1,1 +1,1 @@
-Function block must end with an explicit '=> returnValue' at line 3, col 3
+Function block must end with an explicit '=> returnValue'. Multi-statement functions require an explicit return arrow to distinguish returned values from side effects. Use '=> value' or rewrite as an inline single-expression lambda '(args) => expr'. See docs/syntax.md#311-explicit-returns-and-conditional-execution. at line 3, col 3

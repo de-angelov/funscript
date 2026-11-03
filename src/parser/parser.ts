@@ -101,6 +101,15 @@ export class ParseError extends FunScriptError {
   }
 }
 
+export const FUNCTION_RETURN_DIAGNOSTIC =
+  "Function block must end with an explicit '=> returnValue'. Multi-statement functions require an explicit return arrow to distinguish returned values from side effects. Use '=> value' or rewrite as an inline single-expression lambda '(args) => expr'. See docs/syntax.md#311-explicit-returns-and-conditional-execution.";
+
+export const EFFECT_RETURN_DIAGNOSTIC =
+  "Effect block must end with an explicit '=> returnValue'. Effect blocks require an explicit return arrow to ensure values are yielded and returned properly. Use '=> value' to return, or '_ <- effect' followed by '=> Unit' to discard. See docs/syntax.md#93-the-non-final-expression-rule-and-control-flow-lowering.";
+
+export const EFFECT_BARE_EXPR_DIAGNOSTIC =
+  "Non-final bare expression in effect block is not executed. Use '<-' to run an effect or '_ <-' to discard its value. See docs/syntax.md#93-the-non-final-expression-rule-and-control-flow-lowering.";
+
 export class Parser {
   private current = 0;
   public diagnostics: ParseError[] = [];
@@ -1568,10 +1577,10 @@ export class Parser {
         this.skipNewlines();
         if (braced) while (this.match(TokenType.INDENT) || this.match(TokenType.DEDENT)) {}
         if (atEnd()) {
-          throw new ParseError("Effect block must end with an explicit '=> returnValue'", expr.span);
+          throw new ParseError(EFFECT_RETURN_DIAGNOSTIC, expr.span);
         } else {
           throw new ParseError(
-            "Non-final bare expression in effect block is not executed. Use '<-' to run an effect or '_ <-' to discard its value.",
+            EFFECT_BARE_EXPR_DIAGNOSTIC,
             expr.span,
           );
         }
@@ -1586,7 +1595,7 @@ export class Parser {
     }
 
     if (!finalExpression) {
-      throw new ParseError("Effect block must end with an explicit '=> returnValue'", { start, end: this.previous().span.end });
+      throw new ParseError(EFFECT_RETURN_DIAGNOSTIC, { start, end: this.previous().span.end });
     }
 
     return {
@@ -1788,7 +1797,7 @@ export class Parser {
         this.skipNewlines();
 
         if (this.check(TokenType.RBRACE) || this.check(TokenType.DEDENT)) {
-          if (requireExplicitReturn && expr.kind !== "MatchExpression" && expr.kind !== "EffectBlockExpression") throw new ParseError("Function block must end with an explicit '=> returnValue'", expr.span);
+          if (requireExplicitReturn && expr.kind !== "MatchExpression" && expr.kind !== "EffectBlockExpression") throw new ParseError(FUNCTION_RETURN_DIAGNOSTIC, expr.span);
           finalExpression = expr;
           break;
         } else {
@@ -1809,7 +1818,7 @@ export class Parser {
     }
 
     if (requireExplicitReturn && !finalExpression && statements.at(-1)?.kind !== "ReturnStatement") {
-      throw new ParseError("Function block must end with an explicit '=> returnValue'", { start, end: this.previous().span.end });
+      throw new ParseError(FUNCTION_RETURN_DIAGNOSTIC, { start, end: this.previous().span.end });
     }
     if (hasIndent) {
       this.consume(TokenType.DEDENT, "Expected unindent after brace block");
@@ -1895,7 +1904,7 @@ export class Parser {
             const bind = this.parseBindingDeclaration();
             this.skipNewlines();
             if (this.check(TokenType.DEDENT)) {
-              if (requireExplicitReturn) throw new ParseError("Function block must end with an explicit '=> returnValue'", bind.span);
+              if (requireExplicitReturn) throw new ParseError(FUNCTION_RETURN_DIAGNOSTIC, bind.span);
               statements.push(bind);
               finalExpression = bind.id;
               break;
@@ -1908,7 +1917,7 @@ export class Parser {
           this.skipNewlines();
 
           if (this.check(TokenType.DEDENT)) {
-            if (requireExplicitReturn && expr.kind !== "MatchExpression" && expr.kind !== "EffectBlockExpression") throw new ParseError("Function block must end with an explicit '=> returnValue'", expr.span);
+            if (requireExplicitReturn && expr.kind !== "MatchExpression" && expr.kind !== "EffectBlockExpression") throw new ParseError(FUNCTION_RETURN_DIAGNOSTIC, expr.span);
             finalExpression = expr;
             break;
           } else {
@@ -1930,7 +1939,7 @@ export class Parser {
     }
 
     if (requireExplicitReturn && !finalExpression && statements.at(-1)?.kind !== "ReturnStatement") {
-      throw new ParseError("Function block must end with an explicit '=> returnValue'", { start, end: this.previous().span.end });
+      throw new ParseError(FUNCTION_RETURN_DIAGNOSTIC, { start, end: this.previous().span.end });
     }
     this.consume(TokenType.DEDENT, "Expected unindent after function body");
     const fallbackExpr: Expression = {
