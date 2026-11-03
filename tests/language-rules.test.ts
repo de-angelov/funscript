@@ -3,6 +3,7 @@ import { Effect } from "effect";
 import { Lexer } from "../src/lexer/lexer.js";
 import { Parser, ParseError } from "../src/parser/parser.js";
 import { format } from "../src/formatter/index.js";
+import { assertFormattingIdempotent } from "./helpers/conformance.js";
 import { compileString, CompilerError } from "../src/compiler.js";
 import {
   Program,
@@ -199,9 +200,7 @@ export program =
   }
 `.trim();
 
-        const firstPass = format(source);
-        const secondPass = format(firstPass);
-        expect(secondPass).toBe(firstPass);
+        assertFormattingIdempotent(source);
       });
 
       it("rejects formatting malformed effect blocks missing explicit return", () => {
@@ -373,10 +372,8 @@ export program = effect {
 
       it("preserves arithmetic, comparison, and equality grouping idempotently", () => {
         const source = `export res = 1 + 2 < 3 * 4 #= true\n`;
-        const firstPass = format(source);
-        expect(firstPass).toBe(source);
-        const secondPass = format(firstPass);
-        expect(secondPass).toBe(firstPass);
+        const formatted = assertFormattingIdempotent(source);
+        expect(formatted).toBe(source);
       });
 
       it("rejects formatting malformed comparison syntax", () => {

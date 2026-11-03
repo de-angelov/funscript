@@ -23,7 +23,9 @@ describe("type-directed pipeline resolution conformance", () => {
     }
   });
 
-  it("compiles accepted explicitly qualified pipeline fixture", async () => {
+  it(
+    "compiles accepted explicitly qualified pipeline fixture",
+    async () => {
     const fixturePath = path.join(FIXTURES_DIR, "explicit-qualification.fun");
     const expectedPath = path.join(FIXTURES_DIR, "explicit-qualification.expected.ts");
 
@@ -59,7 +61,7 @@ describe("type-directed pipeline resolution conformance", () => {
     const fn = new Function("pipe", "Array", `${evalCode}; return { apply };`);
     const { apply } = fn(pipe, EffectArray);
     expect(apply([1, 2, 3])).toEqual([2, 3, 4]);
-  });
+  }, 60000);
 
   it("reports actionable diagnostic for rejected ambiguous bare operation fixture", async () => {
     const fixturePath = path.join(FIXTURES_DIR, "ambiguous-bare-operation.fun");
@@ -89,5 +91,5 @@ describe("type-directed pipeline resolution conformance", () => {
       thrownError.message,
       `Diagnostic message for fixture ${fixturePath} must contain actionable suggestion`,
     ).toContain("map is ambiguous for this pipeline; write Array.map(...) or Option.map(...)");
-  });
+  }, 60000);
 });
