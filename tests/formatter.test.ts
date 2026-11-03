@@ -7,6 +7,11 @@ import prettierPlugin from "../src/formatter/prettier.js";
 import { Lexer } from "../src/lexer/lexer.js";
 import { Parser } from "../src/parser/parser.js";
 import { ASSOCIATIVITY, PRECEDENCE } from "../src/formatter/operator-precedence.js";
+import {
+  assertFormattingIdempotent,
+  assertFormat,
+  assertFormattingIdempotentFile,
+} from "./helpers/index.js";
 
 function operatorTree(source: string): unknown {
   const program = new Parser(new Lexer(source, "test.fun").tokenize(), "test.fun").parse();
@@ -432,10 +437,8 @@ export y = 20
 
     for (const expression of expressions) {
       const source = `export result = ${expression}`;
-      const formatted = format(source);
+      const formatted = assertFormattingIdempotent(source);
       expect(operatorTree(formatted)).toEqual(operatorTree(source));
-      expect(format(formatted)).toBe(formatted);
-      expect(operatorTree(format(formatted))).toEqual(operatorTree(source));
     }
 
     expect(format("export result = (1 #= 2) < 3")).toBe("export result = (1 #= 2) < 3\n");
@@ -467,10 +470,8 @@ export y = 20
 
     for (const expression of expressions) {
       const source = `export result = ${expression}`;
-      const formatted = format(source);
+      const formatted = assertFormattingIdempotent(source);
       expect(operatorTree(formatted)).toEqual(operatorTree(source));
-      expect(format(formatted)).toBe(formatted);
-      expect(operatorTree(format(formatted))).toEqual(operatorTree(source));
     }
   });
 
@@ -482,9 +483,10 @@ export updated = {
     role
 }
 `.trim();
-    const formatted = format(unformatted);
-    expect(formatted).toBe(`export updated = {\n  ...user\n  address.city: "Paris"\n  role\n}\n`);
-    expect(format(formatted)).toBe(formatted);
+    assertFormat(
+      unformatted,
+      `export updated = {\n  ...user\n  address.city: "Paris"\n  role\n}\n`,
+    );
   });
 
   it("checkFormat detects formatted and unformatted source", () => {
@@ -515,10 +517,7 @@ export updated = {
     ];
 
     for (const f of files) {
-      const src = fs.readFileSync(path.resolve(f), "utf-8");
-      const pass1 = format(src);
-      const pass2 = format(pass1);
-      expect(pass2, `Idempotency failure for ${f}`).toBe(pass1);
+      assertFormattingIdempotentFile(f);
     }
   });
 
