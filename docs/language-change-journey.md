@@ -23,8 +23,9 @@ language contract remains [Equality and comparisons in the syntax guide](syntax.
    definitely numeric. Unknown, `any`, and non-number operands are rejected
    with a source diagnostic that points back to the FunScript operator. This
    preserves explicit Effect `Order` calls for strings and domain values.
-   [Compiler tests](../tests/compiler.test.ts) cover acceptance, rejection,
-   diagnostic text, and source mapping.
+   [Compiler tests](../tests/compiler.test.ts) and
+   [language rule contract tests](../tests/language-rules.test.ts) cover acceptance,
+   rejection, diagnostic text, and source mapping.
 5. **Emission** — [binary expression emission](../src/emitter/emitter.ts)
    writes numeric comparisons as native TypeScript operators. The type check
    establishes when this native output is allowed; the emitter is not where
@@ -37,6 +38,22 @@ language contract remains [Equality and comparisons in the syntax guide](syntax.
    summary and number-only guidance, and [hover lookup](../src/lsp/hover.ts)
    resolves operator tokens. See [LSP tests](../tests/lsp.test.ts) and
    [hover catalogue tests](../tests/lsp-docs.test.ts).
+
+## Language rule contract tests
+
+End-to-end contract tests for language rules across parsing, emission, formatting, and diagnostics are maintained in:
+- [tests/language-rules.test.ts](../tests/language-rules.test.ts) — covers numeric comparisons (`<`, `<=`, `>`, `>=`) and explicit effect returns (`=> returnValue`), asserting traceable accepted and rejected examples across each compilation and tooling stage.
+
+## Explicit effect returns journey
+
+Explicit effect returns (`=> returnValue`) require every effect block to terminate with an explicit return arrow:
+1. **Parsing** — [the parser's effect block production](../src/parser/parser.ts) requires `=>` before the final return expression. Missing return arrows or non-final bare expressions throw parse errors.
+2. **AST** — [EffectBlockExpression](../src/ast/types.ts) stores block statements in `body` and the final return expression in `finalExpression`.
+3. **Emission** — [the emitter](../src/emitter/emitter.ts) wraps the block in `Effect.gen(function* () { ... })` and emits the final expression as a TypeScript `return` statement.
+4. **Formatting** — [the formatter](../src/formatter/index.ts) formats the return expression with an explicit `=> returnValue` prefix and standard indentation.
+5. **Diagnostics** — parse and compiler diagnostics reject missing return arrows and unexecuted expressions with clear, actionable diagnostics.
+
+Contract coverage for both rules is verified in [tests/language-rules.test.ts](../tests/language-rules.test.ts).
 
 ## Canonical and generated documentation
 
@@ -61,10 +78,10 @@ language contract remains [Equality and comparisons in the syntax guide](syntax.
   behavior changes; regenerate references instead of editing generated files.
 - [ ] Resolve guide links, run `npm run docs:check`, and run `git diff --check`.
 
-Focused checks for a comparison change:
+Focused checks for language rules:
 
 ```sh
-npx vitest run tests/lexer.test.ts tests/lexer-jsx.test.ts tests/parser.test.ts tests/compiler.test.ts tests/formatter.test.ts tests/lsp.test.ts tests/lsp-docs.test.ts --reporter=basic --no-color
+npx vitest run tests/language-rules.test.ts tests/lexer.test.ts tests/lexer-jsx.test.ts tests/parser.test.ts tests/compiler.test.ts tests/formatter.test.ts tests/lsp.test.ts tests/lsp-docs.test.ts --reporter=basic --no-color
 npm run build
 npm run docs:check
 git diff --check
