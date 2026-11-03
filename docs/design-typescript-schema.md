@@ -138,20 +138,26 @@ defined.
 
 ## Human decision (TASK-095)
 
-**Adopted: Option A with `ts` keyword reuse (`schema User = from ts<UserType>`).**
+**Adopted: Declaration Modifier Syntax (`ts schema User = UserType`).**
 
 ### 1. Approved and Rejected Syntax
 
-- **Approved Syntax (Option A with `ts` keyword):**
-  Reuses the existing `ts` escape-hatch keyword in a top-level schema declaration:
+- **Approved Syntax (Declaration Modifier `ts schema`):**
+  Uses `ts` as a declaration modifier directly in front of `schema`, aligning with FunScript's existing `js` declaration modifier (`export js greet = ...`):
   ```funscript
   import type { User as UserType } from "./model"
-  schema User = from ts<UserType>
+
+  ts schema User = UserType
+  export ts schema User = UserType
   ```
+  - **LHS:** The runtime Effect `Schema` binding to produce in FunScript (`User`).
+  - **RHS:** The source TypeScript type symbol (`UserType`).
+  - **Zero Syntax Clutter:** No generic wrappers (`< >`), no prepositions (`from`), and no unnecessary braces (`{ }`).
 - **Rejected Syntax:**
+  - **`schema User = from ts<UserType>`:** Rejected as overly verbose and un-aesthetic with generic syntax noise.
   - **Option B (Import-site derivation `schemaOf<T>()`):** Rejected. Type-only imports have no runtime presence in TypeScript; converting them at call sites requires synthetic compiler reflection and checker-driven expression rewrites rather than declarative schema bindings.
-  - **Illustrative `TypeScript<T>` wrapper:** Rejected in favor of reusing the existing, established `ts` keyword (`ts<T>`).
-  - **Implicit derivation:** Rejected. Conversion must be opt-in and explicitly stated via `schema Name = from ts<Type>`.
+  - **Illustrative `TypeScript<T>` wrapper:** Rejected in favor of FunScript's existing `ts` keyword.
+  - **Implicit derivation:** Rejected. Conversion must be opt-in and explicitly stated via `ts schema Name = Type`.
 
 ### 2. Supported and Rejected Examples
 
