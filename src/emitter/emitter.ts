@@ -9,6 +9,7 @@ import {
   TaggedUnionSchema,
   RefinementSchema,
   TypeSignatureSchema,
+  TsDerivedSchema,
   ErrorDeclaration,
   ServiceDeclaration,
   Expression,
@@ -301,6 +302,26 @@ export class Emitter {
       }
       case "TypeSignatureSchema": {
         return `${exp}type ${name} = ${this.emitTypeNode(decl.body.signature)};`;
+      }
+      case "TsDerivedSchema": {
+        this.effectImports.add("Schema");
+        let schemaExpr: string;
+        const targetType = decl.body.targetType;
+        if (
+          targetType.kind === "TypeReferenceNode" &&
+          !PRIMITIVE_TYPES[targetType.name.name] &&
+          targetType.name.name !== "Duration" &&
+          targetType.name.name !== "UUID" &&
+          !this.declaredTypeNames.has(targetType.name.name) &&
+          targetType.name.name !== "Option" &&
+          targetType.name.name !== "Array" &&
+          targetType.name.name !== "Record"
+        ) {
+          schemaExpr = `(Schema.Unknown as unknown as Schema.Schema<${this.emitTypeNode(targetType)}>)`;
+        } else {
+          schemaExpr = this.emitSchemaTypeField(targetType);
+        }
+        return `${exp}const ${name} = ${schemaExpr};\n${exp}type ${name} = typeof ${name}.Type;\n${exp}const ${name}FromUnknown = (input: unknown): ${name} => Schema.decodeUnknownSync(${name})(input);`;
       }
     }
   }

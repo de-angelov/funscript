@@ -10,6 +10,7 @@ import {
   TaggedUnionSchema,
   RefinementSchema,
   TypeSignatureSchema,
+  TsDerivedSchema,
   ErrorDeclaration,
   ServiceDeclaration,
   BindingDeclaration,
@@ -206,6 +207,56 @@ schema Action = (id: String) => Effect<User, NotFound, Database>
       expect(eff.success.kind).toBe("TypeReferenceNode");
       expect(eff.error?.kind).toBe("TypeReferenceNode");
       expect(eff.requirements?.kind).toBe("TypeReferenceNode");
+    });
+
+    it("parses ts schema declaration modifier syntax", () => {
+      const ast = parse(`ts schema User = UserType`);
+      expect(ast.body.length).toBe(1);
+      const decl = ast.body[0] as SchemaDeclaration;
+      expect(decl.kind).toBe("SchemaDeclaration");
+      expect(decl.isTs).toBe(true);
+      expect(decl.id.name).toBe("User");
+      expect(decl.body.kind).toBe("TsDerivedSchema");
+      const derived = decl.body as TsDerivedSchema;
+      expect(derived.targetType.kind).toBe("TypeReferenceNode");
+      expect((derived.targetType as any).name.name).toBe("UserType");
+    });
+
+    it("parses export ts schema with generic type arguments", () => {
+      const ast = parse(`export ts schema User = UserType<String>`);
+      expect(ast.body.length).toBe(1);
+      const exp = ast.body[0] as ExportDeclaration;
+      expect(exp.kind).toBe("ExportDeclaration");
+      const decl = exp.declaration as SchemaDeclaration;
+      expect(decl.kind).toBe("SchemaDeclaration");
+      expect(decl.isTs).toBe(true);
+      expect(decl.id.name).toBe("User");
+      expect(decl.body.kind).toBe("TsDerivedSchema");
+      const derived = decl.body as TsDerivedSchema;
+      expect(derived.targetType.kind).toBe("TypeReferenceNode");
+      expect((derived.targetType as any).typeArgs?.length).toBe(1);
+      expect((derived.targetType as any).typeArgs[0].name.name).toBe("String");
+    });
+
+    it("parses ts schema with struct and array types", () => {
+      const ast = parse(`
+ts schema Config = { timeout: Number }
+export ts schema Users = Array<UserType>
+`);
+      expect(ast.body.length).toBe(2);
+
+      const decl1 = ast.body[0] as SchemaDeclaration;
+      expect(decl1.isTs).toBe(true);
+      expect(decl1.id.name).toBe("Config");
+      expect(decl1.body.kind).toBe("TsDerivedSchema");
+      expect((decl1.body as TsDerivedSchema).targetType.kind).toBe("RecordTypeNode");
+
+      const exp2 = ast.body[1] as ExportDeclaration;
+      const decl2 = exp2.declaration as SchemaDeclaration;
+      expect(decl2.isTs).toBe(true);
+      expect(decl2.id.name).toBe("Users");
+      expect(decl2.body.kind).toBe("TsDerivedSchema");
+      expect((decl2.body as TsDerivedSchema).targetType.kind).toBe("TypeReferenceNode");
     });
   });
 
@@ -759,6 +810,8 @@ increment = (value) =>
       expect(() => parse(`import { foo }`)).toThrow(ParseError);
       expect(() => parse(`service MyService`)).toThrow(ParseError);
       expect(() => parse(`export schema MySchema = { id }`)).toThrow(ParseError);
+      expect(() => parse(`export ts 123`)).toThrow("Expected '{ ... }' after 'ts'");
+      expect(() => parse(`ts 123`)).toThrow("Expected '{ ... }' after 'ts'");
     });
   });
 });

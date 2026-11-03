@@ -12,6 +12,7 @@ import {
   TaggedUnionSchema,
   VariantDeclaration,
   VariantField,
+  TsDerivedSchema,
   ErrorDeclaration,
   ErrorField,
   ServiceDeclaration,
@@ -178,7 +179,8 @@ export class Parser {
     if (this.match(TokenType.EXPORT)) {
       const exportStart = this.previous().span.start;
       const isJs = this.match(TokenType.JS);
-      const decl = this.parseDeclaration(isJs);
+      const isTs = !isJs && this.match(TokenType.TS);
+      const decl = this.parseDeclaration(isJs, isTs);
       return {
         kind: "ExportDeclaration",
         declaration: decl as any,
@@ -188,12 +190,21 @@ export class Parser {
     return this.parseDeclaration();
   }
 
-  private parseDeclaration(isJs = false): TopLevelDeclaration {
+  private parseDeclaration(isJs = false, isTs = false): TopLevelDeclaration {
     if (this.check(TokenType.IMPORT)) {
       return this.parseImportDeclaration();
     }
+    if (isTs) {
+      if (this.check(TokenType.SCHEMA)) {
+        return this.parseSchemaDeclaration(true);
+      }
+      throw new ParseError("Expected 'schema' after 'export ts'", this.peek().span);
+    }
     if (this.match(TokenType.TS)) {
       const start = this.previous().span.start;
+      if (this.check(TokenType.SCHEMA)) {
+        return this.parseSchemaDeclaration(true, start);
+      }
       const code = this.consumeTsCode();
       this.consumeNewlineOrEof("Expected newline after ts declaration");
       return {
@@ -279,8 +290,11 @@ export class Parser {
     };
   }
 
-  private parseSchemaDeclaration(): SchemaDeclaration {
-    const start = this.consume(TokenType.SCHEMA, "Expected 'schema'").span.start;
+  private parseSchemaDeclaration(isTs = false, tsStart?: Position): SchemaDeclaration {
+    const start = tsStart ?? this.consume(TokenType.SCHEMA, "Expected 'schema'").span.start;
+    if (tsStart) {
+      this.consume(TokenType.SCHEMA, "Expected 'schema'");
+    }
     const id = this.parseUpperIdentifier();
     let typeParams: TypeParameter[] | undefined;
 
@@ -290,7 +304,7 @@ export class Parser {
 
     this.consume(TokenType.EQ, "Expected '=' after schema name");
 
-    const body = this.parseSchemaBody();
+    const body = isTs ? this.parseTsDerivedSchema() : this.parseSchemaBody();
     this.consumeNewlineOrEof("Expected newline after schema declaration");
 
     return {
@@ -298,7 +312,18 @@ export class Parser {
       id,
       typeParams,
       body,
+      isTs: isTs ? true : undefined,
       span: { start, end: body.span.end },
+    };
+  }
+
+  private parseTsDerivedSchema(): TsDerivedSchema {
+    this.skipNewlines();
+    const targetType = this.parseTypeNode();
+    return {
+      kind: "TsDerivedSchema",
+      targetType,
+      span: targetType.span,
     };
   }
 

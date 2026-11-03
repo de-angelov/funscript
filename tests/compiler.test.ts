@@ -267,6 +267,28 @@ export schema Shape =
     expect(Schema.decodeUnknownSync(decode)({ items: ["a", "b"] })).toEqual({ items: ["a", "b"] });
   });
 
+  it("compiles ts schema declarations for imported TypeScript types and structural types", async () => {
+    const code = `
+export ts schema User = UserType
+export ts schema Config = { timeout: Number }
+`.trim();
+
+    const res = await Effect.runPromise(compileString(code));
+    expect(res.typescript).toContain(`import { Schema } from "effect";`);
+    expect(res.typescript).toContain(`export const User = (Schema.Unknown as unknown as Schema.Schema<UserType>);`);
+    expect(res.typescript).toContain(`export type User = typeof User.Type;`);
+    expect(res.typescript).toContain(`export const UserFromUnknown = (input: unknown): User => Schema.decodeUnknownSync(User)(input);`);
+    expect(res.typescript).toContain(`export const Config = Schema.Struct({`);
+    expect(res.typescript).toContain(`timeout: Schema.Number`);
+
+    const { Schema } = await import("effect");
+    const evalCode = ts.transpile(res.typescript, { module: ts.ModuleKind.ESNext })
+      .replace(/import .*\n/g, "")
+      .replace(/\bexport\s+/g, "");
+    const decodedConfig = new Function("Schema", `${evalCode}; return ConfigFromUnknown({ timeout: 5000 });`)(Schema);
+    expect(decodedConfig).toEqual({ timeout: 5000 });
+  });
+
   it("compiles 'js' keyword for interop (export js, effect ingress, pipeline js)", async () => {
     const code = `
 export js fetchUser = (id: String) =>

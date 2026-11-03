@@ -2,6 +2,6 @@ import { defineConfig } from "vitest/config";
 
 export default defineConfig({
   test: {
-    exclude: ["slopboss/workspaces/**"],
+    exclude: ["slopboss/workspaces/**", "funscript-board/**"],
   },
 });

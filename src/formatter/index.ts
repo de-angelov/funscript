@@ -17,6 +17,7 @@ import {
   VariantField,
   RefinementSchema,
   TypeSignatureSchema,
+  TsDerivedSchema,
   ErrorDeclaration,
   ErrorField,
   ServiceDeclaration,
@@ -249,6 +250,8 @@ export class Formatter {
         return [node.init];
       case "SchemaDeclaration":
         return this.getNodeChildren(node.body);
+      case "TsDerivedSchema":
+        return [node.targetType];
       case "RecordSchema":
         return node.fields;
       case "TaggedUnionSchema":
@@ -346,10 +349,10 @@ export class Formatter {
         const currInner = curr.kind === "ExportDeclaration" ? curr.declaration : curr;
         const nextInner = next.kind === "ExportDeclaration" ? next.declaration : next;
         const currIsMulti = currInner.kind === "ServiceDeclaration" ||
-          (currInner.kind === "SchemaDeclaration" && currInner.body.kind !== "TypeSignatureSchema") ||
+          (currInner.kind === "SchemaDeclaration" && currInner.body.kind !== "TypeSignatureSchema" && currInner.body.kind !== "TsDerivedSchema") ||
           (currInner.kind === "BindingDeclaration" && currInner.init.span && currInner.init.span.end.line > currInner.init.span.start.line);
         const nextIsMulti = nextInner.kind === "ServiceDeclaration" ||
-          (nextInner.kind === "SchemaDeclaration" && nextInner.body.kind !== "TypeSignatureSchema") ||
+          (nextInner.kind === "SchemaDeclaration" && nextInner.body.kind !== "TypeSignatureSchema" && nextInner.body.kind !== "TsDerivedSchema") ||
           (nextInner.kind === "BindingDeclaration" && nextInner.init.span && nextInner.init.span.end.line > nextInner.init.span.start.line);
 
         if (currIsMulti || nextIsMulti) {
@@ -428,12 +431,13 @@ export class Formatter {
   }
 
   private formatSchemaDeclaration(decl: SchemaDeclaration, indent = 0): string {
+    const prefix = decl.isTs ? "ts schema " : "schema ";
     const typeParams = decl.typeParams && decl.typeParams.length > 0
       ? `<${decl.typeParams.map(p => p.name.name).join(", ")}>`
       : "";
     const body = this.formatSchemaBody(decl.body, indent);
     const sep = body.startsWith("\n") ? " =" : " = ";
-    return `schema ${decl.id.name}${typeParams}${sep}${body}`;
+    return `${prefix}${decl.id.name}${typeParams}${sep}${body}`;
   }
 
   private formatSchemaBody(body: SchemaBody, indent = 0): string {
@@ -446,6 +450,8 @@ export class Formatter {
         return `${this.formatType(body.baseType)} | ${this.formatExpression(body.refinement, indent)}`;
       case "TypeSignatureSchema":
         return this.formatType(body.signature);
+      case "TsDerivedSchema":
+        return this.formatType(body.targetType, indent);
     }
   }
 

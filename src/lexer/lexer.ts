@@ -589,7 +589,18 @@ export class Lexer {
         span,
       });
       if (raw === "ts") {
+        let p = this.offset;
+        while (p < this.source.length && (this.source[p] === " " || this.source[p] === "\t")) {
+          p++;
+        }
+        if (
+          this.source.slice(p, p + 6) === "schema" &&
+          (p + 6 >= this.source.length || !/[a-zA-Z0-9_]/.test(this.source[p + 6]))
+        ) {
+          return;
+        }
         this.readTsCode();
+        return;
       }
       return;
     }

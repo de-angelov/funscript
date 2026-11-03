@@ -70,13 +70,20 @@ export interface SchemaDeclaration extends NodeBase {
   id: UpperIdentifier;
   typeParams?: TypeParameter[];
   body: SchemaBody;
+  isTs?: boolean;
 }
 
 export type SchemaBody =
   | RecordSchema
   | TaggedUnionSchema
   | RefinementSchema
-  | TypeSignatureSchema;
+  | TypeSignatureSchema
+  | TsDerivedSchema;
+
+export interface TsDerivedSchema extends NodeBase {
+  kind: "TsDerivedSchema";
+  targetType: TypeNode;
+}
 
 export interface RecordSchema extends NodeBase {
   kind: "RecordSchema";

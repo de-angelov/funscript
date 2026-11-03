@@ -176,6 +176,23 @@ export schema Shape =
     expect(format(formatted)).toBe(formatted);
   });
 
+  it("formats ts schema declaration modifier syntax and preserves idempotence", () => {
+    const unformatted = `
+ts schema User = UserType
+export ts schema Admin = AdminType<String>
+ts schema Point = { x: Number, y: Number }
+
+ts schema Config = {
+  timeout: Number
+}
+`.trim();
+    const formatted = format(unformatted);
+    expect(formatted).toBe(
+      `ts schema User = UserType\nexport ts schema Admin = AdminType<String>\nts schema Point = { x: Number, y: Number }\n\nts schema Config = {\n  timeout: Number\n}\n`
+    );
+    expect(format(formatted)).toBe(formatted);
+  });
+
   it("formats error declarations and service declarations", () => {
     const unformatted = `
 export error NotFound(id: String)
