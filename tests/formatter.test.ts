@@ -379,6 +379,22 @@ export y = 20
     }
   });
 
+  it("preserves logical grouping around numeric comparisons through formatting", () => {
+    const expressions = [
+      "(1 < 2) and (3 >= 4)",
+      "(1 < 2 and 3 >= 4) or 5 < 6",
+      "1 < 2 and (3 >= 4 or 5 < 6)",
+    ];
+
+    for (const expression of expressions) {
+      const source = `export result = ${expression}`;
+      const formatted = format(source);
+      expect(operatorTree(formatted)).toEqual(operatorTree(source));
+      expect(format(formatted)).toBe(formatted);
+      expect(operatorTree(format(formatted))).toEqual(operatorTree(source));
+    }
+  });
+
   it("formats record literals with shorthand, spreads, and dot-paths", () => {
     const unformatted = `
 export updated = {
