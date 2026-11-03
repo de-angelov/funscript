@@ -339,6 +339,12 @@ export y = 20
 
   it("preserves equality and comparison grouping through formatting", () => {
     const expressions = [
+      "left #= right < limit",
+      "left < right #= limit",
+      "(left #= right) < limit",
+      "left #= (right < limit)",
+      "left #= (right #! limit)",
+      "left < (right <= limit)",
       "1 < 2 #= true",
       "1 #= 2 < 3",
       "(1 #= 2) < 3",
