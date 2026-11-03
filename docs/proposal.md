@@ -1,5 +1,8 @@
 # FunScript — language design and roadmap
 
+> **Historical design document:** For current language rules, see [syntax.md](syntax.md), and for
+> the documentation map, see [README.md](README.md).
+
 **Draft 0.1 · October 2026**
 
 > FunScript is a small, indentation-based language that compiles to readable TypeScript for
