@@ -275,13 +275,14 @@ export schema Shape =
 
   it("compiles ts schema declarations for imported TypeScript types and structural types", async () => {
     const code = `
+ts { type UserType = { id: string } }
 export ts schema User = UserType
 export ts schema Config = { timeout: Number }
 `.trim();
 
     const res = await compile(code);
     expect(res.typescript).toContain(`import { Schema } from "effect";`);
-    expect(res.typescript).toContain(`export const User = (Schema.Unknown as unknown as Schema.Schema<UserType>);`);
+    expect(res.typescript).toContain(`export const User = Schema.Struct({`);
     expect(res.typescript).toContain(`export type User = typeof User.Type;`);
     expect(res.typescript).toContain(`export const UserFromUnknown = (input: unknown): User => Schema.decodeUnknownSync(User)(input);`);
     expect(res.typescript).toContain(`export const Config = Schema.Struct({`);
