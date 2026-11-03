@@ -261,6 +261,22 @@ export y = 20
     }
   });
 
+  it("preserves equality and comparison grouping through formatting", () => {
+    const expressions = [
+      "(1 #= 2) < 3",
+      "1 < (2 #= 3)",
+      "(1 < 2) #= 3",
+      "1 #= (2 < 3)",
+    ];
+
+    for (const expression of expressions) {
+      const source = `export result = ${expression}`;
+      const formatted = format(source);
+      expect(operatorTree(formatted)).toEqual(operatorTree(source));
+      expect(operatorTree(format(formatted))).toEqual(operatorTree(source));
+    }
+  });
+
   it("formats record literals with shorthand, spreads, and dot-paths", () => {
     const unformatted = `
 export updated = {
