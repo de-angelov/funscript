@@ -320,7 +320,25 @@ mut flag: Boolean = true
       expect(bin.left.kind).toBe("NumberLiteral");
       // 2 ** (3 ** 4)
       expect(bin.right.kind).toBe("BinaryExpression");
-      expect((bin.right as BinaryExpression).operator).toBe("**");
+      const right = bin.right as BinaryExpression;
+      expect(right.operator).toBe("**");
+      expect(right.left.kind).toBe("NumberLiteral");
+      expect(right.right.kind).toBe("NumberLiteral");
+    });
+
+    it("parses subtraction as left-associative", () => {
+      const ast = parse(`res = 10 - 3 - 2`);
+      const binding = ast.body[0] as BindingDeclaration;
+      const bin = binding.init as BinaryExpression;
+
+      // (10 - 3) - 2
+      expect(bin.operator).toBe("-");
+      expect(bin.left.kind).toBe("BinaryExpression");
+      const left = bin.left as BinaryExpression;
+      expect(left.operator).toBe("-");
+      expect(left.left.kind).toBe("NumberLiteral");
+      expect(left.right.kind).toBe("NumberLiteral");
+      expect(bin.right.kind).toBe("NumberLiteral");
     });
 
     it("parses logical and equality expressions", () => {
