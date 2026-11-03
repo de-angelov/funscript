@@ -1,7 +1,8 @@
 # FunScript — language design and roadmap
 
-> **Historical design document:** For current language rules, see [syntax.md](syntax.md), and for
-> the documentation map, see [README.md](README.md).
+> **Design and roadmap document:** This document contains proposals and is not authoritative for
+> implemented language behavior. See [syntax.md](syntax.md) for implemented syntax and the
+> [generated language catalogue](reference/language.md) for the language reference.
 
 **Draft 0.1 · October 2026**
 
