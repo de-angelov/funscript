@@ -1,7 +1,7 @@
 import ts from "typescript";
 import { Program, type Span } from "../ast/types.js";
 import { Emitter } from "../emitter/emitter.js";
-import { TypeScriptCompilationContext } from "./typescript-compilation-context.js";
+import { TypeScriptCompilationContext } from "./typescript-context.js";
 
 class NumericComparisonError extends Error {
   constructor(message: string, readonly span: Span) {
