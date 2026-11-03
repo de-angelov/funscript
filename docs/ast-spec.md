@@ -1,5 +1,8 @@
 # FunScript AST Specification
 
+> **Historical specification:** For current language rules, see [syntax.md](syntax.md), and for
+> the documentation map, see [README.md](README.md).
+
 This document defines the formal Abstract Syntax Tree (AST) node representations for FunScript.
 Every node includes a `Span` for accurate source-mapping, diagnostic reporting, and formatting.
 
