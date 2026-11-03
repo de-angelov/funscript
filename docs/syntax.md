@@ -600,12 +600,13 @@ From lowest to highest:
 | 1     | `\|>`                    | pipeline, left-associative                                                          |
 | 2     | `or`                     | logical or                                                                          |
 | 3     | `and`                    | logical and                                                                         |
-| 4     | `#=`, `#!`, `@=`, `@!` | value equality and reference identity; relational operators also compare primitives |
-| 5     | `+`, `-`                 | additive                                                                            |
-| 6     | `*`, `/`, `%`            | multiplicative                                                                      |
-| 7     | `**`                     | exponent, right-associative                                                         |
-| 8     | `not`, unary `-`         | prefix                                                                              |
-| 9     | call, member, index      | postfix                                                                             |
+| 4     | `<`, `<=`, `>`, `>=`     | relational comparison; valid only when both operands are proven numbers             |
+| 5     | `#=`, `#!`, `@=`, `@!` | value equality and reference identity                                               |
+| 6     | `+`, `-`                 | additive                                                                            |
+| 7     | `*`, `/`, `%`            | multiplicative                                                                      |
+| 8     | `**`                     | exponent, right-associative                                                         |
+| 9     | `not`, unary `-`         | prefix                                                                              |
+| 10    | call, member, index      | postfix                                                                             |
 
 `match`, `effect`, functions, records, arrays, and literals are primary expressions.
 
