@@ -153,6 +153,29 @@ export ts schema User = UserType
   });
 
   describe("Primitive, Array, Record, and Union Schemas", () => {
+    it("preserves tuple positions, optional elements, and instantiated generic arguments", async () => {
+      const source = `
+import type { FixedTuple, OptionalTuple, InstantiatedPair, InstantiatedValue } from "${fixturePath}"
+
+export ts schema Fixed = FixedTuple
+export ts schema Optional = OptionalTuple
+export ts schema PairValue = InstantiatedPair
+export ts schema GenericValue = InstantiatedValue
+`.trim();
+      const result = await Effect.runPromise(compileString(source, dummyFile));
+      expect(result.typescript).toContain("Fixed = Schema.Tuple([Schema.String, Schema.Number])");
+      expect(result.typescript).toContain("Optional = Schema.Tuple([Schema.String, Schema.optional(Schema.Number)])");
+      const mod = evaluateSchemaModule(result.typescript);
+      expect(mod.FixedFromUnknown(["x", 2])).toEqual(["x", 2]);
+      expect(() => mod.FixedFromUnknown([2, "x"])).toThrow();
+      expect(mod.OptionalFromUnknown(["x"])).toEqual(["x"]);
+      expect(() => mod.OptionalFromUnknown(["x", "bad"])).toThrow();
+      expect(mod.PairValueFromUnknown(["x", 2])).toEqual(["x", 2]);
+      expect(() => mod.PairValueFromUnknown([2, "x"])).toThrow();
+      expect(mod.GenericValueFromUnknown({ value: 2 })).toEqual({ value: 2 });
+      expect(() => mod.GenericValueFromUnknown({ value: "bad" })).toThrow();
+    });
+
     it("preserves string, boolean, and numeric discriminated union variants", async () => {
       const source = `
 import type { StringTagged, BooleanTagged, NumericTagged } from "${fixturePath}"
