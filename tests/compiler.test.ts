@@ -35,9 +35,16 @@ export nextAge = age + 1
     expect(result.typescript).toContain("((5 >= 3) && (2 < 4))");
   });
 
-  it("rejects native ordering operators for strings with an Effect Order diagnostic", async () => {
-    await expect(Effect.runPromise(compileString("export valid = (left: String, right: String) => left < right")))
-      .rejects.toThrow("< is only available for numbers; this operand has type string. Use Order.isLessThan(String.Order)(...) or an explicit domain Order.");
+  it("rejects native ordering operators for strings with an Effect Order diagnostic and doc link", async () => {
+    const code = "export valid = (left: String, right: String) => left < right";
+    await expect(Effect.runPromise(compileString(code)))
+      .rejects.toThrow("< is only available for numbers; this operand has type string. Use Order.isLessThan(String.Order)(...) or an explicit domain Order. See docs/syntax.md#42-equality-and-comparisons.");
+
+    const failure = await Effect.runPromise(Effect.flip(compileString(code)));
+    expect((failure as any).span).toMatchObject({
+      start: { offset: 48, line: 1, column: 49 },
+      end: { offset: 48, line: 1, column: 49 },
+    });
   });
 
   it("rejects unknown values in native ordering operators", async () => {

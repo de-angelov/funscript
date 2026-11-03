@@ -631,6 +631,12 @@ Use `<`, `<=`, `>`, and `>=` only when TypeScript can prove that both operands
 are numbers. FunScript never applies these operators to strings or Effect domain
 values: their ordering must be explicit through Effect's `Order` API.
 
+When a comparison operator is used on nonnumeric operands, the compiler and
+language server diagnostics reject the expression, retain the offending operand's
+source location, and suggest the actionable Effect `Order` alternative (such as
+`Order.isLessThan(String.Order)(...)` for strings, or domain-specific orders
+like `DateTime.Order`) while linking to this section (`docs/syntax.md#42-equality-and-comparisons`):
+
 ```funscript
 # Numbers
 isValid = score >= 0

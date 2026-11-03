@@ -65,7 +65,7 @@ export function validateNumericComparisons(ast: Program, source: string, context
           : operator === ">" ? "isGreaterThan" : "isLessThan";
         const received = checker.typeToString(type);
         throw new NumericComparisonError(
-          `${operator} is only available for numbers; this operand has type ${received}. Use Order.${helper}(String.Order)(...) or an explicit domain Order.`,
+          `${operator} is only available for numbers; this operand has type ${received}. Use Order.${helper}(String.Order)(...) or an explicit domain Order. See docs/syntax.md#42-equality-and-comparisons.`,
           spanAtOffset(source, Number(node.arguments[0].text)),
         );
       }

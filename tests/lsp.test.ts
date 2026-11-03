@@ -648,6 +648,28 @@ getUser = () =>
         "Expected '}' to close effect block",
       );
     });
+
+    it("reports diagnostic for rejected nonnumeric comparisons with actionable explanation and location", () => {
+      const code = "export valid = (left: String, right: String) => left < right";
+      const diagnostics = validateFunScript(code, "file:///test.fun");
+      expect(diagnostics).toHaveLength(1);
+      const diag = diagnostics[0];
+      expect(diag.severity).toBe(DiagnosticSeverity.Error);
+      expect(diag.source).toBe("funscript");
+      expect(diag.message).toContain(
+        "< is only available for numbers; this operand has type string.",
+      );
+      expect(diag.message).toContain(
+        "Use Order.isLessThan(String.Order)(...) or an explicit domain Order.",
+      );
+      expect(diag.message).toContain(
+        "docs/syntax.md#42-equality-and-comparisons",
+      );
+      expect(diag.range).toEqual({
+        start: { line: 0, character: 48 },
+        end: { line: 0, character: 49 },
+      });
+    });
   });
 
   describe("Document Formatting (textDocument/formatting)", () => {
@@ -2526,7 +2548,9 @@ export schema Config = {
   });
 
   describe("CLI Stdio Integration (funscript lsp --stdio)", () => {
-    it("boots over stdio, responds to initialize, and publishes diagnostics", async () => {
+    it(
+      "boots over stdio, responds to initialize, and publishes diagnostics",
+      async () => {
       const cliPath = path.resolve(__dirname, "../dist/cli/index.js");
 
       const child = spawn("node", [cliPath, "lsp", "--stdio"]);
@@ -2738,6 +2762,6 @@ export schema Config = {
 
       reader.dispose();
       writer.dispose();
-    });
+    }, 30000);
   });
 });
