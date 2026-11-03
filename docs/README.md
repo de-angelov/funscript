@@ -3,8 +3,8 @@
 ## Current, verified documentation
 
 Authors should use the [language syntax guide](syntax.md) as the current reference for
-syntax accepted by the compiler. It describes implemented behavior; material marked
-**Planned** is future work, not syntax currently accepted by the compiler. The
+syntax accepted by the compiler. It describes implemented behavior and labels future
+notes **Planned**, so they are not mistaken for syntax currently accepted by the compiler. The
 [generated language catalogue](reference/language.md) serves LSP hover documentation and
 is generated from the LSP documentation source; it is a concise, implementation-derived
 catalogue rather than an independent syntax specification.
