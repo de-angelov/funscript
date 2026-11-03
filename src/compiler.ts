@@ -11,9 +11,12 @@ import { inferPipelineCompanions } from "./compiler/pipeline-companions.js";
 import { applyJsInteropNullability } from "./compiler/js-interop-nullability.js";
 import { resolveImportedSchemas } from "./compiler/imported-schemas.js";
 
+export { TypeScriptCompilationContext } from "./compiler/typescript-context.js";
+
 export interface CompileOptions {
   sourcemap?: boolean;
   outputFile?: string;
+  context?: TypeScriptCompilationContext;
 }
 
 export interface CompileResult {
@@ -56,7 +59,7 @@ export const compileString = (
       const ast = parser.parse();
 
       // 3. Emit TypeScript
-      const context = new TypeScriptCompilationContext(filename);
+      const context = options?.context ?? new TypeScriptCompilationContext(filename);
       validateNumericComparisons(ast, source, context);
       const pipelineCompanions = inferPipelineCompanions(ast, context);
       const importedSchemas = resolveImportedSchemas(ast, source, context);
