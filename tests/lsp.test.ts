@@ -634,8 +634,51 @@ getUser = () =>
       expect(diagnostics).toHaveLength(1);
       expect(diagnostics[0].severity).toBe(DiagnosticSeverity.Error);
       expect(diagnostics[0].message).toContain(
-        "Effect block must end with an explicit",
+        "Effect block must end with an explicit '=> returnValue'",
       );
+      expect(diagnostics[0].message).toContain(
+        "Effect blocks require an explicit return arrow to ensure values are yielded and returned properly.",
+      );
+      expect(diagnostics[0].message).toContain(
+        "Use '=> value' to return, or '_ <- effect' followed by '=> Unit' to discard.",
+      );
+      expect(diagnostics[0].message).toContain(
+        "docs/syntax.md#93-the-non-final-expression-rule-and-control-flow-lowering",
+      );
+    });
+
+    it("reports diagnostic for rejected implicit returns in function block with actionable explanation and alternative syntax", () => {
+      const invalidFunctionCode = `
+calculate = (x: Number) => {
+  temp = x + 1
+  temp
+}
+`.trim();
+
+      const diagnostics = validateFunScript(
+        invalidFunctionCode,
+        "file:///test.fun",
+      );
+      expect(diagnostics).toHaveLength(1);
+      const diag = diagnostics[0];
+      expect(diag.severity).toBe(DiagnosticSeverity.Error);
+      expect(diag.source).toBe("funscript");
+      expect(diag.message).toContain(
+        "Function block must end with an explicit '=> returnValue'",
+      );
+      expect(diag.message).toContain(
+        "Multi-statement functions require an explicit return arrow to distinguish returned values from side effects.",
+      );
+      expect(diag.message).toContain(
+        "Use '=> value' or rewrite as an inline single-expression lambda '(args) => expr'.",
+      );
+      expect(diag.message).toContain(
+        "docs/syntax.md#311-explicit-returns-and-conditional-execution",
+      );
+      expect(diag.range).toEqual({
+        start: { line: 2, character: 2 },
+        end: { line: 2, character: 6 },
+      });
     });
 
     it("reports a missing brace at the end of an effect expression", () => {

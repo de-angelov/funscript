@@ -1,1 +1,1 @@
-Effect block must end with an explicit '=> returnValue' at line 1, col 18
+Effect block must end with an explicit '=> returnValue'. Effect blocks require an explicit return arrow to ensure values are yielded and returned properly. Use '=> value' to return, or '_ <- effect' followed by '=> Unit' to discard. See docs/syntax.md#93-the-non-final-expression-rule-and-control-flow-lowering. at line 1, col 18

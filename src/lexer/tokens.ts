@@ -120,7 +120,7 @@ export const BANNED_KEYWORDS: Record<string, string> = {
   const: "FunScript bindings are const by default; write 'name = value'.",
   function: "FunScript functions use the arrow syntax: '(args) => body'.",
   class: "FunScript has no classes; use 'schema' for data, 'error' for errors, and 'service' for services.",
-  return: "FunScript uses '=> value' for explicit returns in function and effect blocks.",
+  return: "FunScript uses '=> value' for explicit returns in function and effect blocks; replace 'return x' with '=> x'. See docs/syntax.md#311-explicit-returns-and-conditional-execution.",
   throw: "FunScript has no 'throw'; recoverable failures use Effect typed errors, and defects use 'Effect.die' or '|> orDie'.",
   try: "FunScript has no 'try/catch'; use typed errors in the E channel or 'Effect.tryPromise'.",
   catch: "FunScript has no 'try/catch'; handle errors with 'Effect.catchTag' or 'match'.",
