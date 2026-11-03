@@ -1,8 +1,9 @@
 # FunScript — language design and roadmap
 
-> **Design and roadmap document:** This document contains proposals and is not authoritative for
-> implemented language behavior. See [syntax.md](syntax.md) for implemented syntax and the
-> [generated language catalogue](reference/language.md) for the language reference.
+> **Historical design context:** This proposal records design exploration and earlier roadmap
+> ideas. Its unlabeled examples are not verified as runnable, and this document does not define
+> the current language contract. See the [documentation map](README.md) for current, verified
+> documentation, including [syntax](syntax.md) and the [generated language catalogue](reference/language.md).
 
 **Draft 0.1 · October 2026**
 
