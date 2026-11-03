@@ -347,6 +347,15 @@ mut flag: Boolean = true
       expect(binding.init.kind).toBe("BinaryExpression");
     });
 
+    it("binds and more tightly than or", () => {
+      const ast = parse(`res = ready and valid or fallback and forced`);
+      const root = (ast.body[0] as BindingDeclaration).init as BinaryExpression;
+
+      expect(root.operator).toBe("or");
+      expect((root.left as BinaryExpression).operator).toBe("and");
+      expect((root.right as BinaryExpression).operator).toBe("and");
+    });
+
     it("parses numeric comparisons between equality and arithmetic precedence", () => {
       const ast = parse(`res = 1 + 2 * 3 < 8 and 4 >= 4`);
       const binding = ast.body[0] as BindingDeclaration;
