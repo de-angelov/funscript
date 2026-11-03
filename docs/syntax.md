@@ -500,7 +500,7 @@ identity = <A>(value: A) => A { => value }
 
 greet = (name: String) =>
   trimmed = name |> String.trim()
-  "Hello, {trimmed}!"
+  => "Hello, {trimmed}!"
 
 answer = () => 42
 ```
@@ -531,7 +531,8 @@ const answer = () => 42;
 - An inline expression is the concise return form. Every function block must end in
   `=> expr`; the final bare expression is never returned implicitly.
   Use `when` for early returns, `match` for branching, and `<- Effect.fail(...)` for typed Effect failure.
-- A trailing binding or `mut` assignment returns the bound/assigned value.
+- A trailing binding or `mut` assignment does not return a value; use `=> expr`
+  to return explicitly.
 - Functions use `name = (params) => ...`. Neither `fn` nor `function` is supported; there is no second function keyword, no method
   shorthand, and no class method syntax. An object field that holds a function uses the
   same lambda: `{ greet: (name) => ... }`.
