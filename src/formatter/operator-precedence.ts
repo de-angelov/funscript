@@ -16,3 +16,22 @@ export const PRECEDENCE: Record<string, number> = {
   "%": 7,
   "**": 8,
 };
+
+export const ASSOCIATIVITY: Record<string, "left" | "right"> = {
+  "or": "left",
+  "and": "left",
+  "#=": "left",
+  "#!": "left",
+  "@=": "left",
+  "@!": "left",
+  "<": "left",
+  "<=": "left",
+  ">": "left",
+  ">=": "left",
+  "+": "left",
+  "-": "left",
+  "*": "left",
+  "/": "left",
+  "%": "left",
+  "**": "right",
+};

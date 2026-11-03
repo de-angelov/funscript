@@ -1,6 +1,6 @@
 import { Lexer } from "../lexer/lexer.js";
 import { Parser } from "../parser/parser.js";
-import { PRECEDENCE } from "./operator-precedence.js";
+import { ASSOCIATIVITY, PRECEDENCE } from "./operator-precedence.js";
 import {
   Program,
   TopLevelDeclaration,
@@ -848,11 +848,8 @@ export class Formatter {
       if (currentPrec < parentPrec) {
         needsParens = true;
       } else if (currentPrec === parentPrec) {
-        // The parser builds every operator level left-associatively except **.
-        // Preserve a right-nested tree at the same precedence with parentheses.
-        if (isRightSide && parentOp !== "**") {
-          needsParens = true;
-        } else if (!isRightSide && parentOp === "**") {
+        const associativity = ASSOCIATIVITY[parentOp] ?? "left";
+        if ((associativity === "left" && isRightSide) || (associativity === "right" && !isRightSide)) {
           needsParens = true;
         }
       }

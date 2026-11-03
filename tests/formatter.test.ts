@@ -6,7 +6,7 @@ import { format, checkFormat, extractComments } from "../src/formatter/index.js"
 import prettierPlugin from "../src/formatter/prettier.js";
 import { Lexer } from "../src/lexer/lexer.js";
 import { Parser } from "../src/parser/parser.js";
-import { PRECEDENCE } from "../src/formatter/operator-precedence.js";
+import { ASSOCIATIVITY, PRECEDENCE } from "../src/formatter/operator-precedence.js";
 
 function operatorTree(source: string): unknown {
   const program = new Parser(new Lexer(source, "test.fun").tokenize(), "test.fun").parse();
@@ -35,6 +35,8 @@ describe("FunScript Code Formatter", () => {
       "or", "and", "#=", "#!", "@=", "@!", "<", "<=", ">", ">=",
       "+", "-", "*", "/", "%", "**",
     ]);
+    expect(Object.keys(ASSOCIATIVITY)).toEqual(operators);
+    expect(ASSOCIATIVITY).toEqual(Object.fromEntries(operators.map(operator => [operator, operator === "**" ? "right" : "left"])));
 
     for (const operator of operators) {
       const source = `export result = left ${operator} right`;
