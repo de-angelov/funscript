@@ -311,6 +311,15 @@ mut flag: Boolean = true
       expect(right.operator).toBe("*");
     });
 
+    it("groups multiplication on both sides of addition", () => {
+      const ast = parse(`res = 1 * 2 + 3 * 4`);
+      const addition = (ast.body[0] as BindingDeclaration).init as BinaryExpression;
+
+      expect(addition.operator).toBe("+");
+      expect((addition.left as BinaryExpression).operator).toBe("*");
+      expect((addition.right as BinaryExpression).operator).toBe("*");
+    });
+
     it("parses right-associative exponentiation", () => {
       const ast = parse(`res = 2 ** 3 ** 4`);
       const binding = ast.body[0] as BindingDeclaration;
@@ -383,6 +392,19 @@ mut flag: Boolean = true
 
       expect(inequality.operator).toBe("#!");
       expect((inequality.right as BinaryExpression).operator).toBe("<");
+    });
+
+    it("groups mixed equality and comparison operators", () => {
+      const ast = parse(`res = 1 #= 2 < 3 #! 4 >= 5`);
+      const inequality = (ast.body[0] as BindingDeclaration).init as BinaryExpression;
+
+      // Equality operators associate left to right, while each comparison stays
+      // grouped within its equality operand: (1 #= (2 < 3)) #! (4 >= 5).
+      expect(inequality.operator).toBe("#!");
+      const equality = inequality.left as BinaryExpression;
+      expect(equality.operator).toBe("#=");
+      expect((equality.right as BinaryExpression).operator).toBe("<");
+      expect((inequality.right as BinaryExpression).operator).toBe(">=");
     });
 
     it("groups arithmetic, comparisons, equality, and logic by precedence", () => {
