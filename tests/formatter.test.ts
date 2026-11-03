@@ -6,6 +6,7 @@ import { format, checkFormat, extractComments } from "../src/formatter/index.js"
 import prettierPlugin from "../src/formatter/prettier.js";
 import { Lexer } from "../src/lexer/lexer.js";
 import { Parser } from "../src/parser/parser.js";
+import { PRECEDENCE } from "../src/formatter/operator-precedence.js";
 
 function operatorTree(source: string): unknown {
   const program = new Parser(new Lexer(source, "test.fun").tokenize(), "test.fun").parse();
@@ -28,6 +29,45 @@ function operatorTree(source: string): unknown {
 }
 
 describe("FunScript Code Formatter", () => {
+  it("lists a precedence for every binary operator and formats identifier operands", () => {
+    const operators = Object.keys(PRECEDENCE);
+    expect(operators).toEqual([
+      "or", "and", "#=", "#!", "@=", "@!", "<", "<=", ">", ">=",
+      "+", "-", "*", "/", "%", "**",
+    ]);
+
+    for (const operator of operators) {
+      const source = `export result = left ${operator} right`;
+      expect(operatorTree(format(source))).toEqual(operatorTree(source));
+    }
+  });
+
+  it("matches parser grouping across adjacent precedence levels", () => {
+    const expressions = [
+      "a or b and c", "a and b #= c", "a #= b < c", "a < b + c",
+      "a + b * c", "a * b ** c",
+    ];
+
+    for (const expression of expressions) {
+      const source = `export result = ${expression}`;
+      expect(operatorTree(format(source))).toEqual(operatorTree(source));
+      expect(operatorTree(format(format(source)))).toEqual(operatorTree(source));
+    }
+  });
+
+  it("preserves left and right associativity for equality and numeric comparison", () => {
+    const expressions = [
+      "a #= b #! c", "a #= (b #! c)",
+      "a < b <= c", "a < (b <= c)",
+    ];
+
+    for (const expression of expressions) {
+      const source = `export result = ${expression}`;
+      expect(operatorTree(format(source))).toEqual(operatorTree(source));
+      expect(operatorTree(format(format(source)))).toEqual(operatorTree(source));
+    }
+  });
+
   it("formats basic bindings and expressions canonically", () => {
     const unformatted = `name = "Ada"\nage =   36\nisActive = true`;
     const formatted = format(unformatted);
