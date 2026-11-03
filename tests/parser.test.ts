@@ -11,6 +11,8 @@ import {
   RefinementSchema,
   TypeSignatureSchema,
   TsDerivedSchema,
+  ImportedTsSchema,
+  TypeReferenceNode,
   ErrorDeclaration,
   ServiceDeclaration,
   BindingDeclaration,
@@ -257,6 +259,59 @@ export ts schema Users = Array<UserType>
       expect(decl2.id.name).toBe("Users");
       expect(decl2.body.kind).toBe("TsDerivedSchema");
       expect((decl2.body as TsDerivedSchema).targetType.kind).toBe("TypeReferenceNode");
+    });
+
+    it("parses ImportedTsSchema declarations from ts<Type>", () => {
+      const ast = parse(`schema User = from ts<UserType>`);
+      expect(ast.body.length).toBe(1);
+      const decl = ast.body[0] as SchemaDeclaration;
+      expect(decl.kind).toBe("SchemaDeclaration");
+      expect(decl.id.name).toBe("User");
+
+      const body = decl.body as ImportedTsSchema;
+      expect(body.kind).toBe("ImportedTsSchema");
+      expect(body.typeNode.kind).toBe("TypeReferenceNode");
+      expect((body.typeNode as TypeReferenceNode).name.name).toBe("UserType");
+      expect(body.typeArgs.length).toBe(1);
+      expect(body.typeArguments.length).toBe(1);
+      expect(body.typeArgs[0]).toBe(body.typeNode);
+      expect(body.span.start.offset).toBe(14); // start of 'from'
+      expect(body.span.end.offset).toBe(31); // end of '>'
+    });
+
+    it("parses ImportedTsSchema with type parameters and generic type arguments", () => {
+      const ast = parse(`schema Container<T> = from ts<TargetType<T>>`);
+      const decl = ast.body[0] as SchemaDeclaration;
+      expect(decl.id.name).toBe("Container");
+      expect(decl.typeParams?.length).toBe(1);
+      expect(decl.typeParams?.[0].name.name).toBe("T");
+
+      const body = decl.body as ImportedTsSchema;
+      expect(body.kind).toBe("ImportedTsSchema");
+      const ref = body.typeNode as TypeReferenceNode;
+      expect(ref.name.name).toBe("TargetType");
+      expect(ref.typeArgs?.length).toBe(1);
+      expect((ref.typeArgs?.[0] as TypeReferenceNode).name.name).toBe("T");
+    });
+
+    it("parses exported ImportedTsSchema", () => {
+      const ast = parse(`export schema User = from ts<UserType>`);
+      const exp = ast.body[0] as ExportDeclaration;
+      expect(exp.kind).toBe("ExportDeclaration");
+      const decl = exp.declaration as SchemaDeclaration;
+      expect(decl.kind).toBe("SchemaDeclaration");
+      expect(decl.id.name).toBe("User");
+      expect(decl.body.kind).toBe("ImportedTsSchema");
+    });
+
+    it("parses ImportedTsSchema with multiple type arguments", () => {
+      const ast = parse(`schema Mapping = from ts<SourceType, TargetType>`);
+      const decl = ast.body[0] as SchemaDeclaration;
+      const body = decl.body as ImportedTsSchema;
+      expect(body.kind).toBe("ImportedTsSchema");
+      expect(body.typeArguments.length).toBe(2);
+      expect((body.typeArguments[0] as TypeReferenceNode).name.name).toBe("SourceType");
+      expect((body.typeArguments[1] as TypeReferenceNode).name.name).toBe("TargetType");
     });
   });
 
@@ -812,6 +867,48 @@ increment = (value) =>
       expect(() => parse(`export schema MySchema = { id }`)).toThrow(ParseError);
       expect(() => parse(`export ts 123`)).toThrow("Expected '{ ... }' after 'ts'");
       expect(() => parse(`ts 123`)).toThrow("Expected '{ ... }' after 'ts'");
+    });
+
+    it("throws actionable ParseErrors with source locations for imported TypeScript schemas", () => {
+      // Missing 'ts' after 'from'
+      expect(() => parse(`schema User = from`)).toThrowError(
+        /Expected 'ts' after 'from'/
+      );
+      expect(() => parse(`schema User = from other<Type>`)).toThrowError(
+        /Expected 'ts' after 'from'/
+      );
+
+      // Missing '<' after 'ts'
+      expect(() => parse(`schema User = from ts`)).toThrowError(
+        /Expected '<' after 'ts'/
+      );
+      expect(() => parse(`schema User = from ts(Type)`)).toThrowError(
+        /Expected '<' after 'ts'/
+      );
+
+      // Empty type arguments in ts<>
+      expect(() => parse(`schema User = from ts<>`)).toThrowError(
+        /Expected type argument inside 'ts<...>'/
+      );
+
+      // Missing closing '>'
+      expect(() => parse(`schema User = from ts<Type`)).toThrowError(
+        /Expected '>' after type argument/
+      );
+
+      // Invalid lowercase type name inside ts<...>
+      expect(() => parse(`schema User = from ts<lowercase>`)).toThrowError(
+        /Type names must begin with an uppercase letter/
+      );
+
+      // Accurate source location verification
+      try {
+        parse(`schema User = from ts<>`);
+        expect.unreachable("should have thrown ParseError");
+      } catch (err: any) {
+        expect(err).toBeInstanceOf(ParseError);
+        expect(err.span.start.offset).toBe(22); // offset of '>'
+      }
     });
   });
 });

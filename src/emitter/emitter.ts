@@ -323,6 +323,9 @@ export class Emitter {
         }
         return `${exp}const ${name} = ${schemaExpr};\n${exp}type ${name} = typeof ${name}.Type;\n${exp}const ${name}FromUnknown = (input: unknown): ${name} => Schema.decodeUnknownSync(${name})(input);`;
       }
+      case "ImportedTsSchema": {
+        return `${exp}type ${name} = unknown;`;
+      }
     }
   }
 

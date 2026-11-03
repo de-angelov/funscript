@@ -193,6 +193,23 @@ ts schema Config = {
     expect(format(formatted)).toBe(formatted);
   });
 
+  it("formats imported TypeScript schema declarations idempotently", () => {
+    const unformatted = `
+import { User as UserType } from "./model"
+
+schema User = from ts<UserType>
+export schema Admin = from ts<AdminType>
+schema Container<T> = from ts<ContainerType<T>>
+schema Pair = from ts<FirstType, SecondType>
+`.trim();
+
+    const formatted = format(unformatted);
+    expect(formatted).toBe(
+      `import { User as UserType } from "./model"\n\nschema User = from ts<UserType>\nexport schema Admin = from ts<AdminType>\nschema Container<T> = from ts<ContainerType<T>>\nschema Pair = from ts<FirstType, SecondType>\n`
+    );
+    expect(format(formatted)).toBe(formatted);
+  });
+
   it("formats error declarations and service declarations", () => {
     const unformatted = `
 export error NotFound(id: String)

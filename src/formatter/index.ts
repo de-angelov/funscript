@@ -18,6 +18,7 @@ import {
   RefinementSchema,
   TypeSignatureSchema,
   TsDerivedSchema,
+  ImportedTsSchema,
   ErrorDeclaration,
   ErrorField,
   ServiceDeclaration,
@@ -256,6 +257,8 @@ export class Formatter {
         return node.fields;
       case "TaggedUnionSchema":
         return node.variants;
+      case "ImportedTsSchema":
+        return node.typeArguments;
       case "ServiceDeclaration":
         return node.members;
       case "BlockStatement":
@@ -349,10 +352,10 @@ export class Formatter {
         const currInner = curr.kind === "ExportDeclaration" ? curr.declaration : curr;
         const nextInner = next.kind === "ExportDeclaration" ? next.declaration : next;
         const currIsMulti = currInner.kind === "ServiceDeclaration" ||
-          (currInner.kind === "SchemaDeclaration" && currInner.body.kind !== "TypeSignatureSchema" && currInner.body.kind !== "TsDerivedSchema") ||
+          (currInner.kind === "SchemaDeclaration" && currInner.body.kind !== "TypeSignatureSchema" && currInner.body.kind !== "TsDerivedSchema" && currInner.body.kind !== "ImportedTsSchema") ||
           (currInner.kind === "BindingDeclaration" && currInner.init.span && currInner.init.span.end.line > currInner.init.span.start.line);
         const nextIsMulti = nextInner.kind === "ServiceDeclaration" ||
-          (nextInner.kind === "SchemaDeclaration" && nextInner.body.kind !== "TypeSignatureSchema" && nextInner.body.kind !== "TsDerivedSchema") ||
+          (nextInner.kind === "SchemaDeclaration" && nextInner.body.kind !== "TypeSignatureSchema" && nextInner.body.kind !== "TsDerivedSchema" && nextInner.body.kind !== "ImportedTsSchema") ||
           (nextInner.kind === "BindingDeclaration" && nextInner.init.span && nextInner.init.span.end.line > nextInner.init.span.start.line);
 
         if (currIsMulti || nextIsMulti) {
@@ -452,6 +455,8 @@ export class Formatter {
         return this.formatType(body.signature);
       case "TsDerivedSchema":
         return this.formatType(body.targetType, indent);
+      case "ImportedTsSchema":
+        return `from ts<${body.typeArguments.map(t => this.formatType(t, indent)).join(", ")}>`;
     }
   }
 
