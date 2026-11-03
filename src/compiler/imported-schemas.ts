@@ -171,7 +171,41 @@ function convertType(
   if (type.isStringLiteral()) return `Schema.Literal(${JSON.stringify(type.value)})`;
   if (type.isNumberLiteral()) return `Schema.Literal(${type.value})`;
 
-  // 3. Arrays
+  // 3. Tuples (must precede arrays: TypeScript models tuples as array references).
+  if (checker.isTupleType(type)) {
+    const reference = type as ts.TypeReference;
+    const target = reference.target as ts.TupleType;
+    const args = checker.getTypeArguments(reference);
+    const flags = target.elementFlags;
+    const restIndex = flags.findIndex((flag) => Boolean(flag & (ts.ElementFlags.Rest | ts.ElementFlags.Variadic)));
+    if (restIndex >= 0) {
+      throw new ImportedSchemaError(
+        `Tuple rest or variadic element at '${path.join(".") || "root"}' is not supported for schema derivation.`,
+        span,
+      );
+    }
+    const nextVisited = new Set(visited).add(type);
+    const elements = args.map((element, index) => {
+      const elementPath = [...path, `[${index}]`];
+      if (flags[index] & ts.ElementFlags.Optional) {
+        const inner = element.isUnion()
+          ? convertUnionMembers(
+              element.types.filter((member) => !(member.flags & ts.TypeFlags.Undefined)),
+              checker,
+              contextNode,
+              span,
+              elementPath,
+              nextVisited,
+            )
+          : convertType(element, checker, contextNode, span, elementPath, nextVisited);
+        return `Schema.optional(${inner})`;
+      }
+      return convertType(element, checker, contextNode, span, elementPath, nextVisited);
+    });
+    return `Schema.Tuple([${elements.join(", ")}])`;
+  }
+
+  // 4. Arrays
   if (checker.isArrayType(type) || type.symbol?.name === "ReadonlyArray") {
     let elemType: ts.Type | undefined;
     if (checker.isArrayType(type)) {
@@ -187,13 +221,13 @@ function convertType(
     return `Schema.Array(${elemSchema})`;
   }
 
-  // 4. Unions
+  // 5. Unions
   if (type.isUnion()) {
     const nextVisited = new Set(visited).add(type);
     return convertUnionMembers(type.types, checker, contextNode, span, path, nextVisited);
   }
 
-  // 5. Records with string index signatures
+  // 6. Records with string index signatures
   const stringIndex = checker.getIndexInfoOfType(type, ts.IndexKind.String);
   if (stringIndex && type.getProperties().length === 0) {
     const nextVisited = new Set(visited).add(type);
@@ -201,7 +235,7 @@ function convertType(
     return `Schema.Record(Schema.String, ${valSchema})`;
   }
 
-  // 6. Structs / Object Types
+  // 7. Structs / Object Types
   if (type.flags & ts.TypeFlags.Object) {
     const nextVisited = new Set(visited).add(type);
     const props = type.getProperties();

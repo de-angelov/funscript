@@ -18,6 +18,12 @@ export interface User {
 
 export type StringArray = string[];
 export type ReadonlyNumberArray = ReadonlyArray<number>;
+export type FixedTuple = [string, number];
+export type OptionalTuple = [string, number?];
+export type Pair<T, U> = [T, U];
+export type NamedValue<T> = { value: T };
+export type InstantiatedPair = Pair<string, number>;
+export type InstantiatedValue = NamedValue<number>;
 export type StringNumberRecord = Record<string, number>;
 
 export type StatusUnion = "active" | "inactive";
