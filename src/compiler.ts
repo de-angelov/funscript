@@ -9,6 +9,7 @@ import { TypeScriptCompilationContext } from "./compiler/typescript-context.js";
 import { validateNumericComparisons } from "./compiler/numeric-comparisons.js";
 import { inferPipelineCompanions } from "./compiler/pipeline-companions.js";
 import { applyJsInteropNullability } from "./compiler/js-interop-nullability.js";
+import { resolveImportedSchemas } from "./compiler/imported-schemas.js";
 
 export interface CompileOptions {
   sourcemap?: boolean;
@@ -58,7 +59,8 @@ export const compileString = (
       const context = new TypeScriptCompilationContext(filename);
       validateNumericComparisons(ast, source, context);
       const pipelineCompanions = inferPipelineCompanions(ast, context);
-      const emitter = new Emitter(ast, undefined, { pipelineCompanions });
+      const importedSchemas = resolveImportedSchemas(ast, source, context);
+      const emitter = new Emitter(ast, undefined, { pipelineCompanions, importedSchemas });
       const typescript = applyJsInteropNullability(emitter.emit(), context);
       const targetExtension = filename.endsWith(".funx") ? ".tsx" : ".ts";
 
@@ -95,7 +97,7 @@ export const compileString = (
             const single = new Emitter(
               { kind: "Program", body: [decl], span: decl.span },
               ast,
-              { pipelineCompanions },
+              { pipelineCompanions, importedSchemas },
             );
             const singleOut = single.emit();
             const code = singleOut

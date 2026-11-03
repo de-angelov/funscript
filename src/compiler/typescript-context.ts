@@ -35,10 +35,10 @@ export class TypeScriptCompilationContext {
     this.host = host;
   }
 
-  check(source: string): { sourceFile: ts.SourceFile; checker: ts.TypeChecker } | undefined {
+  check(source: string): { sourceFile: ts.SourceFile; checker: ts.TypeChecker; program: ts.Program } | undefined {
     this.source = source;
     this.program = ts.createProgram({ rootNames: [this.virtualFile], options: this.options, host: this.host, oldProgram: this.program });
     const sourceFile = this.program.getSourceFile(this.normalized) ?? this.program.getSourceFile(this.virtualFile);
-    return sourceFile ? { sourceFile, checker: this.program.getTypeChecker() } : undefined;
+    return sourceFile ? { sourceFile, checker: this.program.getTypeChecker(), program: this.program } : undefined;
   }
 }

@@ -578,6 +578,30 @@ export class Lexer {
 
     // Check banned keywords
     if (BANNED_KEYWORDS[raw]) {
+      if (raw === "type") {
+        const lastToken = this.tokens[this.tokens.length - 1];
+        if (lastToken && lastToken.type === TokenType.IMPORT) {
+          this.tokens.push({
+            type: TokenType.IDENTIFIER,
+            value: raw,
+            span,
+          });
+          return;
+        }
+        if (lastToken && (lastToken.type === TokenType.LBRACE || lastToken.type === TokenType.COMMA)) {
+          for (let j = this.tokens.length - 1; j >= 0; j--) {
+            if (this.tokens[j].type === TokenType.NEWLINE) break;
+            if (this.tokens[j].type === TokenType.IMPORT) {
+              this.tokens.push({
+                type: TokenType.IDENTIFIER,
+                value: raw,
+                span,
+              });
+              return;
+            }
+          }
+        }
+      }
       throw new LexerError(BANNED_KEYWORDS[raw], span);
     }
 

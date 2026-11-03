@@ -84,6 +84,8 @@ export interface EmitterOptions {
   markPipelineSources?: boolean;
   /** Wrap native comparison operands so the checker can enforce number-only use. */
   markNumericComparisonOperands?: boolean;
+  /** Pre-resolved Effect schema expressions for imported data types keyed by schema name. */
+  importedSchemas?: ReadonlyMap<string, string>;
 }
 
 const ARRAY_COMPANION_METHODS = new Set(PIPELINE_COMPANION_CATALOG.Array);
@@ -256,7 +258,7 @@ export class Emitter {
         return `${typePrefix}${s.imported.name} as ${s.local.name}`;
       })
       .join(", ");
-    return `import { ${specs} } from ${decl.source.raw};`;
+    return `import ${decl.isTypeOnly ? "type " : ""}{ ${specs} } from ${decl.source.raw};`;
   }
 
   private emitSchemaDeclaration(decl: SchemaDeclaration, isExport: boolean): string {
@@ -307,7 +309,9 @@ export class Emitter {
         this.effectImports.add("Schema");
         let schemaExpr: string;
         const targetType = decl.body.targetType;
-        if (
+        if (targetType.kind === "TypeReferenceNode" && this.options.importedSchemas?.has(decl.id.name)) {
+          schemaExpr = this.options.importedSchemas.get(decl.id.name)!;
+        } else if (
           targetType.kind === "TypeReferenceNode" &&
           !PRIMITIVE_TYPES[targetType.name.name] &&
           targetType.name.name !== "Duration" &&
@@ -317,14 +321,16 @@ export class Emitter {
           targetType.name.name !== "Array" &&
           targetType.name.name !== "Record"
         ) {
-          schemaExpr = `(Schema.Unknown as unknown as Schema.Schema<${this.emitTypeNode(targetType)}>)`;
+          schemaExpr = this.options.importedSchemas?.get(decl.id.name) ?? `(Schema.Unknown as unknown as Schema.Schema<${this.emitTypeNode(targetType)}>)`;
         } else {
-          schemaExpr = this.emitSchemaTypeField(targetType);
+          schemaExpr = this.options.importedSchemas?.get(decl.id.name) ?? this.emitSchemaTypeField(targetType);
         }
         return `${exp}const ${name} = ${schemaExpr};\n${exp}type ${name} = typeof ${name}.Type;\n${exp}const ${name}FromUnknown = (input: unknown): ${name} => Schema.decodeUnknownSync(${name})(input);`;
       }
       case "ImportedTsSchema": {
-        return `${exp}type ${name} = unknown;`;
+        this.effectImports.add("Schema");
+        const schemaExpr = this.options.importedSchemas?.get(decl.id.name) ?? `(Schema.Unknown as unknown as Schema.Schema<${this.emitTypeNode(decl.body.typeNode)}>)`;
+        return `${exp}const ${name} = ${schemaExpr};\n${exp}type ${name} = typeof ${name}.Type;\n${exp}const ${name}FromUnknown = (input: unknown): ${name} => Schema.decodeUnknownSync(${name})(input);`;
       }
     }
   }
