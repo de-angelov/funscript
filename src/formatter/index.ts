@@ -1,5 +1,6 @@
 import { Lexer } from "../lexer/lexer.js";
 import { Parser } from "../parser/parser.js";
+import { PRECEDENCE } from "./operator-precedence.js";
 import {
   Program,
   TopLevelDeclaration,
@@ -170,25 +171,6 @@ export function extractComments(source: string): Comment[] {
 
   return comments;
 }
-
-const PRECEDENCE: Record<string, number> = {
-  "or": 1,
-  "and": 2,
-  "#=": 3,
-  "#!": 3,
-  "@=": 3,
-  "@!": 3,
-  "<": 4,
-  "<=": 4,
-  ">": 4,
-  ">=": 4,
-  "+": 5,
-  "-": 5,
-  "*": 6,
-  "/": 6,
-  "%": 6,
-  "**": 7,
-};
 
 export class Formatter {
   private indentSize: number;
