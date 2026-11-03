@@ -13,3 +13,5 @@ export * as prettierPlugin from "./formatter/prettier.js";
 export { default as prettierPluginFunscript } from "./formatter/prettier.js";
 export * as vitePlugin from "./plugins/vite.js";
 export { funscriptPlugin } from "./plugins/vite.js";
+export * as migrate from "./tooling/migrate.js";
+export { migrateSource, migrateFile, migrateFiles, formatMigrationReport } from "./tooling/migrate.js";

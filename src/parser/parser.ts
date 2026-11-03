@@ -110,6 +110,11 @@ export const EFFECT_RETURN_DIAGNOSTIC =
 export const EFFECT_BARE_EXPR_DIAGNOSTIC =
   "Non-final bare expression in effect block is not executed. Use '<-' to run an effect or '_ <-' to discard its value. See docs/syntax.md#93-the-non-final-expression-rule-and-control-flow-lowering.";
 
+export interface ParserOptions {
+  throwOnError?: boolean;
+  allowLegacyReturns?: boolean;
+}
+
 export class Parser {
   private current = 0;
   public diagnostics: ParseError[] = [];
@@ -117,12 +122,16 @@ export class Parser {
   private mutableVariables = new Set<string>();
   private mutDraftVariables = new Set<string>();
   private parsingBraceEffect = false;
+  private options: ParserOptions;
 
   constructor(
     private tokens: Token[],
     private filename: string = "<anonymous>",
     private source: string = "",
-  ) {}
+    options?: ParserOptions,
+  ) {
+    this.options = { ...options };
+  }
 
   public getDiagnostics(): ParseError[] {
     return this.diagnostics;
@@ -140,11 +149,15 @@ export class Parser {
     }
   }
 
-  public parse(optionsOrThrowOnError: boolean | { throwOnError?: boolean } = true): Program {
-    const throwOnError =
+  public parse(optionsOrThrowOnError: boolean | ParserOptions = true): Program {
+    const opts: ParserOptions =
       typeof optionsOrThrowOnError === "boolean"
-        ? optionsOrThrowOnError
-        : (optionsOrThrowOnError?.throwOnError ?? true);
+        ? { throwOnError: optionsOrThrowOnError }
+        : (optionsOrThrowOnError ?? {});
+    const throwOnError = opts.throwOnError ?? this.options.throwOnError ?? true;
+    if (opts.allowLegacyReturns !== undefined) {
+      this.options.allowLegacyReturns = opts.allowLegacyReturns;
+    }
 
     const start = this.peek().span.start;
     const body: TopLevelDeclaration[] = [];
@@ -637,6 +650,7 @@ export class Parser {
     }
 
     let body: FunctionBody;
+    const requireExplicitReturn = !this.options.allowLegacyReturns;
     if (this.match(TokenType.ARROW)) {
       if (
         !returnType &&
@@ -649,16 +663,16 @@ export class Parser {
         if (this.match(TokenType.ARROW)) {
           // consumed arrow before expression body
         }
-        body = this.parseFunctionBody(true);
+        body = this.parseFunctionBody(requireExplicitReturn);
       } else {
-        body = this.parseFunctionBody(true);
+        body = this.parseFunctionBody(requireExplicitReturn);
       }
     } else if (this.check(TokenType.LBRACE)) {
       this.consume(TokenType.LBRACE, "Expected '{'");
-      body = this.parseBraceBlock(true);
+      body = this.parseBraceBlock(requireExplicitReturn);
     } else if (this.match(TokenType.NEWLINE)) {
       this.consume(TokenType.INDENT, "Expected indent for function body block");
-      body = this.parseIndentedBlock(true);
+      body = this.parseIndentedBlock(requireExplicitReturn);
     } else {
       throw new ParseError("Expected '=>', '{', or newline for function body", this.peek().span);
     }
@@ -1076,7 +1090,7 @@ export class Parser {
       if (this.match(TokenType.RPAREN)) {
         // Zero-argument lambda: () => ...
         if (this.match(TokenType.ARROW)) {
-          const body = this.parseFunctionBody(true);
+          const body = this.parseFunctionBody(!this.options.allowLegacyReturns);
           return {
             kind: "FunctionExpression",
             params: [],
@@ -1134,7 +1148,7 @@ export class Parser {
         if (!this.match(TokenType.ARROW)) {
           throw new ParseError("Expected '=>' after parameters", this.peek().span);
         }
-        const body = this.parseFunctionBody(true);
+        const body = this.parseFunctionBody(!this.options.allowLegacyReturns);
         return {
           kind: "FunctionExpression",
           params,
@@ -1161,7 +1175,7 @@ export class Parser {
       }
 
       if (this.match(TokenType.ARROW)) {
-        const body = this.parseFunctionBody(true);
+        const body = this.parseFunctionBody(!this.options.allowLegacyReturns);
         return {
           kind: "FunctionExpression",
           params: [{ kind: "Parameter", name: firstExpr as Identifier, span: firstExpr.span }],
@@ -1177,7 +1191,7 @@ export class Parser {
     // 6. Zero-argument function: => body
     if (this.match(TokenType.ARROW)) {
       const start = this.previous().span.start;
-      const body = this.parseFunctionBody(true);
+      const body = this.parseFunctionBody(!this.options.allowLegacyReturns);
       return {
         kind: "FunctionExpression",
         params: [],
@@ -1577,6 +1591,11 @@ export class Parser {
         this.skipNewlines();
         if (braced) while (this.match(TokenType.INDENT) || this.match(TokenType.DEDENT)) {}
         if (atEnd()) {
+          if (this.options.allowLegacyReturns) {
+            finalExpression = expr;
+            (finalExpression as any).isLegacyBareEffectReturn = true;
+            break;
+          }
           throw new ParseError(EFFECT_RETURN_DIAGNOSTIC, expr.span);
         } else {
           throw new ParseError(
@@ -1595,7 +1614,16 @@ export class Parser {
     }
 
     if (!finalExpression) {
-      throw new ParseError(EFFECT_RETURN_DIAGNOSTIC, { start, end: this.previous().span.end });
+      if (this.options.allowLegacyReturns) {
+        finalExpression = {
+          kind: "Identifier",
+          name: "_missingReturn",
+          span: { start, end: this.previous().span.end },
+        };
+        (finalExpression as any).isMissingEffectReturn = true;
+      } else {
+        throw new ParseError(EFFECT_RETURN_DIAGNOSTIC, { start, end: this.previous().span.end });
+      }
     }
 
     return {
@@ -1905,6 +1933,7 @@ export class Parser {
             this.skipNewlines();
             if (this.check(TokenType.DEDENT)) {
               if (requireExplicitReturn) throw new ParseError(FUNCTION_RETURN_DIAGNOSTIC, bind.span);
+              (bind as any).isTrailingBinding = true;
               statements.push(bind);
               finalExpression = bind.id;
               break;
