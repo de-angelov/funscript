@@ -358,6 +358,9 @@ export y = 20
       expect(format(formatted)).toBe(formatted);
       expect(operatorTree(format(formatted))).toEqual(operatorTree(source));
     }
+
+    expect(format("export result = (1 #= 2) < 3")).toBe("export result = (1 #= 2) < 3\n");
+    expect(format("export result = 1 < (2 #= 3)")).toBe("export result = 1 < (2 #= 3)\n");
   });
 
   it("preserves right-nested same-precedence operators through formatting", () => {
