@@ -17,7 +17,7 @@ language rules.
 - [Runnable example inventory](reference/examples.md) — generated from applications built by `npm run test:examples`.
 - [CI and release operations](ci-release.md) — operational workflow.
 - [Tooling](tooling.md) and [toolchain](toolchain.md) — supported integration guidance.
-- [Language compatibility policy](tooling.md#language-compatibility-policy) — adopted Strict Zero-Alias compatibility policy for Effect aliases, breaking syntax, and pipeline ambiguity.
+- [Language compatibility policy](compatibility.md) — adopted Strict Zero-Alias compatibility policy for Effect aliases, breaking syntax, and pipeline ambiguity.
 
 ## Proposals and historical reference
 

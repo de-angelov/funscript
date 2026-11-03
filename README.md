@@ -148,6 +148,7 @@ tests/            Compiler, CLI, formatter, LSP, and integration coverage
 - [Example inventory](docs/reference/examples.md) — generated from the runnable example tree.
 - [Documentation map](docs/README.md) — separates current verified docs from proposals/history.
 - [Tooling guide](docs/tooling.md) — use FunScript in a normal Node project.
+- [Language compatibility policy](docs/compatibility.md) — compatibility guarantees, deprecation lifecycle, and pipeline ambiguity policy.
 - [CI and release operations](docs/ci-release.md) — maintainer workflow.
 
 ## Scope and non-goals
