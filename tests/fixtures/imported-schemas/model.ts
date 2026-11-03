@@ -1,6 +1,8 @@
 export type StringAlias = string;
 export type NumberAlias = number;
 export type BooleanAlias = boolean;
+export type TrueLiteral = true;
+export type FalseLiteral = false;
 
 export interface User {
   id: string;
@@ -27,6 +29,10 @@ export interface NestedUser {
     avatar: string;
     description?: string;
   };
+}
+
+export interface OptionalUndefined {
+  value?: string | undefined;
 }
 
 export interface TypeWithFunction {

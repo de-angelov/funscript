@@ -155,7 +155,10 @@ function convertType(
   // 2. Primitives and literals
   if (type.flags & ts.TypeFlags.String) return "Schema.String";
   if (type.flags & ts.TypeFlags.Number) return "Schema.Number";
-  if ((type.flags & ts.TypeFlags.Boolean) || (type.flags & ts.TypeFlags.BooleanLiteral)) return "Schema.Boolean";
+  if (type.flags & ts.TypeFlags.Boolean) return "Schema.Boolean";
+  if (type.flags & ts.TypeFlags.BooleanLiteral) {
+    return `Schema.Literal(${(type as any).intrinsicName === "true" ? "true" : "false"})`;
+  }
   if (type.flags & ts.TypeFlags.Null) return "Schema.Null";
   if (type.flags & ts.TypeFlags.Undefined) return "Schema.Undefined";
   if (type.isStringLiteral()) return `Schema.Literal(${JSON.stringify(type.value)})`;
