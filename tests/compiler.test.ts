@@ -3,6 +3,13 @@ import { Effect } from "effect";
 import ts from "typescript";
 import { compileString, checkString, CompilerError } from "../src/compiler.js";
 import { typeCheckSource } from "../src/compiler/check.js";
+import {
+  compile,
+  compileFailure,
+  expectCompileError,
+  execute,
+  evalTypescript,
+} from "./helpers/index.js";
 
 describe("FunScript Compiler", () => {
   it("compiles basic bindings and arithmetic", async () => {
@@ -12,35 +19,36 @@ export age = 36
 export nextAge = age + 1
 `.trim();
 
-    const res = await Effect.runPromise(compileString(code));
+    const res = await compile(code);
     expect(res.typescript).toContain(`export const name = "Ada";`);
     expect(res.typescript).toContain(`export const age = 36;`);
     expect(res.typescript).toContain(`export const nextAge = (age + 1);`);
   });
 
   it("preserves numeric separators while evaluating their numeric value", async () => {
-    const result = await Effect.runPromise(compileString("export total = 110_110 + 0.5_0"));
+    const result = await compile("export total = 110_110 + 0.5_0");
     expect(result.typescript).toContain("110_110");
     expect(result.typescript).toContain("0.5_0");
   });
 
   it("uses Effect v4 Number.is* comparison names without legacy aliases", async () => {
-    const result = await Effect.runPromise(compileString("export valid = 5 |> isGreaterThan(3)"));
+    const result = await compile("export valid = 5 |> isGreaterThan(3)");
     expect(result.typescript).toContain("Number.isGreaterThan(3)");
     expect(result.typescript).not.toContain("Number.greaterThan");
   });
 
   it("emits native ordering operators for number comparisons", async () => {
-    const result = await Effect.runPromise(compileString("export valid = 5 >= 3 and 2 < 4"));
+    const result = await compile("export valid = 5 >= 3 and 2 < 4");
     expect(result.typescript).toContain("((5 >= 3) && (2 < 4))");
   });
 
   it("rejects native ordering operators for strings with an Effect Order diagnostic and doc link", async () => {
     const code = "export valid = (left: String, right: String) => left < right";
-    await expect(Effect.runPromise(compileString(code)))
-      .rejects.toThrow("< is only available for numbers; this operand has type string. Use Order.isLessThan(String.Order)(...) or an explicit domain Order. See docs/syntax.md#42-equality-and-comparisons.");
+    const failure = await expectCompileError(
+      code,
+      "< is only available for numbers; this operand has type string. Use Order.isLessThan(String.Order)(...) or an explicit domain Order. See docs/syntax.md#42-equality-and-comparisons.",
+    );
 
-    const failure = await Effect.runPromise(Effect.flip(compileString(code)));
     expect((failure as any).span).toMatchObject({
       start: { offset: 48, line: 1, column: 49 },
       end: { offset: 48, line: 1, column: 49 },
@@ -48,8 +56,10 @@ export nextAge = age + 1
   });
 
   it("rejects unknown values in native ordering operators", async () => {
-    await expect(Effect.runPromise(compileString("export valid = (value: Unknown) => value >= 0")))
-      .rejects.toThrow(">= is only available for numbers; this operand has type unknown");
+    await expectCompileError(
+      "export valid = (value: Unknown) => value >= 0",
+      ">= is only available for numbers; this operand has type unknown",
+    );
   });
 
   it("suggests inclusive Effect predicates for inclusive operators", async () => {
@@ -214,7 +224,7 @@ export resLogical = 7 |> (_ #= 7 and _ #! 0)
 export resChained = 5 |> (_ + 1) |> (_ * 2)
 `.trim();
 
-    const res = await Effect.runPromise(compileString(code));
+    const res = await compile(code);
     expect(res.typescript).toContain(`import { pipe } from "effect";`);
     expect(res.typescript).toContain(`pipe(\n  5,\n  (__p) => (__p + 1)\n)`);
     expect(res.typescript).toContain(`pipe(\n  user,\n  (__p) => __p.profile.name\n)`);
@@ -222,10 +232,9 @@ export resChained = 5 |> (_ + 1) |> (_ * 2)
     expect(res.typescript).toContain(`pipe(\n  7,\n  (__p) => ((__p === 7) && (__p !== 0))\n)`);
     expect(res.typescript).toContain(`pipe(\n  5,\n  (__p) => (__p + 1),\n  (__p) => (__p * 2)\n)`);
 
-    const { pipe } = await import("effect");
-    const evalCode = res.typescript.replace(/import .*\n/g, "").replace(/export const /g, "const ");
-    const fn = new Function("pipe", "user", `${evalCode}; return { resAdd, resMember, resUnary, resLogical, resChained };`);
-    const evaluated = fn(pipe, { profile: { name: "Alice" } });
+    const evaluated = evalTypescript(res.typescript, {
+      scope: { user: { profile: { name: "Alice" } } },
+    }).exports;
     expect(evaluated.resAdd).toBe(6);
     expect(evaluated.resMember).toBe("Alice");
     expect(evaluated.resUnary).toBe(false);
@@ -256,37 +265,31 @@ export schema Shape =
   });
 
   it("emits Array schemas for fields in Schema.Struct", async () => {
-    const res = await Effect.runPromise(compileString(`export schema Items = { items: Array<String> }`));
+    const res = await compile(`export schema Items = { items: Array<String> }`);
     expect(res.typescript).toContain(`items: Schema.Array(Schema.String)`);
 
+    const { Items } = evalTypescript(res.typescript).exports;
     const { Schema } = await import("effect");
-    const evalCode = ts.transpile(res.typescript, { module: ts.ModuleKind.ESNext })
-      .replace(/import .*\n/g, "")
-      .replace(/\bexport\s+/g, "");
-    const decode = new Function("Schema", `${evalCode}; return Items;`)(Schema);
-    expect(Schema.decodeUnknownSync(decode)({ items: ["a", "b"] })).toEqual({ items: ["a", "b"] });
+    expect(Schema.decodeUnknownSync(Items)({ items: ["a", "b"] })).toEqual({ items: ["a", "b"] });
   });
 
   it("compiles ts schema declarations for imported TypeScript types and structural types", async () => {
     const code = `
+ts { type UserType = { id: string } }
 export ts schema User = UserType
 export ts schema Config = { timeout: Number }
 `.trim();
 
-    const res = await Effect.runPromise(compileString(code));
+    const res = await compile(code);
     expect(res.typescript).toContain(`import { Schema } from "effect";`);
-    expect(res.typescript).toContain(`export const User = (Schema.Unknown as unknown as Schema.Schema<UserType>);`);
+    expect(res.typescript).toContain(`export const User = Schema.Struct({`);
     expect(res.typescript).toContain(`export type User = typeof User.Type;`);
     expect(res.typescript).toContain(`export const UserFromUnknown = (input: unknown): User => Schema.decodeUnknownSync(User)(input);`);
     expect(res.typescript).toContain(`export const Config = Schema.Struct({`);
     expect(res.typescript).toContain(`timeout: Schema.Number`);
 
-    const { Schema } = await import("effect");
-    const evalCode = ts.transpile(res.typescript, { module: ts.ModuleKind.ESNext })
-      .replace(/import .*\n/g, "")
-      .replace(/\bexport\s+/g, "");
-    const decodedConfig = new Function("Schema", `${evalCode}; return ConfigFromUnknown({ timeout: 5000 });`)(Schema);
-    expect(decodedConfig).toEqual({ timeout: 5000 });
+    const { ConfigFromUnknown } = evalTypescript(res.typescript).exports;
+    expect(ConfigFromUnknown({ timeout: 5000 })).toEqual({ timeout: 5000 });
   });
 
   it("compiles 'js' keyword for interop (export js, effect ingress, pipeline js)", async () => {
@@ -610,17 +613,15 @@ export check = (flag: Boolean) =>
 export error UserNotFound(id: String, code: Number)
 `.trim();
 
-      const res = await Effect.runPromise(compileString(code));
+      const res = await compile(code);
       expect(res.typescript).toContain(`import { Schema } from "effect";`);
       expect(res.typescript).toContain(
         `export class UserNotFound$Class extends Schema.TaggedError<UserNotFound$Class>()("UserNotFound", {\n  id: Schema.String,\n  code: Schema.Number\n}) {}`
       );
       expect(res.typescript).toContain(`export const UserNotFound = (function(args: ConstructorParameters<typeof UserNotFound$Class>[0]): UserNotFound { return new UserNotFound$Class(args); }) as { (args: ConstructorParameters<typeof UserNotFound$Class>[0]): UserNotFound; new (args: ConstructorParameters<typeof UserNotFound$Class>[0]): UserNotFound };`);
 
-      const { Schema } = await import("effect");
-      const evalCode = res.typescript.replace(/import .*\n/g, "").replace(/<UserNotFound\$Class>\(\)/g, "()").replace(/\(function\(args: ConstructorParameters<typeof UserNotFound\$Class>\[0\]\): UserNotFound \{ return new UserNotFound\$Class\(args\); \}\) as \{[^}]+\}/, "function(args) { return new UserNotFound$Class(args); }").replace(/export type .*\n/g, "").replace(/export const /g, "const ").replace(/export class /g, "class ");
-      const makeError = new Function("Schema", `${evalCode}; return UserNotFound;`)(Schema);
-      const error = makeError({ id: "u1", code: 404 });
+      const { UserNotFound } = evalTypescript(res.typescript).exports;
+      const error = UserNotFound({ id: "u1", code: 404 });
       expect(error).toBeInstanceOf(Error);
       expect(error.id).toBe("u1");
     });
