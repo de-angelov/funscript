@@ -1,0 +1,27 @@
+import { Console } from "effect"
+
+export schema ButtonProps = {
+  label: String
+  disabled: Boolean
+}
+
+export Button = (props: ButtonProps) =>
+  => <button className="btn" disabled={props.disabled}>
+    <span>{props.label}</span>
+  </button>
+
+export schema CardProps = {
+  title: String
+  count: Number
+}
+
+export Card = (props: CardProps) =>
+  => <div className="card">
+    <header className="card-header">
+      <h2>{props.title}</h2>
+    </header>
+    <div className="card-body">
+      <p>Items count: {props.count}</p>
+      <Button label="Refresh" disabled={false} />
+    </div>
+  </div>

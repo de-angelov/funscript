@@ -121,3 +121,56 @@ Running benchmark: Pipeline compilation (pipeline)...
 Benchmark complete.
 ```
 
+## Tooling and compilation benchmarks
+
+Run the tooling and compiler benchmark suite to measure single-component `.funx` compilation, multi-file compilation with real import resolution, and LSP diagnostic response latency:
+
+```bash
+npm run build
+node scripts/benchmark-tooling.mjs
+```
+
+Pass `--json` for machine-readable output, or `--iterations <n>` and `--warmup <n>` to customize sampling.
+
+### Measured workloads
+
+1. **`.funx` JSX Component Compilation (`funx-compile`)**:
+   - **Entry point**: `compileString(source, "widget.funx", { sourcemap: true })`
+   - **Fixture**: `tests/fixtures/benchmarks/widget.funx`
+   - **Behavior**: Measures full tokenization, AST construction, TSX emission (`targetExtension: .tsx`), and source map generation for a typed JSX component with props and children.
+
+2. **Multi-File Project Import Resolution (`multi-file-project`)**:
+   - **Entry point**: `typeCheckFiles([math.fun, app.fun], { compilerOptions })`
+   - **Fixture**: `tests/fixtures/benchmarks/project/{math.fun,app.fun}`
+   - **Behavior**: Measures multi-module compilation and real cross-module import resolution via TypeScript compiler host (`app.fun` imports `CalculationConfig` and `compute` from `./math.js`).
+
+3. **LSP Diagnostic Response Latency (`lsp-diagnostic`)**:
+   - **Entry point**: `FunScriptLspServer.onDidChangeHandler` -> `diagnostics` event listener
+   - **Fixture**: `tests/fixtures/benchmarks/lsp-diagnostics.fun`
+   - **Behavior**: Measures latency from an editor change notification through document cache update and syntax validation to receiving the `publishDiagnostics` response payload.
+
+### Repeatable baseline capture & environment context
+
+Benchmark metrics are heavily influenced by the execution environment (Node.js runtime, V8 JIT tiering, CPU architectures, thermal limits, and concurrent OS activity). Baselines represent reference captures on a specific host environment rather than absolute hardware-independent limits.
+
+Captured reference baseline on Linux x64 (Node v20.20.2, AMD Ryzen AI 7 350, 16 cores):
+
+| Workload | Warmup | Samples | Min (ms) | Median (ms) | Mean (ms) | p95 (ms) | Max (ms) | StdDev (ms) |
+| :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
+| `funx-compile` | 5 | 20 | 0.315 | 0.637 | 0.827 | 3.571 | 3.571 | 0.674 |
+| `multi-file-project` | 2 | 5 | 557.999 | 625.592 | 617.222 | 679.558 | 679.558 | 46.332 |
+| `lsp-diagnostic` | 5 | 20 | 0.035 | 0.038 | 0.055 | 0.154 | 0.154 | 0.032 |
+
+### Run-to-run variation and practical investigation thresholds
+
+When evaluating performance changes against the baseline:
+
+- **Expected run-to-run variation**: Normal desktop and CI execution exhibits 5% to 15% variation in median timing between subsequent runs due to V8 garbage collection cycles, dynamic CPU throttling, and operating system scheduling.
+- **Do not treat noise as regression**: A single outlier sample (visible in max or p95) or a single run's minor fluctuation does not constitute a regression. Never fail builds or assert hard millisecond gates on individual runs.
+- **Evaluation protocol**:
+  1. Always run `npm run build` prior to running benchmarks so compiled artifacts in `dist/` are up to date.
+  2. Execute at least two consecutive runs to observe the warm median distribution.
+  3. Compare the **median (`p50`)** latency rather than the maximum or single-sample timings.
+- **Practical investigation threshold**:
+  - **Sustained shift > 25%**: A regression is confirmed when median latency increases by more than **25%** across multiple repeated benchmark executions (or a sustained >3 standard deviation shift), indicating unexpected overhead in lexing, parsing, emitter allocation, or type-checking resolution.
+  - **Shifts < 20%**: Shifts under 20% are within standard multi-tasking OS noise and should be retested before treating as an anomaly.
