@@ -153,6 +153,39 @@ export ts schema User = UserType
   });
 
   describe("Primitive, Array, Record, and Union Schemas", () => {
+    it("preserves string, boolean, and numeric discriminated union variants", async () => {
+      const source = `
+import type { StringTagged, BooleanTagged, NumericTagged } from "${fixturePath}"
+
+export ts schema StringChoice = StringTagged
+export ts schema BooleanChoice = BooleanTagged
+export ts schema NumericChoice = NumericTagged
+`.trim();
+      const result = await Effect.runPromise(compileString(source, dummyFile));
+      expect(result.typescript).toContain('kind: Schema.Literal("text")');
+      expect(result.typescript).toContain('kind: Schema.Literal("count")');
+      expect(result.typescript).toContain('enabled: Schema.Literal(true)');
+      expect(result.typescript).toContain('enabled: Schema.Literal(false)');
+      expect(result.typescript).toContain('code: Schema.Literal(1)');
+      expect(result.typescript).toContain('code: Schema.Literal(2)');
+
+      const mod = evaluateSchemaModule(result.typescript);
+      expect(mod.StringChoiceFromUnknown({ kind: "text", value: "hello" })).toEqual({ kind: "text", value: "hello" });
+      expect(mod.StringChoiceFromUnknown({ kind: "count", value: 4 })).toEqual({ kind: "count", value: 4 });
+      expect(() => mod.StringChoiceFromUnknown({ kind: "text", value: 4 })).toThrow();
+      expect(() => mod.StringChoiceFromUnknown({ kind: "other", value: "hello" })).toThrow();
+
+      expect(mod.BooleanChoiceFromUnknown({ enabled: true, label: "ready" })).toEqual({ enabled: true, label: "ready" });
+      expect(mod.BooleanChoiceFromUnknown({ enabled: false, reason: "disabled" })).toEqual({ enabled: false, reason: "disabled" });
+      expect(() => mod.BooleanChoiceFromUnknown({ enabled: true, reason: "disabled" })).toThrow();
+      expect(() => mod.BooleanChoiceFromUnknown({ enabled: "true", label: "ready" })).toThrow();
+
+      expect(mod.NumericChoiceFromUnknown({ code: 1, message: "ok" })).toEqual({ code: 1, message: "ok" });
+      expect(mod.NumericChoiceFromUnknown({ code: 2, retryAfter: 3 })).toEqual({ code: 2, retryAfter: 3 });
+      expect(() => mod.NumericChoiceFromUnknown({ code: 3, message: "ok" })).toThrow();
+      expect(() => mod.NumericChoiceFromUnknown({ code: 1, retryAfter: "soon" })).toThrow();
+    });
+
     it("generates and decodes primitive schemas", async () => {
       const source = `
 import type { StringAlias, NumberAlias, BooleanAlias } from "${fixturePath}"
