@@ -58,7 +58,7 @@ not additional `funscript` CLI commands.
 
 ## Language compatibility policy
 
-Under the human-approved language compatibility policy (TASK-102), FunScript adopts a **Strict Zero-Alias Policy**. Because FunScript is in early active development with zero external production consumers, obsolete constructs and historical shims are removed immediately rather than maintained across deprecation windows or hidden behind edition flags.
+Under the human-approved language compatibility policy (TASK-102), FunScript adopts a **Strict Zero-Alias Policy**. Because FunScript is in early active development with zero external production consumers, obsolete constructs and historical shims are removed immediately rather than maintained across deprecation windows or hidden behind edition flags. See [Language and ecosystem compatibility policy](compatibility.md) for the full policy specification.
 
 The policy governs three key evolutionary areas:
 
