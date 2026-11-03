@@ -16,6 +16,7 @@
   },
   "scripts": {
     "build": "tsc && tsc -p editors/vscode",
+    "benchmark": "node scripts/benchmark.mjs",
     "test": "vitest run",
     "test:examples": "vitest run tests/example-apps-build.test.ts",
     "test:watch": "vitest",

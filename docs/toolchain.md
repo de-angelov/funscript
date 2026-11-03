@@ -174,3 +174,22 @@ When evaluating performance changes against the baseline:
 - **Practical investigation threshold**:
   - **Sustained shift > 25%**: A regression is confirmed when median latency increases by more than **25%** across multiple repeated benchmark executions (or a sustained >3 standard deviation shift), indicating unexpected overhead in lexing, parsing, emitter allocation, or type-checking resolution.
   - **Shifts < 20%**: Shifts under 20% are within standard multi-tasking OS noise and should be retested before treating as an anomaly.
+
+## Unified compiler and LSP performance benchmarks
+
+Run the unified benchmark suite covering single files (cold and warm), pipeline analysis with TypeScript context reuse, `.funx` JSX components, multi-file projects, and LSP operations:
+
+```bash
+npm run build
+npm run benchmark
+# or run with regression assertion verification
+node scripts/benchmark.mjs --assert
+```
+
+Or execute the Vitest benchmark test gate:
+
+```bash
+npx vitest run tests/benchmark.test.ts --reporter=dot
+```
+
+The benchmark test runs all workloads, prints recorded timings, and verifies assertions against established baseline regression thresholds.
