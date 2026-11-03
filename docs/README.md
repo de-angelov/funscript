@@ -11,6 +11,7 @@ specification.
 - [CLI reference](reference/cli.md) — generated from `src/cli/commands.ts`.
 - [Package API](reference/api.md) — generated from `package.json` exports.
 - [Language syntax guide](syntax.md) — implemented syntax reference for the current compiler.
+- [Numeric comparison contributor walkthrough](language-change-journey.md) — implementation guide for contributors; `syntax.md` remains the authoritative language reference.
 - [Language catalogue](reference/language.md) — generated from the LSP documentation source for hover help.
 - [Runnable example inventory](reference/examples.md) — generated from applications built by `npm run test:examples`.
 - [CI and release operations](ci-release.md) — operational workflow.
