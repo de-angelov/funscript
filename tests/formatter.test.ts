@@ -81,6 +81,32 @@ describe("FunScript Code Formatter", () => {
     }
   });
 
+  it("characterizes formatter output against parser grouping for operator families", () => {
+    const cases = [
+      // Equality binds less tightly than numeric comparison in both parser and formatter.
+      ["a #= b < c", "a #= b < c"],
+      ["a < b #= c", "a < b #= c"],
+      ["(a #= b) < c", "(a #= b) < c"],
+      ["a #= (b < c)", "a #= b < c"],
+      // Multiplication binds more tightly than addition.
+      ["a + b * c", "a + b * c"],
+      ["(a + b) * c", "(a + b) * c"],
+      ["a * (b + c)", "a * (b + c)"],
+      // Exponentiation is right-associative in the parser and formatter.
+      ["a ** b ** c", "a ** b ** c"],
+      ["(a ** b) ** c", "(a ** b) ** c"],
+      ["a ** (b ** c)", "a ** b ** c"],
+    ] as const;
+
+    for (const [expression, expected] of cases) {
+      const source = `export result = ${expression}`;
+      const formatted = format(source);
+      expect(formatted).toBe(`export result = ${expected}\n`);
+      expect(operatorTree(formatted)).toEqual(operatorTree(source));
+      expect(operatorTree(format(formatted))).toEqual(operatorTree(source));
+    }
+  });
+
   it("formats basic bindings and expressions canonically", () => {
     const unformatted = `name = "Ada"\nage =   36\nisActive = true`;
     const formatted = format(unformatted);
