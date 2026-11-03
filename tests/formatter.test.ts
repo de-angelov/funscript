@@ -267,6 +267,26 @@ export y = 20
       "1 < (2 #= 3)",
       "(1 < 2) #= 3",
       "1 #= (2 < 3)",
+      "(1 #= 2) #= 3",
+      "1 #= (2 #= 3)",
+      "(1 < 2) < 3",
+      "1 < (2 < 3)",
+    ];
+
+    for (const expression of expressions) {
+      const source = `export result = ${expression}`;
+      const formatted = format(source);
+      expect(operatorTree(formatted)).toEqual(operatorTree(source));
+      expect(operatorTree(format(formatted))).toEqual(operatorTree(source));
+    }
+  });
+
+  it("preserves right-nested same-precedence operators through formatting", () => {
+    const expressions = [
+      "1 + (2 + 3)",
+      "1 * (2 / 3)",
+      "ready and (fallback and enabled)",
+      "ready or (fallback or enabled)",
     ];
 
     for (const expression of expressions) {

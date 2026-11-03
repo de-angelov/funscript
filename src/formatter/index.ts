@@ -848,7 +848,9 @@ export class Formatter {
       if (currentPrec < parentPrec) {
         needsParens = true;
       } else if (currentPrec === parentPrec) {
-        if (isRightSide && (parentOp === "-" || parentOp === "/" || parentOp === "%")) {
+        // The parser builds every operator level left-associatively except **.
+        // Preserve a right-nested tree at the same precedence with parentheses.
+        if (isRightSide && parentOp !== "**") {
           needsParens = true;
         } else if (!isRightSide && parentOp === "**") {
           needsParens = true;
