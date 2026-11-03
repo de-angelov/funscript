@@ -2,18 +2,17 @@
 
 ## Current, verified documentation
 
-Authors should use the [language syntax guide](syntax.md) as the current reference for
-syntax accepted by the compiler. It describes implemented behavior and labels future
-notes **Planned**, so they are not mistaken for syntax currently accepted by the compiler. The
-[generated language catalogue](reference/language.md) serves LSP hover documentation and
-is generated from the LSP documentation source; it is a concise, implementation-derived
-catalogue rather than an independent syntax specification.
+The [language syntax guide](syntax.md) mixes descriptions of syntax accepted by the
+current compiler with explicitly marked **Planned** material. Check those labels before
+treating a section as implemented behavior. The [generated language catalogue](reference/language.md)
+is the editor documentation reference: it is generated from the LSP documentation source
+and supplies language-server hover help.
 
 - [CLI reference](reference/cli.md) — generated from `src/cli/commands.ts`.
 - [Package API](reference/api.md) — generated from `package.json` exports.
-- [Language syntax guide](syntax.md) — implemented syntax reference for the current compiler.
+- [Language syntax guide](syntax.md) — guide to implemented syntax and clearly marked planned material.
 - [Numeric comparison contributor walkthrough](language-change-journey.md) — implementation guide for contributors; `syntax.md` remains the authoritative language reference.
-- [Language catalogue](reference/language.md) — generated LSP catalogue for hover help.
+- [Language catalogue](reference/language.md) — generated editor reference and LSP hover catalogue.
 - [Runnable example inventory](reference/examples.md) — generated from applications built by `npm run test:examples`.
 - [CI and release operations](ci-release.md) — operational workflow.
 - [Tooling](tooling.md) and [toolchain](toolchain.md) — supported integration guidance.

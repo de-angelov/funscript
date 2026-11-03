@@ -1,12 +1,14 @@
 # FunScript syntax
 
-**Status:** Implemented language reference (FunScript 0.1)
+**Status:** Guide to current and planned syntax (FunScript 0.1)
 **Audience:** FunScript users and compiler contributors
 
-This is the normative reference for syntax accepted by the current compiler. Examples
-and compatibility forms describe implemented behavior; explicit future-work notes are
-marked **Planned**. For the design rationale and roadmap, see [proposal.md](proposal.md).
-For safety guarantees and their intended enforcement, see [pit-of-success.md](pit-of-success.md).
+This guide covers syntax accepted by the current compiler and also includes planned
+material. Sections marked **Planned** describe future work, not syntax currently accepted
+by the compiler. The [generated language catalogue](reference/language.md) is the editor
+documentation reference used for language-server hover help. For design rationale and the
+roadmap, see [proposal.md](proposal.md). For safety guarantees and their intended
+enforcement, see [pit-of-success.md](pit-of-success.md).
 
 The design rule is simple:
 
