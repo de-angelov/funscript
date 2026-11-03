@@ -1586,7 +1586,7 @@ Recoverable failures are typed values in the `E` channel:
 export findUser = (id: String) =>
   effect {
     user <- UserRepo.find(id)
-    user
+    => user
   }
   |> Effect.catchTag("NotFound", (e) => Effect.succeed({ id: e.id, name: "anonymous" }))
 ```
@@ -1602,7 +1602,7 @@ export checkout = (cartId: String) =>
     cart <- CartRepo.find(cartId)  # fails with NotFound
     _ <- PaymentGateway.charge(cart.total)  # fails with PaymentDeclined
     _ <- Inventory.reserve(cart.items)  # fails with OutOfStock
-    cart
+    => cart
   }
 
 # Return type inferred as:
@@ -1622,7 +1622,7 @@ to load an embedded seed configuration or decoding a hardcoded constant), use `|
 export loadDefaultConfig =
   effect {
     raw <- ConfigRepo.loadDefault |> orDie
-    raw
+    => raw
   }
 ```
 
@@ -1761,7 +1761,8 @@ producer = (jobs: Queue<Job>) =>
 worker = (jobs: Queue<Job>, id: Number) =>
   effect {
     job <- Queue.take(jobs)
-    _ <- process(job) |> Effect.withSpan("worker.process", { attributes: { id } })
+    result <- process(job) |> Effect.withSpan("worker.process", { attributes: { id } })
+    => result
   }
   |> Effect.forever
 
@@ -1770,7 +1771,7 @@ export pipeline =
     jobs <- Queue.bounded<Job>(100)               # back-pressure: offer waits when full
     _ <- Effect.forkScoped(producer(jobs))        # "go producer(jobs)"
     _ <- Array.range(1, 4) |> Effect.forEach((i) => Effect.forkScoped(worker(jobs, i)))
-    Effect.Never
+    => Effect.Never
   }
   |> Effect.scoped                                 # closing the scope interrupts every fiber
 ```
@@ -1813,7 +1814,7 @@ export GreeterLive =
 export ConfigurableGreeterLive =
   Layer.effect(Greeter, effect {
     prefix <- PrefixConfig
-    {
+    => {
       greet: (name) => Effect.succeed("{prefix}, {name}!")
     }
   })
@@ -1822,7 +1823,7 @@ export main =
   effect {
     message <- Greeter.greet("Ada")
     _ <- Console.log(message)
-    message
+    => message
   }
   |> Effect.provide(GreeterLive)
 ```
@@ -1993,7 +1994,7 @@ greet = (user: User) => "Hello, {user.name}!"
 loadGreeting = (raw: Unknown) =>
   effect {
     user <- raw |> Schema.decodeUnknown(User)
-    greet(user)
+    => greet(user)
   }
 ```
 
@@ -2015,7 +2016,7 @@ type; provide a boundary schema and decode those values explicitly.
 ```funscript
 export js greet = (name: String) =>
   effect {
-    "Hello, {name}!"
+    => "Hello, {name}!"
   }
 ```
 
@@ -2034,7 +2035,7 @@ development placeholder that can appear in any expression position:
 export checkout = (user: User, cart: Cart) =>
   effect {
     total = calculateTotal(cart)
-    ??? "charge payment provider"
+    => ??? "charge payment provider"
   }
 ```
 
@@ -2130,7 +2131,7 @@ export main =
     })
     user = recordLogin(rawUser)
     _ <- Console.log("{user.name} ({user.logins}): {label(Admin)}")
-    user.name
+    => user.name
   }
 ```
 
