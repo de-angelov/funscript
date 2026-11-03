@@ -212,6 +212,20 @@ export y = 20
     expect(format(formatted)).toBe(formatted);
   });
 
+  it("preserves arithmetic grouping and formats it idempotently", () => {
+    const expressions = [
+      ["(1 + 2) * 3", "(1 + 2) * 3"],
+      ["1 - (2 - 3)", "1 - (2 - 3)"],
+      ["(2 ** 3) ** 2", "(2 ** 3) ** 2"],
+    ] as const;
+
+    for (const [expression, expected] of expressions) {
+      const formatted = format(`export result = ${expression}`);
+      expect(formatted).toBe(`export result = ${expected}\n`);
+      expect(format(formatted)).toBe(formatted);
+    }
+  });
+
   it("formats numeric comparisons below arithmetic precedence", () => {
     const formatted = format(`export valid = (1 + 2) < 4 and 5 >= 3`);
     expect(formatted).toBe(`export valid = 1 + 2 < 4 and 5 >= 3\n`);
