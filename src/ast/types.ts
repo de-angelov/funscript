@@ -78,7 +78,8 @@ export type SchemaBody =
   | TaggedUnionSchema
   | RefinementSchema
   | TypeSignatureSchema
-  | TsDerivedSchema;
+  | TsDerivedSchema
+  | ImportedTsSchema;
 
 export interface TsDerivedSchema extends NodeBase {
   kind: "TsDerivedSchema";
@@ -124,6 +125,15 @@ export interface TypeSignatureSchema extends NodeBase {
   kind: "TypeSignatureSchema";
   signature: FunctionTypeNode | EffectTypeNode;
 }
+
+export interface ImportedTsSchema extends NodeBase {
+  kind: "ImportedTsSchema";
+  typeNode: TypeNode;
+  typeArgs: TypeNode[];
+  typeArguments: TypeNode[];
+}
+
+export type FromTsSchema = ImportedTsSchema;
 
 export interface ErrorDeclaration extends NodeBase {
   kind: "ErrorDeclaration";

@@ -10,6 +10,7 @@ import {
   RecordSchema,
   RecordFieldSchema,
   TaggedUnionSchema,
+  ImportedTsSchema,
   VariantDeclaration,
   VariantField,
   TsDerivedSchema,
@@ -330,6 +331,11 @@ export class Parser {
   private parseSchemaBody(): SchemaBody {
     this.skipNewlines();
 
+    // 0. Imported TypeScript Schema: from ts<Type>
+    if (this.check(TokenType.FROM)) {
+      return this.parseImportedTsSchema();
+    }
+
     // 1. Tagged Union: | Variant(...)
     if (this.check(TokenType.BAR) || (this.check(TokenType.INDENT) && this.peekAhead(1).type === TokenType.BAR)) {
       return this.parseTaggedUnionSchema();
@@ -356,6 +362,31 @@ export class Parser {
       kind: "TypeSignatureSchema",
       signature: typeNode as any,
       span: typeNode.span,
+    };
+  }
+
+  private parseImportedTsSchema(): ImportedTsSchema {
+    const fromToken = this.consume(TokenType.FROM, "Expected 'from'");
+    const tsToken = this.consume(TokenType.TS, "Expected 'ts' after 'from'");
+    const ltToken = this.consume(TokenType.LT, "Expected '<' after 'ts'");
+
+    if (this.check(TokenType.GT)) {
+      throw new ParseError("Expected type argument inside 'ts<...>'", this.peek().span);
+    }
+
+    const typeArgs: TypeNode[] = [];
+    do {
+      typeArgs.push(this.parseTypeNode());
+    } while (this.match(TokenType.COMMA) && !this.check(TokenType.GT));
+
+    const gtToken = this.consume(TokenType.GT, "Expected '>' after type argument");
+
+    return {
+      kind: "ImportedTsSchema",
+      typeNode: typeArgs[0],
+      typeArgs,
+      typeArguments: typeArgs,
+      span: { start: fromToken.span.start, end: gtToken.span.end },
     };
   }
 

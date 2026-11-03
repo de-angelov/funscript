@@ -352,6 +352,10 @@ export class DefinitionFinder {
           this.visitTypeNode(decl.body.signature, schemaScope);
         } else if (decl.body.kind === "TsDerivedSchema") {
           this.visitTypeNode(decl.body.targetType, schemaScope);
+        } else if (decl.body.kind === "ImportedTsSchema") {
+          for (const arg of decl.body.typeArguments) {
+            this.visitTypeNode(arg, schemaScope);
+          }
         }
         break;
       }

@@ -589,6 +589,15 @@ export class Lexer {
         span,
       });
       if (raw === "ts") {
+        let prevIdx = this.tokens.length - 2;
+        while (prevIdx >= 0 && (this.tokens[prevIdx].type === TokenType.NEWLINE || this.tokens[prevIdx].type === TokenType.INDENT)) {
+          prevIdx--;
+        }
+        const prev = prevIdx >= 0 ? this.tokens[prevIdx] : undefined;
+        if (prev?.type === TokenType.FROM) {
+          return;
+        }
+
         let p = this.offset;
         while (p < this.source.length && (this.source[p] === " " || this.source[p] === "\t")) {
           p++;
