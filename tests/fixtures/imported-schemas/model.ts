@@ -63,3 +63,15 @@ export interface RecursiveTree {
   id: string;
   children: RecursiveTree[];
 }
+
+export type StringTagged =
+  | { kind: "text"; value: string }
+  | { kind: "count"; value: number };
+
+export type BooleanTagged =
+  | { enabled: true; label: string }
+  | { enabled: false; reason: string };
+
+export type NumericTagged =
+  | { code: 1; message: string }
+  | { code: 2; retryAfter: number };
