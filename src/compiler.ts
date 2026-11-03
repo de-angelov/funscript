@@ -6,7 +6,7 @@ import { Parser, ParseError } from "./parser/parser.js";
 import { Emitter } from "./emitter/emitter.js";
 import { Program } from "./ast/types.js";
 import { FunScriptError } from "./errors.js";
-import { TypeScriptCompilationContext } from "./compiler/typescript-compilation-context.js";
+import { TypeScriptCompilationContext } from "./compiler/typescript-context.js";
 import { validateNumericComparisons } from "./compiler/numeric-comparisons.js";
 import { inferPipelineCompanions } from "./compiler/pipeline-companions.js";
 

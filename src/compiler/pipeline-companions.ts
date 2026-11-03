@@ -2,7 +2,7 @@ import ts from "typescript";
 import { Emitter } from "../emitter/emitter.js";
 import { type PipelineCompanionModule } from "../emitter/pipeline-catalog.js";
 import { Program } from "../ast/types.js";
-import { TypeScriptCompilationContext } from "./typescript-compilation-context.js";
+import { TypeScriptCompilationContext } from "./typescript-context.js";
 
 /**
  * Finds the source type of every pipeline before final emission. The marker is
