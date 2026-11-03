@@ -14,6 +14,51 @@ import {
 import { getDocItem, getHoverDocumentation } from "./docs.js";
 import { spanToRange } from "./definition.js";
 import { pipelineCompanionCandidates } from "../emitter/pipeline-catalog.js";
+import { Parser } from "../parser/parser.js";
+import { Emitter } from "../emitter/emitter.js";
+import { TypeScriptCompilationContext } from "../compiler/typescript-context.js";
+import { resolveImportedSchemas } from "../compiler/imported-schemas.js";
+import ts from "typescript";
+
+function importedSchemaHover(source: string, uri: string, position: Position): Hover | null {
+  try {
+    const program = new Parser(new Lexer(source, uri).tokenize(), uri, source).parse();
+    const decls = program.body.flatMap((item) => {
+      const decl = item.kind === "ExportDeclaration" ? item.declaration : item;
+      return decl.kind === "SchemaDeclaration" && decl.body.kind === "ImportedTsSchema" ? [decl] : [];
+    });
+    const target = decls.find((decl) => {
+      const p = decl.id.span.start;
+      const e = decl.id.span.end;
+      return position.line === p.line - 1 && position.character >= p.column - 1 && position.character <= e.column - 1;
+    });
+    if (!target) return null;
+
+    const context = new TypeScriptCompilationContext(uri);
+    const schemas = resolveImportedSchemas(program, source, context);
+    const checked = context.check(new Emitter(program, undefined, { importedSchemas: schemas }).emit());
+    if (!checked) return null;
+    const typeName = target.body.kind === "ImportedTsSchema" && target.body.typeNode.kind === "TypeReferenceNode"
+      ? target.body.typeNode.name.name
+      : target.id.name;
+    const alias = checked.sourceFile.statements.find((node): node is ts.TypeAliasDeclaration =>
+      ts.isTypeAliasDeclaration(node) && node.name.text === typeName,
+    );
+    const importedType = alias ? checked.checker.getTypeFromTypeNode(alias.type) : undefined;
+    const structure = importedType && importedType.getProperties().length > 0
+      ? `{ ${importedType.getProperties().map((property) => `${property.name}: ${checked.checker.typeToString(checked.checker.getTypeOfSymbolAtLocation(property, alias!), alias!, ts.TypeFormatFlags.NoTruncation)}`).join("; ")} }`
+      : importedType
+        ? checked.checker.typeToString(importedType, alias, ts.TypeFormatFlags.NoTruncation)
+        : "unknown";
+    const schema = schemas.get(target.id.name);
+    return {
+      contents: { kind: MarkupKind.Markdown, value: `**${target.id.name}**\n\nTypeScript type:\n\n\`\`\`ts\n${structure}\n\`\`\`\n\nEffect Schema:\n\n\`\`\`ts\n${schema ?? "Schema.Unknown"}\n\`\`\`` },
+      range: spanToRange(target.id.span),
+    };
+  } catch {
+    return null;
+  }
+}
 
 function isWordChar(ch: string): boolean {
   return /[A-Za-z0-9_]/.test(ch);
@@ -405,6 +450,8 @@ export function findHover(
   }
 
   if (tokens && tokens.length > 0) {
+    const importedHover = importedSchemaHover(source, uri, position);
+    if (importedHover) return importedHover;
     const hoverFromTokens = findHoverInTokens(
       tokens,
       posLine,
