@@ -1,0 +1,1 @@
+< is only available for numbers; this operand has type "apple". Use Order.isLessThan(String.Order)(...) or an explicit domain Order. See docs/syntax.md#42-equality-and-comparisons.

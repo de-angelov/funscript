@@ -1,0 +1,1 @@
+export invalid = "apple" < "banana"
