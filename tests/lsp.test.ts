@@ -1967,6 +1967,29 @@ export schema Config = {
   });
 
   describe("Hover Provider (textDocument/hover)", () => {
+    it("shows imported TypeScript schema structure and Effect representation", async () => {
+      const server = new FunScriptLspServer();
+      await server.handleMessage({ jsonrpc: "2.0", id: 1, method: "initialize", params: {} });
+      const uri = "file:///workspace/imported-hover.fun";
+      const text = [
+        "ts { type Imported = { name: string; active: boolean } }",
+        "schema User = from ts<Imported>",
+      ].join("\n");
+      await server.handleMessage({
+        jsonrpc: "2.0",
+        method: "textDocument/didOpen",
+        params: { textDocument: { uri, languageId: "funscript", version: 1, text } },
+      });
+      const response = (await server.handleMessage({
+        jsonrpc: "2.0", id: 99, method: "textDocument/hover",
+        params: { textDocument: { uri }, position: { line: 1, character: 8 } },
+      })) as ResponseMessage;
+      const value = (response.result as Hover).contents as { value: string };
+      expect(value.value).toContain("name: string");
+      expect(value.value).toContain("active: boolean");
+      expect(value.value).toContain("Schema.Struct");
+    });
+
     it("returns null when document is not open", async () => {
       const server = new FunScriptLspServer();
       await server.handleMessage({
