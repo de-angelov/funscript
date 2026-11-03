@@ -57,6 +57,17 @@ describe("FunScript Code Formatter", () => {
     }
   });
 
+  it("preserves parser grouping across every ordered value-operator pair", () => {
+    const operators = ["or", "and", "#=", "#!", "<", "<=", ">", ">=", "+", "-", "*", "/", "%", "**"];
+
+    for (const first of operators) {
+      for (const second of operators) {
+        const source = `export result = left ${first} middle ${second} right`;
+        expect(operatorTree(format(source))).toEqual(operatorTree(source));
+      }
+    }
+  });
+
   it("preserves left and right associativity for equality and numeric comparison", () => {
     const expressions = [
       "a #= b #! c", "a #= (b #! c)",
