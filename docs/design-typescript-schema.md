@@ -140,17 +140,53 @@ defined.
 
 **Adopted: Option A with `ts` keyword reuse (`schema User = from ts<UserType>`).**
 
-- **Declaration Syntax:** Reuses the existing `ts` escape-hatch keyword in schema declarations:
+### 1. Approved and Rejected Syntax
+
+- **Approved Syntax (Option A with `ts` keyword):**
+  Reuses the existing `ts` escape-hatch keyword in a top-level schema declaration:
   ```funscript
   import type { User as UserType } from "./model"
   schema User = from ts<UserType>
   ```
-- **Supported Initial Subset:**
-  - Primitives: `string` -> `Schema.String`, `number` -> `Schema.Number`, `boolean` -> `Schema.Boolean`.
-  - Arrays: `T[]` / `Array<T>` -> `Schema.Array(convert(T))`.
-  - Structs: `{ a: string; b: number }` -> `Schema.Struct({ a: ..., b: ... })`.
-  - Optionals / Nullables: `{ a?: string }` uses `Schema.optional`; `T | null` uses `Schema.NullOr`.
-- **Unsupported Types:**
-  - Functions, classes, `any`, and complex conditional/mapped types are rejected at compile time with actionable source diagnostics.
-  - No silent widening to `Schema.Unknown`.
+- **Rejected Syntax:**
+  - **Option B (Import-site derivation `schemaOf<T>()`):** Rejected. Type-only imports have no runtime presence in TypeScript; converting them at call sites requires synthetic compiler reflection and checker-driven expression rewrites rather than declarative schema bindings.
+  - **Illustrative `TypeScript<T>` wrapper:** Rejected in favor of reusing the existing, established `ts` keyword (`ts<T>`).
+  - **Implicit derivation:** Rejected. Conversion must be opt-in and explicitly stated via `schema Name = from ts<Type>`.
+
+### 2. Supported and Rejected Examples
+
+- **Supported Types (Initial Subset):**
+  - **Primitives:**
+    - `string` -> `Schema.String`
+    - `number` -> `Schema.Number`
+    - `boolean` -> `Schema.Boolean`
+  - **Arrays:**
+    - `T[]` or `Array<T>` -> `Schema.Array(convert(T))`
+  - **Structs:**
+    - `{ a: string; b: number }` -> `Schema.Struct({ a: Schema.String, b: Schema.Number })`
+  - **Optionals and Nullables:**
+    - Optional struct fields: `{ a?: string }` -> field combinator `Schema.optional(Schema.String)`
+    - Nullable values: `T | null` -> `Schema.NullOr(convert(T))`
+- **Rejected Types (Compile Errors):**
+  - **Functions:** `() => void`, `(x: string) => number` are rejected with compile-time diagnostics.
+  - **Classes / Instances:** `class User { ... }`, `Date`, and prototype instances are rejected.
+  - **`any`:** Statically rejected with an actionable diagnostic. No silent widening to `Schema.Unknown` or permissive passthrough.
+  - **Complex and Advanced Types:** Conditional types (`T extends U ? X : Y`), mapped types with dynamic keys, and template literal types are rejected at compile time.
+
+### 3. Runtime and Encoded Semantics
+
+- **Dual-Type Mapping:** The derived schema produces an Effect `Schema.Schema<A, I>` where:
+  - Runtime type (`A` / `Schema.Schema.Type`): Matches the imported TypeScript static type `T`.
+  - Encoded type (`I` / `Schema.Schema.Encoded`): Matches the runtime structural representation for plain data (primitives, arrays, structs, and nullable values).
+- **Decoder Behavior:** Serves strictly as a structural validation boundary for untrusted inputs. It verifies primitive shapes, array element shapes, and struct field shapes.
+- **No Inferred Domain Refinements:** Static TypeScript types cannot communicate semantic domain constraints (such as integer ranges, non-empty strings, or branded invariants); no such validations are inferred.
+
+### 4. Remaining Limitations and Unresolved Points
+
+- **Unknown Keys Policy:** Whether unexpected keys in decoded structs are preserved, stripped, or rejected remains an unresolved configuration decision to be aligned with Effect 4.x defaults.
+- **Recursive Types:** Support for recursive types via `Schema.suspend` is deferred and unresolved for the initial subset.
+- **General Unions:** General unions (`A | B`) beyond simple `T | null` require discriminator disambiguation and remain unresolved.
+- **Symbol Resolution Across Packages:** Type resolution relies strictly on the TypeScript compiler `TypeChecker` on source files; ambient untyped modules or missing `.d.ts` declarations cannot be synthesized.
+- **Upstream Schema Preference:** Upstream runtime Effect schemas remain preferred whenever available from library authors; type derivation is only intended for un-schematized third-party TypeScript interfaces.
+- **Implementation Status:** TASK-095 records the human architectural decision only; parser grammar (`from ts<...>`) and compiler code generation will be implemented in subsequent tasks.
 
