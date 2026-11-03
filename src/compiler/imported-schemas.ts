@@ -5,6 +5,13 @@ import { FunScriptError } from "../errors.js";
 
 export class ImportedSchemaError extends FunScriptError {
   readonly _tag = "ImportedSchemaError";
+
+  constructor(message: string, span: Span) {
+    super(
+      `${message} Use a FunScript schema declaration such as 'schema Name = { field: String }' and replace unsupported fields with supported primitives, arrays, unions, or records. See docs/syntax.md#1207-unified-schema-schema-structs-tagged-unions-and-aliases.`,
+      span,
+    );
+  }
 }
 
 const UNSUPPORTED_BUILTINS = new Set([

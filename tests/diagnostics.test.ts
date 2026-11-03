@@ -332,6 +332,31 @@ compute = effect {
       });
     });
 
+    it("surfaces actionable schema conversion diagnostics in compiler and LSP", async () => {
+      const code = `
+ts { type User = { created: Date } }
+export ts schema UserSchema = User
+`.trim();
+
+      let error: any;
+      try {
+        await Effect.runPromise(compileString(code, "schema.fun"));
+      } catch (caught) {
+        error = caught;
+      }
+      expect(error).toBeDefined();
+      expect(error.message).toContain("Type 'Date' in 'User.created' is not supported for schema derivation.");
+      expect(error.message).toContain("Use a FunScript schema declaration such as 'schema Name = { field: String }'");
+      expect(error.message).toContain("docs/syntax.md#1207-unified-schema-schema-structs-tagged-unions-and-aliases");
+      expect(error.span.start.line).toBe(2);
+
+      const diagnostics = validateFunScript(code, "file:///schema.fun");
+      expect(diagnostics).toHaveLength(1);
+      expect(diagnostics[0].message).toContain("Type 'Date' in 'User.created' is not supported for schema derivation.");
+      expect(diagnostics[0].message).toContain("supported primitives, arrays, unions, or records");
+      expect(diagnostics[0].range.start.line).toBe(1);
+    });
+
     it("publishes enhanced diagnostics over LSP server textDocument/didOpen and clears them on didChange", async () => {
       const server = new FunScriptLspServer();
       await server.handleMessage({
