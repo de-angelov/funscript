@@ -602,8 +602,8 @@ From lowest to highest:
 | 1     | `\|>`                    | pipeline, left-associative                                                          |
 | 2     | `or`                     | logical or                                                                          |
 | 3     | `and`                    | logical and                                                                         |
-| 4     | `<`, `<=`, `>`, `>=`     | relational comparison; valid only when both operands are proven numbers             |
-| 5     | `#=`, `#!`, `@=`, `@!` | value equality and reference identity                                               |
+| 4     | `#=`, `#!`, `@=`, `@!` | value equality and reference identity                                               |
+| 5     | `<`, `<=`, `>`, `>=`     | relational comparison; valid only when both operands are proven numbers             |
 | 6     | `+`, `-`                 | additive                                                                            |
 | 7     | `*`, `/`, `%`            | multiplicative                                                                      |
 | 8     | `**`                     | exponent, right-associative                                                         |
