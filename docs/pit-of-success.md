@@ -1,9 +1,8 @@
 # The pit of success
 
-**Status:** Design rationale and implementation guarantees for the current language.
-The implemented syntax is cataloged in [syntax.md](syntax.md); proposed future tooling
-is labeled **Planned** in [proposal.md](proposal.md). Compatibility syntax is called out
-in the syntax reference and should not be mistaken for a preferred spelling.
+**Status:** Historical design rationale. This document is not the current implementation
+contract. For current language guidance, see the [syntax guide](syntax.md) and the
+[documentation map](README.md).
 
 > A good language does not merely allow correct programs. It makes the correct program
 > the path of least resistance.
