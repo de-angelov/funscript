@@ -308,18 +308,12 @@ The following assumptions are unsupported by the codebase and must not guide mig
 
 ---
 
-## Decisions Requested (Options for User / Architecture Alignment)
+---
 
-The following open decisions are submitted for human / team lead guidance without choosing prematurely:
+## Human Decision (TASK-104)
 
-### Decision 1: Policy on Trailing `match` and `effect` in Function Blocks
-- **Option A (Strict Unification):** Remove the exemption in `src/parser/parser.ts#L1735, L1855`. Require all function blocks to end with explicit `=> match ...` or `=> effect { ... }`, or be written as expression-bodied functions (`f = () => match ...`).
-- **Option B (Preserve Current Exemption):** Retain the parser rule that permits bare trailing `match` and `effect` without `=>`, documenting it as a language convenience for block-level control-flow terminators.
+**Adopted: No Dedicated Codemod Tooling.**
 
-### Decision 2: Handling Ambiguous Trailing Expressions in `effect` Blocks
-- **Option A (Interactive / Manual Only):** Never automatically migrate trailing expressions in `effect` blocks. Flag them as compile errors and require the author to choose between `_ <- expr` (execution) and `=> expr` (return).
-- **Option B (Type-Informed Migration):** If a migration tool is built, require integration with the TypeScript type checker: if the trailing expression has type `Effect<A, E, R>`, report an error or suggest `_ <-`; if it has a non-Effect value type, suggest `=>`.
+- **Rationale:** FunScript is in early development without external users. No automated codemod tooling will be built or maintained.
+- **Enforcement:** Rely strictly on existing compiler diagnostics (`ParseError: Function block must end with an explicit '=> returnValue'`) to guide developers during editing.
 
-### Decision 3: Scope of Migration Tooling
-- **Option A (No Dedicated Codemod):** Rely entirely on clear compiler diagnostics (`ParseError: Function block must end with an explicit '=> returnValue'`) to guide manual developer updates during file edits.
-- **Option B (Assisted CLI Tool):** Implement a conservative CLI command (`funscript migrate --explicit-returns`) that transforms unambiguous function block expressions, leaving ambiguous or effect-block cases untouched with warning markers.

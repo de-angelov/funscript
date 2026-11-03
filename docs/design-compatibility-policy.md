@@ -345,10 +345,14 @@ A comprehensive compatibility policy coordinates versioning cadence, notice dura
 
 ---
 
-## Key Decision Criteria for Project Leadership
+---
 
-When adopting a binding compatibility policy, leadership should resolve three primary decisions:
+## Human Decision (TASK-102)
 
-1. **Warning Channel Capability:** Does FunScript introduce non-fatal warning diagnostics to `funscript check` and the LSP, enabling staged deprecation windows (Option 1B / 2B), or maintain a binary error/success model (Option 1A / 2A)?
-2. **Tooling Investment Scope:** Should the CLI roadmap prioritize an automated AST refactoring command (`funscript fmt --migrate` or `funscript migrate`), or should migration guidance remain documentation- and diagnostic-driven?
-3. **Catalog Expansion Cadence:** When adding candidate companion modules (such as `Stream` or `Layer`), should additions that introduce newly ambiguous names be held for major/minor version boundaries, ensuring existing bare pipelines do not experience unexpected compile breaks?
+**Adopted: Strict Zero-Alias Policy.**
+
+- **Rationale:** FunScript is in early active development with zero external production consumers. Obsolete constructs should be cleanly removed immediately rather than accumulating technical debt and deprecation warnings.
+- **Effect Aliases:** Remove historical Effect compatibility aliases (such as `catchAll` in favor of `catch`, `fork` in favor of `forkChild`) to remain 100% synchronized with upstream Effect v4 public exports.
+- **Breaking Syntax:** Statically reject outdated syntax with actionable error diagnostics that cite the canonical form.
+- **Pipeline Ambiguity:** Disallow heuristic guessing or module precedence; require explicit qualification (e.g. `Array.map`, `Effect.map`) when a bare stage is ambiguous across companion modules.
+

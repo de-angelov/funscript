@@ -136,11 +136,21 @@ defined.
    semantics that cannot be reconstructed from a TypeScript type. Derivation is
    most useful for plain structural declarations without such runtime metadata.
 
-## Decision requested
+## Human decision (TASK-095)
 
-Choose whether derivation belongs in the language at all, and if so, whether the
-surface is a declaration (`schema X = from ...`) or a checker-aware import API.
-Then define a deliberately narrow first supported subset and its policies for
-optional/undefined fields, extra keys, unions, readonly, and recursion. Keep
-explicit native schemas and upstream runtime schemas as the predictable
-fallbacks. No choice is made by this survey.
+**Adopted: Option A with `ts` keyword reuse (`schema User = from ts<UserType>`).**
+
+- **Declaration Syntax:** Reuses the existing `ts` escape-hatch keyword in schema declarations:
+  ```funscript
+  import type { User as UserType } from "./model"
+  schema User = from ts<UserType>
+  ```
+- **Supported Initial Subset:**
+  - Primitives: `string` -> `Schema.String`, `number` -> `Schema.Number`, `boolean` -> `Schema.Boolean`.
+  - Arrays: `T[]` / `Array<T>` -> `Schema.Array(convert(T))`.
+  - Structs: `{ a: string; b: number }` -> `Schema.Struct({ a: ..., b: ... })`.
+  - Optionals / Nullables: `{ a?: string }` uses `Schema.optional`; `T | null` uses `Schema.NullOr`.
+- **Unsupported Types:**
+  - Functions, classes, `any`, and complex conditional/mapped types are rejected at compile time with actionable source diagnostics.
+  - No silent widening to `Schema.Unknown`.
+
