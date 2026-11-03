@@ -314,6 +314,7 @@ export y = 20
       const formatted = format(source);
       expect(formatted).toBe(`export result = ${expected}\n`);
       expect(operatorTree(formatted)).toEqual(operatorTree(source));
+      expect(format(formatted)).toBe(formatted);
       expect(operatorTree(format(formatted))).toEqual(operatorTree(source));
     }
   });
@@ -331,6 +332,7 @@ export y = 20
       const formatted = format(source);
       expect(formatted).toBe(`export result = ${expected}\n`);
       expect(operatorTree(formatted)).toEqual(operatorTree(source));
+      expect(format(formatted)).toBe(formatted);
       expect(operatorTree(format(formatted))).toEqual(operatorTree(source));
     }
   });
@@ -353,6 +355,7 @@ export y = 20
       const source = `export result = ${expression}`;
       const formatted = format(source);
       expect(operatorTree(formatted)).toEqual(operatorTree(source));
+      expect(format(formatted)).toBe(formatted);
       expect(operatorTree(format(formatted))).toEqual(operatorTree(source));
     }
   });
