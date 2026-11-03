@@ -45,6 +45,7 @@ import { Lexer } from "../lexer/lexer.js";
 import { Parser } from "../parser/parser.js";
 import { TypeScriptCompilationContext } from "../compiler/typescript-context.js";
 import { validateNumericComparisons } from "../compiler/numeric-comparisons.js";
+import { resolveImportedSchemas } from "../compiler/imported-schemas.js";
 import { format } from "../formatter/index.js";
 import type { Span } from "../ast/types.js";
 import { findHover } from "./hover.js";
@@ -121,6 +122,7 @@ export function validateFunScript(
       try {
         const context = new TypeScriptCompilationContext(uri);
         validateNumericComparisons(ast, source, context);
+        resolveImportedSchemas(ast, source, context);
       } catch (error: any) {
         diagnostics.push(toDiagnostic(error));
       }
