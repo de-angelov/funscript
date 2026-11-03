@@ -1520,7 +1520,7 @@ The compiler introspects the imported type using the TypeScript compiler API and
 | Arrays (`T[]`, `Array<T>`, `ReadonlyArray<T>`) | `Schema.Array(ElemSchema)` | Supports nested arrays (`T[][]`) |
 | Record index signatures (`Record<string, V>`) | `Schema.Record(Schema.String, ValSchema)` | Key must be string |
 | Object interfaces and type literals (`{ ... }`) | `Schema.Struct({ ... })` | Field names preserved; nested structs supported |
-| Optional properties (`field?: T`) | `field: Schema.optional(FieldSchema)` | Decodes omitted or `undefined` properties |
+| Optional properties (`field?: T`) | `field: Schema.optional(FieldSchema)` | Accepts omitted properties and present `undefined` values. `Schema.Struct` decoding strips undeclared extra keys from decoded output. |
 | Nullable unions (`T \| null`) | `Schema.NullOr(InnerSchema)` | Explicit nullable wrapper |
 | Optional unions (`T \| undefined`) | `Schema.UndefinedOr(InnerSchema)` | Explicit undefined wrapper |
 | Nullish unions (`T \| null \| undefined`) | `Schema.NullishOr(InnerSchema)` | Null or undefined |

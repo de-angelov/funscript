@@ -176,6 +176,37 @@ export ts schema Bool = BooleanAlias
       expect(() => mod.BoolFromUnknown("true")).toThrow();
     });
 
+    it("keeps boolean literal schemas exact", async () => {
+      const source = `
+import type { TrueLiteral, FalseLiteral } from "${fixturePath}"
+
+export ts schema AlwaysTrue = TrueLiteral
+export ts schema AlwaysFalse = FalseLiteral
+`.trim();
+      const result = await Effect.runPromise(compileString(source, dummyFile));
+      expect(result.typescript).toContain("AlwaysTrue = Schema.Literal(true)");
+      expect(result.typescript).toContain("AlwaysFalse = Schema.Literal(false)");
+      const mod = evaluateSchemaModule(result.typescript);
+      expect(mod.AlwaysTrueFromUnknown(true)).toBe(true);
+      expect(() => mod.AlwaysTrueFromUnknown(false)).toThrow();
+      expect(mod.AlwaysFalseFromUnknown(false)).toBe(false);
+      expect(() => mod.AlwaysFalseFromUnknown(true)).toThrow();
+    });
+
+    it("documents optional undefined and extra-key decode behavior", async () => {
+      const source = `
+import type { OptionalUndefined } from "${fixturePath}"
+
+export ts schema OptionalValue = OptionalUndefined
+`.trim();
+      const result = await Effect.runPromise(compileString(source, dummyFile));
+      const mod = evaluateSchemaModule(result.typescript);
+      expect(mod.OptionalValueFromUnknown({})).toEqual({});
+      expect(mod.OptionalValueFromUnknown({ value: undefined })).toEqual({ value: undefined });
+      expect(mod.OptionalValueFromUnknown({ value: "ok", extra: 1 })).toEqual({ value: "ok" });
+      expect(() => mod.OptionalValueFromUnknown({ value: 1 })).toThrow();
+    });
+
     it("generates and decodes array schemas", async () => {
       const source = `
 import type { StringArray, ReadonlyNumberArray } from "${fixturePath}"
