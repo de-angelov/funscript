@@ -6,7 +6,7 @@
 // 4. Error handling with Effect TaggedError
 // 5. Pattern matching on response states (Success, RateLimited, NotFound, ServerError)
 
-import { Console } from "effect"
+import { Console, Effect, Schema } from "effect"
 
 // --- Domain Data Model & Schemas ---
 
@@ -29,76 +29,75 @@ export schema ApiResponse =
 // Effect TaggedError representation
 export error GithubApiError(statusCode: Number, message: String)
 
-// TypeScript escape hatch for foreign fetch execution & error instantiation
-ts {
-export const makeGithubApiError = (statusCode: number, message: string) =>
-    new GithubApiError({ statusCode, message });
-
-  export interface RawApiResponse {
-    status: number;
-    headers?: Record<string, string>;
-    json?: any;
-    message: string;
-  }
-
-  // Simulated REST API fetch client with deterministic test fixtures
-  export async function executeFetch(repoPath: string): Promise<RawApiResponse> {
-    if (repoPath === "effect-ts/effect") {
-      return {
-        status: 200,
-        message: "",
-        json: {
-          id: 101,
-          name: "effect",
-          fullName: "Effect-TS/effect",
-          description: "A fully-fledged functional effect system for TypeScript",
-          stargazersCount: 9500,
-          forksCount: 680,
-          openIssuesCount: 42
-        }
-      };
-    }
-    if (repoPath === "funscript/funscript") {
-      return {
-        status: 200,
-        message: "",
-        json: {
-          id: 202,
-          name: "funscript",
-          fullName: "funscript/funscript",
-          description: "Lightweight functional notation compiling directly to TypeScript",
-          stargazersCount: 1337,
-          forksCount: 88,
-          openIssuesCount: 3
-        }
-      };
-    }
-    if (repoPath === "rate/limit") {
-      return {
-        status: 403,
-        message: "Rate limit exceeded",
-        json: { resetTime: 1730000000, remaining: 0 }
-      };
-    }
-    if (repoPath === "ghost/nonexistent") {
-      return {
-        status: 404,
-        message: "Repository not found"
-      };
-    }
-    return {
-      status: 500,
-      message: "Internal GitHub API server error"
-    };
-  }
+export schema RateLimitInfo = {
+  resetTime: Number
+  remaining: Number
 }
+
+export schema RawApiResponse = {
+  status: Number
+  message: String
+  json: Unknown
+}
+
+// Simulated REST API fetch client with deterministic test fixtures
+export executeFetch = (repoPath: String) =>
+  match repoPath
+    | "effect-ts/effect" =>
+        Promise.resolve({
+          status: 200
+          message: ""
+          json: {
+            id: 101
+            name: "effect"
+            fullName: "Effect-TS/effect"
+            description: "A fully-fledged functional effect system for TypeScript"
+            stargazersCount: 9500
+            forksCount: 680
+            openIssuesCount: 42
+          }
+        })
+    | "funscript/funscript" =>
+        Promise.resolve({
+          status: 200
+          message: ""
+          json: {
+            id: 202
+            name: "funscript"
+            fullName: "funscript/funscript"
+            description: "Lightweight functional notation compiling directly to TypeScript"
+            stargazersCount: 1337
+            forksCount: 88
+            openIssuesCount: 3
+          }
+        })
+    | "rate/limit" =>
+        Promise.resolve({
+          status: 403
+          message: "Rate limit exceeded"
+          json: { resetTime: 1730000000, remaining: 0 }
+        })
+    | "ghost/nonexistent" =>
+        Promise.resolve({
+          status: 404
+          message: "Repository not found"
+          json: {}
+        })
+    | _ =>
+        Promise.resolve({
+          status: 500
+          message: "Internal GitHub API server error"
+          json: {}
+        })
 
 // --- Response Parsing & Pipelines ---
 
-export parseResponse = (repoPath: String, raw: ts { RawApiResponse }): ApiResponse =>
+export parseResponse = (repoPath: String, raw: RawApiResponse): ApiResponse =>
   match raw.status
     | 200 => Success(raw.json |> Schema.decodeUnknownSync(Repository))
-    | 403 => RateLimited(raw.json.resetTime, raw.json.remaining)
+    | 403 =>
+        info = raw.json |> Schema.decodeUnknownSync(RateLimitInfo)
+        RateLimited(info.resetTime, info.remaining)
     | 404 => NotFound(repoPath)
     | _ => ServerError(raw.status, raw.message)
 

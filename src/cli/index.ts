@@ -12,6 +12,7 @@ import { startLspServer } from "../lsp/index.js";
 import { format } from "../formatter/index.js";
 import { startRepl } from "./repl.js";
 import { renderCliHelp } from "./commands.js";
+import { auditIdiomaticFunScript } from "../tooling/idiomatic.js";
 
 const readFile = (filePath: string) =>
   Effect.tryPromise({
@@ -176,6 +177,7 @@ const emitCommand = (args: string[]) =>
 
 const checkCommand = (args: string[]) =>
   Effect.gen(function* () {
+    const isIdiomatic = args.includes("--idiomatic");
     const rawFileArgs = args.filter((a) => !a.startsWith("--"));
 
     let filesToCheck: string[] = [];
@@ -193,7 +195,7 @@ const checkCommand = (args: string[]) =>
         catch: (error: any) => new Error(`Failed to scan files in '${searchDir}': ${error.message}`),
       });
       if (filesToCheck.length === 0) {
-        return yield* Console.error("Usage: funscript check [file.fun|file.funx...]");
+        return yield* Console.error("Usage: funscript check [file.fun|file.funx...] [--idiomatic]");
       }
     } else {
       for (const target of rawFileArgs) {
@@ -213,10 +215,29 @@ const checkCommand = (args: string[]) =>
       }
     }
 
+    let idiomaticPassed = true;
+    if (isIdiomatic) {
+      for (const target of filesToCheck) {
+        const source = yield* Effect.tryPromise({
+          try: () => fs.readFile(target, "utf-8"),
+          catch: () => "",
+        });
+        const audit = auditIdiomaticFunScript(source, target);
+        if (!audit.success) {
+          idiomaticPassed = false;
+          for (const d of audit.diagnostics) {
+            yield* Console.error(`${d.file}:${d.line}:${d.column} - error: ${d.message}`);
+          }
+        }
+      }
+    }
+
     const result = yield* typeCheckFiles(filesToCheck);
-    if (!result.success) {
+    if (!result.success || !idiomaticPassed) {
       process.exitCode = 1;
-      yield* Console.error(result.formattedOutput);
+      if (!result.success) {
+        yield* Console.error(result.formattedOutput);
+      }
     } else {
       if (filesToCheck.length === 1) {
         yield* Console.log(`✓ ${filesToCheck[0]} checked successfully (0 errors)`);

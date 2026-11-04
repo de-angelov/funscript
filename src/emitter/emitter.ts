@@ -1234,6 +1234,12 @@ export class Emitter {
         if (s.kind === "BindingDeclaration") {
           return `    ${this.emitBindingDeclaration(s)}`;
         }
+        if (s.kind === "AssignmentStatement") {
+          const target = s.target.kind === "Identifier" || s.target.kind === "IndexExpression"
+            ? this.emitExpression(s.target)
+            : s.target.path.map((p) => p.name).join(".");
+          return `    ${target} = ${this.emitExpression(s.value)};`;
+        }
         if (s.kind === "WhenStatement") {
           return `    ${this.emitWhenStatement(s, true)}`;
         }

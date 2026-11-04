@@ -79,7 +79,7 @@ export applyDiscount = (order: Order, discount: Number) =>
   }
 
 // Mutative array draft recipe
-export appendAuditEntry = (logs: ts { string[] }, entry: String) =>
+export appendAuditEntry = (logs: Array<String>, entry: String) =>
   => logs
   |> mut (draft) =>
     draft.push(entry)
@@ -99,7 +99,7 @@ export service NotificationService
 
 // --- Live Layer Implementations ---
 
-mut paymentCallCount: ts { number[] } = []
+mut paymentCallCount: Number = 0
 
 export InventoryServiceLive =
   Layer.succeed(InventoryService, {
@@ -122,8 +122,8 @@ export PaymentGatewayLive =
       effect {
         methodDesc = formatPaymentMethod(method)
         _ <- Console.log("  [PaymentGateway] Attempting to charge ${amount} via {methodDesc}")
-        _ = paymentCallCount.push(1)
-        calls = paymentCallCount.length
+        paymentCallCount = paymentCallCount + 1
+        calls = paymentCallCount
         res <- match
           | amount |> isGreaterThan(50000) =>
               effect {
@@ -219,7 +219,7 @@ export processOrderWorkflow = (order: Order, method: PaymentMethod, tier: Delive
     _ <- Fiber.join(notifyFiber)
 
     // 7. Immutably append audit records
-    log0: ts { string[] } = []
+    log0: Array<String> = []
     log1 = appendAuditEntry(log0, "Order initialized")
     log2 = appendAuditEntry(log1, "Inventory reserved")
     log3 = appendAuditEntry(log2, "Payment processed: {txId}")
