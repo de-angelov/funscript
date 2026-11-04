@@ -15,7 +15,7 @@ matching, and immutable updates less ceremonial.
 - Package: `funscript` `0.1.0`
 - Runtime: Effect `^4.1.1`
 - Source extensions: `.fun`, `.funx`
-- Runnable checked examples: 21
+- Runnable checked examples: 16
 
 The exact command surface is generated from the implementation in the [CLI reference](docs/reference/cli.md). The language catalogue used by editor hover help is generated in the [language reference](docs/reference/language.md).
 <!-- /GENERATED: project-facts -=>
@@ -87,27 +87,22 @@ For the current, verified contract and runnable source examples, read the
 ## Examples
 
 <!-- GENERATED: example-inventory -=>
-| [`examples/08-todo-dashboard.funx`](examples/08-todo-dashboard.funx) | `FunScript JSX` |
+| [`examples/bank-account.fun`](examples/bank-account.fun) | `FunScript` |
+| [`examples/fibonacci.fun`](examples/fibonacci.fun) | `FunScript` |
 | [`examples/github-api-client.fun`](examples/github-api-client.fun) | `FunScript` |
 | [`examples/greeter-service.fun`](examples/greeter-service.fun) | `FunScript` |
 | [`examples/hello.fun`](examples/hello.fun) | `FunScript` |
+| [`examples/js-ts-interop.fun`](examples/js-ts-interop.fun) | `FunScript` |
 | [`examples/markdown-task-manager.fun`](examples/markdown-task-manager.fun) | `FunScript` |
 | [`examples/order-fulfillment.fun`](examples/order-fulfillment.fun) | `FunScript` |
 | [`examples/reactive-widget.funx`](examples/reactive-widget.funx) | `FunScript JSX` |
 | [`examples/shapes.fun`](examples/shapes.fun) | `FunScript` |
 | [`examples/solid-demo/domain.fun`](examples/solid-demo/domain.fun) | `FunScript` |
 | [`examples/solid-demo/solid-in-funscript.fun`](examples/solid-demo/solid-in-funscript.fun) | `FunScript` |
+| [`examples/todo-dashboard.funx`](examples/todo-dashboard.funx) | `FunScript JSX` |
 | [`examples/todo-http.fun`](examples/todo-http.fun) | `FunScript` |
+| [`examples/todo-service.fun`](examples/todo-service.fun) | `FunScript` |
 | [`examples/ts-schema-validation.fun`](examples/ts-schema-validation.fun) | `FunScript` |
-| [`programs/01-fibonacci.fun`](programs/01-fibonacci.fun) | `FunScript` |
-| [`programs/02-bank-account.fun`](programs/02-bank-account.fun) | `FunScript` |
-| [`programs/03-todo-service.fun`](programs/03-todo-service.fun) | `FunScript` |
-| [`programs/04-js-ts-interop.fun`](programs/04-js-ts-interop.fun) | `FunScript` |
-| [`programs/04-order-fulfillment.fun`](programs/04-order-fulfillment.fun) | `FunScript` |
-| [`programs/05-github-api-client.fun`](programs/05-github-api-client.fun) | `FunScript` |
-| [`programs/06-markdown-task-manager.fun`](programs/06-markdown-task-manager.fun) | `FunScript` |
-| [`programs/07-reactive-widget.funx`](programs/07-reactive-widget.funx) | `FunScript JSX` |
-| [`programs/08-todo-dashboard.funx`](programs/08-todo-dashboard.funx) | `FunScript JSX` |
 <!-- /GENERATED: example-inventory -=>
 
 ## Development
@@ -134,8 +129,7 @@ src/formatter/    Formatter and Prettier plugin
 src/lsp/          Language Server Protocol support
 src/plugins/      Vite integration
 editors/vscode/   VS Code extension
-examples/         Small, readable language examples
-programs/         Larger end-to-end programs
+examples/         Runnable examples, showcases, and applications
 docs/             Language, tooling, and generated references
 tests/            Compiler, CLI, formatter, LSP, and integration coverage
 ```

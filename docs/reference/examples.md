@@ -6,24 +6,19 @@ Every entry below is compiled by `npm run test:examples`.
 
 | File | Kind |
 | --- | --- |
-| [`examples/08-todo-dashboard.funx`](../examples/08-todo-dashboard.funx) | `FunScript JSX` |
+| [`examples/bank-account.fun`](../examples/bank-account.fun) | `FunScript` |
+| [`examples/fibonacci.fun`](../examples/fibonacci.fun) | `FunScript` |
 | [`examples/github-api-client.fun`](../examples/github-api-client.fun) | `FunScript` |
 | [`examples/greeter-service.fun`](../examples/greeter-service.fun) | `FunScript` |
 | [`examples/hello.fun`](../examples/hello.fun) | `FunScript` |
+| [`examples/js-ts-interop.fun`](../examples/js-ts-interop.fun) | `FunScript` |
 | [`examples/markdown-task-manager.fun`](../examples/markdown-task-manager.fun) | `FunScript` |
 | [`examples/order-fulfillment.fun`](../examples/order-fulfillment.fun) | `FunScript` |
 | [`examples/reactive-widget.funx`](../examples/reactive-widget.funx) | `FunScript JSX` |
 | [`examples/shapes.fun`](../examples/shapes.fun) | `FunScript` |
 | [`examples/solid-demo/domain.fun`](../examples/solid-demo/domain.fun) | `FunScript` |
 | [`examples/solid-demo/solid-in-funscript.fun`](../examples/solid-demo/solid-in-funscript.fun) | `FunScript` |
+| [`examples/todo-dashboard.funx`](../examples/todo-dashboard.funx) | `FunScript JSX` |
 | [`examples/todo-http.fun`](../examples/todo-http.fun) | `FunScript` |
+| [`examples/todo-service.fun`](../examples/todo-service.fun) | `FunScript` |
 | [`examples/ts-schema-validation.fun`](../examples/ts-schema-validation.fun) | `FunScript` |
-| [`programs/01-fibonacci.fun`](../programs/01-fibonacci.fun) | `FunScript` |
-| [`programs/02-bank-account.fun`](../programs/02-bank-account.fun) | `FunScript` |
-| [`programs/03-todo-service.fun`](../programs/03-todo-service.fun) | `FunScript` |
-| [`programs/04-js-ts-interop.fun`](../programs/04-js-ts-interop.fun) | `FunScript` |
-| [`programs/04-order-fulfillment.fun`](../programs/04-order-fulfillment.fun) | `FunScript` |
-| [`programs/05-github-api-client.fun`](../programs/05-github-api-client.fun) | `FunScript` |
-| [`programs/06-markdown-task-manager.fun`](../programs/06-markdown-task-manager.fun) | `FunScript` |
-| [`programs/07-reactive-widget.funx`](../programs/07-reactive-widget.funx) | `FunScript JSX` |
-| [`programs/08-todo-dashboard.funx`](../programs/08-todo-dashboard.funx) | `FunScript JSX` |

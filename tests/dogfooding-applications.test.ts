@@ -6,22 +6,20 @@ import * as os from "node:os";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import { compileString } from "../src/compiler.js";
-import { typeCheckFiles, typeCheckSource } from "../src/compiler/check.js";
+import { typeCheckFiles } from "../src/compiler/check.js";
 
 const execFileAsync = promisify(execFile);
 const cliPath = path.resolve("dist/cli/index.js");
 
 describe("Dogfooding Real-World Applications (TASK-027)", () => {
-  const programsDir = path.resolve("programs");
   const examplesDir = path.resolve("examples");
 
-  describe("Application 1: GitHub REST API Client (05-github-api-client.fun)", () => {
-    const programPath = path.join(programsDir, "05-github-api-client.fun");
+  describe("Application 1: GitHub REST API Client (github-api-client.fun)", () => {
     const examplePath = path.join(examplesDir, "github-api-client.fun");
 
     it("compiles cleanly to TypeScript with Effect, Schema, and ts-pattern", async () => {
-      const source = await fs.readFile(programPath, "utf-8");
-      const res = await Effect.runPromise(compileString(source, programPath));
+      const source = await fs.readFile(examplePath, "utf-8");
+      const res = await Effect.runPromise(compileString(source, examplePath));
 
       expect(res.targetExtension).toBe(".ts");
       expect(res.typescript).toBeDefined();
@@ -46,14 +44,14 @@ describe("Dogfooding Real-World Applications (TASK-027)", () => {
     });
 
     it("passes static type checking (funscript check) with 0 errors", async () => {
-      const checkResult = await Effect.runPromise(typeCheckFiles([programPath]));
+      const checkResult = await Effect.runPromise(typeCheckFiles([examplePath]));
       expect(checkResult.success).toBe(true);
       expect(checkResult.errorCount).toBe(0);
       expect(checkResult.diagnostics).toHaveLength(0);
     });
 
-    it("executes programs/05-github-api-client.fun via CLI with expected deterministic output", async () => {
-      const { stdout, stderr } = await execFileAsync("node", [cliPath, "run", programPath]);
+    it("executes examples/github-api-client.fun via CLI with expected deterministic output", async () => {
+      const { stdout, stderr } = await execFileAsync("node", [cliPath, "run", examplePath]);
       expect(stderr).toBe("");
 
       expect(stdout).toContain("=== GitHub API Client Dogfooding ===");
@@ -66,25 +64,15 @@ describe("Dogfooding Real-World Applications (TASK-027)", () => {
       expect(stdout).toContain("[GitHub Client] Requesting repository: ghost/nonexistent");
       expect(stdout).toContain("[404 Not Found] Repository 'ghost/nonexistent' does not exist");
       expect(stdout).toContain("=== GitHub API Client Completed Successfully ===");
-    });
-
-    it("executes examples/github-api-client.fun identically", async () => {
-      const { stdout, stderr } = await execFileAsync("node", [cliPath, "run", examplePath]);
-      expect(stderr).toBe("");
-      expect(stdout).toContain("[200 OK] Effect-TS/effect");
-      expect(stdout).toContain("[200 OK] funscript/funscript");
-      expect(stdout).toContain("[403 Rate Limited]");
-      expect(stdout).toContain("[404 Not Found]");
-    });
+    }, 20_000);
   });
 
-  describe("Application 2: Markdown Task Manager CLI (06-markdown-task-manager.fun)", () => {
-    const programPath = path.join(programsDir, "06-markdown-task-manager.fun");
+  describe("Application 2: Markdown Task Manager CLI (markdown-task-manager.fun)", () => {
     const examplePath = path.join(examplesDir, "markdown-task-manager.fun");
 
     it("compiles cleanly to TypeScript with Mutative create and control flow", async () => {
-      const source = await fs.readFile(programPath, "utf-8");
-      const res = await Effect.runPromise(compileString(source, programPath));
+      const source = await fs.readFile(examplePath, "utf-8");
+      const res = await Effect.runPromise(compileString(source, examplePath));
 
       expect(res.targetExtension).toBe(".ts");
       expect(res.typescript).toContain('import { create } from "mutative";');
@@ -107,8 +95,8 @@ describe("Dogfooding Real-World Applications (TASK-027)", () => {
       expect(res.typescript).toContain("__funscriptJs(() => readTaskFile(filePath), false)");
     });
 
-    it("executes programs/06-markdown-task-manager.fun via CLI and persists/reloads markdown tasks", async () => {
-      const { stdout, stderr } = await execFileAsync("node", [cliPath, "run", programPath]);
+    it("executes examples/markdown-task-manager.fun via CLI and persists/reloads markdown tasks", async () => {
+      const { stdout, stderr } = await execFileAsync("node", [cliPath, "run", examplePath]);
       expect(stderr).toBe("");
 
       expect(stdout).toContain("=== Markdown Task Manager Starting ===");
@@ -121,18 +109,10 @@ describe("Dogfooding Real-World Applications (TASK-027)", () => {
       expect(stdout).toContain("- [ ] #3: Document findings in docs/DOGFOODING.md (tag: #docs)");
       expect(stdout).toContain("[TaskManager] Cleaned up temporary test file.");
       expect(stdout).toContain("=== Markdown Task Manager Completed Successfully ===");
-    });
-
-    it("executes examples/markdown-task-manager.fun identically", async () => {
-      const { stdout, stderr } = await execFileAsync("node", [cliPath, "run", examplePath]);
-      expect(stderr).toBe("");
-      expect(stdout).toContain("- [x] #1: Set up FunScript dogfood suite (tag: #dev)");
-      expect(stdout).toContain("- [ ] #3: Document findings in docs/DOGFOODING.md (tag: #docs)");
-    });
+    }, 20_000);
   });
 
-  describe("Application 3: Reactive UI Widget Component (07-reactive-widget.funx)", () => {
-    const programPath = path.join(programsDir, "07-reactive-widget.funx");
+  describe("Application 3: Reactive UI Widget Component (reactive-widget.funx)", () => {
     const examplePath = path.join(examplesDir, "reactive-widget.funx");
     let tmpDir: string;
 
@@ -147,8 +127,8 @@ describe("Dogfooding Real-World Applications (TASK-027)", () => {
     });
 
     it("compiles cleanly to .tsx with native JSX and ts-pattern branches", async () => {
-      const source = await fs.readFile(programPath, "utf-8");
-      const res = await Effect.runPromise(compileString(source, programPath));
+      const source = await fs.readFile(examplePath, "utf-8");
+      const res = await Effect.runPromise(compileString(source, examplePath));
 
       expect(res.targetExtension).toBe(".tsx");
       expect(res.typescript).toBeDefined();
@@ -173,14 +153,14 @@ describe("Dogfooding Real-World Applications (TASK-027)", () => {
     });
 
     it("passes static type checking (funscript check) with 0 errors", async () => {
-      const checkResult = await Effect.runPromise(typeCheckFiles([programPath]));
+      const checkResult = await Effect.runPromise(typeCheckFiles([examplePath]));
       expect(checkResult.success).toBe(true);
       expect(checkResult.errorCount).toBe(0);
       expect(checkResult.diagnostics).toHaveLength(0);
     });
 
-    it("executes programs/07-reactive-widget.funx via CLI and evaluates rendered tree", async () => {
-      const { stdout, stderr } = await execFileAsync("node", [cliPath, "run", programPath]);
+    it("executes examples/reactive-widget.funx via CLI and evaluates rendered tree", async () => {
+      const { stdout, stderr } = await execFileAsync("node", [cliPath, "run", examplePath]);
       expect(stderr).toBe("");
 
       expect(stdout).toContain("=== Reactive Widget (.funx) Starting ===");
@@ -191,24 +171,17 @@ describe("Dogfooding Real-World Applications (TASK-027)", () => {
       expect(stdout).toContain("[Badge] Rendered Active badge: <span>");
       expect(stdout).toContain("[Badge] Rendered Limit badge: <span>");
       expect(stdout).toContain("=== Reactive Widget (.funx) Completed Successfully ===");
-    });
+    }, 20_000);
 
-    it("builds programs/07-reactive-widget.funx to .tsx via CLI build command", async () => {
-      const outTsx = path.join(tmpDir, "07-reactive-widget.tsx");
-      const { stdout } = await execFileAsync("node", [cliPath, "build", programPath, "--out", outTsx]);
+    it("builds examples/reactive-widget.funx to .tsx via CLI build command", async () => {
+      const outTsx = path.join(tmpDir, "reactive-widget.tsx");
+      const { stdout } = await execFileAsync("node", [cliPath, "build", examplePath, "--out", outTsx]);
       expect(stdout).toContain(`✓ Built ${outTsx}`);
 
       const content = await fs.readFile(outTsx, "utf-8");
       expect(content).toContain("export const CounterWidget = (props: WidgetProps) => {");
       expect(content).toContain('className={`widget-card variant-${props.variant}`}');
-    });
-
-    it("executes examples/reactive-widget.funx identically", async () => {
-      const { stdout, stderr } = await execFileAsync("node", [cliPath, "run", examplePath]);
-      expect(stderr).toBe("");
-      expect(stdout).toContain("=== Reactive Widget (.funx) Starting ===");
-      expect(stdout).toContain('[Widget] Rendered root tag: <div className="widget-card variant-primary">');
-    });
+    }, 20_000);
   });
 
   describe("Edge Case Stress Testing & Repros", () => {

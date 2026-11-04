@@ -7,7 +7,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 const execFileAsync = promisify(execFile);
 const cliPath = resolve("dist/cli/index.js");
-const sourceRoots = ["examples", "programs"];
+const sourceRoots = ["examples"];
 let outputDir: string;
 
 const findFunScriptFiles = async (directory: string): Promise<string[]> => {
@@ -31,7 +31,7 @@ describe("runnable example applications", () => {
     await rm(outputDir, { recursive: true, force: true });
   });
 
-  it("builds every example application and program through the CLI", async () => {
+  it("builds every example application through the CLI", async () => {
     const files = (await Promise.all(sourceRoots.map(findFunScriptFiles)))
       .flat()
       .filter((file) => !file.startsWith("examples/fixtures/"))

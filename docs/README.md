@@ -28,7 +28,7 @@ To prevent documentation drift, documentation facts are categorized into generat
 | CLI commands & flags (`docs/reference/cli.md`) | Generated | `src/cli/commands.ts` (`CLI_COMMANDS`) | `npm run docs:check`, `tests/cli-help.test.ts` |
 | Package entry points (`docs/reference/api.md`) | Generated | `package.json` (`exports`) | `npm run docs:check`, `tests/reference-docs.test.ts` |
 | Hover language catalogue (`docs/reference/language.md`) | Generated | `src/lsp/docs.ts` (`DOC_CATALOG`) | `npm run docs:check`, `tests/lsp-docs.test.ts` |
-| Example inventory (`docs/reference/examples.md`, `README.md`) | Generated | `examples/`, `programs/` files | `npm run docs:check`, `npm run test:examples` |
+| Example inventory (`docs/reference/examples.md`, `README.md`) | Generated | `examples/` files | `npm run docs:check`, `npm run test:examples` |
 | Project facts (`README.md`) | Generated | `package.json` (`version`, `dependencies.effect`) | `npm run docs:check` |
 | Lexer keywords (`docs/syntax.md#15-keywords`) | Code-asserted | `src/lexer/tokens.ts` (`KEYWORDS`) | `tests/reference-docs.test.ts`, `tests/lsp-docs.test.ts` |
 | Pipeline companions (`docs/syntax.md#51`, `docs/compatibility.md#4`) | Code-asserted | `src/emitter/pipeline-catalog.ts` (`PIPELINE_COMPANION_CATALOG`) | `tests/reference-docs.test.ts` |
@@ -43,7 +43,7 @@ To prevent documentation drift, documentation facts are categorized into generat
 
 1. When adding or altering CLI commands, update `src/cli/commands.ts`.
 2. When adding or altering hover documentation, update `src/lsp/docs.ts`.
-3. When adding runnable examples in `examples/` or `programs/`, or updating package metadata, run `npm run docs:generate`.
+3. When adding runnable examples in `examples/`, or updating package metadata, run `npm run docs:generate`.
 4. Run `npm run docs:check` to verify that generated documentation matches current code before committing.
 5. Automated test suites (`tests/reference-docs.test.ts`, `tests/cli-help.test.ts`, `tests/lsp-docs.test.ts`) assert keyword counts, companion module names, and package scripts.
 

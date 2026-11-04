@@ -50,8 +50,7 @@ export const generateReferenceDocs = async ({
 } = {}) => {
   const pkg = JSON.parse(await readFile(resolve(root, "package.json"), "utf8"));
 
-  const exampleFiles = (await Promise.all(["examples", "programs"].map((directory) => findFunScriptFiles(resolve(root, directory)))))
-    .flat()
+  const exampleFiles = (await findFunScriptFiles(resolve(root, "examples")))
     .filter((file) => !relative(root, file).startsWith("examples/fixtures/"))
     .sort();
   const exampleRows = exampleFiles.map((file) => {
