@@ -119,7 +119,7 @@ export function documentSymbols(source: string, uri: string): DocumentSymbol[] {
     const decl = top.kind === "ExportDeclaration" ? top.declaration : top;
     if (!("id" in decl)) continue;
     const id = decl.id;
-    const kind = decl.kind === "SchemaDeclaration" ? 5 : decl.kind === "ServiceDeclaration" ? 11 : decl.kind === "ErrorDeclaration" ? 5 : 12;
+    const kind = decl.kind === "SchemaDeclaration" ? 5 : (decl.kind === "ServiceDeclaration" || decl.kind === "ExternServiceDeclaration") ? 11 : decl.kind === "ErrorDeclaration" ? 5 : 12;
     symbols.push({ name:id.name, kind, range:spanToRange(top.span), selectionRange:spanToRange(id.span) });
   }
   return symbols;

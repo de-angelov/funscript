@@ -15,6 +15,8 @@ import {
   TypeReferenceNode,
   ErrorDeclaration,
   ServiceDeclaration,
+  ExternServiceDeclaration,
+  ExternServiceMember,
   BindingDeclaration,
   BinaryExpression,
   UnaryExpression,
@@ -368,6 +370,91 @@ service PaymentGateway "custom/payment/gateway"
       expect(svc.customTag?.parts[0]).toEqual({ kind: "StringRawPart", value: "custom/payment/gateway" });
       expect(svc.members.length).toBe(1);
       expect(svc.members[0].name.name).toBe("charge");
+    });
+  });
+
+  describe("Extern Service Declarations", () => {
+    it("parses extern service declaration with braced syntax", () => {
+      const ast = parse(
+        `extern "stripe" service StripeClient { constructEvent: (body: String, sig: String, secret: String) => Effect<StripeEvent, StripeError> }`
+      );
+      expect(ast.body.length).toBe(1);
+      const decl = ast.body[0] as ExternServiceDeclaration;
+
+      expect(decl.kind).toBe("ExternServiceDeclaration");
+      expect(decl.package.parts[0]).toEqual({ kind: "StringRawPart", value: "stripe" });
+      expect(decl.id.name).toBe("StripeClient");
+      expect(decl.members.length).toBe(1);
+
+      const m = decl.members[0];
+      expect(m.kind).toBe("ExternServiceMember");
+      expect(m.name.name).toBe("constructEvent");
+      expect(m.signature.kind).toBe("FunctionTypeNode");
+      expect(m.signature.params.length).toBe(3);
+      expect(m.signature.params[0].name.name).toBe("body");
+      expect(m.signature.params[1].name.name).toBe("sig");
+      expect(m.signature.params[2].name.name).toBe("secret");
+    });
+
+    it("parses extern service declaration with multiline braced syntax", () => {
+      const ast = parse(`
+extern "stripe" service StripeClient {
+  constructEvent: (body: String, sig: String, secret: String) => Effect<StripeEvent, StripeError>
+}
+`);
+      expect(ast.body.length).toBe(1);
+      const decl = ast.body[0] as ExternServiceDeclaration;
+      expect(decl.kind).toBe("ExternServiceDeclaration");
+      expect(decl.package.parts[0]).toEqual({ kind: "StringRawPart", value: "stripe" });
+      expect(decl.id.name).toBe("StripeClient");
+      expect(decl.members.length).toBe(1);
+      expect(decl.members[0].name.name).toBe("constructEvent");
+    });
+
+    it("parses extern service declaration with indented syntax", () => {
+      const ast = parse(`
+extern "stripe" service StripeClient
+  constructEvent: (body: String, sig: String, secret: String) => Effect<StripeEvent, StripeError>
+  createCustomer: (email: String) => Effect<Customer, StripeError>
+`);
+      expect(ast.body.length).toBe(1);
+      const decl = ast.body[0] as ExternServiceDeclaration;
+
+      expect(decl.kind).toBe("ExternServiceDeclaration");
+      expect(decl.package.parts[0]).toEqual({ kind: "StringRawPart", value: "stripe" });
+      expect(decl.id.name).toBe("StripeClient");
+      expect(decl.members.length).toBe(2);
+
+      expect(decl.members[0].kind).toBe("ExternServiceMember");
+      expect(decl.members[0].name.name).toBe("constructEvent");
+      expect(decl.members[1].kind).toBe("ExternServiceMember");
+      expect(decl.members[1].name.name).toBe("createCustomer");
+    });
+
+    it("parses exported extern service declaration", () => {
+      const ast = parse(`
+export extern "@aws-sdk/client-s3" service S3Client {
+  getObject: (bucket: String, key: String) => Effect<ByteStream, S3Error>
+}
+`);
+      expect(ast.body.length).toBe(1);
+      const exp = ast.body[0] as ExportDeclaration;
+      expect(exp.kind).toBe("ExportDeclaration");
+
+      const decl = exp.declaration as ExternServiceDeclaration;
+      expect(decl.kind).toBe("ExternServiceDeclaration");
+      expect(decl.package.parts[0]).toEqual({ kind: "StringRawPart", value: "@aws-sdk/client-s3" });
+      expect(decl.id.name).toBe("S3Client");
+      expect(decl.members.length).toBe(1);
+      expect(decl.members[0].name.name).toBe("getObject");
+    });
+
+    it("throws ParseError on malformed extern declarations", () => {
+      expect(() => parse(`extern`)).toThrow(ParseError);
+      expect(() => parse(`extern 123`)).toThrow(ParseError);
+      expect(() => parse(`extern "stripe"`)).toThrow(ParseError);
+      expect(() => parse(`extern "stripe" service`)).toThrow(ParseError);
+      expect(() => parse(`extern "stripe" service StripeClient`)).toThrow(ParseError);
     });
   });
 

@@ -243,6 +243,8 @@ export class Emitter {
         return this.emitErrorDeclaration(decl, isExport);
       case "ServiceDeclaration":
         return this.emitServiceDeclaration(decl, isExport);
+      case "ExternServiceDeclaration":
+        return "";
       case "BindingDeclaration":
         return this.emitBindingDeclaration(decl, isExport);
       case "WhenStatement":
