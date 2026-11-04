@@ -163,6 +163,7 @@ export class Emitter {
   private needsMutative = false;
   private needsReferenceEquality = false;
   private needsJsInterop = false;
+  private needsDecodeUnknown = false;
   private primitiveIdentifiers = new Set<string>();
   private currentPlaceholderParam: string | null = null;
   private bindings = new Map<string, BindingDeclaration>();
@@ -218,6 +219,9 @@ export class Emitter {
       header += `function __funscriptJs<A>(thunk: () => Promise<A>, nullable: false): Effect.Effect<A, JsInteropError>;\n`;
       header += `function __funscriptJs<A>(thunk: () => Promise<A>, nullable: "unknown"): Effect.Effect<Option.Option<unknown>, JsInteropError>;\n`;
       header += `function __funscriptJs<A>(thunk: () => Promise<A>, nullable: boolean | "unknown"): Effect.Effect<A | Option.Option<NonNullable<A>> | Option.Option<unknown>, JsInteropError> {\n  const effect = Effect.tryPromise({ try: thunk, catch: (cause) => new JsInteropError(cause) });\n  return nullable === false ? effect : Effect.map(effect, Option.fromNullishOr);\n}\n`;
+    }
+    if (this.needsDecodeUnknown) {
+      header += `declare module "effect" {\n  namespace Schema {\n    export const decodeUnknown: typeof Schema.decodeUnknownEffect;\n  }\n}\n`;
     }
 
     if (header.length > 0) {
@@ -692,6 +696,9 @@ export class Emitter {
       const companion = this.getCompanionModule(name, preferredCompanion);
       if (companion) {
         this.effectImports.add(companion);
+        if (companion === "Schema" && name === "decode") {
+          this.needsDecodeUnknown = true;
+        }
         return {
           ...stage,
           args: companion === "Struct" && (name === "pick" || name === "omit")
@@ -700,7 +707,7 @@ export class Emitter {
           callee: {
             kind: "MemberExpression",
             object: { kind: "UpperIdentifier", name: companion, span: stage.callee.span },
-            property: { ...stage.callee, name: name === "lines" ? "linesIterator" : name },
+            property: { ...stage.callee, name: name === "lines" ? "linesIterator" : name === "decode" ? "decodeUnknown" : name },
             span: stage.callee.span,
           },
         };
@@ -715,6 +722,16 @@ export class Emitter {
         const companion = obj.name as CompanionModule;
         if (this.isCompanionOperation(companion, prop.name)) {
           this.effectImports.add(companion);
+          if (companion === "Schema" && prop.name === "decode") {
+            this.needsDecodeUnknown = true;
+            return {
+              ...stage,
+              callee: {
+                ...stage.callee,
+                property: { ...prop, name: "decodeUnknown" },
+              },
+            };
+          }
           if (companion === "Struct" && (prop.name === "pick" || prop.name === "omit")) {
             return {
               ...stage,
@@ -755,6 +772,7 @@ export class Emitter {
     if (OPTION_COMPANION_METHODS.has(name)) candidates.push("Option");
     if (RESULT_COMPANION_METHODS.has(name)) candidates.push("Result");
     if (CHUNK_COMPANION_METHODS.has(name)) candidates.push("Chunk");
+    if (name === "decode" || (preferredCompanion === "Schema" && this.isCompanionOperation("Schema", name))) candidates.push("Schema");
     if (preferredCompanion && candidates.includes(preferredCompanion)) return preferredCompanion;
     if (candidates.length === 1) return candidates[0];
     // The caller turns an ambiguous core companion into a source diagnostic.

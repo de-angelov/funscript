@@ -10,6 +10,15 @@ import { TypeScriptCompilationContext } from "./typescript-context.js";
  * become the first argument to `pipe`, including imports and function calls.
  */
 export function inferPipelineCompanions(ast: Program, context: TypeScriptCompilationContext): ReadonlyMap<number, PipelineCompanionModule> {
+  const schemaNames = new Set<string>();
+  for (const decl of ast.body) {
+    if (decl.kind === "SchemaDeclaration") {
+      schemaNames.add(decl.id.name);
+    } else if (decl.kind === "ExportDeclaration" && decl.declaration.kind === "SchemaDeclaration") {
+      schemaNames.add(decl.declaration.id.name);
+    }
+  }
+
   const marked = new Emitter(ast, undefined, {
     allowAmbiguousPipeline: true,
     markPipelineSources: true,
@@ -19,11 +28,17 @@ export function inferPipelineCompanions(ast: Program, context: TypeScriptCompila
   // The provisional emitter deliberately leaves unresolved stages bare. Add
   // companion imports here so source expressions such as `Option.some(...)`
   // still receive their real TypeScript type during this analysis pass.
-  const source = `import { Array, Chunk, Effect, Layer, Option, Result, Schedule, Schema, Stream } from "effect";\nconst __funscriptPipelineSource = <T,>(_id: number, value: T): T => value;\n${marked}`;
+  const source = `import { Array, Chunk, Effect, Layer, Option, Result, Schedule, Schema, Stream } from "effect";\ndeclare const decode: any;\nconst __funscriptPipelineSource = <T,>(_id: number, value: T): T => value;\n${marked}`;
   const checked = context.check(source);
   if (!checked) return new Map();
   const { sourceFile, checker } = checked;
   const companions = new Map<number, PipelineCompanionModule>();
+
+  const isSchemaType = (type: ts.Type): boolean => {
+    if (Boolean(type.getProperty("ast") && type.getProperty("Type"))) return true;
+    const printed = checker.typeToString(type);
+    return /^Schema(?:<|$)/.test(printed) || /^Struct(?:<|$)/.test(printed);
+  };
 
   const companionForType = (type: ts.Type): PipelineCompanionModule | undefined => {
     // Effect's own Option and Result aliases are unions of their variants.
@@ -75,7 +90,27 @@ export function inferPipelineCompanions(ast: Program, context: TypeScriptCompila
       node.arguments.length === 2 &&
       ts.isNumericLiteral(node.arguments[0])
     ) {
-      const companion = companionForType(checker.getTypeAtLocation(node.arguments[1]));
+      let companion = companionForType(checker.getTypeAtLocation(node.arguments[1]));
+      if (!companion && ts.isCallExpression(node.parent)) {
+        for (const stage of node.parent.arguments.slice(1)) {
+          if (
+            ts.isCallExpression(stage) &&
+            ((ts.isIdentifier(stage.expression) && stage.expression.text === "decode") ||
+              (ts.isPropertyAccessExpression(stage.expression) &&
+                (stage.expression.name.text === "decode" || stage.expression.name.text === "decodeUnknown"))) &&
+            stage.arguments.length >= 1
+          ) {
+            const targetArg = stage.arguments[0];
+            if (
+              (ts.isIdentifier(targetArg) && schemaNames.has(targetArg.text)) ||
+              isSchemaType(checker.getTypeAtLocation(targetArg))
+            ) {
+              companion = "Schema";
+              break;
+            }
+          }
+        }
+      }
       if (companion) companions.set(Number(node.arguments[0].text), companion);
     }
     ts.forEachChild(node, visit);

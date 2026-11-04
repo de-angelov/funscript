@@ -86,7 +86,7 @@ form and rejects the other one.
 | Effectful iteration            | `Effect.forEach`                                                        | Effect                                                                                           | `for await`, `Promise.all`                           |
 | Validated data & tagged unions | `schema` (records, `?`, `= default`, `\|> Schema.*`, `\| Variant(...)`) | `Schema` + `Data.TaggedEnum` + `typeof Name.Type`                                                | duplicate TS `type` + validator, `enum`, `interface` |
 | Absent / optional value        | `Option` (`Some` / `None`)                                              | `Option`                                                                                         | `null`, `undefined` literals                         |
-| Boundary decoding              | `Unknown` + `Schema.decodeUnknown(MyType)`                              | `Unknown`, `Schema`                                                                              | `any`, `as any`                                      |
+| Boundary decoding              | `Unknown` + `raw \|> decode(MyType)`                    | `Unknown`, `Schema`                                                                              | `any`, `as any`                                      |
 | Value / identity equality      | `#=` / `#!`; `@=` / `@!`                                                | `Equal.equals` for structured values; strict JS equality for primitives; identity for references | coercing equality                                    |
 | Boolean                        | `and` / `or` / `not`                                                    | `&&` / `\|\|` / `!`                                                                              | `&&`, `\|\|`, `!`                                    |
 | Conditional & pattern match    | `match` (value, boolean, `\|> match`, `\| A \| B =>`)                   | ts-pattern (value) / conditional & `if` (boolean)                                                | `if`, `else`, `switch`, ternary `? :`, `return`      |
@@ -1290,7 +1290,7 @@ runtime boundaries without duplication:
 greetUser = (user: User) => "Hello, {user.name}!"
 
 # At a runtime validation boundary:
-user <- rawInput |> Schema.decodeUnknown(User)
+user <- rawInput |> decode(User)
 todo <- response |> HttpClientResponse.schemaBodyJson(Todo)
 ```
 
@@ -2196,13 +2196,16 @@ greet = (user: User) => "Hello, {user.name}!"
 
 loadGreeting = (raw: Unknown) =>
   effect {
-    user <- raw |> Schema.decodeUnknown(User)
+    user <- raw |> decode(User)
     => greet(user)
   }
 ```
 
-`Schema.decodeUnknown(User)` returns an Effect whose error channel contains
-`ParseError`. `Schema.decodeUnknownEither(User)` returns an Either for explicit
+The pipeline stage `payload |> decode(TargetSchema)` auto-resolves against
+`Schema.decodeUnknown(TargetSchema)` to parse and decode untrusted dictionaries
+(e.g., webhook metadata, query params, JSON payloads) into typed FunScript schemas.
+It returns an Effect whose error channel contains `ParseError`.
+`Schema.decodeUnknown(User)` also remains callable explicitly. `Schema.decodeUnknownEither(User)` returns an Either for explicit
 success/failure handling. `Schema.decodeUnknownSync(User)` validates synchronously
 and throws on invalid input; use it at synchronous boundaries, or catch that
 exception with `Effect.try` when entering an Effect program. JSON text must first

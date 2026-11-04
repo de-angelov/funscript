@@ -6,6 +6,7 @@ import {
   EFFECT_PIPELINE_CATALOG_VERSION,
   EFFECT_PIPELINE_COMPATIBILITY_ALIASES,
   PIPELINE_COMPANION_CATALOG,
+  pipelineCompanionCandidates,
 } from "../src/emitter/pipeline-catalog.js";
 
 describe("pipeline companion catalog", () => {
@@ -57,6 +58,11 @@ describe("pipeline companion catalog", () => {
       expect(alias).not.toBe(target);
       expect(EffectPackage.Effect[target as keyof typeof EffectPackage.Effect]).toBeTypeOf("function");
     }
+  });
+
+  it("registers decode as an auto-resolving Schema pipeline companion", () => {
+    expect(PIPELINE_COMPANION_CATALOG.Schema).toContain("decode");
+    expect(pipelineCompanionCandidates("decode")).toEqual(["Schema"]);
   });
 });
 

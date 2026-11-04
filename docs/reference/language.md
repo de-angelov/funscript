@@ -106,6 +106,8 @@ expression |> function(args...)
 
 Passes the value of the left expression as the first argument (or into placeholder `_`) of the right expression. Compiles to `pipe(...)` or direct function invocation. Bare companion operations resolve only when the source proves a companion module. If multiple companions expose the name and the source is unproven, compilation reports the explicit namespaces to choose from.
 
+Untrusted dictionaries and payloads can be safely decoded directly using `payload |> decode(TargetSchema)`.
+
 
 See also: `pipe`, `Effect.map`, `Effect.timeout`.
 
@@ -915,7 +917,7 @@ schema Name = | CaseA | CaseB(v: Type)
 
 Declares data models backed by Effect's `@effect/schema` and `Data.TaggedEnum`.
 
-A single `schema` declaration generates both the runtime validator/constructor and the static TypeScript type definition, avoiding dual declaration boilerplate.
+A single `schema` declaration generates both the runtime validator/constructor and the static TypeScript type definition, avoiding dual declaration boilerplate. Untrusted payloads and dictionaries can be safely decoded using `payload |> decode(Name)`.
 
 
 See also: `record`, `variant`, `error`.
@@ -997,7 +999,7 @@ The type-safe counterpart of any; represents an uninspected value.
 type unknown
 ```
 
-Top type representing values whose type is not statically known (e.g. from external API payloads). Must be narrowed via `Schema.decodeUnknown` or `match` before access.
+Top type representing values whose type is not statically known (e.g. from external API payloads). Must be narrowed via `raw |> decode(TargetSchema)` or `match` before access.
 
 
 See also: `never`, `schema`.
