@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { Effect, Schema, Data, pipe, Array as EffectArray } from "effect";
+import { Effect, Schema, Data, pipe, Array as EffectArray, Context, Layer } from "effect";
 import * as fs from "node:fs/promises";
 import * as path from "node:path";
 import ts from "typescript";
@@ -12,22 +12,53 @@ const RULE_DIRECTORIES = [
   "numeric-comparisons",
   "pipelines",
   "schemas",
+  "extern-services",
 ] as const;
 
-function evalModule(typescript: string, exportsToReturn: string[]) {
+const ContextCompat = new Proxy(Context, {
+  get(target, prop, receiver) {
+    if (prop === "GenericTag") {
+      return (key: string) => (Context as any).Service()(key);
+    }
+    return Reflect.get(target, prop, receiver);
+  },
+});
+
+const SchemaCompat = new Proxy(Schema, {
+  get(target, prop, receiver) {
+    if (prop === "decodeUnknown") {
+      return (target as any).decodeUnknownEffect;
+    }
+    return Reflect.get(target, prop, receiver);
+  },
+});
+
+function evalModule(
+  typescript: string,
+  exportsToReturn: string[],
+  scope?: Record<string, any>,
+) {
   const js = ts
     .transpile(typescript, { module: ts.ModuleKind.ESNext })
     .replace(/^import\s+.*$/gm, "")
     .replace(/\bexport\s+/g, "");
+  const baseScope: Record<string, any> = {
+    Effect,
+    Schema: SchemaCompat,
+    Data,
+    pipe,
+    Array: EffectArray,
+    Context: ContextCompat,
+    Layer,
+    ...(scope ?? {}),
+  };
+  const keys = Object.keys(baseScope);
+  const values = Object.values(baseScope);
   const fn = new Function(
-    "Effect",
-    "Schema",
-    "Data",
-    "pipe",
-    "Array",
+    ...keys,
     `${js}; return { ${exportsToReturn.join(", ")} };`,
   );
-  return fn(Effect, Schema, Data, pipe, EffectArray);
+  return fn(...values);
 }
 
 async function verifyPositiveFixture(
@@ -35,6 +66,7 @@ async function verifyPositiveFixture(
   fixtureName: string,
   options?: {
     evalExports?: string[];
+    scope?: Record<string, any>;
     verifyEval?: (exports: Record<string, any>) => Promise<void> | void;
   },
 ) {
@@ -53,7 +85,7 @@ async function verifyPositiveFixture(
   ).toBe(expected.trim());
 
   if (options?.evalExports && options.verifyEval) {
-    const exported = evalModule(result.typescript, options.evalExports);
+    const exported = evalModule(result.typescript, options.evalExports, options?.scope);
     await options.verifyEval(exported);
   }
 }
@@ -224,6 +256,59 @@ describe("language conformance fixture suite", () => {
 
     it("reports diagnostic when schema name is not UpperCamelCase", async () => {
       await verifyNegativeFixture(dir, "lowercase-schema-name");
+    });
+  });
+
+  describe("Rule: Extern Services", () => {
+    const dir = path.join(CONFORMANCE_ROOT, "extern-services");
+
+    it("verifies extern service with ts schema and decode pipeline compiles, matches expected TypeScript, and evaluates correctly", async () => {
+      const mockStripe = {
+        constructEvent: (body: string, sig: string, secret: string) => {
+          if (sig !== "valid_sig") {
+            throw new Error("Invalid signature");
+          }
+          return { id: "evt_conformance_1", type: "payment_intent.succeeded" };
+        },
+      };
+
+      await verifyPositiveFixture(dir, "extern-service-wrapper", {
+        evalExports: ["processWebhook", "StripeClientLive"],
+        scope: {
+          __extern_stripe: mockStripe,
+        },
+        verifyEval: async ({ processWebhook, StripeClientLive }) => {
+          // 1. Success case: decoded input feeds into extern service call
+          const result = await Effect.runPromise(
+            processWebhook({ payload: "event_data", signature: "valid_sig" }, "whsec_test").pipe(
+              Effect.provide(StripeClientLive),
+            ),
+          );
+          expect(result).toEqual({ id: "evt_conformance_1", type: "payment_intent.succeeded" });
+
+          // 2. Exception case: SDK thrown exception is caught and yields typed Effect failure
+          const failEffect = processWebhook(
+            { payload: "event_data", signature: "invalid_sig" },
+            "whsec_test",
+          ).pipe(Effect.provide(StripeClientLive));
+          const failure = await Effect.runPromise(Effect.flip(failEffect));
+          expect(failure).toBeDefined();
+          expect((failure as any).message).toBe("Invalid signature");
+
+          // 3. Invalid decoded input: payload validation fails before extern service call
+          const decodeFailEffect = processWebhook(
+            { payload: 12345, signature: "valid_sig" },
+            "whsec_test",
+          ).pipe(Effect.provide(StripeClientLive));
+          const decodeFailure = await Effect.runPromise(Effect.flip(decodeFailEffect));
+          expect(decodeFailure).toBeDefined();
+          expect((decodeFailure as any)._tag).toBe("SchemaError");
+        },
+      });
+    });
+
+    it("reports diagnostic when extern package name is missing", async () => {
+      await verifyNegativeFixture(dir, "missing-extern-package");
     });
   });
 });

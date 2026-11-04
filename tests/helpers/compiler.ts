@@ -1,5 +1,5 @@
 import { expect } from "vitest";
-import { Effect, Schema, Data, Context, pipe, Array as EffectArray, Option, Either, Equal, Order, Record as EffectRecord } from "effect";
+import { Effect, Schema, Data, Context, Layer, pipe, Array as EffectArray, Option, Either, Equal, Order, Record as EffectRecord } from "effect";
 import { match, P } from "ts-pattern";
 import { create as mutativeCreate } from "mutative";
 import ts from "typescript";
@@ -139,15 +139,34 @@ export const ArrayCompat = new Proxy(Array, {
   },
 });
 
+export const ContextCompat = new Proxy(Context, {
+  get(target, prop, receiver) {
+    if (prop === "GenericTag") {
+      return (key: string) => (Context as any).Service()(key);
+    }
+    return Reflect.get(target, prop, receiver);
+  },
+});
+
+export const SchemaCompat = new Proxy(Schema, {
+  get(target, prop, receiver) {
+    if (prop === "decodeUnknown") {
+      return (target as any).decodeUnknownEffect;
+    }
+    return Reflect.get(target, prop, receiver);
+  },
+});
+
 /**
  * Default runtime scope injected into evaluated modules.
  */
 export function getDefaultRuntimeScope(): Record<string, any> {
   return {
     Effect,
-    Schema,
+    Schema: SchemaCompat,
     Data,
-    Context,
+    Context: ContextCompat,
+    Layer,
     pipe,
     Array: ArrayCompat,
     Option,
