@@ -12,6 +12,7 @@ import {
   TsDerivedSchema,
   ErrorDeclaration,
   ServiceDeclaration,
+  ExternServiceDeclaration,
   Expression,
   Literal,
   NumberLiteral,
@@ -181,7 +182,12 @@ export class Emitter {
       if (item.kind === "ImportDeclaration" && /^"effect(?:\/|\")/.test(item.source.raw)) {
         for (const spec of item.specifiers) this.effectModuleBindings.add(spec.local.name);
       }
-      if (decl.kind === "SchemaDeclaration" || decl.kind === "ErrorDeclaration" || decl.kind === "ServiceDeclaration") {
+      if (
+        decl.kind === "SchemaDeclaration" ||
+        decl.kind === "ErrorDeclaration" ||
+        decl.kind === "ServiceDeclaration" ||
+        decl.kind === "ExternServiceDeclaration"
+      ) {
         this.declaredTypeNames.add(decl.id.name);
       }
       if (decl.kind === "BindingDeclaration") this.bindings.set(decl.id.name, decl);
@@ -244,7 +250,7 @@ export class Emitter {
       case "ServiceDeclaration":
         return this.emitServiceDeclaration(decl, isExport);
       case "ExternServiceDeclaration":
-        return "";
+        return this.emitExternServiceDeclaration(decl, isExport);
       case "BindingDeclaration":
         return this.emitBindingDeclaration(decl, isExport);
       case "WhenStatement":
@@ -396,6 +402,18 @@ export class Emitter {
       .join("\n");
 
     return `${exp}class ${name} extends Context.Service<${name}, {\n${members}\n}>()(${tag}) {}`;
+  }
+
+  private emitExternServiceDeclaration(decl: ExternServiceDeclaration, isExport: boolean): string {
+    this.effectImports.add("Context");
+    const name = decl.id.name;
+    const exp = isExport ? "export " : "";
+    const members = decl.members
+      .map((m) => `  readonly ${m.name.name}: ${this.emitTypeNode(m.signature)};`)
+      .join("\n");
+    const membersBody = members.length > 0 ? `\n${members}\n` : "";
+
+    return `${exp}interface ${name} {${membersBody}}\n${exp}const ${name} = Context.GenericTag<${name}>("${name}");`;
   }
 
   private isPrimitiveType(type?: TypeNode): boolean {

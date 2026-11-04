@@ -639,6 +639,45 @@ export service PaymentGateway "custom/payment/gateway"
       expect(res.typescript).toContain(`readonly charge: (amount: number) => Effect.Effect<Receipt, PaymentFailed, never>;`);
     });
 
+    it("compiles extern service declarations to interface and Context.GenericTag", async () => {
+      const code = `
+export extern "stripe" service StripeClient {
+  constructEvent: (body: String, sig: String, secret: String) => Effect<StripeEvent, StripeError>
+}
+`.trim();
+
+      const res = await Effect.runPromise(compileString(code));
+      expect(res.typescript).toContain(`import { Context, Effect } from "effect";`);
+      expect(res.typescript).toContain(`export interface StripeClient {`);
+      expect(res.typescript).toContain(
+        `readonly constructEvent: (body: string, sig: string, secret: string) => Effect.Effect<StripeEvent, StripeError, never>;`
+      );
+      expect(res.typescript).toContain(
+        `export const StripeClient = Context.GenericTag<StripeClient>("StripeClient");`
+      );
+    });
+
+    it("compiles unexported extern service declarations with multiple methods", async () => {
+      const code = `
+extern "@aws-sdk/client-s3" service S3Client
+  getObject: (bucket: String, key: String) => Effect<ByteStream, S3Error>
+  putObject: (bucket: String, key: String, body: String) => Effect<Void, S3Error>
+`.trim();
+
+      const res = await Effect.runPromise(compileString(code));
+      expect(res.typescript).toContain(`import { Context, Effect } from "effect";`);
+      expect(res.typescript).toContain(`interface S3Client {`);
+      expect(res.typescript).toContain(
+        `readonly getObject: (bucket: string, key: string) => Effect.Effect<ByteStream, S3Error, never>;`
+      );
+      expect(res.typescript).toContain(
+        `readonly putObject: (bucket: string, key: string, body: string) => Effect.Effect<void, S3Error, never>;`
+      );
+      expect(res.typescript).toContain(
+        `const S3Client = Context.GenericTag<S3Client>("S3Client");`
+      );
+    });
+
     it("compiles typed holes to runtime throw expressions", async () => {
       const code = `
 export unfinished = () => ??? "implement later"
