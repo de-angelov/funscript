@@ -48,7 +48,6 @@ The design rule is simple:
 | Compile-time type alias      | `schema Lookup = (id: String) => Effect<User, NotFound>`                                         |
 | Error                        | `error NotFound(id: String)`                                                                     |
 | Service                      | `service Greeter` newline `greet: (name: String) => Effect<String>`                              |
-| External service             | `extern "stripe" service StripeClient { ... }`                                                   |
 | Layer (pure / effectful)     | `Layer.succeed(Greeter, { ... })` or `Layer.effect(Greeter, effect { ... })`                    |
 | Effect block                 | `effect { user <- UserRepo.find(id); => user }` (canonical; indentation form is implemented compatibility syntax) |
 | Effect bind                  | `name <- effect`                                                                                 |
@@ -238,13 +237,13 @@ or a compiler-known pattern (`Some`, `None`, `Left`, `Right`, `Success`, `Failur
 The compiler enforces the convention for declarations it generates. Imported JavaScript
 values may have any casing; they are only relevant in expression position.
 
-### 1.5 Keywords (19 total)
+### 1.5 Keywords (18 total)
 
 ```text
 and       default   effect    error     export
-extern    false     from      import    js
-match     mut       not       or        schema
-service   true      ts        when
+false     from      import    js        match
+mut       not       or        schema    service
+true      ts        when
 ```
 
 `_` is a special token (wildcard in patterns, discard in `_ <-`, and call-argument
@@ -2081,102 +2080,42 @@ Rules:
 - `yield* Greeter` (written `greeter <- Greeter`) accesses the full service instance when an explicit
   binding is preferred.
 
-### 10.1 External service declarations (`extern service`)
+### 10.1 External package interop: services with `js` operator
 
-When interacting with external third-party packages or SDKs (such as Stripe, AWS SDK, GitHub Octokit, or custom npm libraries), you should not use raw `ts { ... }` escape hatches or unmanaged singletons. Instead, FunScript provides the `extern "<package>" service <Name>` declaration to model external clients directly as typed Effect services and layers.
+When interacting with external third-party packages or SDKs (such as Redis, Stripe, AWS SDK, or custom npm libraries), declare a domain interface with `service <Name>` and implement it using a `Layer` whose methods lift foreign calls into Effects using the `js` interop operator (or `Effect.tryPromise`).
 
-#### Syntax
+> [!NOTE]
+> FunScript previously experimented with an `extern "pkg" service Name` keyword that generated zero-argument client constructors (`new pkg()`). This was retired under the **Strict Zero-Alias Policy** because real-world production SDKs require explicit options, credentials, and configuration (e.g. `createClient({ url })`, `new Stripe(apiKey)`), making zero-arg instantiation unusable.
 
-External services declare their package specifier as a string literal and their member signatures inside braces `{ ... }` or an indented block:
+#### Declaring the domain service contract
 
 ```funscript
-# Braced syntax
-export extern "stripe" service StripeClient {
-  constructEvent: (body: String, sig: String, secret: String) => Effect<StripeEvent, StripeError>
-  createCustomer: (email: String) => Promise<Customer>
-  deleteCustomer: (id: String) => Effect<Promise<DeletedCustomer>, StripeError>
-}
+export error StripeError(message: String)
 
-# Indented syntax
-extern "@aws-sdk/client-s3" service S3Client
-  getObject: (bucket: String, key: String) => Effect<ByteStream, S3Error>
-  putObject: (bucket: String, key: String, body: String) => Effect<Void, S3Error>
+export service StripeClient
+  createCustomer: (email: String) => Effect<Customer, StripeError>
+  deleteCustomer: (id: String) => Effect<DeletedCustomer, StripeError>
 ```
 
-#### Emitted TypeScript
+#### Implementing the Layer with `js` interop
 
-The compiler lowers `extern service` declarations into three primary artifacts:
-1. **Interface Contract**: A TypeScript interface containing the method signatures with all returns normalized to `Effect.Effect<Success, Error, never>`.
-2. **Context Tag**: A `Context.GenericTag<Name>("Name")` identifier used by FunScript's dependency injection system to resolve the service tag from context.
-3. **Live Layer (`<Name>Live`)**: A pre-wired `Layer.succeed(<Name>, { ... })` that instantiates the external client and wraps each method call in the appropriate Effect constructor.
+```funscript
+import { Layer, Effect } from "effect"
+import Stripe from "stripe"
 
-```ts
-// Emitted by the FunScript compiler:
-import { Context, Effect, Layer } from "effect";
-import * as __extern_stripe from "stripe";
+stripe = Stripe(process.env.STRIPE_SECRET_KEY)
 
-export interface StripeClient {
-  readonly constructEvent: (body: string, sig: string, secret: string) => Effect.Effect<StripeEvent, StripeError, never>;
-  readonly createCustomer: (email: string) => Effect.Effect<Customer, unknown, never>;
-  readonly deleteCustomer: (id: string) => Effect.Effect<DeletedCustomer, StripeError, never>;
-}
-
-export const StripeClient = Context.GenericTag<StripeClient>("StripeClient");
-
-const __client_StripeClient: any =
-  typeof __extern_stripe === "function"
-    ? new (__extern_stripe as any)()
-    : typeof (__extern_stripe as any).default === "function"
-      ? new ((__extern_stripe as any).default)()
-      : typeof (__extern_stripe as any).StripeClient === "function"
-        ? new ((__extern_stripe as any).StripeClient)()
-        : __extern_stripe;
-
-export const StripeClientLive = Layer.succeed(StripeClient, {
-  constructEvent: (body, sig, secret) =>
-    Effect.try({
-      try: () => __client_StripeClient.constructEvent(body, sig, secret),
-      catch: (error: any) => error as StripeError,
-    }),
+export StripeClientLive = Layer.succeed(StripeClient, {
   createCustomer: (email) =>
-    Effect.tryPromise({
-      try: () => __client_StripeClient.createCustomer(email),
-      catch: (error: any) => error as unknown,
-    }),
+    js stripe.customers.create({ email })
+    |> Effect.mapError(e => StripeError(e.message)),
   deleteCustomer: (id) =>
-    Effect.tryPromise({
-      try: () => __client_StripeClient.deleteCustomer(id),
-      catch: (error: any) => error as StripeError,
-    }),
-});
+    js stripe.customers.del(id)
+    |> Effect.mapError(e => StripeError(e.message))
+})
 ```
 
-#### Method signatures and Effect wrapper rules
-
-Each member in an `extern service` represents a method on the external client. The return type determines how the compiler wraps external method execution in the generated live layer:
-
-| Declared Return Type | Method Kind | Layer Wrapper | Interface Return Type | Error Channel |
-| --- | --- | --- | --- | --- |
-| `Effect<T, E>` | Synchronous / Effect | `Effect.try` | `Effect.Effect<T, E, never>` | `E` |
-| `Effect<Promise<T>, E>` | Asynchronous | `Effect.tryPromise` | `Effect.Effect<T, E, never>` | `E` |
-| `Promise<T>` / `Async<T>` | Asynchronous | `Effect.tryPromise` | `Effect.Effect<T, unknown, never>` | `unknown` |
-| `T` (synchronous value) | Synchronous | `Effect.try` | `Effect.Effect<T, unknown, never>` | `unknown` |
-
-#### Error models and exception handling
-
-Third-party JavaScript and TypeScript libraries typically throw unhandled exceptions or return rejected Promises on failure. FunScript bridges these into Effect's typed error channel:
-- If a method specifies a typed error in `Effect<Success, ErrorType>`, runtime exceptions or rejected Promises caught by the wrapper are cast directly into `ErrorType` in the `E` channel (`catch: (error: any) => error as ErrorType`).
-- If no error type is specified (or when using bare `Promise<T>`), the error channel defaults to `unknown`.
-- Within your application code, callers handle these errors explicitly using `Effect.catchTag`, `Effect.catchAll`, or `match` pattern matching.
-
-#### Idiomatic authoring and consumption patterns
-
-External services are consumed identically to native FunScript services:
-- **Direct calls**: Call methods directly on the service identifier inside `effect { ... }` blocks (e.g. `customer <- StripeClient.createCustomer(email)`). This automatically resolves `StripeClient` from Context and tracks `StripeClient` in the `R` channel.
-- **Explicit binding**: Use `client <- StripeClient` inside an `effect` block to obtain the full service instance.
-- **Layer composition**: Provide the pre-generated `<Name>Live` layer to your workflow using `Effect.provide(StripeClientLive)` or compose it into application layers with `Layer.provide`.
-- **Testing and mocking**: Because `extern service` produces a standard `Context.GenericTag`, unit tests can substitute `StripeClientLive` with a test layer via `Layer.succeed(StripeClient, { ... })` without calling the real external SDK.
-- **No raw escape hatches**: Always author external integrations using native `extern service` rather than raw `ts { ... }` or `export js`.
+Because `js` safely catches all Promise rejections and lifts them into `JsInteropError`, the compiler strictly requires mapping or handling errors before matching the service's declared error channel `StripeError`.
 
 ---
 
@@ -2216,7 +2155,6 @@ export schema User = ...
 export schema Shape = | Circle(radius: Number) | Rect(width: Number, height: Number)
 export error NotFound(...)
 export service Greeter ...
-export extern "stripe" service StripeClient ...
 export { Name } from "./other.fun"
 ```
 
@@ -2460,7 +2398,6 @@ statement      = importDecl
                | schemaDecl
                | errorDecl
                | serviceDecl
-               | externServiceDecl
                | binding
                | mutBinding
                | assignStmt
@@ -2468,7 +2405,7 @@ statement      = importDecl
                | "when" "(" expression ")" ( "=>" expression | block | bracedBlock )
                | expression ;
 
-exportDecl     = "export" ( schemaDecl | errorDecl | serviceDecl | externServiceDecl | binding | reExport ) ;
+exportDecl     = "export" ( schemaDecl | errorDecl | serviceDecl | binding | reExport ) ;
 reExport       = "{" identList "}" "from" string ;
 
 binding        = pattern [ ":" type ] "=" expression ;
@@ -2537,8 +2474,6 @@ effectBind     = pattern "<-" expression ;
 serviceDecl    = "service" UpperIdent [ string ] INDENT { serviceMember } DEDENT ;
 serviceMember  = identifier ":" type ;
 
-externServiceDecl = "extern" string "service" UpperIdent ( ( "{" [ NEWLINE ] [ INDENT ] { externServiceMember } [ DEDENT ] "}" ) | ( NEWLINE INDENT { externServiceMember } DEDENT ) ) ;
-externServiceMember = identifier ":" type ;
 
 errorDecl      = "error" UpperIdent [ "(" [ field { "," field } ] ")" ] ;
 schemaDecl     = [ "ts" ] "schema" UpperIdent [ "<" typeParams ">" ] "=" ( variantBlock | importedTsSchema | typeExpr ) ;
