@@ -355,11 +355,11 @@ export class Formatter {
         const currInner = curr.kind === "ExportDeclaration" ? curr.declaration : curr;
         const nextInner = next.kind === "ExportDeclaration" ? next.declaration : next;
         const currIsMulti = currInner.kind === "ServiceDeclaration" ||
-          currInner.kind === "ExternServiceDeclaration" ||
+          (currInner.kind === "ExternServiceDeclaration" && currInner.members.length > 0 && (!currInner.span || currInner.span.end.line > currInner.span.start.line)) ||
           (currInner.kind === "SchemaDeclaration" && currInner.body.kind !== "TypeSignatureSchema" && currInner.body.kind !== "TsDerivedSchema" && currInner.body.kind !== "ImportedTsSchema") ||
           (currInner.kind === "BindingDeclaration" && currInner.init.span && currInner.init.span.end.line > currInner.init.span.start.line);
         const nextIsMulti = nextInner.kind === "ServiceDeclaration" ||
-          nextInner.kind === "ExternServiceDeclaration" ||
+          (nextInner.kind === "ExternServiceDeclaration" && nextInner.members.length > 0 && (!nextInner.span || nextInner.span.end.line > nextInner.span.start.line)) ||
           (nextInner.kind === "SchemaDeclaration" && nextInner.body.kind !== "TypeSignatureSchema" && nextInner.body.kind !== "TsDerivedSchema" && nextInner.body.kind !== "ImportedTsSchema") ||
           (nextInner.kind === "BindingDeclaration" && nextInner.init.span && nextInner.init.span.end.line > nextInner.init.span.start.line);
 
@@ -519,14 +519,43 @@ export class Formatter {
   }
 
   private formatExternServiceDeclaration(decl: ExternServiceDeclaration, indent = 0): string {
-    const pkg = decl.package.raw;
+    const pkg = this.formatStringLiteral(decl.package);
+    let hasBraces = false;
+    let isSingleLine = false;
+    if (decl.span) {
+      isSingleLine = decl.span.start.line === decl.span.end.line;
+      if (decl.id.span) {
+        const afterId = this.source.slice(decl.id.span.end.offset, decl.span.end.offset);
+        hasBraces = afterId.includes("{");
+      } else {
+        const declText = this.source.slice(decl.span.start.offset, decl.span.end.offset);
+        hasBraces = declText.includes("{");
+      }
+    } else {
+      hasBraces = decl.members.length === 0;
+    }
+
+    if (isSingleLine || decl.members.length === 0) {
+      if (decl.members.length === 0) {
+        return `extern ${pkg} service ${decl.id.name} {}`;
+      }
+      const members = decl.members.map(m => `${m.name.name}: ${this.formatType(m.signature)}`).join(", ");
+      return `extern ${pkg} service ${decl.id.name} { ${members} }`;
+    }
+
     const memberIndent = this.spaces(indent + this.indentSize);
     const members = decl.members.map(m => {
       const leading = this.formatLeadingComments(m, memberIndent);
       const trailing = this.getTrailingComment(m.span.end.line);
       return `${leading}${memberIndent}${m.name.name}: ${this.formatType(m.signature)}${trailing}`;
     }).join("\n");
-    return `extern ${pkg} service ${decl.id.name}\n${members}`;
+
+    if (hasBraces) {
+      const closingIndent = this.spaces(indent);
+      return `extern ${pkg} service ${decl.id.name} {\n${members}\n${closingIndent}}`;
+    } else {
+      return `extern ${pkg} service ${decl.id.name}\n${members}`;
+    }
   }
 
   private formatBindingDeclaration(decl: BindingDeclaration, indent = 0): string {
