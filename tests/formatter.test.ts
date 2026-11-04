@@ -267,6 +267,69 @@ export service Greeter "greeter-v1"
     expect(format(formatted)).toBe(formatted);
   });
 
+  it("formats extern service declarations with indentation and with braces", () => {
+    const unformattedIndented = `
+extern "stripe" service StripeClient
+    constructEvent: (body: String, sig: String, secret: String) => Effect<StripeEvent, StripeError>
+    createCustomer: (email: String) => Effect<Customer, StripeError>
+`.trim();
+    const formattedIndented = format(unformattedIndented);
+    expect(formattedIndented).toBe(
+      `extern "stripe" service StripeClient\n  constructEvent: (body: String, sig: String, secret: String) => Effect<StripeEvent, StripeError>\n  createCustomer: (email: String) => Effect<Customer, StripeError>\n`
+    );
+    expect(format(formattedIndented)).toBe(formattedIndented);
+
+    const unformattedBraced = `
+extern "@aws-sdk/client-s3" service S3Client {
+      getObject: (bucket: String, key: String) => Effect<ByteStream, S3Error>
+      putObject: (bucket: String, key: String, body: ByteStream) => Effect<Void, S3Error>
+}
+`.trim();
+    const formattedBraced = format(unformattedBraced);
+    expect(formattedBraced).toBe(
+      `extern "@aws-sdk/client-s3" service S3Client {\n  getObject: (bucket: String, key: String) => Effect<ByteStream, S3Error>\n  putObject: (bucket: String, key: String, body: ByteStream) => Effect<Void, S3Error>\n}\n`
+    );
+    expect(format(formattedBraced)).toBe(formattedBraced);
+  });
+
+  it("formats single-line and empty extern service declarations", () => {
+    const singleLine = `extern "stripe" service StripeClient { constructEvent: (body: String) => Effect<String> }`;
+    const formattedSingle = format(singleLine);
+    expect(formattedSingle).toBe(
+      `extern "stripe" service StripeClient { constructEvent: (body: String) => Effect<String> }\n`
+    );
+    expect(format(formattedSingle)).toBe(formattedSingle);
+
+    const singleLineMultiMembers = `extern "stripe" service StripeClient {   constructEvent: (body: String) => Effect<String>,   cancel: () => Effect<Void>   }`;
+    const formattedMultiMembers = format(singleLineMultiMembers);
+    expect(formattedMultiMembers).toBe(
+      `extern "stripe" service StripeClient { constructEvent: (body: String) => Effect<String>, cancel: () => Effect<Void> }\n`
+    );
+    expect(format(formattedMultiMembers)).toBe(formattedMultiMembers);
+
+    const empty = `extern "stripe" service StripeClient {}`;
+    const formattedEmpty = format(empty);
+    expect(formattedEmpty).toBe(
+      `extern "stripe" service StripeClient {}\n`
+    );
+    expect(format(formattedEmpty)).toBe(formattedEmpty);
+  });
+
+  it("formats exported extern service declarations with comments", () => {
+    const unformatted = `
+// Client for Stripe payment processing
+export extern "stripe" service StripeClient {
+  // Verifies incoming webhook
+  constructEvent: (body: String, sig: String, secret: String) => Effect<StripeEvent, StripeError>
+}
+`.trim();
+    const formatted = format(unformatted);
+    expect(formatted).toBe(
+      `// Client for Stripe payment processing\nexport extern "stripe" service StripeClient {\n  // Verifies incoming webhook\n  constructEvent: (body: String, sig: String, secret: String) => Effect<StripeEvent, StripeError>\n}\n`
+    );
+    expect(format(formatted)).toBe(formatted);
+  });
+
   it("formats match expressions with pattern types", () => {
     const unformatted = `
 export classify = (shape: Shape) =>
