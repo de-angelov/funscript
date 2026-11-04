@@ -178,7 +178,7 @@ describe("VS Code Extension Package (TASK-018)", () => {
       );
       expect(controlKeywords).toBeDefined();
       const controlRegex = new RegExp(controlKeywords.match);
-      for (const kw of ["effect", "match", "mut", "schema", "service", "extern", "error", "export", "import", "from", "when"]) {
+      for (const kw of ["effect", "match", "mut", "schema", "service", "extern", "error", "export", "import", "from", "when", "default"]) {
         expect(controlRegex.test(kw)).toBe(true);
       }
 

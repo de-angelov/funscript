@@ -25,6 +25,7 @@ export interface Program extends NodeBase {
 export type TopLevelDeclaration =
   | ImportDeclaration
   | ExportDeclaration
+  | ExportDefaultDeclaration
   | SchemaDeclaration
   | ErrorDeclaration
   | ServiceDeclaration
@@ -55,6 +56,11 @@ export interface ImportSpecifier extends NodeBase {
 export interface ExportDeclaration extends NodeBase {
   kind: "ExportDeclaration";
   declaration: SchemaDeclaration | ErrorDeclaration | ServiceDeclaration | ExternServiceDeclaration | BindingDeclaration;
+}
+
+export interface ExportDefaultDeclaration extends NodeBase {
+  kind: "ExportDefaultDeclaration";
+  expression: Expression;
 }
 
 export interface BindingDeclaration extends NodeBase {

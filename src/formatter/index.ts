@@ -7,6 +7,7 @@ import {
   ImportDeclaration,
   ImportSpecifier,
   ExportDeclaration,
+  ExportDefaultDeclaration,
   BindingDeclaration,
   SchemaDeclaration,
   SchemaBody,
@@ -249,6 +250,8 @@ export class Formatter {
         return node.body;
       case "ExportDeclaration":
         return [node.declaration];
+      case "ExportDefaultDeclaration":
+        return [node.expression];
       case "BindingDeclaration":
         return [node.init];
       case "SchemaDeclaration":
@@ -357,11 +360,13 @@ export class Formatter {
         const currIsMulti = currInner.kind === "ServiceDeclaration" ||
           (currInner.kind === "ExternServiceDeclaration" && currInner.members.length > 0 && (!currInner.span || currInner.span.end.line > currInner.span.start.line)) ||
           (currInner.kind === "SchemaDeclaration" && currInner.body.kind !== "TypeSignatureSchema" && currInner.body.kind !== "TsDerivedSchema" && currInner.body.kind !== "ImportedTsSchema") ||
-          (currInner.kind === "BindingDeclaration" && currInner.init.span && currInner.init.span.end.line > currInner.init.span.start.line);
+          (currInner.kind === "BindingDeclaration" && currInner.init.span && currInner.init.span.end.line > currInner.init.span.start.line) ||
+          (currInner.kind === "ExportDefaultDeclaration" && currInner.expression.span && currInner.expression.span.end.line > currInner.expression.span.start.line);
         const nextIsMulti = nextInner.kind === "ServiceDeclaration" ||
           (nextInner.kind === "ExternServiceDeclaration" && nextInner.members.length > 0 && (!nextInner.span || nextInner.span.end.line > nextInner.span.start.line)) ||
           (nextInner.kind === "SchemaDeclaration" && nextInner.body.kind !== "TypeSignatureSchema" && nextInner.body.kind !== "TsDerivedSchema" && nextInner.body.kind !== "ImportedTsSchema") ||
-          (nextInner.kind === "BindingDeclaration" && nextInner.init.span && nextInner.init.span.end.line > nextInner.init.span.start.line);
+          (nextInner.kind === "BindingDeclaration" && nextInner.init.span && nextInner.init.span.end.line > nextInner.init.span.start.line) ||
+          (nextInner.kind === "ExportDefaultDeclaration" && nextInner.expression.span && nextInner.expression.span.end.line > nextInner.expression.span.start.line);
 
         if (currIsMulti || nextIsMulti) {
           result += "\n\n";
@@ -388,6 +393,8 @@ export class Formatter {
     switch (decl.kind) {
       case "ExportDeclaration":
         return `export ${this.formatDeclaration(decl.declaration)}`;
+      case "ExportDefaultDeclaration":
+        return `export default ${this.formatExpression(decl.expression, 0)}`;
       case "ImportDeclaration":
         return this.formatImportDeclaration(decl);
       case "SchemaDeclaration":

@@ -116,6 +116,17 @@ export res = 5 |> add(10, _)
     expect(res.typescript).toContain(`(__p) => add(10, __p)`);
   });
 
+  it("compiles export default declarations", async () => {
+    const resId = await Effect.runPromise(compileString("App = 1\nexport default App"));
+    expect(resId.typescript).toContain("export default App;");
+
+    const resArrow = await Effect.runPromise(compileString("export default () => <div />", "app.funx"));
+    expect(resArrow.typescript).toContain("export default () => <div />;");
+
+    const resLit = await Effect.runPromise(compileString("export default 42"));
+    expect(resLit.typescript).toContain("export default 42;");
+  });
+
   it("auto-resolves mapError as an Effect pipeline stage", async () => {
     const code = `export safe = Effect.fail("network") |> mapError((reason) => "mapped")`;
 

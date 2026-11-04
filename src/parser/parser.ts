@@ -4,6 +4,7 @@ import {
   ImportDeclaration,
   ImportSpecifier,
   ExportDeclaration,
+  ExportDefaultDeclaration,
   BindingDeclaration,
   SchemaDeclaration,
   SchemaBody,
@@ -125,6 +126,7 @@ export class Parser {
   private mutableVariables = new Set<string>();
   private mutDraftVariables = new Set<string>();
   private parsingBraceEffect = false;
+  private hasDefaultExport = false;
   private options: ParserOptions;
   private isFunx: boolean;
 
@@ -166,6 +168,7 @@ export class Parser {
     if (opts.isFunx !== undefined) {
       this.isFunx = opts.isFunx;
     }
+    this.hasDefaultExport = false;
 
     const start = this.peek().span.start;
     const body: TopLevelDeclaration[] = [];
@@ -209,6 +212,9 @@ export class Parser {
   private parseTopLevelDeclaration(): TopLevelDeclaration {
     if (this.match(TokenType.EXPORT)) {
       const exportStart = this.previous().span.start;
+      if (this.match(TokenType.DEFAULT)) {
+        return this.parseExportDefaultDeclaration(exportStart);
+      }
       const isJs = this.match(TokenType.JS);
       const isTs = !isJs && this.match(TokenType.TS);
       const decl = this.parseDeclaration(isJs, isTs);
@@ -219,6 +225,33 @@ export class Parser {
       };
     }
     return this.parseDeclaration();
+  }
+
+  private parseExportDefaultDeclaration(start: Position): ExportDefaultDeclaration {
+    if (this.hasDefaultExport) {
+      throw new ParseError("Multiple default exports are not allowed", {
+        start,
+        end: this.previous().span.end,
+      });
+    }
+    this.hasDefaultExport = true;
+    let hasIndent = false;
+    if (this.match(TokenType.NEWLINE)) {
+      hasIndent = this.match(TokenType.INDENT);
+    }
+    const expression = this.parseExpression();
+    if (hasIndent) {
+      this.skipNewlines();
+      if (!this.isAtEnd() && !this.check(TokenType.EOF)) {
+        this.consume(TokenType.DEDENT, "Expected unindent after default export");
+      }
+    }
+    this.consumeNewlineOrEof("Expected newline after default export");
+    return {
+      kind: "ExportDefaultDeclaration",
+      expression,
+      span: { start, end: expression.span.end },
+    };
   }
 
   private parseDeclaration(isJs = false, isTs = false): TopLevelDeclaration {

@@ -5,6 +5,7 @@ import {
   Program,
   ImportDeclaration,
   ExportDeclaration,
+  ExportDefaultDeclaration,
   SchemaDeclaration,
   RecordSchema,
   TaggedUnionSchema,
@@ -96,6 +97,37 @@ export count = 10
 
       expect(ast.body[1].kind).toBe("ExportDeclaration");
       expect((ast.body[1] as ExportDeclaration).declaration.kind).toBe("BindingDeclaration");
+    });
+
+    it("parses export default declarations", () => {
+      const ast = parse("export default App");
+      expect(ast.body.length).toBe(1);
+      const decl = ast.body[0] as ExportDefaultDeclaration;
+      expect(decl.kind).toBe("ExportDefaultDeclaration");
+      expect(decl.expression.kind).toBe("UpperIdentifier");
+      expect((decl.expression as any).name).toBe("App");
+    });
+
+    it("parses export default with arrow function and JSX in funx", () => {
+      const ast = parse("export default () => <div />", "test.funx");
+      expect(ast.body.length).toBe(1);
+      const decl = ast.body[0] as ExportDefaultDeclaration;
+      expect(decl.kind).toBe("ExportDefaultDeclaration");
+      expect(decl.expression.kind).toBe("FunctionExpression");
+    });
+
+    it("parses export default with literal expression", () => {
+      const ast = parse("export default 42");
+      expect(ast.body.length).toBe(1);
+      const decl = ast.body[0] as ExportDefaultDeclaration;
+      expect(decl.kind).toBe("ExportDefaultDeclaration");
+      expect(decl.expression.kind).toBe("NumberLiteral");
+    });
+
+    it("rejects multiple export default declarations in one file", () => {
+      expect(() => parse("export default 1\nexport default 2")).toThrowError(
+        /Multiple default exports are not allowed/
+      );
     });
   });
 
