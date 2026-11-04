@@ -733,6 +733,75 @@ export extern "stripe" service StripeClient {
       expect(res.typescript).toContain(`catch: (error: any) => error as StripeError`);
     });
 
+    it("compiles extern service referencing ts schema types and catches thrown SDK exceptions in effect blocks", async () => {
+      const code = `
+ts schema StripeEvent = {
+  id: String
+  type: String
+}
+
+schema StripeError = {
+  message: String
+}
+
+export extern "stripe" service StripeClient {
+  constructEvent: (body: String, sig: String, secret: String) => Effect<StripeEvent, StripeError>
+}
+
+export handleWebhook = (body: String, sig: String, secret: String) =>
+  effect {
+    event <- StripeClient.constructEvent(body, sig, secret)
+    => event
+  }
+`.trim();
+
+      const res = await Effect.runPromise(compileString(code));
+      expect(res.typescript).toContain(`export interface StripeClient {`);
+      expect(res.typescript).toContain(
+        `readonly constructEvent: (body: string, sig: string, secret: string) => Effect.Effect<StripeEvent, StripeError, never>;`
+      );
+      expect(res.typescript).toContain(
+        `export const StripeClient = Context.GenericTag<StripeClient>("StripeClient");`
+      );
+      expect(res.typescript).toContain(
+        `export const StripeClientLive = Layer.succeed(StripeClient, {`
+      );
+      expect(res.typescript).toContain(
+        `const event = yield* (yield* StripeClient).constructEvent(body, sig, secret);`
+      );
+
+      const mockStripe = {
+        constructEvent: (body: string, sig: string, secret: string) => {
+          if (sig !== "whsec_valid") {
+            throw new Error("Invalid signature");
+          }
+          return { id: "evt_test_123", type: "charge.succeeded" };
+        },
+      };
+
+      const { handleWebhook, StripeClientLive } = evalTypescript(res.typescript, {
+        scope: {
+          __extern_stripe: mockStripe,
+        },
+      }).exports;
+
+      // 1. Success execution yields typed StripeEvent
+      const success = await Effect.runPromise(
+        handleWebhook("raw_body", "whsec_valid", "secret").pipe(
+          Effect.provide(StripeClientLive),
+        ),
+      );
+      expect(success).toEqual({ id: "evt_test_123", type: "charge.succeeded" });
+
+      // 2. Exception thrown by SDK is caught and yields typed Effect failure
+      const failureEffect = handleWebhook("raw_body", "whsec_invalid", "secret").pipe(
+        Effect.provide(StripeClientLive),
+      );
+      const failure = await Effect.runPromise(Effect.flip(failureEffect));
+      expect(failure).toBeDefined();
+      expect((failure as any).message).toBe("Invalid signature");
+    });
+
     it("compiles typed holes to runtime throw expressions", async () => {
       const code = `
 export unfinished = () => ??? "implement later"
