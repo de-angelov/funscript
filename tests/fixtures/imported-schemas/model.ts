@@ -81,3 +81,23 @@ export type BooleanTagged =
 export type NumericTagged =
   | { code: 1; message: string }
   | { code: 2; retryAfter: number };
+
+export type StripeEvent =
+  | {
+      type: "checkout.session.completed";
+      data: {
+        object: {
+          id: string;
+          amount_total: number;
+        };
+      };
+    }
+  | {
+      type: "payment_intent.payment_failed";
+      data: {
+        object: {
+          id: string;
+          last_payment_error: string;
+        };
+      };
+    };

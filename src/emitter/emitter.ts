@@ -1004,18 +1004,42 @@ export class Emitter {
 
     for (const arm of expr.arms) {
       if (arm.pattern.kind === "WildcardPattern") {
-        const body = this.emitArmHandler(arm.body, arm.pattern);
+        const body = this.emitArmHandler(arm.body, arm.pattern, expr.scrutinee);
         code += `\n  .otherwise(${body})`;
       } else {
         const pat = this.emitPattern(arm.pattern);
-        const body = this.emitArmHandler(arm.body, arm.pattern);
+        const body = this.emitArmHandler(arm.body, arm.pattern, expr.scrutinee);
         if (arm.guard) {
-          const vars = this.collectPatternVariables(arm.pattern);
           let guardFn: string;
-          if (vars.length > 0) {
-            guardFn = `($matched) => {\n    const { _tag: _, ...__fields } = $matched as any;\n    const [${vars.join(", ")}] = Object.values(__fields) as any[];\n    return ${this.emitExpression(arm.guard)};\n  }`;
+          if (arm.pattern.kind === "RecordPattern") {
+            const destructParts = this.collectRecordDestructuring(arm.pattern);
+            const scrutineeName = expr.scrutinee?.kind === "Identifier" ? expr.scrutinee.name : undefined;
+            if (destructParts.length > 0) {
+              const lines = [
+                ...(scrutineeName ? [`const ${scrutineeName} = $matched;`] : []),
+                `const { ${destructParts.join(", ")} } = $matched;`,
+                `return ${this.emitExpression(arm.guard)};`,
+              ];
+              guardFn = `($matched) => {\n    ${lines.join("\n    ")}\n  }`;
+            } else if (scrutineeName) {
+              guardFn = `(${scrutineeName}) => ${this.emitExpression(arm.guard)}`;
+            } else {
+              guardFn = `($matched) => ${this.emitExpression(arm.guard)}`;
+            }
+          } else if (arm.pattern.kind === "OrPattern" && arm.pattern.patterns.every((p) => p.kind === "RecordPattern")) {
+            const scrutineeName = expr.scrutinee?.kind === "Identifier" ? expr.scrutinee.name : undefined;
+            if (scrutineeName) {
+              guardFn = `(${scrutineeName}) => ${this.emitExpression(arm.guard)}`;
+            } else {
+              guardFn = `($matched) => ${this.emitExpression(arm.guard)}`;
+            }
           } else {
-            guardFn = `() => ${this.emitExpression(arm.guard)}`;
+            const vars = this.collectPatternVariables(arm.pattern);
+            if (vars.length > 0) {
+              guardFn = `($matched) => {\n    const { _tag: _, ...__fields } = $matched as any;\n    const [${vars.join(", ")}] = Object.values(__fields) as any[];\n    return ${this.emitExpression(arm.guard)};\n  }`;
+            } else {
+              guardFn = `() => ${this.emitExpression(arm.guard)}`;
+            }
           }
           code += `\n  .with(${pat}, ${guardFn}, ${body})`;
         } else {
@@ -1072,7 +1096,12 @@ export class Emitter {
     }
     if (pat.kind === "RecordPattern") {
       const fields = pat.fields
-        .map((f) => (f.pattern ? `${f.key.name}: ${this.emitPattern(f.pattern)}` : `${f.key.name}: P._`))
+        .map((f) => {
+          if (!f.pattern || f.pattern.kind === "VariablePattern") {
+            return `${f.key.name}: P._`;
+          }
+          return `${f.key.name}: ${this.emitPattern(f.pattern)}`;
+        })
         .join(", ");
       return `{ ${fields} }`;
     }
@@ -1083,7 +1112,67 @@ export class Emitter {
     return "P._";
   }
 
-  private emitArmHandler(body: FunctionBody, pat?: Pattern): string {
+  private collectRecordDestructuring(pat: RecordPattern): string[] {
+    const parts: string[] = [];
+    for (const f of pat.fields) {
+      if (!f.pattern) {
+        parts.push(f.key.name);
+      } else if (f.pattern.kind === "VariablePattern") {
+        parts.push(`${f.key.name}: ${f.pattern.name.name}`);
+      } else if (f.pattern.kind === "RecordPattern") {
+        const sub = this.collectRecordDestructuring(f.pattern);
+        if (sub.length > 0) {
+          parts.push(`${f.key.name}: { ${sub.join(", ")} }`);
+        }
+      }
+    }
+    return parts;
+  }
+
+  private emitArmHandler(body: FunctionBody, pat?: Pattern, scrutinee?: Expression): string {
+    if (pat?.kind === "RecordPattern") {
+      const destructParts = this.collectRecordDestructuring(pat);
+      const scrutineeName = scrutinee?.kind === "Identifier" ? scrutinee.name : undefined;
+
+      if (destructParts.length > 0) {
+        const lines: string[] = [];
+        if (scrutineeName) {
+          lines.push(`const ${scrutineeName} = $matched;`);
+        }
+        lines.push(`const { ${destructParts.join(", ")} } = $matched;`);
+        if (body.kind === "BlockStatement") {
+          return `($matched) => {\n    ${lines.join("\n    ")}\n${this.emitFunctionBody(body)}\n  }`;
+        }
+        return `($matched) => {\n    ${lines.join("\n    ")}\n    return ${this.emitExpression(body)};\n  }`;
+      }
+
+      if (scrutineeName) {
+        if (body.kind === "BlockStatement") {
+          return `(${scrutineeName}) => {\n${this.emitFunctionBody(body)}\n}`;
+        }
+        return `(${scrutineeName}) => ${this.emitExpression(body)}`;
+      }
+
+      if (body.kind === "BlockStatement") {
+        return `($matched) => {\n${this.emitFunctionBody(body)}\n}`;
+      }
+      return `($matched) => ${this.emitExpression(body)}`;
+    }
+
+    if (pat?.kind === "OrPattern" && pat.patterns.every((p) => p.kind === "RecordPattern")) {
+      const scrutineeName = scrutinee?.kind === "Identifier" ? scrutinee.name : undefined;
+      if (scrutineeName) {
+        if (body.kind === "BlockStatement") {
+          return `(${scrutineeName}) => {\n${this.emitFunctionBody(body)}\n}`;
+        }
+        return `(${scrutineeName}) => ${this.emitExpression(body)}`;
+      }
+      if (body.kind === "BlockStatement") {
+        return `($matched) => {\n${this.emitFunctionBody(body)}\n}`;
+      }
+      return `($matched) => ${this.emitExpression(body)}`;
+    }
+
     const vars = pat ? this.collectPatternVariables(pat) : [];
     if (vars.length > 0) {
       const unpack = `const { _tag: _, ...__fields } = $matched as any;\n    const [${vars.join(", ")}] = Object.values(__fields) as any[];`;

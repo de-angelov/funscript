@@ -1,8 +1,29 @@
 import { describe, it, expect } from "vitest";
 import { Effect, Equal, Data, pipe } from "effect";
 import { match, P } from "ts-pattern";
+import ts from "typescript";
 import { compileString, CompilerError } from "../src/compiler.js";
 import { format } from "../src/formatter/index.js";
+
+function evaluateTsFunction(tsCode: string, fnName: string) {
+  const cjs = ts.transpileModule(tsCode, {
+    compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 },
+  }).outputText;
+  const module = { exports: {} as any };
+  const fn = new Function("exports", "require", "module", "match", "P", cjs);
+  fn(
+    module.exports,
+    (mod: string) => {
+      if (mod === "effect") return require("effect");
+      if (mod === "ts-pattern") return require("ts-pattern");
+      return require(mod);
+    },
+    module,
+    match,
+    P,
+  );
+  return module.exports[fnName];
+}
 
 describe("Equality Type Constraints & Match Forms Test Suite Matrix (TASK-026)", () => {
   describe("1. Reference Identity Type Constraints (@= and @!)", () => {
@@ -483,6 +504,161 @@ export check = (act: Action) =>
 
       const formatted = format(unformatted);
       expect(formatted).toContain("    | Deposit(amount) when flag => \"large\"\n");
+      expect(format(formatted)).toBe(formatted);
+    });
+  });
+
+  describe("10. Match Form 8: External TypeScript Discriminated Unions ('ts schema') (TASK-176)", () => {
+    it("compiles and executes match with record patterns and sub-property access", async () => {
+      const code = `
+ts {
+  export type StripeEvent =
+    | { type: "checkout.session.completed"; data: { object: { id: string; amount_total: number } } }
+    | { type: "payment_intent.payment_failed"; data: { object: { id: string; last_payment_error: string } } };
+}
+
+export ts schema Event = StripeEvent
+
+export handle = (event: Event) =>
+  match event
+    | { type: "checkout.session.completed" } => event.data.object.amount_total
+    | { type: "payment_intent.payment_failed" } => event.data.object.last_payment_error
+`.trim();
+
+      const res = await Effect.runPromise(compileString(code));
+      expect(res.typescript).toContain('import { match, P } from "ts-pattern";');
+      expect(res.typescript).toContain('.with({ type: "checkout.session.completed" }, (event) => event.data.object.amount_total)');
+      expect(res.typescript).toContain('.with({ type: "payment_intent.payment_failed" }, (event) => event.data.object.last_payment_error)');
+      expect(res.typescript).toContain('.exhaustive()');
+
+      // Execute compiled JavaScript
+      const fn = evaluateTsFunction(res.typescript, "handle");
+
+      expect(fn({
+        type: "checkout.session.completed",
+        data: { object: { id: "cs_1", amount_total: 999 } },
+      })).toBe(999);
+
+      expect(fn({
+        type: "payment_intent.payment_failed",
+        data: { object: { id: "pi_2", last_payment_error: "insufficient_funds" } },
+      })).toBe("insufficient_funds");
+    });
+
+    it("compiles and executes match with destructured and nested record patterns", async () => {
+      const code = `
+ts {
+  export type WebhookEvent =
+    | { type: "order.created"; payload: { customerId: string; total: number } }
+    | { type: "order.cancelled"; payload: { customerId: string; reason: string } };
+}
+
+export ts schema Webhook = WebhookEvent
+
+export summarize = (event: Webhook) =>
+  match event
+    | { type: "order.created", payload } => payload.customerId + ":" + payload.total
+    | { type: "order.cancelled", payload: { customerId, reason } } => customerId + ":" + reason
+`.trim();
+
+      const res = await Effect.runPromise(compileString(code));
+      expect(res.typescript).toContain('const { payload } = $matched;');
+      expect(res.typescript).toContain('const { payload: { customerId, reason } } = $matched;');
+
+      const fn = evaluateTsFunction(res.typescript, "summarize");
+
+      expect(fn({
+        type: "order.created",
+        payload: { customerId: "cust_1", total: 150 },
+      })).toBe("cust_1:150");
+
+      expect(fn({
+        type: "order.cancelled",
+        payload: { customerId: "cust_2", reason: "fraud" },
+      })).toBe("cust_2:fraud");
+    });
+
+    it("compiles and executes match with when guards on narrowed union variants", async () => {
+      const code = `
+ts {
+  export type StripeEvent =
+    | { type: "checkout.session.completed"; data: { object: { id: string; amount_total: number } } }
+    | { type: "payment_intent.payment_failed"; data: { object: { id: string; last_payment_error: string } } };
+}
+
+export ts schema Event = StripeEvent
+
+export classify = (event: Event) =>
+  match event
+    | { type: "checkout.session.completed" } when event.data.object.amount_total > 1000 => "vip"
+    | { type: "checkout.session.completed" } => "standard"
+    | { type: "payment_intent.payment_failed" } => "failed"
+`.trim();
+
+      const res = await Effect.runPromise(compileString(code));
+      expect(res.typescript).toContain(
+        '.with({ type: "checkout.session.completed" }, (event) => (event.data.object.amount_total > 1000), (event) => "vip")',
+      );
+      expect(res.typescript).toContain(
+        '.with({ type: "checkout.session.completed" }, (event) => "standard")',
+      );
+
+      const fn = evaluateTsFunction(res.typescript, "classify");
+
+      expect(fn({
+        type: "checkout.session.completed",
+        data: { object: { id: "cs_1", amount_total: 5000 } },
+      })).toBe("vip");
+
+      expect(fn({
+        type: "checkout.session.completed",
+        data: { object: { id: "cs_2", amount_total: 50 } },
+      })).toBe("standard");
+
+      expect(fn({
+        type: "payment_intent.payment_failed",
+        data: { object: { id: "pi_1", last_payment_error: "expired_card" } },
+      })).toBe("failed");
+    });
+
+    it("compiles or-patterns combining record pattern variants", async () => {
+      const code = `
+ts {
+  export type Notification =
+    | { channel: "email"; recipient: string; subject: string }
+    | { channel: "sms"; recipient: string; body: string }
+    | { channel: "push"; deviceToken: string };
+}
+
+export ts schema Notice = Notification
+
+export getTarget = (n: Notice) =>
+  match n
+    | { channel: "email" } | { channel: "sms" } => n.recipient
+    | { channel: "push" } => n.deviceToken
+`.trim();
+
+      const res = await Effect.runPromise(compileString(code));
+      expect(res.typescript).toContain('P.union({ channel: "email" }, { channel: "sms" })');
+
+      const fn = evaluateTsFunction(res.typescript, "getTarget");
+
+      expect(fn({ channel: "email", recipient: "alice@example.com", subject: "Hello" })).toBe("alice@example.com");
+      expect(fn({ channel: "sms", recipient: "+1234567890", body: "Hi" })).toBe("+1234567890");
+      expect(fn({ channel: "push", deviceToken: "tok_abc" })).toBe("tok_abc");
+    });
+
+    it("formats record patterns and guards cleanly", () => {
+      const unformatted = `
+export check = (event: Event) =>
+  match event
+    | { type: "checkout.session.completed", data } when flag => "ok"
+    | { type: "payment_intent.payment_failed" } => "err"
+`.trim();
+
+      const formatted = format(unformatted);
+      expect(formatted).toContain('    | { type: "checkout.session.completed", data } when flag => "ok"\n');
+      expect(formatted).toContain('    | { type: "payment_intent.payment_failed" } => "err"\n');
       expect(format(formatted)).toBe(formatted);
     });
   });

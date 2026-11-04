@@ -578,9 +578,20 @@ export class Lexer {
 
     // Check banned keywords
     if (BANNED_KEYWORDS[raw]) {
-      if (raw === "type") {
-        const lastToken = this.tokens[this.tokens.length - 1];
-        if (lastToken && lastToken.type === TokenType.IMPORT) {
+      const lastToken = this.tokens[this.tokens.length - 1];
+      if (lastToken && lastToken.type === TokenType.DOT) {
+        this.tokens.push({
+          type: TokenType.IDENTIFIER,
+          value: raw,
+          span,
+        });
+        return;
+      }
+      if (raw === "type" || raw === "data") {
+        if (
+          (lastToken && lastToken.type === TokenType.IMPORT) ||
+          this.braceStack.includes("record")
+        ) {
           this.tokens.push({
             type: TokenType.IDENTIFIER,
             value: raw,

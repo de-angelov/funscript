@@ -134,10 +134,15 @@ function mapDiagnosticLocation(
   if (diagnostic.length !== undefined && diagnostic.length > 0) {
     const tsSpanText = tsCode.slice(diagnostic.start, diagnostic.start + diagnostic.length).trim();
     if (tsSpanText.length > 0) {
-      spanLen = tsSpanText.length;
+      const isExhaustiveError =
+        tsSpanText.includes(".exhaustive") ||
+        (typeof diagnostic.messageText === "string"
+          ? diagnostic.messageText.includes("NonExhaustiveError")
+          : JSON.stringify(diagnostic.messageText).includes("NonExhaustiveError"));
+      spanLen = isExhaustiveError ? 5 : tsSpanText.length;
       const idMatch = tsSpanText.match(/^[A-Za-z0-9_$]+/);
-      const isId = Boolean(idMatch && idMatch[0] === tsSpanText);
-      const searchToken = isId ? idMatch![0] : tsSpanText;
+      const isId = isExhaustiveError || Boolean(idMatch && idMatch[0] === tsSpanText);
+      const searchToken = isExhaustiveError ? "match" : (isId ? idMatch![0] : tsSpanText);
 
       // 1. Try finding on current origLine
       let match = findTokenInLine(lineText, searchToken, isId);
