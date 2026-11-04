@@ -237,12 +237,13 @@ or a compiler-known pattern (`Some`, `None`, `Left`, `Right`, `Success`, `Failur
 The compiler enforces the convention for declarations it generates. Imported JavaScript
 values may have any casing; they are only relevant in expression position.
 
-### 1.5 Keywords (15 total)
+### 1.5 Keywords (17 total)
 
 ```text
 and       effect    error     export    false
-from      import    match     mut       not
-or        schema    service   true      when
+from      import    js        match     mut
+not       or        schema    service   true
+ts        when
 ```
 
 `_` is a special token (wildcard in patterns, discard in `_ <-`, and call-argument
@@ -786,12 +787,14 @@ const topActive = pipe(
 | Piped type                      | Companion module  | Examples of auto-resolved functions                                    |
 | ------------------------------- | ----------------- | ---------------------------------------------------------------------- |
 | `Array<T>` / `ReadonlyArray<T>` | `effect/Array`    | `map`, `filter`, `sort`, `sortBy`, `take`, `drop`, `join`, `findFirst` |
-| `Option<T>`                     | `effect/Option`   | `map`, `flatMap`, `getOrElse`, `isSome`, `isNone`                      |
+| `Option<T>`                     | `effect/Option`   | `map`, `flatMap`, `getOrElse`, `andThen`, `filter`                     |
+| `Result<A, E>`                  | `effect/Result`   | `map`, `flatMap`, `mapError`, `getOrElse`, `match`                     |
+| `Chunk<T>`                      | `effect/Chunk`    | `map`, `filter`, `take`, `drop`, `head`, `tail`                        |
 | `Effect<A, E, R>`               | `effect/Effect`   | `map`, `flatMap`, `retry`, `timeout`, `catchTag`, `provide`            |
-| `HashMap<K, V>`                 | `effect/HashMap`  | `get`, `set`, `has`, `remove`, `values`, `keys`                        |
-| `HashSet<T>`                    | `effect/HashSet`  | `has`, `add`, `remove`, `union`, `difference`                          |
-| `String`                        | `effect/String`   | `trim`, `toLowerCase`, `toUpperCase`, `split`, `lines`                 |
-| `DateTime`                      | `effect/DateTime` | `add`, `subtract`, `formatIso`, `greaterThan`                          |
+| `Schedule<Env, In, Out>`        | `effect/Schedule` | `map`, `addDelay`, `modifyDelay`, `jittered`, `upTo`                   |
+| `Layer<ROut, E, RIn>`           | `effect/Layer`    | `provide`, `merge`, `fresh`, `launch`, `orDie`                         |
+| `Stream<A, E, R>`               | `effect/Stream`   | `map`, `filter`, `take`, `drop`, `timeout`                             |
+| `Schema<A, I, R>`               | `effect/Schema`   | `annotate`, `optional`, `mutable`, `brand`, `check`                    |
 
 #### Resolution and shadowing rules
 

@@ -52,8 +52,9 @@ proprietary project layout or package format.
 
 ## Package scripts in this repository
 
-The repository's own scripts are defined in `package.json`: `build`, `test`, `test:watch`,
-`fmt`, `fmt:check`, `prettier:check`, `verify`, and `pr:check`. They are repository scripts,
+The repository's own scripts are defined in `package.json`: `build`, `benchmark`, `test`,
+`test:examples`, `test:watch`, `fmt`, `fmt:check`, `prettier:check`, `docs:generate`,
+`docs:check`, `verify`, and `pr:check`. They are repository scripts,
 not additional `funscript` CLI commands.
 
 ## Language compatibility policy
@@ -64,10 +65,10 @@ The policy governs three key evolutionary areas:
 
 ### 1. Effect aliases
 
-Historical and obsolete Effect compatibility aliases (such as `catchAll` in favor of `catch`, or `fork` in favor of `forkChild`) are removed immediately to remain 100% synchronized with upstream Effect v4 public exports. There is no multi-release retention window or warning-only phase for obsolete aliases.
+Obsolete Effect compatibility aliases are avoided to remain synchronized with upstream Effect v4 public exports. FunScript enforces canonical names (such as `forkChild` instead of obsolete `fork`). A single audited transitional alias (`catchAll` mapping to `catch`) remains temporarily available in `EFFECT_PIPELINE_COMPATIBILITY_ALIASES` for compatibility, but canonical Effect v4 names should always be preferred.
 
 ```funscript
-# Obsolete Effect alias (rejected at compile time):
+# Audited compatibility alias (compiles to Effect.catch; slated for removal):
 export recover = task |> catchAll((err) => Effect.succeed("fallback"))
 
 # Canonical Effect operation:
@@ -107,13 +108,14 @@ export process = (data) => data |> Array.map((x) => x + 1)
 
 ## Explicit-return migration decision
 
-Under the human-approved decision for TASK-104, FunScript has **declined dedicated codemod tooling** for migrating legacy implicit-return syntax to explicit `=> returnValue` returns.
+Under the human-approved decision for TASK-104 and TASK-166, FunScript has **declined automatic CLI codemod commands** (such as `funscript migrate`) that perform unattended rewrites. Instead, the language provides compiler diagnostics alongside a safe programmatic migration utility in `src/tooling/migrate.ts`.
 
 ### Decision rationale and compatibility policy
 
 In alignment with FunScript's [Strict Zero-Alias compatibility policy](#language-compatibility-policy):
 - FunScript is in early active development with zero external production consumers.
-- No automated migration command (such as `funscript migrate`) or automated AST codemod is provided or maintained.
+- No automated CLI command (such as `funscript migrate`) performs automatic silent rewrites on build.
+- Programmatic safe migration functions (`migrateSource`, `migrateFile`, `migrateFiles`, `formatMigrationReport`) are available in `src/tooling/migrate.ts` to convert unambiguous function blocks while leaving ambiguous constructs untouched for developer review.
 - Codebases rely strictly on immediate, actionable compiler diagnostics (`ParseError: Function block must end with an explicit '=> returnValue'` and `ParseError: Effect block must end with an explicit '=> returnValue'`) to guide developers during manual updates.
 
 ### Ambiguous cases and safety risks
