@@ -138,7 +138,9 @@ function mapDiagnosticLocation(
         tsSpanText.includes(".exhaustive") ||
         (typeof diagnostic.messageText === "string"
           ? diagnostic.messageText.includes("NonExhaustiveError")
-          : JSON.stringify(diagnostic.messageText).includes("NonExhaustiveError"));
+          : diagnostic.messageText
+          ? JSON.stringify(diagnostic.messageText).includes("NonExhaustiveError")
+          : false);
       spanLen = isExhaustiveError ? 5 : tsSpanText.length;
       const idMatch = tsSpanText.match(/^[A-Za-z0-9_$]+/);
       const isId = isExhaustiveError || Boolean(idMatch && idMatch[0] === tsSpanText);
@@ -358,8 +360,16 @@ export const typeCheckVirtualFiles = (
 
           const loc = mapDiagnosticLocation(diag, meta.funPath, meta.funSource, meta.traceMap, meta.tsCode);
           const category = mapCategory(diag.category);
-          const message = ts.flattenDiagnosticMessageText(diag.messageText, "\n");
-          const code = diag.code;
+          let message = ts.flattenDiagnosticMessageText(diag.messageText, "\n");
+          let code: number | string = diag.code;
+
+          if (
+            (diag.code === 2488 || diag.code === 2461) &&
+            /Promise/.test(message)
+          ) {
+            code = "PROMISE_BIND";
+            message = "Cannot bind raw Promise in effect block. External asynchronous calls must be explicitly lifted using the 'js' operator (e.g. '<- js <expr>') or wrapped in 'Effect.tryPromise'.";
+          }
 
           let frame: string | undefined;
           try {
@@ -378,7 +388,8 @@ export const typeCheckVirtualFiles = (
             frame = undefined;
           }
 
-          const header = `${loc.file}:${loc.line}:${loc.column} - ${category} TS${code}: ${message}`;
+          const codePrefix = typeof code === "number" ? `TS${code}` : code;
+          const header = `${loc.file}:${loc.line}:${loc.column} - ${category} ${codePrefix}: ${message}`;
           const formatted = frame ? `${header}\n${frame}` : header;
 
           tsDiagnostics.push({
@@ -393,6 +404,74 @@ export const typeCheckVirtualFiles = (
             frame,
             formatted,
           });
+        }
+
+        const checker = program.getTypeChecker();
+        for (const [normFile, meta] of virtualSourceMap) {
+          const sf = program.getSourceFile(normFile);
+          if (!sf) continue;
+
+          const visit = (node: ts.Node): void => {
+            if (ts.isYieldExpression(node) && node.asteriskToken && node.expression) {
+              const isJsInterop =
+                ts.isCallExpression(node.expression) &&
+                ts.isIdentifier(node.expression.expression) &&
+                node.expression.expression.text === "__funscriptJs";
+
+              if (!isJsInterop) {
+                const type = checker.getTypeAtLocation(node.expression);
+                const isAny = Boolean(type.flags & ts.TypeFlags.Any);
+                if (isAny) {
+                  const customMsg = "Cannot bind untyped 'any' expression in effect block. External asynchronous calls must be explicitly lifted using the 'js' operator (e.g. '<- js <expr>') or validated with a schema.";
+                  const loc = mapDiagnosticLocation(
+                    {
+                      file: sf,
+                      start: node.expression.getStart(sf),
+                      length: node.expression.getWidth(sf),
+                      messageText: customMsg,
+                      category: ts.DiagnosticCategory.Error,
+                      code: 9999,
+                    } as ts.Diagnostic,
+                    meta.funPath,
+                    meta.funSource,
+                    meta.traceMap,
+                    meta.tsCode
+                  );
+                  let frame: string | undefined;
+                  try {
+                    frame = codeFrameColumns(
+                      meta.funSource,
+                      {
+                        start: { line: loc.line, column: loc.column },
+                        end: loc.endColumn ? { line: loc.line, column: loc.endColumn } : undefined,
+                      },
+                      {
+                        message: customMsg,
+                        highlightCode: options?.highlightCode ?? false,
+                      }
+                    );
+                  } catch {
+                    frame = undefined;
+                  }
+                  const header = `${loc.file}:${loc.line}:${loc.column} - error ANY_BIND: ${customMsg}`;
+                  tsDiagnostics.push({
+                    file: loc.file,
+                    line: loc.line,
+                    column: loc.column,
+                    endLine: loc.endLine,
+                    endColumn: loc.endColumn,
+                    message: customMsg,
+                    category: "error",
+                    code: "ANY_BIND",
+                    frame,
+                    formatted: frame ? `${header}\n${frame}` : header,
+                  });
+                }
+              }
+            }
+            ts.forEachChild(node, visit);
+          };
+          visit(sf);
         }
       }
 

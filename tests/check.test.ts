@@ -78,6 +78,57 @@ export result = effect {
       expect(result.diagnostics.some((d) => d.message.includes("Property 'name' does not exist"))).toBe(true);
     });
 
+    it("rejects binding raw Promises in effect blocks with PROMISE_BIND and actionable guidance", async () => {
+      const code = `
+run = (client: { hIncrBy: (k: String) => Promise<Number> }) =>
+  effect {
+    x <- client.hIncrBy("key")
+    => x
+  }
+`.trim();
+
+      const result = await Effect.runPromise(typeCheckSource(code, "raw-promise.fun"));
+      expect(result.success).toBe(false);
+      expect(result.diagnostics.some((d) => d.code === "PROMISE_BIND")).toBe(true);
+      const diag = result.diagnostics.find((d) => d.code === "PROMISE_BIND");
+      expect(diag!.message).toContain("Cannot bind raw Promise in effect block");
+      expect(diag!.message).toContain("must be explicitly lifted using the 'js' operator");
+    });
+
+    it("accepts Promise binds when explicitly lifted with the 'js' operator", async () => {
+      const code = `
+run = (client: { hIncrBy: (k: String) => Promise<Number> }) =>
+  effect {
+    x <- js client.hIncrBy("key")
+    => x
+  }
+`.trim();
+
+      const result = await Effect.runPromise(typeCheckSource(code, "js-promise.fun"));
+      expect(result.success).toBe(true);
+      expect(result.diagnostics).toHaveLength(0);
+    });
+
+    it("rejects binding untyped any expressions in effect blocks with ANY_BIND", async () => {
+      const code = `
+ts {
+  export const client: any = {};
+}
+
+run = () =>
+  effect {
+    x <- client.hIncrBy("key")
+    => x
+  }
+`.trim();
+
+      const result = await Effect.runPromise(typeCheckSource(code, "any-bind.fun"));
+      expect(result.success).toBe(false);
+      expect(result.diagnostics.some((d) => d.code === "ANY_BIND")).toBe(true);
+      const diag = result.diagnostics.find((d) => d.code === "ANY_BIND");
+      expect(diag!.message).toContain("Cannot bind untyped 'any' expression in effect block");
+    });
+
     it("detects variable type mismatch and maps back to original line and column", async () => {
       const code = `
 export title: String = "FunScript"

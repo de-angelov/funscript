@@ -1373,7 +1373,7 @@ export class Emitter {
     if (effectExpr.kind === "CallExpression" && effectExpr.callee.kind === "MemberExpression") {
       const obj = effectExpr.callee.object;
       if (obj.kind === "UpperIdentifier") {
-        if (EFFECT_BUILTIN_MODULES.has(obj.name) || this.effectModuleBindings.has(obj.name)) {
+        if (EFFECT_BUILTIN_MODULES.has(obj.name) || this.effectModuleBindings.has(obj.name) || obj.name === "Promise") {
           return `${obj.name}.${this.emitMemberProperty(effectExpr.callee)}(${effectExpr.args.map((a) => this.emitExpression(a)).join(", ")})`;
         }
         // Direct Service Call: Service.method(...) => (yield* Service).method(...)
