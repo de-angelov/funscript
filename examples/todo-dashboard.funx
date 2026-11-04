@@ -3,14 +3,6 @@
 
 import { Console } from "effect"
 
-ts {
-import { create } from "mutative";
-  export const addTodo = (todos: ReadonlyArray<Todo>, title: string): ReadonlyArray<Todo> =>
-    create(todos, (draft) => {
-      draft.push({ id: "new-task", title, completed: false });
-    });
-}
-
 // --- Standalone JSX runtime for deterministic CLI rendering ---
 
 ts {
@@ -30,6 +22,12 @@ export schema Todo = {
   title: String
   completed: Boolean
 }
+
+export addTodo = (todos: Array<Todo>, title: String): Array<Todo> =>
+  => todos
+  |> mut (draft) =>
+    draft.push({ id: "new-task", title, completed: false })
+    draft
 
 export schema TodoFilter =
   | All

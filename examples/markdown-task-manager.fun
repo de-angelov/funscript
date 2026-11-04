@@ -7,6 +7,7 @@
 // 5. Effect file system I/O via 'js' Promise interop
 
 import { Console } from "effect"
+import { writeFile, readFile, unlink } from "node:fs/promises"
 
 // --- Domain Data Model & Schemas ---
 
@@ -17,35 +18,21 @@ export schema Task = {
   tag: String
 }
 
-export schema TaskManager = ts { { tasks: Task[]; nextId: number; } }
-
-// --- File System I/O Helpers via TypeScript Interop ---
-
-ts {
-import * as fs from "node:fs/promises";
-
-  export async function writeTaskFile(filePath: string, content: string): Promise<boolean> {
-    await fs.writeFile(filePath, content, "utf-8");
-    return true;
-  }
-
-  export async function readTaskFile(filePath: string): Promise<string> {
-    try {
-      return await fs.readFile(filePath, "utf-8");
-    } catch {
-      return "";
-    }
-  }
-
-  export async function deleteTaskFile(filePath: string): Promise<boolean> {
-    try {
-      await fs.unlink(filePath);
-      return true;
-    } catch {
-      return false;
-    }
-  }
+export schema TaskManager = {
+  tasks: Array<Task>
+  nextId: Number
 }
+
+// --- File System I/O Helpers via FunScript Promise Interop ---
+
+export writeTaskFile = (filePath: String, content: String) =>
+  => writeFile(filePath, content, "utf-8").then(() => true)
+
+export readTaskFile = (filePath: String) =>
+  => readFile(filePath, "utf-8").catch(() => "")
+
+export deleteTaskFile = (filePath: String) =>
+  => unlink(filePath).then(() => true).catch(() => false)
 
 // --- Pure Domain Operations (Mutative & Control Flow) ---
 

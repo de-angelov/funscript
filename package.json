@@ -26,6 +26,7 @@
     "prettier:check": "prettier --plugin ./dist/formatter/prettier.js --check examples/hello.fun tests/fixtures/formatter/*.funx docs/ci-release.md",
     "docs:generate": "npm run build && node scripts/generate-reference-docs.mjs",
     "docs:check": "node scripts/generate-reference-docs.mjs --check",
+    "check:idiomatic": "node scripts/check-idiomatic.mjs",
     "verify": "npm run build && npm run fmt:check && npm test",
     "pr:check": "node scripts/validate-pr.js"
   },
