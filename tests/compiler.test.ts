@@ -647,7 +647,8 @@ export extern "stripe" service StripeClient {
 `.trim();
 
       const res = await Effect.runPromise(compileString(code));
-      expect(res.typescript).toContain(`import { Context, Effect } from "effect";`);
+      expect(res.typescript).toContain(`import { Context, Effect, Layer } from "effect";`);
+      expect(res.typescript).toContain(`import * as __extern_stripe from "stripe";`);
       expect(res.typescript).toContain(`export interface StripeClient {`);
       expect(res.typescript).toContain(
         `readonly constructEvent: (body: string, sig: string, secret: string) => Effect.Effect<StripeEvent, StripeError, never>;`
@@ -655,6 +656,18 @@ export extern "stripe" service StripeClient {
       expect(res.typescript).toContain(
         `export const StripeClient = Context.GenericTag<StripeClient>("StripeClient");`
       );
+      expect(res.typescript).toContain(
+        `const __client_StripeClient: any = typeof __extern_stripe === "function"`
+      );
+      expect(res.typescript).toContain(
+        `export const StripeClientLive = Layer.succeed(StripeClient, {`
+      );
+      expect(res.typescript).toContain(`constructEvent: (body, sig, secret) =>`);
+      expect(res.typescript).toContain(`Effect.try({`);
+      expect(res.typescript).toContain(
+        `try: () => __client_StripeClient.constructEvent(body, sig, secret)`
+      );
+      expect(res.typescript).toContain(`catch: (error: any) => error as StripeError`);
     });
 
     it("compiles unexported extern service declarations with multiple methods", async () => {
@@ -665,7 +678,8 @@ extern "@aws-sdk/client-s3" service S3Client
 `.trim();
 
       const res = await Effect.runPromise(compileString(code));
-      expect(res.typescript).toContain(`import { Context, Effect } from "effect";`);
+      expect(res.typescript).toContain(`import { Context, Effect, Layer } from "effect";`);
+      expect(res.typescript).toContain(`import * as __extern_aws_sdk_client_s3 from "@aws-sdk/client-s3";`);
       expect(res.typescript).toContain(`interface S3Client {`);
       expect(res.typescript).toContain(
         `readonly getObject: (bucket: string, key: string) => Effect.Effect<ByteStream, S3Error, never>;`
@@ -676,6 +690,47 @@ extern "@aws-sdk/client-s3" service S3Client
       expect(res.typescript).toContain(
         `const S3Client = Context.GenericTag<S3Client>("S3Client");`
       );
+      expect(res.typescript).toContain(
+        `const S3ClientLive = Layer.succeed(S3Client, {`
+      );
+      expect(res.typescript).toContain(
+        `try: () => __client_S3Client.getObject(bucket, key)`
+      );
+      expect(res.typescript).toContain(
+        `try: () => __client_S3Client.putObject(bucket, key, body)`
+      );
+    });
+
+    it("compiles extern service with async/Promise methods to Effect.tryPromise in live layer", async () => {
+      const code = `
+export extern "stripe" service StripeClient {
+  createCustomer: (email: String) => Promise<Customer>
+  deleteCustomer: (id: String) => Effect<Promise<DeletedCustomer>, StripeError>
+}
+`.trim();
+
+      const res = await Effect.runPromise(compileString(code));
+      expect(res.typescript).toContain(`import { Context, Effect, Layer } from "effect";`);
+      expect(res.typescript).toContain(`import * as __extern_stripe from "stripe";`);
+      expect(res.typescript).toContain(
+        `readonly createCustomer: (email: string) => Effect.Effect<Customer, unknown, never>;`
+      );
+      expect(res.typescript).toContain(
+        `readonly deleteCustomer: (id: string) => Effect.Effect<DeletedCustomer, StripeError, never>;`
+      );
+      expect(res.typescript).toContain(
+        `export const StripeClientLive = Layer.succeed(StripeClient, {`
+      );
+      expect(res.typescript).toContain(`createCustomer: (email) =>`);
+      expect(res.typescript).toContain(`Effect.tryPromise({`);
+      expect(res.typescript).toContain(
+        `try: () => __client_StripeClient.createCustomer(email)`
+      );
+      expect(res.typescript).toContain(`deleteCustomer: (id) =>`);
+      expect(res.typescript).toContain(
+        `try: () => __client_StripeClient.deleteCustomer(id)`
+      );
+      expect(res.typescript).toContain(`catch: (error: any) => error as StripeError`);
     });
 
     it("compiles typed holes to runtime throw expressions", async () => {
