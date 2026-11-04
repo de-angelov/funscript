@@ -175,7 +175,7 @@
       "patterns": [
         {
           "name": "keyword.control.funscript",
-          "match": "\\b(effect|match|mut|schema|service|extern|error|export|import|from|when)\\b"
+          "match": "\\b(effect|match|mut|schema|service|extern|error|export|import|from|when|default)\\b"
         },
         {
           "name": "keyword.other.funscript",

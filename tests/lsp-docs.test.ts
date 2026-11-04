@@ -114,6 +114,7 @@ describe("LSP Keyword & Built-in Documentation Catalog", () => {
       "true",
       "false",
       "from",
+      "default",
       "js",
       "ts",
     ];

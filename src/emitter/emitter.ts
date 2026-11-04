@@ -3,6 +3,7 @@ import {
   TopLevelDeclaration,
   ImportDeclaration,
   ExportDeclaration,
+  ExportDefaultDeclaration,
   BindingDeclaration,
   SchemaDeclaration,
   RecordSchema,
@@ -247,6 +248,8 @@ export class Emitter {
         return this.emitImportDeclaration(decl);
       case "ExportDeclaration":
         return this.emitTopLevelDeclaration(decl.declaration, true);
+      case "ExportDefaultDeclaration":
+        return `export default ${this.emitExpression(decl.expression)};`;
       case "SchemaDeclaration":
         return this.emitSchemaDeclaration(decl, isExport);
       case "ErrorDeclaration":

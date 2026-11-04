@@ -408,6 +408,11 @@ export class DefinitionFinder {
         break;
       }
 
+      case "ExportDefaultDeclaration": {
+        this.visitExpression(decl.expression, scope);
+        break;
+      }
+
       case "ImportDeclaration": {
         for (const spec of decl.specifiers) {
           if (this.isCursorIn(spec.imported)) {

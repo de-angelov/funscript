@@ -189,6 +189,21 @@ Effect's modern date-time module replacing JavaScript's mutable `Date`.
 
 See also: `Duration`.
 
+## `default`
+
+Exports an expression as the default export of the module.
+
+```funscript
+export default <expression>
+```
+
+Specifies the default export of a module or route file.
+
+Only one default export is permitted per file. Useful for framework integrations (e.g. Next.js, Remix, Vite) and route components.
+
+
+See also: `export`, `import`.
+
 ## `Duration`
 
 Representation of an elapsed time interval.
@@ -515,18 +530,19 @@ See also: `fail`, `schema`, `Effect.catchTag`.
 
 ## `export`
 
-Exports a binding, schema, error, or service from the module.
+Exports a binding, schema, error, service, or default value from the module.
 
 ```funscript
 export declaration = ...
 export schema Name = ...
 export service Name ...
+export default <expression>
 ```
 
-Exposes module members to other files. All exports in FunScript are named exports; default exports are disallowed to keep naming consistent and refactorable.
+Exposes module members to other files. Supports both named exports (`export name = value`) and default exports (`export default expr`).
 
 
-See also: `import`.
+See also: `import`, `default`.
 
 ## `extern`
 

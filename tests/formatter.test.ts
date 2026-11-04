@@ -171,6 +171,26 @@ describe("FunScript Code Formatter", () => {
     expect(format(formatted, { filename: "message.funx" })).toBe(formatted);
   });
 
+  it("formats export default declarations cleanly and idempotently", () => {
+    const srcId = "export default App";
+    const fmtId = format(srcId);
+    expect(fmtId).toBe("export default App\n");
+    expect(format(fmtId)).toBe(fmtId);
+    expect(checkFormat(fmtId).isFormatted).toBe(true);
+
+    const srcArrow = "export default () => <div />";
+    const fmtArrow = format(srcArrow, { filename: "App.funx" });
+    expect(fmtArrow).toBe("export default () => <div />\n");
+    expect(format(fmtArrow, { filename: "App.funx" })).toBe(fmtArrow);
+    expect(checkFormat(fmtArrow, { filename: "App.funx" }).isFormatted).toBe(true);
+
+    const srcLit = "export default 42";
+    const fmtLit = format(srcLit);
+    expect(fmtLit).toBe("export default 42\n");
+    expect(format(fmtLit)).toBe(fmtLit);
+    expect(checkFormat(fmtLit).isFormatted).toBe(true);
+  });
+
   it("formats Effect blocks and pipelines idempotently", () => {
     const source = `result =\n  effect\n    value <- fetch()\n    => value |> normalize`;
     const formatted = format(source);

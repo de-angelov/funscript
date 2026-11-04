@@ -21,6 +21,7 @@ export enum TokenType {
 
   // Keywords
   AND = "and",
+  DEFAULT = "default",
   EFFECT = "effect",
   ERROR = "error",
   EXPORT = "export",
@@ -97,6 +98,7 @@ export interface Token {
 
 export const KEYWORDS: Record<string, TokenType> = {
   and: TokenType.AND,
+  default: TokenType.DEFAULT,
   effect: TokenType.EFFECT,
   error: TokenType.ERROR,
   export: TokenType.EXPORT,

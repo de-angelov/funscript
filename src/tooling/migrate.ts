@@ -326,6 +326,11 @@ function visitTopLevelDeclaration(
         visitTopLevelDeclaration(decl.declaration, source, options, changes, diagnostics, filename);
       }
       break;
+    case "ExportDefaultDeclaration":
+      if (decl.expression) {
+        visitExpression(decl.expression, source, options, changes, diagnostics, filename);
+      }
+      break;
     case "BindingDeclaration":
       if (decl.init) {
         visitExpression(decl.init, source, options, changes, diagnostics, filename);

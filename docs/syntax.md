@@ -238,13 +238,13 @@ or a compiler-known pattern (`Some`, `None`, `Left`, `Right`, `Success`, `Failur
 The compiler enforces the convention for declarations it generates. Imported JavaScript
 values may have any casing; they are only relevant in expression position.
 
-### 1.5 Keywords (18 total)
+### 1.5 Keywords (19 total)
 
 ```text
-and       effect    error     export    extern
-false     from      import    js        match
-mut       not       or        schema    service
-true      ts        when
+and       default   effect    error     export
+extern    false     from      import    js
+match     mut       not       or        schema
+service   true      ts        when
 ```
 
 `_` is a special token (wildcard in patterns, discard in `_ <-`, and call-argument
@@ -257,14 +257,14 @@ JavaScript or TypeScript habits into FunScript:
 ```text
 arguments   as          async       await       break
 catch       class       continue    data        declare
-default     delete      do          else        enum
-eval        extends     finally     for         function
-if          in          instanceof  interface   let
-module      namespace   new         null        private
-protected   prototype   public      require     return
-static      super       switch      then        this
-throw       try         type        typeof      undefined
-var         void        while       with        yield
+delete      do          else        enum        eval
+extends     finally     for         function    if
+in          instanceof  interface   let         module
+namespace   new         null        private     protected
+prototype   public      require     return      static
+super       switch      then        this        throw
+try         type        typeof      undefined   var
+void        while       with        yield
 ```
 
 Reserved words are still allowed as record field names and after `.` when the parser
