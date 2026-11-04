@@ -33,7 +33,7 @@ export function funscriptPlugin(options: FunscriptPluginOptions = {}): Plugin {
     config() {
       return {
         esbuild: {
-          include: /\.[jt]sx?$|\.funx$/,
+          include: /\.[jt]sx?$|\.funx?$/,
           loader: "tsx",
         },
       };
