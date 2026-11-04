@@ -30,6 +30,15 @@ export function funscriptPlugin(options: FunscriptPluginOptions = {}): Plugin {
     name: "vite-plugin-funscript",
     enforce: "pre",
 
+    config() {
+      return {
+        esbuild: {
+          include: /\.[jt]sx?$|\.funx$/,
+          loader: "tsx",
+        },
+      };
+    },
+
     async transform(code: string, id: string) {
       const [cleanPath] = id.split("?");
       const cleanId = cleanPath.split("#")[0];
