@@ -5,6 +5,7 @@ import * as fs from "node:fs/promises";
 import * as path from "node:path";
 import { compileString } from "../src/compiler.js";
 import { format } from "../src/formatter/index.js";
+import { typeCheckVirtualFiles } from "../src/compiler/check.js";
 
 function evaluateSchemaModule(tsCode: string): any {
   const cjs = ts.transpileModule(tsCode, {
@@ -16,6 +17,7 @@ function evaluateSchemaModule(tsCode: string): any {
     module.exports,
     (mod: string) => {
       if (mod === "effect") return require("effect");
+      if (mod === "ts-pattern") return require("ts-pattern");
       return require(mod);
     },
     module,
@@ -207,6 +209,122 @@ export ts schema NumericChoice = NumericTagged
       expect(mod.NumericChoiceFromUnknown({ code: 2, retryAfter: 3 })).toEqual({ code: 2, retryAfter: 3 });
       expect(() => mod.NumericChoiceFromUnknown({ code: 3, message: "ok" })).toThrow();
       expect(() => mod.NumericChoiceFromUnknown({ code: 1, retryAfter: "soon" })).toThrow();
+    });
+
+    it("preserves nested discriminated union structures and supports exhaustive narrowing in match arms (TASK-176)", async () => {
+      const source = `
+import type { StripeEvent } from "${fixturePath}"
+
+export ts schema Event = StripeEvent
+
+export handle = (event: Event) =>
+  match event
+    | { type: "checkout.session.completed" } => event.data.object.amount_total
+    | { type: "payment_intent.payment_failed" } => event.data.object.last_payment_error
+`.trim();
+
+      const result = await Effect.runPromise(compileString(source, dummyFile));
+      expect(result.typescript).toContain('type: Schema.Literal("checkout.session.completed")');
+      expect(result.typescript).toContain('type: Schema.Literal("payment_intent.payment_failed")');
+      expect(result.typescript).toContain('id: Schema.String');
+      expect(result.typescript).toContain('amount_total: Schema.Number');
+      expect(result.typescript).toContain('last_payment_error: Schema.String');
+      expect(result.typescript).toContain('.with({ type: "checkout.session.completed" }, (event) => event.data.object.amount_total)');
+      expect(result.typescript).toContain('.with({ type: "payment_intent.payment_failed" }, (event) => event.data.object.last_payment_error)');
+      expect(result.typescript).toContain('.exhaustive()');
+
+      const mod = evaluateSchemaModule(result.typescript);
+      const checkoutEv = {
+        type: "checkout.session.completed",
+        data: { object: { id: "cs_123", amount_total: 5000 } },
+      };
+      const failedEv = {
+        type: "payment_intent.payment_failed",
+        data: { object: { id: "pi_456", last_payment_error: "card_declined" } },
+      };
+      expect(mod.EventFromUnknown(checkoutEv)).toEqual(checkoutEv);
+      expect(mod.EventFromUnknown(failedEv)).toEqual(failedEv);
+      expect(() => mod.EventFromUnknown({ type: "unknown.event" })).toThrow();
+
+      expect(mod.handle(checkoutEv)).toBe(5000);
+      expect(mod.handle(failedEv)).toBe("card_declined");
+
+      // Verify end-to-end type check passes cleanly
+      const checkSource = `
+import type { StripeEvent } from "../tests/fixtures/imported-schemas/model.js"
+
+export ts schema Event = StripeEvent
+
+export handle = (event: Event) =>
+  match event
+    | { type: "checkout.session.completed" } => event.data.object.amount_total
+    | { type: "payment_intent.payment_failed" } => event.data.object.last_payment_error
+`.trim();
+      const checkRes = await Effect.runPromise(
+        typeCheckVirtualFiles(
+          { "src/test-imported.fun": checkSource },
+          { cwd: path.resolve("."), compilerOptions: { rootDir: "." } },
+        ),
+      );
+      expect(checkRes.success).toBe(true);
+      expect(checkRes.errorCount).toBe(0);
+    });
+
+    it("provides source-mapped diagnostic when match arm references non-existent variant property (TASK-176)", async () => {
+      const checkSource = `
+import type { StripeEvent } from "../tests/fixtures/imported-schemas/model.js"
+
+export ts schema Event = StripeEvent
+
+export handle = (event: Event) =>
+  match event
+    | { type: "checkout.session.completed" } => event.data.object.non_existent_field
+    | { type: "payment_intent.payment_failed" } => event.data.object.last_payment_error
+`.trim();
+
+      const checkRes = await Effect.runPromise(
+        typeCheckVirtualFiles(
+          { "src/test-imported.fun": checkSource },
+          { cwd: path.resolve("."), compilerOptions: { rootDir: "." } },
+        ),
+      );
+      expect(checkRes.success).toBe(false);
+      expect(checkRes.errorCount).toBeGreaterThan(0);
+
+      const err = checkRes.diagnostics.find((d) => d.message.includes("non_existent_field"));
+      expect(err).toBeDefined();
+      expect(err!.file).toBe("src/test-imported.fun");
+      expect(err!.line).toBe(7);
+      expect(err!.message).toContain("Property 'non_existent_field' does not exist");
+    });
+
+    it("exhaustiveness checking flags missing union variants with a source-mapped error (TASK-176)", async () => {
+      const checkSource = `
+import type { StripeEvent } from "../tests/fixtures/imported-schemas/model.js"
+
+export ts schema Event = StripeEvent
+
+export handle = (event: Event) =>
+  match event
+    | { type: "checkout.session.completed" } => event.data.object.amount_total
+`.trim();
+
+      const checkRes = await Effect.runPromise(
+        typeCheckVirtualFiles(
+          { "src/test-imported.fun": checkSource },
+          { cwd: path.resolve("."), compilerOptions: { rootDir: "." } },
+        ),
+      );
+      expect(checkRes.success).toBe(false);
+      expect(checkRes.errorCount).toBeGreaterThan(0);
+
+      const err = checkRes.diagnostics.find(
+        (d) => d.message.includes("NonExhaustiveError") || d.message.includes("not callable"),
+      );
+      expect(err).toBeDefined();
+      expect(err!.file).toBe("src/test-imported.fun");
+      expect(err!.line).toBe(6);
+      expect(err!.message).toContain("payment_intent.payment_failed");
     });
 
     it("generates and decodes primitive schemas", async () => {

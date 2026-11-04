@@ -1503,6 +1503,61 @@ export class Parser {
         span: this.previous().span,
       };
     }
+    if (this.match(TokenType.LBRACE)) {
+      const start = this.previous().span.start;
+      const fields: RecordPatternField[] = [];
+      this.skipNewlines();
+      const hasIndent = this.match(TokenType.INDENT);
+
+      while (!this.check(TokenType.RBRACE) && !this.check(TokenType.DEDENT) && !this.isAtEnd()) {
+        this.skipNewlines();
+        if (this.check(TokenType.RBRACE) || this.check(TokenType.DEDENT)) break;
+
+        const key = this.parseIdentifier();
+        let pattern: Pattern | undefined;
+        if (this.match(TokenType.COLON)) {
+          pattern = this.parsePattern();
+        }
+        fields.push({
+          kind: "RecordPatternField",
+          key,
+          pattern,
+          span: { start: key.span.start, end: pattern ? pattern.span.end : key.span.end },
+        });
+
+        this.match(TokenType.COMMA);
+        this.skipNewlines();
+      }
+
+      if (hasIndent) {
+        this.consume(TokenType.DEDENT, "Expected unindent in record pattern");
+      }
+      this.skipNewlines();
+      const end = this.consume(TokenType.RBRACE, "Expected '}' after record pattern").span.end;
+      return {
+        kind: "RecordPattern",
+        fields,
+        span: { start, end },
+      };
+    }
+    if (this.match(TokenType.LBRACKET)) {
+      const start = this.previous().span.start;
+      const elements: Pattern[] = [];
+      this.skipNewlines();
+      while (!this.check(TokenType.RBRACKET) && !this.isAtEnd()) {
+        this.skipNewlines();
+        if (this.check(TokenType.RBRACKET)) break;
+        elements.push(this.parsePattern());
+        this.match(TokenType.COMMA);
+        this.skipNewlines();
+      }
+      const end = this.consume(TokenType.RBRACKET, "Expected ']' after array pattern").span.end;
+      return {
+        kind: "ArrayPattern",
+        elements,
+        span: { start, end },
+      };
+    }
 
     throw new ParseError(`Unexpected pattern token '${this.peek().value}'`, this.peek().span);
   }
