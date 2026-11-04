@@ -135,6 +135,42 @@ describe("FunScript Code Formatter", () => {
     expect(format(formatted, { filename: "message.funx" })).toBe(formatted);
   });
 
+  it("formats single JSX element implicit return in .funx idempotently", () => {
+    const source = `export Message = () =>\n  <p>Done!</p>`;
+    const formatted = format(source, { filename: "message.funx" });
+    expect(formatted).toBe(`export Message = () =>\n  <p>Done!</p>\n`);
+    expect(format(formatted, { filename: "message.funx" })).toBe(formatted);
+  });
+
+  it("formats single JSX fragment implicit return in .funx idempotently", () => {
+    const source = `export Message = () =>\n  <>\n    <span>Hello</span>\n  </>`;
+    const formatted = format(source, { filename: "message.funx" });
+    expect(formatted).toContain("<>");
+    expect(formatted).toContain("<span>Hello</span>");
+    expect(format(formatted, { filename: "message.funx" })).toBe(formatted);
+  });
+
+  it("formats single JSX self-closing element implicit return in .funx idempotently", () => {
+    const source = `export Message = () =>\n  <input type="text" />`;
+    const formatted = format(source, { filename: "message.funx" });
+    expect(formatted).toBe(`export Message = () =>\n  <input type="text" />\n`);
+    expect(format(formatted, { filename: "message.funx" })).toBe(formatted);
+  });
+
+  it("formats braced single JSX element in .funx into indented block preserving implicit return", () => {
+    const source = `export Message = () => {\n  <p>Done!</p>\n}`;
+    const formatted = format(source, { filename: "message.funx" });
+    expect(formatted).toBe(`export Message = () =>\n  <p>Done!</p>\n`);
+    expect(format(formatted, { filename: "message.funx" })).toBe(formatted);
+  });
+
+  it("preserves explicit => return in .funx function block across formatting", () => {
+    const source = `export Message = () =>\n  => <p>Done!</p>`;
+    const formatted = format(source, { filename: "message.funx" });
+    expect(formatted).toBe(`export Message = () =>\n  => <p>Done!</p>\n`);
+    expect(format(formatted, { filename: "message.funx" })).toBe(formatted);
+  });
+
   it("formats Effect blocks and pipelines idempotently", () => {
     const source = `result =\n  effect\n    value <- fetch()\n    => value |> normalize`;
     const formatted = format(source);

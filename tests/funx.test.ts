@@ -143,6 +143,74 @@ export FragmentView = () =>
         "return (<><span>First</span><><strong>Nested</strong><em>Sibling</em></><span>Last</span></>);",
       );
     });
+
+    it("compiles single JSX element in indented function block to TSX with implicit return", async () => {
+      const code = `
+export Button = () =>
+  <button className="primary">Click</button>
+`.trim();
+
+      const res = await Effect.runPromise(compileString(code, "Button.funx"));
+      expect(res.typescript).toContain('return <button className="primary">Click</button>;');
+    });
+
+    it("compiles single JSX self-closing element in braced function block to TSX with implicit return", async () => {
+      const code = `
+export Divider = () => {
+  <hr className="divider" />
+}
+`.trim();
+
+      const res = await Effect.runPromise(compileString(code, "Divider.funx"));
+      expect(res.typescript).toContain('return <hr className="divider" />;');
+    });
+
+    it("compiles single JSX fragment in function block to TSX with implicit return", async () => {
+      const code = `
+export FragmentView = () =>
+  <>
+    <span>First</span>
+    <span>Second</span>
+  </>
+`.trim();
+
+      const res = await Effect.runPromise(compileString(code, "FragmentView.funx"));
+      expect(res.typescript).toContain("return <><span>First</span><span>Second</span></>;");
+    });
+
+    it("rejects multi-statement .funx function block without explicit return during compilation", async () => {
+      const code = `
+export View = () =>
+  title = "Dashboard"
+  <h1>{title}</h1>
+`.trim();
+
+      await expect(Effect.runPromise(compileString(code, "View.funx"))).rejects.toThrow(
+        "Function block must end with an explicit '=> returnValue'",
+      );
+    });
+
+    it("rejects single-expression non-JSX function block in .funx during compilation", async () => {
+      const code = `
+export getValue = () =>
+  42
+`.trim();
+
+      await expect(Effect.runPromise(compileString(code, "getValue.funx"))).rejects.toThrow(
+        "Function block must end with an explicit '=> returnValue'",
+      );
+    });
+
+    it("rejects single-expression function block in .fun file during compilation", async () => {
+      const code = `
+export getValue = () =>
+  42
+`.trim();
+
+      await expect(Effect.runPromise(compileString(code, "getValue.fun"))).rejects.toThrow(
+        "Function block must end with an explicit '=> returnValue'",
+      );
+    });
   });
 
   describe("CLI build command with .funx files", () => {
