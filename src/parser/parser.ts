@@ -113,6 +113,7 @@ export const EFFECT_BARE_EXPR_DIAGNOSTIC =
 export interface ParserOptions {
   throwOnError?: boolean;
   allowLegacyReturns?: boolean;
+  isFunx?: boolean;
 }
 
 export class Parser {
@@ -123,6 +124,7 @@ export class Parser {
   private mutDraftVariables = new Set<string>();
   private parsingBraceEffect = false;
   private options: ParserOptions;
+  private isFunx: boolean;
 
   constructor(
     private tokens: Token[],
@@ -131,6 +133,7 @@ export class Parser {
     options?: ParserOptions,
   ) {
     this.options = { ...options };
+    this.isFunx = options?.isFunx ?? this.filename.endsWith(".funx");
   }
 
   public getDiagnostics(): ParseError[] {
@@ -157,6 +160,9 @@ export class Parser {
     const throwOnError = opts.throwOnError ?? this.options.throwOnError ?? true;
     if (opts.allowLegacyReturns !== undefined) {
       this.options.allowLegacyReturns = opts.allowLegacyReturns;
+    }
+    if (opts.isFunx !== undefined) {
+      this.isFunx = opts.isFunx;
     }
 
     const start = this.peek().span.start;
@@ -1825,7 +1831,18 @@ export class Parser {
         this.skipNewlines();
 
         if (this.check(TokenType.RBRACE) || this.check(TokenType.DEDENT)) {
-          if (requireExplicitReturn && expr.kind !== "MatchExpression" && expr.kind !== "EffectBlockExpression") throw new ParseError(FUNCTION_RETURN_DIAGNOSTIC, expr.span);
+          const isAllowedImplicitJsxReturn =
+            this.isFunx &&
+            statements.length === 0 &&
+            (expr.kind === "JSXElement" || expr.kind === "JSXSelfClosingElement");
+          if (
+            requireExplicitReturn &&
+            !isAllowedImplicitJsxReturn &&
+            expr.kind !== "MatchExpression" &&
+            expr.kind !== "EffectBlockExpression"
+          ) {
+            throw new ParseError(FUNCTION_RETURN_DIAGNOSTIC, expr.span);
+          }
           finalExpression = expr;
           break;
         } else {
@@ -1946,7 +1963,18 @@ export class Parser {
           this.skipNewlines();
 
           if (this.check(TokenType.DEDENT)) {
-            if (requireExplicitReturn && expr.kind !== "MatchExpression" && expr.kind !== "EffectBlockExpression") throw new ParseError(FUNCTION_RETURN_DIAGNOSTIC, expr.span);
+            const isAllowedImplicitJsxReturn =
+              this.isFunx &&
+              statements.length === 0 &&
+              (expr.kind === "JSXElement" || expr.kind === "JSXSelfClosingElement");
+            if (
+              requireExplicitReturn &&
+              !isAllowedImplicitJsxReturn &&
+              expr.kind !== "MatchExpression" &&
+              expr.kind !== "EffectBlockExpression"
+            ) {
+              throw new ParseError(FUNCTION_RETURN_DIAGNOSTIC, expr.span);
+            }
             finalExpression = expr;
             break;
           } else {
@@ -1980,7 +2008,10 @@ export class Parser {
       kind: "BlockStatement",
       statements,
       finalExpression: finalExpression ?? (statements.length === 0 ? fallbackExpr : undefined),
-      span: { start: statements[0]?.span.start || this.previous().span.start, end: (finalExpression ?? fallbackExpr).span.end },
+      span: {
+        start: statements[0]?.span.start || (finalExpression ? finalExpression.span.start : this.previous().span.start),
+        end: (finalExpression ?? fallbackExpr).span.end,
+      },
     };
   }
 
