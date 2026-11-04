@@ -13,7 +13,6 @@ import {
   TsDerivedSchema,
   ErrorDeclaration,
   ServiceDeclaration,
-  ExternServiceDeclaration,
   Expression,
   Literal,
   NumberLiteral,
@@ -171,7 +170,6 @@ export class Emitter {
   private bindings = new Map<string, BindingDeclaration>();
 
   private declaredTypeNames = new Set<string>();
-  private externPackageImports = new Map<string, string>();
 
   constructor(private program?: Program, contextProgram?: Program, private options: EmitterOptions = {}) {
     // Source-map emission renders declarations individually, but resolution
@@ -187,8 +185,7 @@ export class Emitter {
       if (
         decl.kind === "SchemaDeclaration" ||
         decl.kind === "ErrorDeclaration" ||
-        decl.kind === "ServiceDeclaration" ||
-        decl.kind === "ExternServiceDeclaration"
+        decl.kind === "ServiceDeclaration"
       ) {
         this.declaredTypeNames.add(decl.id.name);
       }
@@ -211,9 +208,6 @@ export class Emitter {
     if (generatedEffectImports.length > 0) {
       const sorted = generatedEffectImports.sort().join(", ");
       header += `import { ${sorted} } from "effect";\n`;
-    }
-    for (const [pkgRaw, ident] of this.externPackageImports) {
-      header += `import * as ${ident} from ${pkgRaw};\n`;
     }
     if (this.needsTsPattern) {
       header += `import { match, P } from "ts-pattern";\n`;
@@ -256,8 +250,6 @@ export class Emitter {
         return this.emitErrorDeclaration(decl, isExport);
       case "ServiceDeclaration":
         return this.emitServiceDeclaration(decl, isExport);
-      case "ExternServiceDeclaration":
-        return this.emitExternServiceDeclaration(decl, isExport);
       case "BindingDeclaration":
         return this.emitBindingDeclaration(decl, isExport);
       case "WhenStatement":
@@ -421,93 +413,6 @@ export class Emitter {
       return this.isAsyncOrPromiseType(type.success);
     }
     return false;
-  }
-
-  private emitExternServiceMemberSignature(sig: FunctionTypeNode): string {
-    const params = sig.params
-      .map((p) => {
-        const name = p.name ? p.name.name : "_";
-        return p.typeAnnotation ? `${name}: ${this.emitTypeNode(p.typeAnnotation)}` : name;
-      })
-      .join(", ");
-
-    let retType: string;
-    if (
-      sig.returnType.kind === "TypeReferenceNode" &&
-      (sig.returnType.name.name === "Promise" || sig.returnType.name.name === "Async")
-    ) {
-      this.effectImports.add("Effect");
-      const inner =
-        sig.returnType.typeArgs && sig.returnType.typeArgs.length > 0
-          ? this.emitTypeNode(sig.returnType.typeArgs[0])
-          : "unknown";
-      retType = `Effect.Effect<${inner}, unknown, never>`;
-    } else if (
-      sig.returnType.kind === "EffectTypeNode" &&
-      sig.returnType.success.kind === "TypeReferenceNode" &&
-      (sig.returnType.success.name.name === "Promise" || sig.returnType.success.name.name === "Async")
-    ) {
-      this.effectImports.add("Effect");
-      const inner =
-        sig.returnType.success.typeArgs && sig.returnType.success.typeArgs.length > 0
-          ? this.emitTypeNode(sig.returnType.success.typeArgs[0])
-          : "unknown";
-      const err = sig.returnType.error ? this.emitTypeNode(sig.returnType.error) : "never";
-      const req = sig.returnType.requirements ? this.emitTypeNode(sig.returnType.requirements) : "never";
-      retType = `Effect.Effect<${inner}, ${err}, ${req}>`;
-    } else if (sig.returnType.kind === "EffectTypeNode") {
-      retType = this.emitTypeNode(sig.returnType);
-    } else {
-      this.effectImports.add("Effect");
-      retType = `Effect.Effect<${this.emitTypeNode(sig.returnType)}, unknown, never>`;
-    }
-
-    return `(${params}) => ${retType}`;
-  }
-
-  private emitExternServiceDeclaration(decl: ExternServiceDeclaration, isExport: boolean): string {
-    this.effectImports.add("Context");
-    this.effectImports.add("Effect");
-    this.effectImports.add("Layer");
-    const name = decl.id.name;
-    const exp = isExport ? "export " : "";
-
-    const pkgRaw = decl.package.raw;
-    const pkgValue = decl.package.parts.map((p) => (p.kind === "StringRawPart" ? p.value : "")).join("");
-    const sanitizedPkg = pkgValue.replace(/[^a-zA-Z0-9_$]/g, "_").replace(/^_+/, "");
-    const pkgIdent = `__extern_${sanitizedPkg}`;
-    this.externPackageImports.set(pkgRaw, pkgIdent);
-
-    const clientVar = `__client_${name}`;
-
-    const members = decl.members
-      .map((m) => `  readonly ${m.name.name}: ${this.emitExternServiceMemberSignature(m.signature)};`)
-      .join("\n");
-    const membersBody = members.length > 0 ? `\n${members}\n` : "";
-
-    const clientInit = `const ${clientVar}: any = typeof ${pkgIdent} === "function" ? new (${pkgIdent} as any)() : typeof (${pkgIdent} as any).default === "function" ? new ((${pkgIdent} as any).default)() : typeof (${pkgIdent} as any).${name} === "function" ? new ((${pkgIdent} as any).${name})() : ${pkgIdent};`;
-
-    let liveLayer = "";
-    if (decl.members.length === 0) {
-      liveLayer = `${exp}const ${name}Live = Layer.succeed(${name}, {});`;
-    } else {
-      const methodImplementations = decl.members
-        .map((m) => {
-          const params = m.signature.params.map((p, i) => (p.name ? p.name.name : `_arg${i}`)).join(", ");
-          const isAsync = this.isAsyncOrPromiseType(m.signature.returnType);
-          const wrapper = isAsync ? "Effect.tryPromise" : "Effect.try";
-          let errorType = "unknown";
-          if (m.signature.returnType.kind === "EffectTypeNode" && m.signature.returnType.error) {
-            errorType = this.emitTypeNode(m.signature.returnType.error);
-          }
-          return `  ${m.name.name}: (${params}) =>\n    ${wrapper}({\n      try: () => ${clientVar}.${m.name.name}(${params}),\n      catch: (error: any) => error as ${errorType},\n    }),`;
-        })
-        .join("\n");
-
-      liveLayer = `${exp}const ${name}Live = Layer.succeed(${name}, {\n${methodImplementations}\n});`;
-    }
-
-    return `${exp}interface ${name} {${membersBody}}\n${exp}const ${name} = Context.GenericTag<${name}>("${name}");\n${clientInit}\n${liveLayer}`;
   }
 
   private isPrimitiveType(type?: TypeNode): boolean {

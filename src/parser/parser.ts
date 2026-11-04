@@ -19,8 +19,6 @@ import {
   ErrorField,
   ServiceDeclaration,
   ServiceMember,
-  ExternServiceDeclaration,
-  ExternServiceMember,
   Expression,
   Literal,
   NumberLiteral,
@@ -291,9 +289,6 @@ export class Parser {
     }
     if (this.check(TokenType.SERVICE)) {
       return this.parseServiceDeclaration();
-    }
-    if (this.check(TokenType.EXTERN)) {
-      return this.parseExternServiceDeclaration();
     }
     if (this.check(TokenType.WHEN)) {
       return this.parseWhenStatement();
@@ -620,82 +615,6 @@ export class Parser {
       kind: "ServiceDeclaration",
       id,
       customTag,
-      members,
-      span: { start, end: this.previous().span.end },
-    };
-  }
-
-  private parseExternServiceDeclaration(): ExternServiceDeclaration {
-    const start = this.consume(TokenType.EXTERN, "Expected 'extern'").span.start;
-    if (!this.check(TokenType.STRING)) {
-      throw new ParseError("Expected package name as string literal after 'extern'", this.peek().span);
-    }
-    const pkg = this.parseStringLiteral();
-    this.consume(TokenType.SERVICE, "Expected 'service' after extern package name");
-    const id = this.parseUpperIdentifier();
-
-    const members: ExternServiceMember[] = [];
-
-    if (this.match(TokenType.LBRACE)) {
-      this.skipNewlines();
-      const hasIndent = this.match(TokenType.INDENT);
-
-      while (!this.check(TokenType.RBRACE) && !this.check(TokenType.DEDENT) && !this.isAtEnd()) {
-        this.skipNewlines();
-        if (this.check(TokenType.RBRACE) || this.check(TokenType.DEDENT)) break;
-
-        const mStart = this.peek().span.start;
-        const mName = this.parseIdentifier();
-        this.consume(TokenType.COLON, "Expected ':' after service member name");
-        const sig = this.parseFunctionTypeNode();
-
-        members.push({
-          kind: "ExternServiceMember",
-          name: mName,
-          signature: sig,
-          span: { start: mStart, end: sig.span.end },
-        });
-
-        this.match(TokenType.COMMA);
-        this.skipNewlines();
-      }
-
-      if (hasIndent) {
-        this.consume(TokenType.DEDENT, "Expected unindent after service members");
-      }
-      this.skipNewlines();
-      this.consume(TokenType.RBRACE, "Expected '}' after service members");
-    } else {
-      this.consume(TokenType.NEWLINE, "Expected newline or '{' before service members");
-      this.consume(TokenType.INDENT, "Expected indent before service members");
-
-      while (!this.check(TokenType.DEDENT) && !this.isAtEnd()) {
-        this.skipNewlines();
-        if (this.check(TokenType.DEDENT)) break;
-
-        const mStart = this.peek().span.start;
-        const mName = this.parseIdentifier();
-        this.consume(TokenType.COLON, "Expected ':' after service member name");
-        const sig = this.parseFunctionTypeNode();
-
-        members.push({
-          kind: "ExternServiceMember",
-          name: mName,
-          signature: sig,
-          span: { start: mStart, end: sig.span.end },
-        });
-
-        this.match(TokenType.COMMA);
-        this.skipNewlines();
-      }
-
-      this.consume(TokenType.DEDENT, "Expected unindent after service members");
-    }
-
-    return {
-      kind: "ExternServiceDeclaration",
-      package: pkg,
-      id,
       members,
       span: { start, end: this.previous().span.end },
     };

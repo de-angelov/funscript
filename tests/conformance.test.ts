@@ -12,7 +12,6 @@ const RULE_DIRECTORIES = [
   "numeric-comparisons",
   "pipelines",
   "schemas",
-  "extern-services",
 ] as const;
 
 const ContextCompat = new Proxy(Context, {
@@ -256,59 +255,6 @@ describe("language conformance fixture suite", () => {
 
     it("reports diagnostic when schema name is not UpperCamelCase", async () => {
       await verifyNegativeFixture(dir, "lowercase-schema-name");
-    });
-  });
-
-  describe("Rule: Extern Services", () => {
-    const dir = path.join(CONFORMANCE_ROOT, "extern-services");
-
-    it("verifies extern service with ts schema and decode pipeline compiles, matches expected TypeScript, and evaluates correctly", async () => {
-      const mockStripe = {
-        constructEvent: (body: string, sig: string, secret: string) => {
-          if (sig !== "valid_sig") {
-            throw new Error("Invalid signature");
-          }
-          return { id: "evt_conformance_1", type: "payment_intent.succeeded" };
-        },
-      };
-
-      await verifyPositiveFixture(dir, "extern-service-wrapper", {
-        evalExports: ["processWebhook", "StripeClientLive"],
-        scope: {
-          __extern_stripe: mockStripe,
-        },
-        verifyEval: async ({ processWebhook, StripeClientLive }) => {
-          // 1. Success case: decoded input feeds into extern service call
-          const result = await Effect.runPromise(
-            processWebhook({ payload: "event_data", signature: "valid_sig" }, "whsec_test").pipe(
-              Effect.provide(StripeClientLive),
-            ),
-          );
-          expect(result).toEqual({ id: "evt_conformance_1", type: "payment_intent.succeeded" });
-
-          // 2. Exception case: SDK thrown exception is caught and yields typed Effect failure
-          const failEffect = processWebhook(
-            { payload: "event_data", signature: "invalid_sig" },
-            "whsec_test",
-          ).pipe(Effect.provide(StripeClientLive));
-          const failure = await Effect.runPromise(Effect.flip(failEffect));
-          expect(failure).toBeDefined();
-          expect((failure as any).message).toBe("Invalid signature");
-
-          // 3. Invalid decoded input: payload validation fails before extern service call
-          const decodeFailEffect = processWebhook(
-            { payload: 12345, signature: "valid_sig" },
-            "whsec_test",
-          ).pipe(Effect.provide(StripeClientLive));
-          const decodeFailure = await Effect.runPromise(Effect.flip(decodeFailEffect));
-          expect(decodeFailure).toBeDefined();
-          expect((decodeFailure as any)._tag).toBe("SchemaError");
-        },
-      });
-    });
-
-    it("reports diagnostic when extern package name is missing", async () => {
-      await verifyNegativeFixture(dir, "missing-extern-package");
     });
   });
 });

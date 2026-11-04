@@ -340,7 +340,6 @@ function visitTopLevelDeclaration(
       visitWhenStatement(decl, source, options, changes, diagnostics, filename);
       break;
     case "ServiceDeclaration":
-    case "ExternServiceDeclaration":
       // Service members declare signatures only
       break;
     case "SchemaDeclaration":

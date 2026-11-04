@@ -94,9 +94,9 @@ describe("LSP Keyword & Built-in Documentation Catalog", () => {
 
     it("verifies 'extern' documentation details", () => {
       const doc = getHoverDocumentation("extern")!;
-      expect(doc).toContain("StripeClient");
-      expect(doc).toContain("Context.GenericTag");
-      expect(doc).toContain("Layer.succeed");
+      expect(doc).toContain("Retired");
+      expect(doc).toContain("service");
+      expect(doc).toContain("js");
     });
   });
 

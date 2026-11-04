@@ -25,7 +25,6 @@ export enum TokenType {
   EFFECT = "effect",
   ERROR = "error",
   EXPORT = "export",
-  EXTERN = "extern",
   FALSE = "false",
   FROM = "from",
   IMPORT = "import",
@@ -102,7 +101,6 @@ export const KEYWORDS: Record<string, TokenType> = {
   effect: TokenType.EFFECT,
   error: TokenType.ERROR,
   export: TokenType.EXPORT,
-  extern: TokenType.EXTERN,
   false: TokenType.FALSE,
   from: TokenType.FROM,
   import: TokenType.IMPORT,
@@ -119,6 +117,7 @@ export const KEYWORDS: Record<string, TokenType> = {
 };
 
 export const BANNED_KEYWORDS: Record<string, string> = {
+  extern: "FunScript has retired 'extern service'. Declare interfaces using 'service Name' and implement them in a Layer using 'js' for foreign calls.",
   let: "FunScript has no 'let'; use 'name = value' for immutable bindings, or 'mut name = value' for local mutable drafts.",
   var: "FunScript has no 'var'; use 'name = value' for immutable bindings, or 'mut name = value' for local mutable drafts.",
   const: "FunScript bindings are const by default; write 'name = value'.",
