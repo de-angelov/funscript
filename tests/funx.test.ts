@@ -306,7 +306,8 @@ export Header = () => <header><h1>FunScript</h1></header>
   });
 
   describe("Todo dashboard showcase", () => {
-    const dashboardPath = path.resolve("programs/08-todo-dashboard.funx");
+    const dashboardPath = path.resolve("examples/todo-dashboard.funx");
+    const widgetPath = path.resolve("examples/reactive-widget.funx");
 
     it("compiles composed dashboard components to TSX", async () => {
       const source = await fs.readFile(dashboardPath, "utf-8");
@@ -323,10 +324,8 @@ export Header = () => <header><h1>FunScript</h1></header>
 
     it("checks, runs, and production-builds the .funx applications", async () => {
       const funxFiles = [
-        "programs/07-reactive-widget.funx",
+        widgetPath,
         dashboardPath,
-        path.resolve("examples/reactive-widget.funx"),
-        path.resolve("examples/08-todo-dashboard.funx"),
       ];
 
       for (const funxFile of funxFiles) {
@@ -342,7 +341,7 @@ export Header = () => <header><h1>FunScript</h1></header>
       const widgetRun = await execFileAsync("node", [
         cliPath,
         "run",
-        "programs/07-reactive-widget.funx",
+        widgetPath,
       ]);
       expect(widgetRun.stdout).toContain("[Badge] Rendered Active badge: <span>");
 
@@ -350,13 +349,14 @@ export Header = () => <header><h1>FunScript</h1></header>
       const { stdout: buildOutput } = await execFileAsync("node", [
         cliPath,
         "build",
-        "programs",
+        widgetPath,
+        dashboardPath,
         "--outDir",
         distDir,
       ]);
-      expect(buildOutput).toContain(`✓ Built ${path.join(distDir, "07-reactive-widget.tsx")}`);
-      expect(buildOutput).toContain(`✓ Built ${path.join(distDir, "08-todo-dashboard.tsx")}`);
-      const builtDashboard = await fs.readFile(path.join(distDir, "08-todo-dashboard.tsx"), "utf-8");
+      expect(buildOutput).toContain(`✓ Built ${path.join(distDir, "reactive-widget.tsx")}`);
+      expect(buildOutput).toContain(`✓ Built ${path.join(distDir, "todo-dashboard.tsx")}`);
+      const builtDashboard = await fs.readFile(path.join(distDir, "todo-dashboard.tsx"), "utf-8");
       expect(builtDashboard).toContain("export const TodoDashboard");
     }, 120_000);
   });

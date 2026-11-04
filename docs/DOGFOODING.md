@@ -9,9 +9,9 @@ This dogfooding exercise stress-tested FunScript across realistic, non-trivial a
 
 Three complete applications were built and verified:
 
-1. **GitHub REST API Client (`programs/05-github-api-client.fun` & `examples/github-api-client.fun`)**: REST API client leveraging foreign Promise interop via `js`, runtime JSON schema decoding via `Schema.Struct` and `Schema.decodeUnknownSync`, functional pipelines with `|>`, Effect tagged error declarations, and exhaustive pattern matching on response states (`Success`, `RateLimited`, `NotFound`, `ServerError`).
-2. **Markdown Task Manager CLI (`programs/06-markdown-task-manager.fun` & `examples/markdown-task-manager.fun`)**: Local task manager featuring Mutative `draft` state updates, Effect file system I/O, `when` early returns (`when (title #= "") => ...`), conditional block execution (`when (idx #! -1) { ... }`), and explicit returns (`=> expr`).
-3. **Reactive UI Widget Component (`programs/07-reactive-widget.funx` & `examples/reactive-widget.funx`)**: Native JSX component compiling to `.tsx`, typed props, tagged union view states, attribute string template interpolation (`className="widget-card variant-${props.variant}"`), child expressions, and conditional rendering.
+1. **GitHub REST API Client (`examples/github-api-client.fun`)**: REST API client leveraging foreign Promise interop via `js`, runtime JSON schema decoding via `Schema.Struct` and `Schema.decodeUnknownSync`, functional pipelines with `|>`, Effect tagged error declarations, and exhaustive pattern matching on response states (`Success`, `RateLimited`, `NotFound`, `ServerError`).
+2. **Markdown Task Manager CLI (`examples/markdown-task-manager.fun`)**: Local task manager featuring Mutative `draft` state updates, Effect file system I/O, `when` early returns (`when (title #= "") => ...`), conditional block execution (`when (idx #! -1) { ... }`), and explicit returns (`=> expr`).
+3. **Reactive UI Widget Component (`examples/reactive-widget.funx`)**: Native JSX component compiling to `.tsx`, typed props, tagged union view states, attribute string template interpolation (`className="widget-card variant-${props.variant}"`), child expressions, and conditional rendering.
 
 In addition to building and executing these applications, extensive stress testing uncovered **8 critical compiler/runtime edge cases and ergonomic friction points**, detailed below with minimal reproducible examples, analysis, and recommendations.
 
@@ -19,9 +19,9 @@ In addition to building and executing these applications, extensive stress testi
 
 ## 2. Realistic Applications Built
 
-### 2.1 GitHub REST API Client (`05-github-api-client.fun`)
+### 2.1 GitHub REST API Client (`github-api-client.fun`)
 
-- **Location**: `programs/05-github-api-client.fun` (mirrored at `examples/github-api-client.fun`)
+- **Location**: `examples/github-api-client.fun`
 - **Key Features Demonstrated**:
   - `export schema Repository = { ... }` for API response structure.
   - `export schema ApiResponse = Success | RateLimited | NotFound | ServerError` tagged union.
@@ -30,9 +30,9 @@ In addition to building and executing these applications, extensive stress testi
   - Pipeline decoding: `raw.json |> Schema.decodeUnknownSync(Repository)`.
   - Exhaustive pattern matching (`match res | Success(repo) => ...`).
 
-### 2.2 Markdown Task Manager CLI (`06-markdown-task-manager.fun`)
+### 2.2 Markdown Task Manager CLI (`markdown-task-manager.fun`)
 
-- **Location**: `programs/06-markdown-task-manager.fun` (mirrored at `examples/markdown-task-manager.fun`)
+- **Location**: `examples/markdown-task-manager.fun`
 - **Key Features Demonstrated**:
   - State management using Mutative copy-on-write draft scopes: `manager.tasks |> mut (draft) => draft.push(newTask) \n draft`.
   - Early returns with `when (cond) => expr`.
@@ -40,9 +40,9 @@ In addition to building and executing these applications, extensive stress testi
   - Explicit return statements with `=> expr`.
   - File system persistence via Node fs promises lifted into Effect fibers.
 
-### 2.3 Reactive UI Widget Component (`07-reactive-widget.funx`)
+### 2.3 Reactive UI Widget Component (`reactive-widget.funx`)
 
-- **Location**: `programs/07-reactive-widget.funx` (mirrored at `examples/reactive-widget.funx`)
+- **Location**: `examples/reactive-widget.funx`
 - **Key Features Demonstrated**:
   - `.funx` to `.tsx` component compilation.
   - Typed props via `WidgetProps = { title: String, initialCount: Number, step: Number, min: Number, max: Number, variant: String }`.

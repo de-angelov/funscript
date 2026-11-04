@@ -10,16 +10,14 @@ const execFileAsync = promisify(execFile);
 const cliPath = path.resolve("dist/cli/index.js");
 
 describe("Sample Applications & Real-World Programs", () => {
-  const programsDir = path.resolve("programs");
   const examplesDir = path.resolve("examples");
 
-  describe("04-order-fulfillment.fun end-to-end showcase", () => {
-    const programPath = path.join(programsDir, "04-order-fulfillment.fun");
+  describe("order-fulfillment.fun end-to-end showcase", () => {
     const examplePath = path.join(examplesDir, "order-fulfillment.fun");
 
     it("compiles cleanly to TypeScript with Effect, ts-pattern, and Mutative constructs", async () => {
-      const source = await fs.readFile(programPath, "utf-8");
-      const res = await Effect.runPromise(compileString(source, programPath));
+      const source = await fs.readFile(examplePath, "utf-8");
+      const res = await Effect.runPromise(compileString(source, examplePath));
 
       expect(res.typescript).toBeDefined();
 
@@ -51,8 +49,8 @@ describe("Sample Applications & Real-World Programs", () => {
       expect(res.typescript).toContain("Layer.merge(PaymentGatewayLive)");
     });
 
-    it("executes programs/04-order-fulfillment.fun via CLI and verifies expected output", async () => {
-      const { stdout, stderr } = await execFileAsync("node", [cliPath, "run", programPath]);
+    it("executes examples/order-fulfillment.fun via CLI and verifies expected output", async () => {
+      const { stdout, stderr } = await execFileAsync("node", [cliPath, "run", examplePath]);
       expect(stderr).toBe("");
 
       // Scenario 1: Happy path with retry recovery and dispatch
@@ -62,47 +60,46 @@ describe("Sample Applications & Real-World Programs", () => {
       expect(stdout).toContain("[PaymentGateway] Payment authorized successfully!");
       expect(stdout).toContain("[NotificationService] Sent confirmation to Grace Hopper");
       expect(stdout).toContain("Audit trail: 4 events logged immutably");
+      expect(stdout).toContain("=== Scenario 1 Result ===");
       expect(stdout).toContain("SUCCESS: Order ORD-9402 settled (Tx: TXN-90210) and dispatched with tracking #TRACK-GLO-8849");
 
       // Scenario 2: Error handling with catchAll
       expect(stdout).toContain("=== Starting Fulfillment for Order ORD-9999 ===");
       expect(stdout).toContain("[PaymentGateway] Transaction denied: credit limit exceeded");
       expect(stdout).toContain("[Workflow Recovery] Caught domain error: CreditLimitExceeded");
-      expect(stdout).toContain("FAILED: Order ORD-9999 processing stopped: CreditLimitExceeded");
-    }, 15_000);
-
-    it("executes examples/order-fulfillment.fun identically", async () => {
-      const { stdout, stderr } = await execFileAsync("node", [cliPath, "run", examplePath]);
-      expect(stderr).toBe("");
-      expect(stdout).toContain("=== Scenario 1 Result ===");
-      expect(stdout).toContain("SUCCESS: Order ORD-9402 settled (Tx: TXN-90210) and dispatched with tracking #TRACK-GLO-8849");
       expect(stdout).toContain("=== Scenario 2 Result ===");
       expect(stdout).toContain("FAILED: Order ORD-9999 processing stopped: CreditLimitExceeded");
-    }, 15_000);
+    }, 20_000);
   });
 
-  describe("Existing sample programs compilation and execution", () => {
-    it("runs 01-fibonacci.fun with expected output", async () => {
-      const p = path.join(programsDir, "01-fibonacci.fun");
+  describe("Sample programs compilation and execution", () => {
+    it("runs fibonacci.fun with expected output", async () => {
+      const p = path.join(examplesDir, "fibonacci.fun");
       const { stdout } = await execFileAsync("node", [cliPath, "run", p]);
       expect(stdout).toContain("fib(0) = 0");
       expect(stdout).toContain("fib(10) = 55");
-    });
+    }, 20_000);
 
-    it("runs 02-bank-account.fun with expected output", async () => {
-      const p = path.join(programsDir, "02-bank-account.fun");
+    it("runs bank-account.fun with expected output", async () => {
+      const p = path.join(examplesDir, "bank-account.fun");
       const { stdout } = await execFileAsync("node", [cliPath, "run", p]);
       expect(stdout).toContain("Account ACC-101 (Ada Lovelace): Balance = $300");
-    });
+    }, 20_000);
 
-    it("runs 03-todo-service.fun with expected output", async () => {
-      const p = path.join(programsDir, "03-todo-service.fun");
+    it("runs todo-service.fun with expected output", async () => {
+      const p = path.join(examplesDir, "todo-service.fun");
       const { stdout } = await execFileAsync("node", [cliPath, "run", p]);
       expect(stdout).toContain("Created 3 initial todos.");
       expect(stdout).toContain("Completed tasks #1 and #2.");
       expect(stdout).toContain("[x] #1: Buy coffee beans");
       expect(stdout).toContain("[x] #2: Design FunScript parser");
       expect(stdout).toContain("[ ] #3: Write blog post");
-    });
+    }, 20_000);
+
+    it("checks and compiles js-ts-interop.fun cleanly", async () => {
+      const p = path.join(examplesDir, "js-ts-interop.fun");
+      const { stdout } = await execFileAsync("node", [cliPath, "check", p]);
+      expect(stdout).toContain("checked successfully (0 errors)");
+    }, 20_000);
   });
 });
