@@ -28,6 +28,7 @@ export type TopLevelDeclaration =
   | SchemaDeclaration
   | ErrorDeclaration
   | ServiceDeclaration
+  | ExternServiceDeclaration
   | BindingDeclaration
   | TsEscapeDeclaration
   | WhenStatement;
@@ -53,7 +54,7 @@ export interface ImportSpecifier extends NodeBase {
 
 export interface ExportDeclaration extends NodeBase {
   kind: "ExportDeclaration";
-  declaration: SchemaDeclaration | ErrorDeclaration | ServiceDeclaration | BindingDeclaration;
+  declaration: SchemaDeclaration | ErrorDeclaration | ServiceDeclaration | ExternServiceDeclaration | BindingDeclaration;
 }
 
 export interface BindingDeclaration extends NodeBase {
@@ -156,6 +157,19 @@ export interface ServiceDeclaration extends NodeBase {
 
 export interface ServiceMember extends NodeBase {
   kind: "ServiceMember";
+  name: Identifier;
+  signature: FunctionTypeNode;
+}
+
+export interface ExternServiceDeclaration extends NodeBase {
+  kind: "ExternServiceDeclaration";
+  package: StringLiteral;
+  id: UpperIdentifier;
+  members: ExternServiceMember[];
+}
+
+export interface ExternServiceMember extends NodeBase {
+  kind: "ExternServiceMember";
   name: Identifier;
   signature: FunctionTypeNode;
 }

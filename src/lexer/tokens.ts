@@ -19,11 +19,12 @@ export enum TokenType {
   IDENTIFIER = "IDENTIFIER",
   UPPER_IDENTIFIER = "UPPER_IDENTIFIER",
 
-  // The 17 FunScript Keywords
+  // Keywords
   AND = "and",
   EFFECT = "effect",
   ERROR = "error",
   EXPORT = "export",
+  EXTERN = "extern",
   FALSE = "false",
   FROM = "from",
   IMPORT = "import",
@@ -99,6 +100,7 @@ export const KEYWORDS: Record<string, TokenType> = {
   effect: TokenType.EFFECT,
   error: TokenType.ERROR,
   export: TokenType.EXPORT,
+  extern: TokenType.EXTERN,
   false: TokenType.FALSE,
   from: TokenType.FROM,
   import: TokenType.IMPORT,

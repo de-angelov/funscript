@@ -23,6 +23,8 @@ import {
   ErrorField,
   ServiceDeclaration,
   ServiceMember,
+  ExternServiceDeclaration,
+  ExternServiceMember,
   Expression,
   PipelineExpression,
   BinaryExpression,
@@ -260,6 +262,7 @@ export class Formatter {
       case "ImportedTsSchema":
         return node.typeArguments;
       case "ServiceDeclaration":
+      case "ExternServiceDeclaration":
         return node.members;
       case "BlockStatement":
         return [...node.statements, ...(node.finalExpression ? [node.finalExpression] : [])];
@@ -352,9 +355,11 @@ export class Formatter {
         const currInner = curr.kind === "ExportDeclaration" ? curr.declaration : curr;
         const nextInner = next.kind === "ExportDeclaration" ? next.declaration : next;
         const currIsMulti = currInner.kind === "ServiceDeclaration" ||
+          currInner.kind === "ExternServiceDeclaration" ||
           (currInner.kind === "SchemaDeclaration" && currInner.body.kind !== "TypeSignatureSchema" && currInner.body.kind !== "TsDerivedSchema" && currInner.body.kind !== "ImportedTsSchema") ||
           (currInner.kind === "BindingDeclaration" && currInner.init.span && currInner.init.span.end.line > currInner.init.span.start.line);
         const nextIsMulti = nextInner.kind === "ServiceDeclaration" ||
+          nextInner.kind === "ExternServiceDeclaration" ||
           (nextInner.kind === "SchemaDeclaration" && nextInner.body.kind !== "TypeSignatureSchema" && nextInner.body.kind !== "TsDerivedSchema" && nextInner.body.kind !== "ImportedTsSchema") ||
           (nextInner.kind === "BindingDeclaration" && nextInner.init.span && nextInner.init.span.end.line > nextInner.init.span.start.line);
 
@@ -391,6 +396,8 @@ export class Formatter {
         return this.formatErrorDeclaration(decl);
       case "ServiceDeclaration":
         return this.formatServiceDeclaration(decl, 0);
+      case "ExternServiceDeclaration":
+        return this.formatExternServiceDeclaration(decl, 0);
       case "BindingDeclaration":
         return this.formatBindingDeclaration(decl, 0);
       case "WhenStatement":
@@ -400,7 +407,7 @@ export class Formatter {
     }
   }
 
-  private formatDeclaration(decl: SchemaDeclaration | ErrorDeclaration | ServiceDeclaration | BindingDeclaration | WhenStatement): string {
+  private formatDeclaration(decl: SchemaDeclaration | ErrorDeclaration | ServiceDeclaration | ExternServiceDeclaration | BindingDeclaration | WhenStatement): string {
     switch (decl.kind) {
       case "SchemaDeclaration":
         return this.formatSchemaDeclaration(decl, 0);
@@ -408,6 +415,8 @@ export class Formatter {
         return this.formatErrorDeclaration(decl);
       case "ServiceDeclaration":
         return this.formatServiceDeclaration(decl, 0);
+      case "ExternServiceDeclaration":
+        return this.formatExternServiceDeclaration(decl, 0);
       case "BindingDeclaration":
         return this.formatBindingDeclaration(decl, 0);
       case "WhenStatement":
@@ -507,6 +516,17 @@ export class Formatter {
       return `${leading}${memberIndent}${m.name.name}: ${this.formatType(m.signature)}${trailing}`;
     }).join("\n");
     return `service ${decl.id.name}${tag}\n${members}`;
+  }
+
+  private formatExternServiceDeclaration(decl: ExternServiceDeclaration, indent = 0): string {
+    const pkg = decl.package.raw;
+    const memberIndent = this.spaces(indent + this.indentSize);
+    const members = decl.members.map(m => {
+      const leading = this.formatLeadingComments(m, memberIndent);
+      const trailing = this.getTrailingComment(m.span.end.line);
+      return `${leading}${memberIndent}${m.name.name}: ${this.formatType(m.signature)}${trailing}`;
+    }).join("\n");
+    return `extern ${pkg} service ${decl.id.name}\n${members}`;
   }
 
   private formatBindingDeclaration(decl: BindingDeclaration, indent = 0): string {

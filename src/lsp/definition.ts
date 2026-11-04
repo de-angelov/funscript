@@ -197,7 +197,7 @@ export class DefinitionFinder {
             kind: "field",
           });
         }
-      } else if (decl.kind === "ServiceDeclaration") {
+      } else if (decl.kind === "ServiceDeclaration" || decl.kind === "ExternServiceDeclaration") {
         for (const member of decl.members) {
           this.members.set(member.name.name, {
             name: member.name.name,
@@ -234,7 +234,8 @@ export class DefinitionFinder {
           scope.define(decl.id.name, declNode, decl.id, "type");
           break;
         }
-        case "ServiceDeclaration": {
+        case "ServiceDeclaration":
+        case "ExternServiceDeclaration": {
           scope.define(decl.id.name, declNode, decl.id, "type");
           break;
         }
@@ -383,7 +384,8 @@ export class DefinitionFinder {
         break;
       }
 
-      case "ServiceDeclaration": {
+      case "ServiceDeclaration":
+      case "ExternServiceDeclaration": {
         if (this.isCursorIn(decl.id)) {
           this.found = {
             originNode: decl.id,
