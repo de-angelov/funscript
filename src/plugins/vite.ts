@@ -64,4 +64,5 @@ export function funscriptPlugin(options: FunscriptPluginOptions = {}): Plugin {
   };
 }
 
+export const funscript = funscriptPlugin;
 export default funscriptPlugin;
