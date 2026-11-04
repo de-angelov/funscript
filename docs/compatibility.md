@@ -43,7 +43,7 @@ When upstream Effect renames, restructures, or deprecates module exports:
 Effect v4 renamed `catchAll` to `catch`. In FunScript:
 
 ```funscript
-# Obsolete Effect alias (rejected at compile time):
+# Audited compatibility alias (compiles to Effect.catch; slated for removal):
 export recover = task |> catchAll((err) => Effect.succeed("fallback"))
 
 # Canonical Effect v4 operation:
@@ -87,7 +87,7 @@ When language syntax, grammar, or AST semantics evolve:
 1. **Static Rejection:** Deprecated syntax is rejected at parse time or during semantic validation.
 2. **Actionable Diagnostics:** Error messages must cite the canonical replacement and highlight the exact source span.
 3. **No Silent Semantic Shifts:** The compiler never silently converts legacy syntax into new syntax if runtime semantics could diverge or mask developer intent.
-4. **No Automated Codemods (TASK-104 Decision):** Automated migration tools (such as `funscript migrate`) have been formally declined. Due to semantic ambiguity between side effects, yielded effects, and returned expressions, mechanical rewrites risk silent semantic corruption. Developers migrate syntax manually guided by compiler diagnostics and version control (`git`).
+4. **No Automated CLI Codemods (TASK-104 & TASK-166):** Unattended CLI migration commands (such as `funscript migrate`) have been formally declined to avoid silent semantic corruption. Safe programmatic migration is provided via `src/tooling/migrate.ts` for unambiguous function blocks, while ambiguous constructs (such as trailing bindings and ambiguous effects) are strictly flagged with diagnostics for developer review.
 
 ### Major Implemented Syntax Rules and Protocols
 

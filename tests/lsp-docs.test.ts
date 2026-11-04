@@ -106,6 +106,8 @@ describe("LSP Keyword & Built-in Documentation Catalog", () => {
       "true",
       "false",
       "from",
+      "js",
+      "ts",
     ];
 
     for (const kw of additionalKeywords) {
@@ -117,6 +119,15 @@ describe("LSP Keyword & Built-in Documentation Catalog", () => {
         expect(doc).toContain(kw);
       });
     }
+
+    it("provides hover documentation for every lexer keyword", async () => {
+      const { KEYWORDS } = await import("../src/lexer/tokens.js");
+      for (const kw of Object.keys(KEYWORDS)) {
+        const doc = getHoverDocumentation(kw);
+        expect(doc, `Missing hover documentation for keyword '${kw}'`).toBeTypeOf("string");
+        expect(doc).toContain("```funscript");
+      }
+    });
   });
 
   describe("Standard Primitives & Types", () => {
