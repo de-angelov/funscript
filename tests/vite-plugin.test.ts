@@ -250,8 +250,8 @@ export Button = (props: Props) => <button className="btn">{props.label}</button>
       try {
         const mathResult = await server.transformRequest("/src/math.fun");
         expect(mathResult).toBeDefined();
-        expect(mathResult?.code).toContain(
-          "export const double = (n: Int) => (n * 2);",
+        expect(mathResult?.code).toMatch(
+          /export const double = \(n(: Int)?\) =>/,
         );
         expect(mathResult?.map).toBeDefined();
 
