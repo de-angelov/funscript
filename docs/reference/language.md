@@ -528,6 +528,28 @@ Exposes module members to other files. All exports in FunScript are named export
 
 See also: `import`.
 
+## `extern`
+
+Declares an external third-party SDK or client as a typed Effect service.
+
+```funscript
+extern "package" service ServiceName
+  methodName: (param: Type) => Effect<Success, Error>
+```
+
+Bridges external npm packages and SDKs directly into FunScript's effect ecosystem without requiring raw `ts { ... }` escape hatches.
+
+Compiles to:
+- A TypeScript interface for the service methods.
+- An Effect `Context.Tag` (`Context.GenericTag<ServiceName>("ServiceName")`) for dependency injection.
+- A live layer (`ServiceNameLive = Layer.succeed(...)`) that instantiates the external client and wraps each method call.
+- Synchronous methods or `Effect` returns are automatically wrapped with `Effect.try`.
+- Asynchronous methods returning `Promise<T>` or `Async<T>` are wrapped with `Effect.tryPromise`.
+- Catches runtime errors and casts them to the declared typed error channel.
+
+
+See also: `service`, `Context`, `Layer`, `Effect.tryPromise`, `Effect`.
+
 ## `fail`
 
 Constructs an Effect that fails with a recoverable typed error.
@@ -936,7 +958,7 @@ Defines a service contract that compiles to an Effect `Context.Service` tag.
 Calls to service methods (such as `UserRepo.find(id)`) inside `effect` blocks automatically resolve the service from Context and track its dependency in the Effect `R` channel. Implementations are supplied at runtime via `Layer.succeed`, `Layer.effect`, or `Layer.scoped`.
 
 
-See also: `Layer`, `Context`, `effect`, `Effect`.
+See also: `Layer`, `Context`, `effect`, `Effect`, `extern`.
 
 ## `Some`
 

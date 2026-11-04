@@ -91,6 +91,13 @@ describe("LSP Keyword & Built-in Documentation Catalog", () => {
       expect(doc).toContain("`E` channel");
       expect(doc).toContain("recoverable");
     });
+
+    it("verifies 'extern' documentation details", () => {
+      const doc = getHoverDocumentation("extern")!;
+      expect(doc).toContain("StripeClient");
+      expect(doc).toContain("Context.GenericTag");
+      expect(doc).toContain("Layer.succeed");
+    });
   });
 
   describe("Additional Language Keywords", () => {
@@ -99,6 +106,7 @@ describe("LSP Keyword & Built-in Documentation Catalog", () => {
       "error",
       "import",
       "export",
+      "extern",
       "when",
       "and",
       "or",
