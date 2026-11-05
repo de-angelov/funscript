@@ -1,6 +1,8 @@
 import { type Plugin, createFilter } from "vite";
 import { Effect } from "effect";
 import { compileString } from "../compiler.js";
+import { TypeView, type TypeViewOptions } from "./type-view.js";
+import * as path from "node:path";
 
 export interface FunscriptPluginOptions {
   /**
@@ -15,6 +17,8 @@ export interface FunscriptPluginOptions {
    * Whether to generate source maps. Defaults to true.
    */
   sourcemap?: boolean;
+  /** Generate a disk-backed type view for tools outside Vite. */
+  types?: TypeViewOptions;
 }
 
 /**
@@ -26,17 +30,45 @@ export function funscriptPlugin(options: FunscriptPluginOptions = {}): Plugin {
     options.exclude,
   );
 
+  let typeView: TypeView | undefined;
   return {
     name: "vite-plugin-funscript",
     enforce: "pre",
 
-    config() {
+    async config(config) {
+      if (options.types) {
+        typeView = new TypeView(path.resolve(config.root ?? process.cwd()), options.types);
+        await typeView.generate();
+      }
       return {
         esbuild: {
           include: /\.[jt]sx?$|\.funx?$/,
           loader: "tsx",
         },
       };
+    },
+
+    async resolveId(source, importer, resolveOptions) {
+      if (!importer || !source.endsWith(".js") || (!source.startsWith(".") && !path.isAbsolute(source))) return null;
+      const existing = await this.resolve(source, importer, { ...resolveOptions, skipSelf: true });
+      if (existing) return existing;
+      for (const extension of [".fun", ".funx"]) {
+        const resolved = await this.resolve(source.slice(0, -3) + extension, importer, { ...resolveOptions, skipSelf: true });
+        if (resolved) return resolved;
+      }
+      return null;
+    },
+
+    configureServer(server) {
+      if (!typeView) return;
+      const view = typeView;
+      let pending = Promise.resolve();
+      const enqueue = (work: () => Promise<void>) => {
+        pending = pending.then(work).catch((error) => server.config.logger.error(`FunScript type view: ${error.message}`));
+      };
+      const update = (file: string) => { if (/\.funx?$/.test(file)) enqueue(() => view.refresh(file)); };
+      const remove = (file: string) => { if (/\.funx?$/.test(file)) enqueue(() => view.forget(file)); };
+      server.watcher.on("add", update).on("change", update).on("unlink", remove);
     },
 
     async transform(code: string, id: string) {

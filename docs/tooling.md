@@ -47,6 +47,51 @@ FunScript Vite plugin if the app imports `.fun` modules. Vitest tests are JavaSc
 TypeScript tests; `.fun` test discovery is not implemented. For output beyond compiling
 FunScript files to TypeScript, configure Vite or another standard bundler directly.
 
+### Vite and framework type views
+
+The Vite plugin compiles `.fun` and `.funx` in memory for development and production
+builds. Relative `.js` imports first resolve normally; if the target does not exist,
+the plugin tries the corresponding `.fun` and `.funx` files. Existing JavaScript and
+TypeScript resolution keeps priority.
+
+For framework tools that run outside Vite, opt in to a generated TypeScript view:
+
+```ts
+import { defineConfig } from "vite";
+import { funscript } from "funscript/vite";
+
+export default defineConfig({
+  plugins: [funscript({ types: { include: ["app"] } })],
+});
+```
+
+Enable arbitrary-extension resolution and add the generated directory to your existing
+`rootDirs` in `tsconfig.json` (retain any framework-provided root directories):
+
+```json
+{
+  "compilerOptions": {
+    "allowArbitraryExtensions": true,
+    "rootDirs": [".", "./.react-router/types", "./.funscript/types"]
+  }
+}
+```
+
+The plugin generates `.funscript/types` before Vite starts, builds, or a framework loads
+its Vite configuration, and refreshes the view when development files change. Ignore
+that directory in version control. `include` accepts project-relative directories or
+files; `outDir` changes the cache directory and must also be reflected in `rootDirs`.
+Use distinct output directories for configurations with different source sets. The cache
+is generated and must not contain hand-edited files. A `.fun` and `.funx` with the same
+stem in the source set are rejected because their JavaScript-style import is ambiguous.
+
+A React Router route can use the actual `.funx` path in its route configuration. Keep
+server-only dependencies referenced only by server route exports so React Router can
+remove them from the client bundle. TypeScript diagnostics in the generated view can
+still refer to cache paths; Vite runtime source maps point back to the FunScript source.
+Run the framework's normal type generation before its TypeScript check. This type view
+is not a declaration-only publishing build and does not replace `funscript check`.
+
 The CLI command surface is intentionally small and composable. It does not create a
 proprietary project layout or package format.
 
