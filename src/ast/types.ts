@@ -41,6 +41,9 @@ export interface TsEscapeDeclaration extends NodeBase {
 export interface ImportDeclaration extends NodeBase {
   kind: "ImportDeclaration";
   isTypeOnly: boolean;
+  isSideEffect: boolean;
+  defaultBinding?: Identifier | UpperIdentifier;
+  namespaceBinding?: Identifier | UpperIdentifier;
   specifiers: ImportSpecifier[];
   source: StringLiteral;
 }

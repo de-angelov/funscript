@@ -1,3 +1,4 @@
+import { renderImport } from "../emitter/imports.js";
 import { Lexer } from "../lexer/lexer.js";
 import { Parser } from "../parser/parser.js";
 import { ASSOCIATIVITY, PRECEDENCE } from "./operator-precedence.js";
@@ -423,21 +424,10 @@ export class Formatter {
   }
 
   private formatImportDeclaration(decl: ImportDeclaration): string {
-    const isType = decl.isTypeOnly ? "type " : "";
-    const specifiers = decl.specifiers.map(s => {
-      const sType = s.isTypeOnly ? "type " : "";
-      const name = s.imported.name;
-      const as = s.local.name !== name ? ` as ${s.local.name}` : "";
-      return `${sType}${name}${as}`;
-    }).join(", ");
-
     const firstPart = decl.source.parts[0];
     const rawVal = firstPart && firstPart.kind === "StringRawPart" ? firstPart.value : "";
-    const src = this.escapeStringPart(rawVal);
-    if (decl.specifiers.length === 0) {
-      return `import ${isType}{} from "${src}"`;
-    }
-    return `import ${isType}{ ${specifiers} } from "${src}"`;
+    const source = `"${this.escapeStringPart(rawVal)}"`;
+    return renderImport(decl, source).slice(0, -1);
   }
 
   private formatSchemaDeclaration(decl: SchemaDeclaration, indent = 0): string {

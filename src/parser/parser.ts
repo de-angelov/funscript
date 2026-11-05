@@ -306,50 +306,71 @@ export class Parser {
 
   private parseImportDeclaration(): ImportDeclaration {
     const start = this.consume(TokenType.IMPORT, "Expected 'import'").span.start;
-    const isTypeOnly = this.match(TokenType.IDENTIFIER) && this.previous().value === "type";
-
-    this.consume(TokenType.LBRACE, "Expected '{' in import declaration");
-    const specifiers: ImportSpecifier[] = [];
-
-    if (!this.check(TokenType.RBRACE)) {
-      do {
-        let specTypeOnly = false;
-        if (this.check(TokenType.IDENTIFIER) && this.peek().value === "type" && this.peekAhead(1).type !== TokenType.COMMA && this.peekAhead(1).type !== TokenType.RBRACE) {
-          this.advance();
-          specTypeOnly = true;
-        }
-
-        const importedId = this.parseAnyIdentifier();
-        let localId = importedId;
-
-        if (this.check(TokenType.IDENTIFIER) && this.peek().value === "as") {
-          this.advance();
-          localId = this.parseAnyIdentifier();
-        }
-
-        specifiers.push({
-          kind: "ImportSpecifier",
-          isTypeOnly: specTypeOnly,
-          imported: importedId,
-          local: localId,
-          span: { start: importedId.span.start, end: localId.span.end },
-        });
-      } while (this.match(TokenType.COMMA) && !this.check(TokenType.RBRACE));
+    if (this.check(TokenType.STRING)) {
+      const source = this.parseImportSource();
+      this.consumeNewlineOrEof("Expected newline after import declaration");
+      return { kind: "ImportDeclaration", isTypeOnly: false, isSideEffect: true, specifiers: [], source, span: { start, end: source.span.end } };
     }
-
-    this.consume(TokenType.RBRACE, "Expected '}' after import specifiers");
+    const isTypeOnly = this.check(TokenType.IDENTIFIER) && this.peek().value === "type" && this.peekAhead(1).type !== TokenType.FROM;
+    if (isTypeOnly) this.advance();
+    let defaultBinding: Identifier | UpperIdentifier | undefined;
+    let namespaceBinding: Identifier | UpperIdentifier | undefined;
+    const specifiers: ImportSpecifier[] = [];
+    if (this.check(TokenType.IDENTIFIER) || this.check(TokenType.UPPER_IDENTIFIER)) {
+      defaultBinding = this.parseAnyIdentifier();
+      if (this.match(TokenType.COMMA)) {
+        if (isTypeOnly) throw new ParseError("A type-only import cannot combine a default binding with other bindings", this.peek().span);
+      } else {
+        this.consume(TokenType.FROM, "Expected 'from' after import binding");
+        const source = this.parseImportSource();
+        this.consumeNewlineOrEof("Expected newline after import declaration");
+        return { kind: "ImportDeclaration", isTypeOnly, isSideEffect: false, defaultBinding, specifiers, source, span: { start, end: source.span.end } };
+      }
+    }
+    if (this.match(TokenType.STAR)) {
+      if (!(this.check(TokenType.IDENTIFIER) && this.peek().value === "as")) {
+        throw new ParseError("Expected 'as' after '*' in namespace import", this.peek().span);
+      }
+      this.advance();
+      namespaceBinding = this.parseAnyIdentifier();
+    } else {
+      this.consume(TokenType.LBRACE, "Expected '{' or '*' in import declaration");
+      if (!this.check(TokenType.RBRACE)) {
+        do {
+          let specTypeOnly = false;
+          if (this.check(TokenType.IDENTIFIER) && this.peek().value === "type" && this.peekAhead(1).type !== TokenType.COMMA && this.peekAhead(1).type !== TokenType.RBRACE && this.peekAhead(1).value !== "as") {
+            this.advance();
+            specTypeOnly = true;
+            if (isTypeOnly) throw new ParseError("A type-only import cannot contain a type-only specifier", this.previous().span);
+          }
+          let importedId: Identifier | UpperIdentifier;
+          if (this.match(TokenType.DEFAULT)) {
+            const token = this.previous();
+            importedId = { kind: "Identifier", name: token.value, span: token.span };
+          } else importedId = this.parseAnyIdentifier();
+          let localId = importedId;
+          if (this.check(TokenType.IDENTIFIER) && this.peek().value === "as") {
+            this.advance();
+            localId = this.parseAnyIdentifier();
+          } else if (importedId.name === "default") {
+            throw new ParseError("A default import specifier requires an alias", importedId.span);
+          }
+          specifiers.push({ kind: "ImportSpecifier", isTypeOnly: specTypeOnly, imported: importedId, local: localId, span: { start: importedId.span.start, end: localId.span.end } });
+        } while (this.match(TokenType.COMMA) && !this.check(TokenType.RBRACE));
+      }
+      this.consume(TokenType.RBRACE, "Expected '}' after import specifiers");
+    }
     this.consume(TokenType.FROM, "Expected 'from' after import specifiers");
-
-    const source = this.parseStringLiteral();
+    const source = this.parseImportSource();
     this.consumeNewlineOrEof("Expected newline after import declaration");
+    return { kind: "ImportDeclaration", isTypeOnly, isSideEffect: false, defaultBinding, namespaceBinding, specifiers, source, span: { start, end: source.span.end } };
+  }
 
-    return {
-      kind: "ImportDeclaration",
-      isTypeOnly,
-      specifiers,
-      source,
-      span: { start, end: source.span.end },
-    };
+  private parseImportSource(): StringLiteral {
+    if (!this.check(TokenType.STRING)) {
+      throw new ParseError("Expected a non-interpolated string module specifier", this.peek().span);
+    }
+    return this.parseStringLiteral();
   }
 
   private parseSchemaDeclaration(isTs = false, tsStart?: Position): SchemaDeclaration {

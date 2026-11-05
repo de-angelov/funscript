@@ -1,3 +1,4 @@
+import { renderImport } from "./imports.js";
 import {
   Program,
   TopLevelDeclaration,
@@ -181,6 +182,12 @@ export class Emitter {
       }
       if (item.kind === "ImportDeclaration" && /^"effect(?:\/|\")/.test(item.source.raw)) {
         for (const spec of item.specifiers) this.effectModuleBindings.add(spec.local.name);
+        if (item.namespaceBinding) {
+          this.effectModuleBindings.add(item.namespaceBinding.name);
+          if (item.source.raw === `"effect/${item.namespaceBinding.name}"`) {
+            this.userEffectBindings.add(item.namespaceBinding.name);
+          }
+        }
       }
       if (
         decl.kind === "SchemaDeclaration" ||
@@ -260,16 +267,7 @@ export class Emitter {
   }
 
   private emitImportDeclaration(decl: ImportDeclaration): string {
-    const specs = decl.specifiers
-      .map((s) => {
-        const typePrefix = s.isTypeOnly ? "type " : "";
-        if (s.imported.name === s.local.name) {
-          return `${typePrefix}${s.imported.name}`;
-        }
-        return `${typePrefix}${s.imported.name} as ${s.local.name}`;
-      })
-      .join(", ");
-    return `import ${decl.isTypeOnly ? "type " : ""}{ ${specs} } from ${decl.source.raw};`;
+    return renderImport(decl);
   }
 
   private emitSchemaDeclaration(decl: SchemaDeclaration, isExport: boolean): string {

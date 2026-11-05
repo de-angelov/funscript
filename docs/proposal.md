@@ -973,19 +973,14 @@ export greet = (name: String) => "Hello, {name}!"
 
 Rules:
 
-- `.fun` import specifiers are rewritten to `.js` in the emitted TypeScript. TypeScript
-  resolves `.js` specifiers to `.ts` sources, so the same emitted code works for `tsc`,
-  bundlers, and Node ESM.
-- The compiler compiles the import graph (or the whole project in project mode).
+- Module specifiers are preserved in emitted TypeScript; use specifiers understood by
+  the target runtime or bundler. Project checking discovers local FunScript imports.
 - Any npm package can be imported directly. Its TypeScript types are used as-is.
 - Top-level declarations are private unless exported. There is no auto-export.
-- FunScript-authored modules use named exports only, written with the `export` prefix or
-  barrel re-exports `export { ... } from "./mod.fun"`.
-- Default exports (`export default`), local `export { ... }` lists without `from`,
-  `require`, `module.exports`, and dynamic `import()` are not in the surface. Use raw
-  TypeScript if you need them immediately.
-- Named imports are canonical. Default and namespace imports are interop exceptions for
-  external packages that require them; do not use them for FunScript modules.
+- Static imports include named, default, namespace, and side-effect-only forms. Type-only
+  imports and named `default as` specifiers are supported. Import specifiers are strings.
+- Default exports are supported. Local `export { ... }` lists without `from`, `require`,
+  `module.exports`, and dynamic `import()` are not in the surface.
 - Import order is preserved. The formatter never reorders imports.
 
 Raw TypeScript is available through backticks:

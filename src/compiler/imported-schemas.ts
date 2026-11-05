@@ -1,3 +1,4 @@
+import { renderImport } from "../emitter/imports.js";
 import ts from "typescript";
 import { Program, SchemaDeclaration, Span } from "../ast/types.js";
 import { TypeScriptCompilationContext } from "./typescript-context.js";
@@ -314,20 +315,11 @@ export function resolveImportedSchemas(
 
   for (const item of ast.body) {
     if (item.kind === "ImportDeclaration") {
-      const specs = item.specifiers
-        .map((s) => {
-          const typePrefix = s.isTypeOnly ? "type " : "";
-          if (s.imported.name === s.local.name) {
-            return `${typePrefix}${s.imported.name}`;
-          }
-          return `${typePrefix}${s.imported.name} as ${s.local.name}`;
-        })
-        .join(", ");
       let importSource = item.source.raw.slice(1, -1);
       if (importSource.startsWith(".") && !/\.[a-zA-Z0-9]+$/.test(importSource)) {
         importSource = `${importSource}.js`;
       }
-      lines.push(`import ${item.isTypeOnly ? "type " : ""}{ ${specs} } from ${JSON.stringify(importSource)};`);
+      lines.push(renderImport(item, JSON.stringify(importSource)));
     } else if (item.kind === "TsEscapeDeclaration") {
       lines.push(item.code);
     }

@@ -634,7 +634,7 @@ Imports bindings, services, types, or schemas from another module.
 import { Name } from "module"
 ```
 
-Standard ESM import statement in FunScript. Imports can load values, types, or services from neighboring `.fun` files or npm packages like `effect`.
+Static ESM imports support named, default, namespace, side-effect-only, and type-only forms. Module specifiers must be non-interpolated strings.
 
 
 See also: `export`, `from`.

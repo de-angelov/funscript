@@ -239,6 +239,9 @@ export class DefinitionFinder {
           break;
         }
         case "ImportDeclaration": {
+          for (const binding of [decl.defaultBinding, decl.namespaceBinding]) {
+            if (binding) scope.define(binding.name, decl, binding, "import");
+          }
           for (const spec of decl.specifiers) {
             const idNode = spec.local ?? spec.imported;
             scope.define(idNode.name, spec, idNode, "import");
@@ -412,6 +415,12 @@ export class DefinitionFinder {
       }
 
       case "ImportDeclaration": {
+        for (const binding of [decl.defaultBinding, decl.namespaceBinding]) {
+          if (binding && this.isCursorIn(binding)) {
+            this.found = { originNode: binding, declarationNode: decl, targetIdentifierNode: binding };
+            return;
+          }
+        }
         for (const spec of decl.specifiers) {
           if (this.isCursorIn(spec.imported)) {
             this.found = {

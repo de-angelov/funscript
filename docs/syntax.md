@@ -2125,6 +2125,10 @@ Because `js` safely catches all Promise rejections and lifts them into `JsIntero
 import { Effect, Console } from "effect"
 import { UserRepo } from "./services/user-repo.fun"
 import type { Lookup } from "./types.fun"
+import "./app.css"
+import React, { useState } from "react"
+import * as ReactDOM from "react-dom/client"
+import { default as stylesheet } from "./app.css?url"
 
 export { Circle, Rect, Shape } from "./shapes.fun"
 export greet = (name: String) => "Hello, {name}!"
@@ -2133,19 +2137,17 @@ export greet = (name: String) => "Hello, {name}!"
 Rules:
 
 - ES module syntax only. No `require`, `module.exports`, or dynamic `import()`.
-- `.fun` specifiers are rewritten to `.js` in emitted TypeScript; TypeScript resolves
-  `.js` specifiers back to `.ts` sources.
-- The compiler compiles the import graph (or the project in project mode).
+- Module specifiers are preserved in emitted TypeScript. Choose specifiers supported by
+  the target runtime or bundler; project checking also discovers local FunScript imports.
 - Top-level declarations are private unless prefixed with `export`.
-- FunScript-authored modules use named exports only, written with the `export` prefix on the
-  declaration (`export greet = ...`). Barrel re-exports (`export { ... } from "./mod.fun"`
-  and `export type { ... } from "./mod.fun"`) are supported for package entry points.
-  Default exports (`export default`) and local export lists (`export { x }` without `from`)
-  are rejected.
-- Named imports are canonical. Default and namespace imports are interop exceptions for
-  external packages that require them; do not use them for FunScript modules.
+- Export declarations and default exports (`export default expression`) are supported.
+- Static imports support side-effect-only, default, namespace, named, and combined default
+  plus named or namespace forms. Named specifiers may use `default as name` and `type`.
+  Type-only imports can use a default, namespace, or named clause; a type-only default
+  cannot be combined with another clause.
+- Module specifiers must be non-interpolated strings. Side-effect imports execute in source
+  order and are not interchangeable with type-only imports.
 - Import order is preserved. The formatter never reorders imports.
-- `import type` is supported.
 
 Exportable declarations:
 
