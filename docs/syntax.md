@@ -556,7 +556,8 @@ const answer = () => 42;
   and their fallback evaluated once per call only when the value is `undefined`.
   They preserve `null` and falsey values. Record-field defaults cannot reference
   function parameters yet.
-- Record types may use `error` as a field name, including for JavaScript logger types.
+- Record types and literals may use `error` as a field name, and it can be read with
+  `.error`, including for JavaScript response and logger objects.
 - Optional fields are supported on direct, required record parameters, including inside
   required nested records. An optional parent record containing optional fields can be
   inspected by matching it with `Some(name)` and `None`; reads of its nested optional

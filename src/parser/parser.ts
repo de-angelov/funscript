@@ -1351,7 +1351,10 @@ export class Parser {
           span: { start: this.previous().span.start, end: arg.span.end },
         });
       } else {
-        const firstId = this.parseIdentifier();
+        const fieldToken = this.check(TokenType.ERROR) ? this.advance() : undefined;
+        const firstId: Identifier = fieldToken
+          ? { kind: "Identifier", name: fieldToken.value, span: fieldToken.span }
+          : this.parseIdentifier();
         if (this.match(TokenType.DOT)) {
           // Dot-path entry: address.city: "Paris"
           const path: Identifier[] = [firstId];
@@ -2504,6 +2507,10 @@ export class Parser {
   }
 
   private parseAnyIdentifier(): Identifier | UpperIdentifier {
+    if (this.check(TokenType.ERROR)) {
+      const token = this.advance();
+      return { kind: "Identifier", name: token.value, span: token.span };
+    }
     if (this.check(TokenType.UPPER_IDENTIFIER)) return this.parseUpperIdentifier();
     return this.parseIdentifier();
   }

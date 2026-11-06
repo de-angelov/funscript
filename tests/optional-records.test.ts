@@ -6,6 +6,14 @@ import { typeCheckVirtualFiles } from "../src/compiler/check.js";
 import path from "node:path";
 
 describe("optional fields in inline parameter records", () => {
+  it("supports error fields in record literals and member access", async () => {
+    const source = 'export response = { error: "bad" }\nexport read = () => response.error';
+    const checked = await typeCheck(source, "record-error-value.fun");
+    expect(checked.success, checked.formattedOutput).toBe(true);
+    const { read } = await execute(source);
+    expect(read()).toBe("bad");
+  });
+
   it("accepts error as a record type field for JavaScript logger contracts", async () => {
     const source = 'export keep = (props: { logger?: { error: (message: String) => Void } }) => props.logger';
     const result = await typeCheck(source, "record-error-field.fun");
