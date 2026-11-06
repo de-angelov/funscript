@@ -4,6 +4,13 @@ import { compile, execute, expectCompileError, typeCheck } from "./helpers/index
 import { format } from "../src/formatter/index.js";
 
 describe("optional fields in inline parameter records", () => {
+  it("accepts error as a record type field for JavaScript logger contracts", async () => {
+    const source = 'export keep = (props: { logger?: { error: (message: String) => Void } }) => props.logger';
+    const result = await typeCheck(source, "record-error-field.fun");
+    expect(result.success, result.formattedOutput).toBe(true);
+    expect((await compile(source)).typescript).toContain('readonly error: (message: string) => void');
+  });
+
   it("exposes real Options inside while accepting ordinary JavaScript props", async () => {
     const source = 'export read = (props: { label?: String }) => props.label';
     const { read } = await execute(source);

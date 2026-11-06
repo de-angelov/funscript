@@ -2181,7 +2181,10 @@ export class Parser {
         while (!this.check(TokenType.RBRACE) && !this.check(TokenType.DEDENT) && !this.isAtEnd()) {
           this.skipNewlines();
           if (this.check(TokenType.RBRACE) || this.check(TokenType.DEDENT)) break;
-          const fName = this.parseIdentifier();
+          const fieldToken = this.check(TokenType.ERROR) ? this.advance() : undefined;
+          const fName: Identifier = fieldToken
+            ? { kind: "Identifier", name: fieldToken.value, span: fieldToken.span }
+            : this.parseIdentifier();
           const optional = this.match(TokenType.QUESTION);
           if (optional && (!this.allowOptionalRecordFields || this.recordTypeDepth !== 1)) {
             throw new ParseError("Optional record fields are supported only on direct function parameters", fName.span);

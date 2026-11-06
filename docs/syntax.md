@@ -556,6 +556,7 @@ const answer = () => 42;
   and their fallback evaluated once per call only when the value is `undefined`.
   They preserve `null` and falsey values. Record-field defaults cannot reference
   function parameters yet.
+- Record types may use `error` as a field name, including for JavaScript logger types.
 - For now, optional/defaulted record fields are supported only on a direct, required
   function parameter, not nested records or named record types. To keep raw JavaScript
   values from escaping into FunScript unconverted, access the parameter's fields directly:
