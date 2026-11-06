@@ -3,13 +3,15 @@ import MagicString, { type SourceMap } from "magic-string";
 import { Lexer, LexerError } from "./lexer/lexer.js";
 import { Parser, ParseError } from "./parser/parser.js";
 import { Emitter } from "./emitter/emitter.js";
-import { Program } from "./ast/types.js";
+import { Program, type RecordTypeNode } from "./ast/types.js";
 import { FunScriptError } from "./errors.js";
 import { TypeScriptCompilationContext } from "./compiler/typescript-context.js";
 import { validateNumericComparisons } from "./compiler/numeric-comparisons.js";
 import { inferPipelineCompanions } from "./compiler/pipeline-companions.js";
 import { applyJsInteropNullability } from "./compiler/js-interop-nullability.js";
 import { resolveImportedSchemas } from "./compiler/imported-schemas.js";
+import { resolveImportedRecordFunctions } from "./compiler/imported-record-functions.js";
+import { resolvePackageRecordContracts } from "./compiler/package-record-contracts.js";
 
 export { TypeScriptCompilationContext } from "./compiler/typescript-context.js";
 
@@ -17,6 +19,10 @@ export interface CompileOptions {
   sourcemap?: boolean;
   outputFile?: string;
   context?: TypeScriptCompilationContext;
+  /** In-memory source files, keyed by absolute path, for cross-module analysis. */
+  virtualSources?: ReadonlyMap<string, string>;
+  /** Absolute source path when the displayed filename is project-relative. */
+  sourcePath?: string;
 }
 
 export interface CompileResult {
@@ -59,11 +65,14 @@ export const compileString = (
       const ast = parser.parse();
 
       // 3. Emit TypeScript
-      const context = options?.context ?? new TypeScriptCompilationContext(filename);
-      validateNumericComparisons(ast, source, context);
-      const pipelineCompanions = inferPipelineCompanions(ast, context);
+      const context = options?.context ?? new TypeScriptCompilationContext(options?.sourcePath ?? filename);
+      const importedRecordContracts = new Map<string, RecordTypeNode>();
+      const importedRecordFunctions = resolveImportedRecordFunctions(ast, options?.sourcePath ?? filename, options?.virtualSources, importedRecordContracts);
+      for (const [name, contract] of resolvePackageRecordContracts(ast, context, importedRecordContracts)) importedRecordContracts.set(name, contract);
+      validateNumericComparisons(ast, source, context, importedRecordFunctions, importedRecordContracts);
+      const pipelineCompanions = inferPipelineCompanions(ast, context, importedRecordFunctions, importedRecordContracts);
       const importedSchemas = resolveImportedSchemas(ast, source, context);
-      const emitter = new Emitter(ast, undefined, { pipelineCompanions, importedSchemas });
+      const emitter = new Emitter(ast, undefined, { pipelineCompanions, importedSchemas, importedRecordFunctions, importedRecordContracts });
       const typescript = applyJsInteropNullability(emitter.emit(), context);
       const targetExtension = filename.endsWith(".funx") ? ".tsx" : ".ts";
 
@@ -100,7 +109,7 @@ export const compileString = (
             const single = new Emitter(
               { kind: "Program", body: [decl], span: decl.span },
               ast,
-              { pipelineCompanions, importedSchemas },
+              { pipelineCompanions, importedSchemas, importedRecordFunctions, importedRecordContracts },
             );
             const singleOut = single.emit();
             const code = singleOut

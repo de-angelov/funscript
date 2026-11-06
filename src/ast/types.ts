@@ -104,6 +104,7 @@ export interface RecordFieldSchema extends NodeBase {
   kind: "RecordFieldSchema";
   name: Identifier;
   typeAnnotation: TypeNode;
+  optional?: boolean;
   defaultValue?: Expression;
 }
 
@@ -561,11 +562,18 @@ export type JSXTagName = Identifier | UpperIdentifier | MemberExpression;
 
 export type JSXAttributeValue = StringLiteral | JSXExpressionContainer | Expression;
 
-export interface JSXAttribute extends NodeBase {
+export interface JSXNamedAttribute extends NodeBase {
   kind: "JSXAttribute";
   name: Identifier | UpperIdentifier;
   value?: JSXAttributeValue;
 }
+
+export interface JSXSpreadAttribute extends NodeBase {
+  kind: "JSXSpreadAttribute";
+  argument: Expression;
+}
+
+export type JSXAttribute = JSXNamedAttribute | JSXSpreadAttribute;
 
 export interface JSXExpressionContainer extends NodeBase {
   kind: "JSXExpressionContainer";

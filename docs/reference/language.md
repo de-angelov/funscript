@@ -939,17 +939,17 @@ See also: `Effect.retry`, `Effect.repeat`, `Duration`.
 Unified declaration for record shapes, tagged unions, refinements, and type signatures.
 
 ```funscript
-schema Name = { field: Type }
+schema Name = { field: Type, optional?: Type }
 # or tagged union:
 schema Name = | CaseA | CaseB(v: Type)
 ```
 
-Declares data models backed by Effect's `@effect/schema` and `Data.TaggedEnum`.
+Declares data models backed by Effect Schema and `Data.TaggedEnum`.
 
-A single `schema` declaration generates both the runtime validator/constructor and the static TypeScript type definition, avoiding dual declaration boilerplate. Untrusted payloads and dictionaries can be safely decoded using `payload |> decode(Name)`.
+Data schema fields declared with `?` decode missing or undefined input to a real Effect `Option`; encoding `None` omits the field. Decoding is explicit. `SchemaInput<Name>` describes the encoded JavaScript input type without decoding it. A record containing a function or Effect type is instead a compile-time contract with no runtime decoder.
 
 
-See also: `record`, `variant`, `error`.
+See also: `record`, `variant`, `error`, `SchemaInput`.
 
 ## `SchemaInput`
 

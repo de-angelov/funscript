@@ -479,6 +479,7 @@ function visitExpression(
         visitJSXChild(child, source, options, changes, diagnostics, filename);
       }
       for (const attr of expr.openingElement.attributes) {
+        if (attr.kind === "JSXSpreadAttribute") { visitExpression(attr.argument, source, options, changes, diagnostics, filename); continue; }
         if (attr.value && "expression" in attr.value && attr.value.expression) {
           visitExpression(attr.value.expression, source, options, changes, diagnostics, filename);
         }
@@ -487,6 +488,7 @@ function visitExpression(
 
     case "JSXSelfClosingElement":
       for (const attr of expr.attributes) {
+        if (attr.kind === "JSXSpreadAttribute") { visitExpression(attr.argument, source, options, changes, diagnostics, filename); continue; }
         if (attr.value && "expression" in attr.value && attr.value.expression) {
           visitExpression(attr.value.expression, source, options, changes, diagnostics, filename);
         }

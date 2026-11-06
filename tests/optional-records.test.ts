@@ -2,6 +2,8 @@ import { describe, expect, it } from "vitest";
 import { Effect, Option } from "effect";
 import { compile, execute, expectCompileError, typeCheck } from "./helpers/index.js";
 import { format } from "../src/formatter/index.js";
+import { typeCheckVirtualFiles } from "../src/compiler/check.js";
+import path from "node:path";
 
 describe("optional fields in inline parameter records", () => {
   it("accepts error as a record type field for JavaScript logger contracts", async () => {
@@ -85,6 +87,62 @@ describe("optional fields in inline parameter records", () => {
     await expectCompileError('read = (props: { label?: String }) => props.label\nexport forward = (props: { label: String = "x" }) => read(props)', /cannot be passed/);
     await expectCompileError('read = (props: { label?: String }) => props.label\nexport forward = (props: { label?: String }, read: (value: Unknown) => Unknown) => read(props)', /cannot be passed/);
     await expectCompileError('read = (props: { label?: String }) => props.label\nexport forward = (props: { label?: String }, value: Unknown) =>\n  match value\n    | read => read(props)', /cannot be passed/);
+  });
+
+  it("forwards raw records across verified FunScript module boundaries", async () => {
+    const reader = 'export read = (props: { label?: String }) => props.label';
+    const caller = 'import { read as inspect } from "./reader.js"\nexport forward = (props: { label?: String }) => inspect(props)';
+    const checked = await Effect.runPromise(typeCheckVirtualFiles({ "reader.fun": reader, "caller.fun": caller }, { compilerOptions: { rootDir: process.cwd() } }));
+    expect(checked.success, checked.formattedOutput).toBe(true);
+    const original = { label: "Ada" };
+    let received: unknown;
+    const { forward } = await execute(caller, { filename: "caller.fun", compileOptions: { virtualSources: new Map([[path.resolve("reader.fun"), reader]]) }, scope: { inspect: (value: unknown) => { received = value; return Option.some("ok"); } } });
+    expect(forward(original)).toEqual(Option.some("ok"));
+    expect(received).toBe(original);
+    const withComparison = caller.replace('export forward = (props: { label?: String }) => inspect(props)', 'export forward = (props: { label?: String }, count: Number) =>\n  match count > 0\n    | true => inspect(props)\n    | false => inspect(props)');
+    expect((await compile(withComparison, "caller.fun", { virtualSources: new Map([[path.resolve("reader.fun"), reader]]) })).typescript).toContain("inspect(props)");
+    const incompatible = await Effect.runPromise(typeCheckVirtualFiles({ "reader.fun": 'export read = (props: { label?: Number }) => props.label', "caller.fun": caller }, { compilerOptions: { rootDir: process.cwd() } }));
+    expect(incompatible.success).toBe(false);
+    const unchecked = await Effect.runPromise(typeCheckVirtualFiles({ "reader.fun": 'export read = (props: Unknown) => props', "caller.fun": caller }, { compilerOptions: { rootDir: process.cwd() } }));
+    expect(unchecked.success).toBe(false);
+    expect(unchecked.diagnostics.some((d) => d.message.includes("cannot be passed"))).toBe(true);
+    await expectCompileError('import { read } from "./missing.fun"\nexport forward = (props: { label?: String }) => read(props)', /cannot be passed/);
+  });
+
+  it("tracks verified default exports, namespace imports, and re-export aliases", async () => {
+    const files = {
+      "reader.fun": 'export read = (props: { label?: String }) => props.label\nexport default read',
+      "direct.fun": 'export default (props: { label?: String }) => props.label',
+      "barrel.fun": 'import { read as impl } from "./reader.js"\nexport read = impl',
+      "caller.fun": 'import read from "./reader.js"\nimport direct from "./direct.js"\nimport * as api from "./barrel.js"\nexport first = (props: { label?: String }) => read(props)\nexport second = (props: { label?: String }) => api.read(props)\nexport third = (props: { label?: String }) => direct(props)',
+    };
+    const checked = await Effect.runPromise(typeCheckVirtualFiles(files, { compilerOptions: { rootDir: process.cwd() } }));
+    expect(checked.success, checked.formattedOutput).toBe(true);
+    let received: unknown;
+    const observe = (value: unknown) => { received = value; return Option.none(); };
+    const scope = { read: observe, direct: observe, api: { read: observe } };
+    const virtualSources = new Map([[path.resolve("reader.fun"), files["reader.fun"]], [path.resolve("direct.fun"), files["direct.fun"]], [path.resolve("barrel.fun"), files["barrel.fun"]]]);
+    const { first, second, third } = await execute(files["caller.fun"], { filename: "caller.fun", compileOptions: { virtualSources }, scope });
+    const original = { label: "Ada" };
+    first(original);
+    expect(received).toBe(original);
+    second(original);
+    expect(received).toBe(original);
+    third(original);
+    expect(received).toBe(original);
+    const cycle = await Effect.runPromise(typeCheckVirtualFiles({
+      "first.fun": 'import { read as impl } from "./second.js"\nexport read = impl',
+      "second.fun": 'import { read as impl } from "./first.js"\nexport read = impl',
+      "caller.fun": 'import { read } from "./first.js"\nexport forward = (props: { label?: String }) => read(props)',
+    }, { compilerOptions: { rootDir: process.cwd() } }));
+    expect(cycle.success).toBe(false);
+    expect(cycle.diagnostics.some((d) => d.message.includes("cannot be passed"))).toBe(true);
+    const shadowed = await Effect.runPromise(typeCheckVirtualFiles({
+      "reader.fun": files["reader.fun"],
+      "caller.fun": 'import * as api from "./reader.js"\nexport forward = (props: { label?: String }, api: { read: (value: Unknown) => Unknown }) => api.read(props)',
+    }, { compilerOptions: { rootDir: process.cwd() } }));
+    expect(shadowed.success).toBe(false);
+    expect(shadowed.diagnostics.some((d) => d.message.includes("cannot be passed"))).toBe(true);
   });
 
   it("tracks immutable record aliases and rejects their unsafe escape", async () => {

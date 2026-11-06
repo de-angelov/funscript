@@ -1,5 +1,5 @@
 import ts from "typescript";
-import { Program, type Span } from "../ast/types.js";
+import { Program, type Span, type RecordTypeNode } from "../ast/types.js";
 import { Emitter } from "../emitter/emitter.js";
 import { TypeScriptCompilationContext } from "./typescript-context.js";
 
@@ -26,10 +26,12 @@ function spanAtOffset(source: string, offset: number): Span {
  * JavaScript: both operands must be proven numbers. This keeps string,
  * locale, and domain ordering explicit through Effect's Order API.
  */
-export function validateNumericComparisons(ast: Program, source: string, context: TypeScriptCompilationContext): void {
+export function validateNumericComparisons(ast: Program, source: string, context: TypeScriptCompilationContext, importedRecordFunctions?: ReadonlyMap<string, ReadonlySet<number>>, importedRecordContracts?: ReadonlyMap<string, RecordTypeNode>): void {
   const marked = new Emitter(ast, undefined, {
     allowAmbiguousPipeline: true,
     markNumericComparisonOperands: true,
+    importedRecordFunctions,
+    importedRecordContracts,
   }).emit();
   if (!marked.includes("__funscriptNumericOperand(")) return;
 

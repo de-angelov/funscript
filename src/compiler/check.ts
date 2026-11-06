@@ -253,6 +253,7 @@ export const typeCheckVirtualFiles = (
       >();
 
       const earlyDiagnostics: TypeCheckDiagnostic[] = [];
+      const virtualSources = new Map(Object.entries(virtualInputFiles).map(([file, content]) => [path.resolve(cwd, file), content]));
 
       for (const [filePath, source] of Object.entries(virtualInputFiles)) {
         const fullFunPath = path.isAbsolute(filePath) ? path.normalize(filePath) : path.normalize(path.join(cwd, filePath));
@@ -261,7 +262,7 @@ export const typeCheckVirtualFiles = (
 
         let compiled;
         try {
-          compiled = await Effect.runPromise(compileString(source, filePath, { sourcemap: true }));
+          compiled = await Effect.runPromise(compileString(source, filePath, { sourcemap: true, sourcePath: fullFunPath, virtualSources }));
         } catch (err: any) {
           const compErr = err instanceof CompilerError ? err : new CompilerError(err.message, err);
           let errLine = 1;

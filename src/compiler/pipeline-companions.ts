@@ -9,7 +9,7 @@ import { TypeScriptCompilationContext } from "./typescript-context.js";
  * an identity function, so TypeScript sees precisely the expression that will
  * become the first argument to `pipe`, including imports and function calls.
  */
-export function inferPipelineCompanions(ast: Program, context: TypeScriptCompilationContext): ReadonlyMap<number, PipelineCompanionModule> {
+export function inferPipelineCompanions(ast: Program, context: TypeScriptCompilationContext, importedRecordFunctions?: ReadonlyMap<string, ReadonlySet<number>>, importedRecordContracts?: ReadonlyMap<string, import("../ast/types.js").RecordTypeNode>): ReadonlyMap<number, PipelineCompanionModule> {
   const schemaNames = new Set<string>();
   for (const decl of ast.body) {
     if (decl.kind === "SchemaDeclaration") {
@@ -22,6 +22,8 @@ export function inferPipelineCompanions(ast: Program, context: TypeScriptCompila
   const marked = new Emitter(ast, undefined, {
     allowAmbiguousPipeline: true,
     markPipelineSources: true,
+    importedRecordFunctions,
+    importedRecordContracts,
   }).emit();
   if (!marked.includes("__funscriptPipelineSource(")) return new Map();
 

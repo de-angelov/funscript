@@ -737,6 +737,7 @@ export class DefinitionFinder {
           }
         }
         for (const attr of expr.openingElement.attributes) {
+          if (attr.kind === "JSXSpreadAttribute") { this.visitExpression(attr.argument, scope); continue; }
           if (attr.value) {
             if (attr.value.kind === "JSXExpressionContainer") {
               this.visitExpression(attr.value.expression, scope);
@@ -773,6 +774,7 @@ export class DefinitionFinder {
           }
         }
         for (const attr of expr.attributes) {
+          if (attr.kind === "JSXSpreadAttribute") { this.visitExpression(attr.argument, scope); continue; }
           if (attr.value) {
             if (attr.value.kind === "JSXExpressionContainer") {
               this.visitExpression(attr.value.expression, scope);

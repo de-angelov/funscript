@@ -486,11 +486,17 @@ export class Parser {
       if (this.check(TokenType.RBRACE) || this.check(TokenType.DEDENT)) break;
 
       const fieldName = this.parseIdentifier();
+      const optional = this.match(TokenType.QUESTION);
       this.consume(TokenType.COLON, "Expected ':' after field name");
-      const fieldType = this.parseTypeNode();
+      const previous = this.allowOptionalRecordFields;
+      this.allowOptionalRecordFields = true;
+      let fieldType: TypeNode;
+      try { fieldType = this.parseTypeNode(); }
+      finally { this.allowOptionalRecordFields = previous; }
       let defaultValue: Expression | undefined;
 
       if (this.match(TokenType.EQ)) {
+        if (optional) throw new ParseError("A schema field cannot be both optional and defaulted", fieldName.span);
         defaultValue = this.parseExpression();
       }
 
@@ -498,6 +504,7 @@ export class Parser {
         kind: "RecordFieldSchema",
         name: fieldName,
         typeAnnotation: fieldType,
+        optional,
         defaultValue,
         span: { start: fieldName.span.start, end: (defaultValue || fieldType).span.end },
       });
@@ -2402,6 +2409,13 @@ export class Parser {
   }
 
   private parseJsxAttribute(): JSXAttribute {
+    if (this.match(TokenType.LBRACE)) {
+      const start = this.previous().span.start;
+      this.consume(TokenType.DOTDOTDOT, "Expected '...' in JSX spread attribute");
+      const argument = this.parseExpression();
+      const end = this.consume(TokenType.RBRACE, "Expected '}' after JSX spread").span.end;
+      return { kind: "JSXSpreadAttribute", argument, span: { start, end } };
+    }
     let nameTok: Token;
     if (this.check(TokenType.JSX_ATTRIBUTE_NAME)) {
       nameTok = this.advance();

@@ -1,5 +1,6 @@
 import { FunScriptError } from "../errors.js";
 import { renderImport } from "./imports.js";
+import { isRecordContract, recordContractType, RECORD_CONTRACT_BRAND } from "../compiler/record-contracts.js";
 import {
   Program,
   TopLevelDeclaration,
@@ -89,6 +90,9 @@ export interface EmitterOptions {
   markNumericComparisonOperands?: boolean;
   /** Pre-resolved Effect schema expressions for imported data types keyed by schema name. */
   importedSchemas?: ReadonlyMap<string, string>;
+  /** Direct imported FunScript functions with verified optional-record parameters. */
+  importedRecordFunctions?: ReadonlyMap<string, ReadonlySet<number>>;
+  importedRecordContracts?: ReadonlyMap<string, import("../ast/types.js").RecordTypeNode>;
 }
 
 const ARRAY_COMPANION_METHODS = new Set(PIPELINE_COMPANION_CATALOG.Array);
@@ -176,8 +180,10 @@ export class Emitter {
   private bindings = new Map<string, BindingDeclaration>();
 
   private declaredTypeNames = new Set<string>();
+  private recordContracts = new Map<string, import("../ast/types.js").RecordTypeNode>();
 
   constructor(private program?: Program, contextProgram?: Program, private options: EmitterOptions = {}) {
+    for (const [name, contract] of options.importedRecordContracts ?? []) this.recordContracts.set(name, contract);
     // Source-map emission renders declarations individually, but resolution
     // still needs the bindings from the complete source program.
     for (const item of (contextProgram ?? program)?.body ?? []) {
@@ -201,6 +207,9 @@ export class Emitter {
       ) {
         this.declaredTypeNames.add(decl.id.name);
       }
+      if (decl.kind === "SchemaDeclaration" && decl.body.kind === "RecordSchema" && isRecordContract(decl.body)) {
+        this.recordContracts.set(decl.id.name, recordContractType(decl.body));
+      }
       if (decl.kind === "BindingDeclaration") this.bindings.set(decl.id.name, decl);
     }
   }
@@ -209,6 +218,18 @@ export class Emitter {
     let bodyCode = "";
 
     if (this.program) {
+      const visit = (value: unknown, parent?: Record<string, unknown>, grandparent?: Record<string, unknown>, key?: string): void => {
+        if (!value || typeof value !== "object") return;
+        if (Array.isArray(value)) { value.forEach((child) => visit(child, parent, grandparent, key)); return; }
+        const node = value as Record<string, any>;
+        if (node.kind === "TypeReferenceNode" && this.recordContracts.has(node.name.name)) {
+          if (!(parent?.kind === "Parameter" && grandparent?.kind === "FunctionExpression" && key === "typeAnnotation")) {
+            throw new FunScriptError(`${node.name.name} is a compile-time record contract and is currently supported only as a direct function parameter`, node.span);
+          }
+        }
+        for (const [childKey, child] of Object.entries(node)) if (childKey !== "span") visit(child, node, parent, childKey);
+      };
+      visit(this.program);
       for (const decl of this.program.body) {
         bodyCode += this.emitTopLevelDeclaration(decl) + "\n\n";
       }
@@ -281,10 +302,22 @@ export class Emitter {
 
     switch (decl.body.kind) {
       case "RecordSchema": {
+        if (isRecordContract(decl.body)) {
+          const hasDefault = (value: unknown): boolean => {
+            if (!value || typeof value !== "object") return false;
+            if (Array.isArray(value)) return value.some(hasDefault);
+            const node = value as Record<string, unknown>;
+            return Boolean(node.defaultValue) || Object.entries(node).some(([key, child]) => key !== "span" && hasDefault(child));
+          };
+          if (hasDefault(decl.body)) throw new FunScriptError("Compile-time record contracts cannot declare schema defaults", decl.span);
+          const brand = `${RECORD_CONTRACT_BRAND}$${name}`;
+          return `declare const ${brand}: unique symbol;\n${exp}type ${name} = ${this.emitTypeNode(recordContractType(decl.body))} & { readonly [${brand}]?: never };`;
+        }
         this.effectImports.add("Schema");
         const schemaFields = decl.body.fields
           .map((f) => {
             const schema = this.emitSchemaTypeField(f.typeAnnotation);
+            if (f.optional) return `  ${f.name.name}: Schema.OptionFromOptional(${schema})`;
             if (!f.defaultValue) return `  ${f.name.name}: ${schema}`;
             this.effectImports.add("Effect");
             return `  ${f.name.name}: ${schema}.pipe(Schema.withDecodingDefaultType(Effect.sync(() => ${this.emitExpression(f.defaultValue!)})))`;
@@ -356,9 +389,16 @@ export class Emitter {
 
   private emitSchemaTypeField(typeNode: TypeNode): string {
     this.effectImports.add("Schema");
+    if (typeNode.kind === "FunctionTypeNode" || typeNode.kind === "EffectTypeNode") {
+      throw new FunScriptError("Runtime schema fields cannot validate function or Effect types; use a separate type or an explicit schema", typeNode.span);
+    }
     if (typeNode.kind === "RecordTypeNode") {
       const inner = typeNode.fields
-        .map((f) => `  ${f.name.name}: ${this.emitSchemaTypeField(f.typeAnnotation)}`)
+        .map((f) => {
+          if (f.defaultValue) throw new FunScriptError("Nested schema field defaults are not supported yet", f.span);
+          const schema = this.emitSchemaTypeField(f.typeAnnotation);
+          return `  ${f.name.name}: ${f.optional ? `Schema.OptionFromOptional(${schema})` : schema}`;
+        })
         .join(",\n");
       return `Schema.Struct({\n${inner}\n})`;
     }
@@ -370,6 +410,7 @@ export class Emitter {
     }
     if (typeNode.kind === "TypeReferenceNode") {
       const tName = typeNode.name.name;
+      if (this.recordContracts.has(tName)) throw new FunScriptError(`${tName} is a compile-time record contract, not a runtime schema`, typeNode.span);
       if (tName === "SchemaInput" && !this.declaredTypeNames.has(tName)) {
         throw new Error("SchemaInput is a static input type, not a runtime schema; use the schema itself for validation");
       }
@@ -492,18 +533,23 @@ export class Emitter {
     const hasDefaults = source?.kind === "RecordTypeNode" && source.fields.some((field) => field.defaultValue);
     const isSafeLocalForward = (parent: Record<string, unknown>, index: number | undefined): boolean => {
       if (hasDefaults || index === undefined || parent.kind !== "CallExpression") return false;
-      const callee = parent.callee as { kind?: string; name?: string } | undefined;
-      if (callee?.kind !== "Identifier" || !callee.name || shadowed.has(callee.name)) return false;
+      const callee = parent.callee as { kind?: string; name?: string; object?: { kind?: string; name?: string }; property?: { name?: string } } | undefined;
+      if (callee?.kind === "MemberExpression" && (callee.object?.kind === "Identifier" || callee.object?.kind === "UpperIdentifier") && callee.object.name && callee.property?.name && !shadowed.has(callee.object.name)) {
+        return this.options.importedRecordFunctions?.get(`${callee.object.name}.${callee.property.name}`)?.has(index) ?? false;
+      }
+      if ((callee?.kind !== "Identifier" && callee?.kind !== "UpperIdentifier") || !callee.name || shadowed.has(callee.name)) return false;
+      if (this.options.importedRecordFunctions?.get(callee.name)?.has(index)) return true;
       const target = this.bindings.get(callee.name);
       if (!target || target.isMut || target.isJs || target.init.kind !== "FunctionExpression") return false;
-      const type = target.init.params[index]?.typeAnnotation;
+      const targetType = target.init.params[index]?.typeAnnotation;
+      const type = targetType?.kind === "TypeReferenceNode" ? this.recordContracts.get(targetType.name.name) ?? targetType : targetType;
       const hasOptionalFields = (node: TypeNode | undefined): boolean => node?.kind === "RecordTypeNode" &&
         node.fields.some((field) => Boolean(field.optional || field.defaultValue) || hasOptionalFields(field.typeAnnotation));
       return hasOptionalFields(type);
     };
-    const visit = (value: unknown, parent?: Record<string, unknown>, key?: string, allowMember = true, inJs = false, index?: number): void => {
+    const visit = (value: unknown, parent?: Record<string, unknown>, key?: string, allowMember = true, inJs = false, index?: number, jsxTarget?: unknown): void => {
       if (!value || typeof value !== "object") return;
-      if (Array.isArray(value)) { value.forEach((child, i) => visit(child, parent, key, allowMember, inJs, i)); return; }
+      if (Array.isArray(value)) { value.forEach((child, i) => visit(child, parent, key, allowMember, inJs, i, jsxTarget)); return; }
       const node = value as Record<string, unknown>;
       if (node.kind === "FunctionExpression" && Array.isArray(node.params) && node.params.some((param: any) => param.name?.name === name)) return;
       if (node.kind === "MemberExpression") {
@@ -519,11 +565,13 @@ export class Emitter {
         if (allowMember && parent?.kind === "MemberExpression" && key === "object") return;
         if (allowMember && inJs && parent?.kind === "CallExpression" && key === "args") return;
         if (allowMember && parent && key === "args" && isSafeLocalForward(parent, index)) return;
+        if (allowMember && parent?.kind === "JSXSpreadAttribute" && key === "argument" && isSafeLocalForward({ kind: "CallExpression", callee: jsxTarget }, 0)) return;
         if ((parent?.kind === "MemberExpression" && key === "property") || (parent?.kind === "FieldEntry" && key === "key") || (parent?.kind === "JSXAttribute" && key === "name")) return;
         throw new FunScriptError(`A record parameter with optional fields cannot be passed, returned, aliased, or indexed yet; access ${name}.field directly`, node.span as any);
       }
       for (const [childKey, child] of Object.entries(node)) {
-        if (childKey !== "span" && childKey !== "typeAnnotation" && childKey !== "returnType") visit(child, node, childKey, allowMember, inJs || node.kind === "JsExpression");
+        const target = childKey === "attributes" && (node.kind === "JSXOpeningElement" || node.kind === "JSXSelfClosingElement") ? node.name : jsxTarget;
+        if (childKey !== "span" && childKey !== "typeAnnotation" && childKey !== "returnType") visit(child, node, childKey, allowMember, inJs || node.kind === "JsExpression", undefined, target);
       }
     };
     visit(expr.body);
@@ -562,6 +610,9 @@ export class Emitter {
     const typeAnn = decl.typeAnnotation ? `: ${this.emitTypeNode(decl.typeAnnotation)}` : "";
 
     if (decl.isJs) {
+      if (decl.init.kind === "FunctionExpression" && decl.init.params.some((p) => p.typeAnnotation?.kind === "TypeReferenceNode" && this.recordContracts.has(p.typeAnnotation.name.name))) {
+        throw new FunScriptError("Compile-time record contracts are not supported on js entry bindings", decl.span);
+      }
       this.effectImports.add("Effect");
       if (decl.init.kind === "FunctionExpression") {
         const fn = decl.init;
@@ -609,6 +660,7 @@ export class Emitter {
         return expr.value ? "true" : "false";
       case "Identifier":
       case "UpperIdentifier":
+        if (this.recordContracts.has(expr.name)) throw new FunScriptError(`${expr.name} is a compile-time record contract, not a runtime schema`, expr.span);
         return expr.name;
       case "Placeholder":
         return this.currentPlaceholderParam ?? "__placeholder";
@@ -1065,8 +1117,13 @@ export class Emitter {
     const records = new Map<string, Map<string, RecordFieldInfo> | undefined>();
     const recordDefaults: string[] = [];
     expr.params.forEach((param, paramIndex) => {
-      if (param.typeAnnotation?.kind !== "RecordTypeNode") { records.set(param.name.name, undefined); return; }
-      const fields = param.typeAnnotation.fields;
+      const declared = param.typeAnnotation;
+      const recordType = declared?.kind === "TypeReferenceNode" ? this.recordContracts.get(declared.name.name) : declared;
+      if (declared?.kind === "TypeReferenceNode" && recordType && (param.optional || param.defaultValue)) {
+        throw new FunScriptError("A compile-time record contract parameter cannot itself be optional or defaulted yet", param.span);
+      }
+      if (recordType?.kind !== "RecordTypeNode") { records.set(param.name.name, undefined); return; }
+      const fields = recordType.fields;
       const nestedFields = (type: TypeNode): Map<string, RecordFieldInfo> | undefined => {
         if (type.kind !== "RecordTypeNode") {
           const containsOptionalRecord = (value: unknown): boolean => {
@@ -1610,6 +1667,7 @@ export class Emitter {
   }
 
   public emitJsxAttribute(attr: JSXAttribute): string {
+    if (attr.kind === "JSXSpreadAttribute") return `{...${this.emitExpression(attr.argument)}}`;
     const name = attr.name.name;
     if (attr.value === undefined) {
       return name;

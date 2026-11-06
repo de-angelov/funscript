@@ -4,6 +4,7 @@ import { Lexer } from "../src/lexer/lexer.js";
 import { Parser } from "../src/parser/parser.js";
 import { Emitter } from "../src/emitter/emitter.js";
 import { compileString } from "../src/compiler.js";
+import { typeCheckSource, typeCheckVirtualFiles } from "../src/compiler/check.js";
 import {
   JSXElement,
   JSXSelfClosingElement,
@@ -85,6 +86,28 @@ describe("TSX Emitter for JSX AST Nodes", () => {
   });
 
   describe("JSX Attributes", () => {
+    it("emits spread attributes in source order", () => {
+      expect(emitJsxExpr('<div id="before" {...props} className="after" />')).toBe('<div id="before" {...props} className="after" />');
+    });
+
+    it("forwards optional records only to verified FunScript components", async () => {
+      const source = 'export Target = (props: { label?: String }) => <div />\nexport Wrapper = (props: { label?: String }) => <Target {...props} />';
+      expect(await compileFunx(source)).toContain('<Target {...props} />');
+      const checked = await Effect.runPromise(typeCheckSource(source, "spread.funx"));
+      expect(checked.success, checked.formattedOutput).toBe(true);
+      const bad = await Effect.runPromise(typeCheckSource(source.replace('export Wrapper = (props: { label?: String })', 'export Wrapper = (props: { label?: Number })'), "spread.funx"));
+      expect(bad.success).toBe(false);
+      await expect(Effect.runPromise(compileString('export Wrapper = (props: { label?: String }) => <Unknown {...props} />', "test.funx"))).rejects.toThrow(/cannot be passed/);
+      await expect(Effect.runPromise(compileString('export Target = (props: { label?: String }) => <div />\nexport Wrapper = (props: { label: String = "x" }) => <Target {...props} />', "test.funx"))).rejects.toThrow(/cannot be passed/);
+    });
+
+    it("checks JSX forwarding across FunScript modules", async () => {
+      const result = await Effect.runPromise(typeCheckVirtualFiles({
+        "target.funx": 'export Target = (props: { label?: String }) => <div />',
+        "wrapper.funx": 'import { Target } from "./target.js"\nexport Wrapper = (props: { label?: String }) => <Target {...props} />',
+      }, { compilerOptions: { rootDir: process.cwd() } }));
+      expect(result.success, result.formattedOutput).toBe(true);
+    });
     it("emits boolean attributes without value", () => {
       expect(emitJsxExpr("<button disabled autofocus />")).toBe("<button disabled autofocus />");
     });

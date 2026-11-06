@@ -465,7 +465,7 @@ export class Formatter {
       const leading = this.formatLeadingComments(f, fieldIndent);
       const trailing = this.getTrailingComment(f.span.end.line);
       const def = f.defaultValue ? ` = ${this.formatExpression(f.defaultValue, indent + this.indentSize)}` : "";
-      return `${leading}${fieldIndent}${f.name.name}: ${this.formatType(f.typeAnnotation, indent + this.indentSize)}${def}${trailing}`;
+      return `${leading}${fieldIndent}${f.name.name}${f.optional ? "?" : ""}: ${this.formatType(f.typeAnnotation, indent + this.indentSize)}${def}${trailing}`;
     }).join("\n");
     return `{\n${fields}\n${closingIndent}}`;
   }

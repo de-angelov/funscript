@@ -560,19 +560,67 @@ const answer = () => 42;
 - Optional fields are supported on direct, required record parameters, including inside
   required nested records. An optional parent record containing optional fields can be
   inspected by matching it with `Some(name)` and `None`; reads of its nested optional
-  fields are also `Option`s. Named optional record types and optional records inside
-  callback or container types are not supported yet. Defaulted fields must be directly on the
+  fields are also `Option`s. Optional records inside callback or container types are not
+  supported yet. Defaulted fields must be directly on the
   parameter record. Reads of optional fields produce real Effect `Option`s.
 - To keep raw JavaScript values from escaping into FunScript unconverted, passing,
   returning, and indexing these records are restricted. A record without defaults may
   have immutable aliases in the function body and may be passed to a statically known
-  local FunScript function whose corresponding parameter also declares optional record
-  fields. An explicit `js` call may receive the original object. To pass an individual
+  local or verified imported FunScript function whose corresponding parameter
+  also declares optional record fields. An explicit `js` call may receive the original object. To pass an individual
   optional field to JavaScript, explicitly convert its `Option`, for example with
   `Option.getOrUndefined`.
 - `SchemaInput<Name>` is the encoded input type of a named schema. It is a static
   type only; using it does not decode or validate a value or apply schema defaults.
   Use the schema's decoder explicitly when decoded values are required.
+
+```funscript
+export schema Profile = {
+  name: String
+  nickname?: String
+  preferences?: { theme?: String }
+}
+
+# Decode at a boundary. The named Profile type contains real Options and can
+# be passed between functions and modules without special forwarding rules.
+export readNickname = (profile: Profile) => profile.nickname
+export fromInput = (input: SchemaInput<Profile>) => readNickname(ProfileFromUnknown(input))
+```
+
+`ProfileFromUnknown` validates and decodes its input; `SchemaInput<Profile>` alone
+does not. Encoding the decoded value with Effect Schema produces ordinary optional
+JavaScript properties again. Optional schema fields cannot also have a default.
+Record schemas containing a function or Effect type instead declare a **compile-time
+record contract**. They describe ordinary JavaScript objects and do not provide a
+runtime schema, decoder, or `SchemaInput` type. This distinction applies to the whole
+record: adding a function or Effect field to a data schema changes it into a contract.
+
+```funscript
+export schema ButtonProps = {
+  label?: String
+  onClick?: (label: String) => Void
+}
+
+export Button = (props: ButtonProps) =>
+  label = Option.getOrElse(props.label, () => "OK")
+  => <button onClick={() => Option.map(props.onClick, (click) => click(label))}>{label}</button>
+```
+
+Contract fields marked `?` accept omitted or `undefined` JavaScript properties and
+read as Effect `Option`s in FunScript. Type checking verifies callback signatures for
+typed callers; no runtime validation of JavaScript values or callback signatures is
+performed. A contract may currently be used as a direct, required function parameter;
+the forwarding restrictions above apply. Its declaration carries type-only metadata
+through TypeScript's declaration output so FunScript can recover optional-field
+semantics from a package. Declaration tooling must preserve that metadata. Optional
+records inside callback parameters, containers, or unions are not supported when
+recovering package contracts.
+
+- A raw optional record can also be passed to an imported FunScript function when the
+  compiler can verify that its exported parameter declares optional record fields.
+  Named, default, and namespace imports and immutable re-export aliases are supported.
+  The object is forwarded unchanged; normal type checking still verifies the parameter
+  types. Unresolved, ambiguous, cyclic, and non-FunScript targets remain restricted.
 - `funscript tsc` runs the project's TypeScript compiler and maps diagnostics from
   an up-to-date default `.funscript/types` view back to FunScript sources. It leaves
   ordinary TypeScript and stale-view diagnostics unchanged. Plain `tsc` does not use
@@ -606,6 +654,13 @@ export Message = () =>
 ```
 
 Any multi-statement function body in `.funx`, non-JSX final expressions, and all function block bodies in `.fun` continue to require an explicit `=> expression` return.
+
+JSX attributes support spreads such as `<Button {...props} disabled={true} />`.
+They retain JavaScript's source-order override behavior. A record parameter with
+optional fields can be spread only into a statically verified FunScript component
+whose first parameter declares optional record fields; records with field defaults
+and unknown component targets remain restricted. React constructs its usual props
+object, so a JSX spread does not preserve the original record's identity.
 
 ### 3.2 Calls and methods
 
@@ -1374,10 +1429,13 @@ Rules:
    `schema`/`error` declarations) compile to a runtime `Schema` value **and**
    `type Name = typeof Name.Type`.
 2. **Absence and default fields in record `schema` declarations:**
-   - **No `?` in schema records:** Schema records do not support `field?: Type` yet. A field declared
-     `Option<Type>` contains an actual Effect `Option`; it does not automatically decode
-     missing, `undefined`, or `null` values. Use an explicit schema conversion for those
-     JavaScript representations.
+   - `field?: Type` uses `Schema.OptionFromOptional(Type)`. After explicit schema decoding,
+     an omitted or `undefined` field is a real `Option.none()` and a present, valid value
+     is `Option.some(value)`. Encoding `None` omits the field; encoding `Some(value)`
+     produces the ordinary JavaScript value. `null` is accepted only when the field's
+     schema accepts it. This works inside nested schema records as well.
+   - A field declared `Option<Type>` contains an actual Effect `Option`; it does not
+     automatically decode missing, `undefined`, or `null` values.
    - `field: Type = defaultExpr` uses Effect's `Schema.withDecodingDefaultType`.
      Missing or `undefined` input gets the decoded default, evaluated lazily during
      decoding. The encoded field is optional; the decoded field is required. Defaults
@@ -2586,7 +2644,7 @@ These are the choices that came out of checking the surface for ambiguity:
 | Decision                                                                      | Why                                                                                                                                                                                                                                                      |
 | ----------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Unified `schema` = Effect `Schema` + Tagged Unions (`\| Variant`) + TS `type` | Naming the keyword `schema` (instead of `type` or `data`) makes it explicit that declarations compile to runtime Effect `Schema` validators + `Data.TaggedEnum` + static TypeScript types.                                                               |
-| `\|> Schema.*` refinements + `?` / `= default` in `schema`                    | Constraints, branding, optional fields (`Schema.optional`), and decoding defaults (`Schema.optionalWith`) live directly on the `schema` declaration.                                                                                                     |
+| `\|> Schema.*` refinements + `?` / `= default` in `schema`                    | Constraints and branding are schema refinements; optional fields decode to Effect `Option`, and defaults are applied during decoding.                                                                                                                     |
 | `{ ...x, a.b: 1 }` and `mut` for immutable updates (no `with`)                | Shallow spreads emit `{ ...x, k: v }`, while nested dot-paths (`a.b: 1`) and `mut draft = x` / `\|> mut (d) => ...` lower to Mutative's `create(...)` with fast structural sharing on plain `Schema`/`ts-pattern` objects.                               |
 | Local `mut` + `=` with copy-on-write                                          | `mut` marks local mutable bindings and `\|> mut (d) =>` drafts explicitly up front; reassignment uses normal `=` (no extra `:=` operator) and path updates on a `mut` binding lower to `create(...)`.                                                    |
 | `\|> f(a, _)` pipeline argument placeholder                                   | Lets uncurried multi-argument functions participate in pipelines without throwaway lambdas, while banning nested `_` (`_.x`, `f(g(_))`) to prevent scope ambiguity.                                                                                      |
