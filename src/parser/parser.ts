@@ -2186,7 +2186,7 @@ export class Parser {
             ? { kind: "Identifier", name: fieldToken.value, span: fieldToken.span }
             : this.parseIdentifier();
           const optional = this.match(TokenType.QUESTION);
-          if (optional && (!this.allowOptionalRecordFields || this.recordTypeDepth !== 1)) {
+          if (optional && !this.allowOptionalRecordFields) {
             throw new ParseError("Optional record fields are supported only on direct function parameters", fName.span);
           }
           this.consume(TokenType.COLON, "Expected ':' after field name");

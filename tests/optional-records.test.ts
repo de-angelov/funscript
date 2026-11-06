@@ -75,18 +75,73 @@ describe("optional fields in inline parameter records", () => {
     expect(received).toBe(original);
   });
 
+  it("forwards unchanged optional records to a statically known FunScript function", async () => {
+    const source = 'read = (props: { label?: String }) => props.label\nexport forward = (props: { label?: String }) => read(props)';
+    const checked = await typeCheck(source, "record-forward.fun");
+    expect(checked.success, checked.formattedOutput).toBe(true);
+    const { forward } = await execute(source);
+    expect(forward({})).toEqual(Option.none());
+    expect(forward({ label: "Ada" })).toEqual(Option.some("Ada"));
+    await expectCompileError('read = (props: { label?: String }) => props.label\nexport forward = (props: { label: String = "x" }) => read(props)', /cannot be passed/);
+    await expectCompileError('read = (props: { label?: String }) => props.label\nexport forward = (props: { label?: String }, read: (value: Unknown) => Unknown) => read(props)', /cannot be passed/);
+    await expectCompileError('read = (props: { label?: String }) => props.label\nexport forward = (props: { label?: String }, value: Unknown) =>\n  match value\n    | read => read(props)', /cannot be passed/);
+  });
+
+  it("tracks immutable record aliases and rejects their unsafe escape", async () => {
+    const source = 'read = (props: { label?: String }) => props.label\nexport forward = (props: { label?: String }) =>\n  alias = props\n  saved = alias\n  => read(saved)';
+    const checked = await typeCheck(source, "record-alias.fun");
+    expect(checked.success, checked.formattedOutput).toBe(true);
+    const { forward } = await execute(source);
+    expect(forward({})).toEqual(Option.none());
+    expect(forward({ label: "Ada" })).toEqual(Option.some("Ada"));
+    const direct = await execute('export read = (props: { label?: String }) =>\n  alias = props\n  => alias.label');
+    expect(direct.read({ label: "Ada" })).toEqual(Option.some("Ada"));
+    await expectCompileError('export leak = (props: { label?: String }) =>\n  alias = props\n  => alias', /cannot be passed/);
+    await expectCompileError('export leak = (props: { label: String = "x" }) =>\n  alias = props\n  => alias.label', /cannot be passed/);
+  });
+
+  it("handles optional fields inside required nested records without leaking them", async () => {
+    const source = 'export read = (props: { nested: { label?: String } }) => props.nested.label';
+    const checked = await typeCheck(source, "nested-option.fun");
+    expect(checked.success, checked.formattedOutput).toBe(true);
+    const { read } = await execute(source);
+    expect(read({ nested: {} })).toEqual(Option.none());
+    expect(read({ nested: { label: "hello" } })).toEqual(Option.some("hello"));
+    const forwarded = await execute('read = (props: { nested: { label?: String } }) => props.nested.label\nexport forward = (props: { nested: { label?: String } }) => read(props)');
+    expect(forwarded.forward({ nested: { label: "hello" } })).toEqual(Option.some("hello"));
+    const unsafe = await typeCheck('export read = (props: { nested: { label?: String } }) => props.nested.label.toUpperCase()', "nested-option.fun");
+    expect(unsafe.success).toBe(false);
+    await expectCompileError('export leak = (props: { nested: { label?: String } }) => props.nested', /nested record with optional fields/);
+    await expectCompileError('export leak = (props: { nested: { label?: String } }) => props.nested["label"]', /nested record with optional fields/);
+    await expectCompileError('export leak = (props: { nested?: { label?: String } }) => props.nested', /nested record with optional fields/);
+    await expectCompileError('export leak = (props: { callback: (value: { label?: String }) => String }) => props.callback', /inside callbacks or container types/);
+    await expectCompileError('export leak = (props: { values: Array<{ label?: String }> }) => props.values', /inside callbacks or container types/);
+  });
+
+  it("handles an optional parent record through an explicit Some match", async () => {
+    const source = 'import { Option } from "effect"\nexport read = (props: { nested?: { label?: String } }) =>\n  match props.nested\n    | Some(nested) => nested.label\n    | None => Option.none()';
+    const checked = await typeCheck(source, "optional-parent.fun");
+    expect(checked.success, checked.formattedOutput).toBe(true);
+    const { read } = await execute(source);
+    expect(read({})).toEqual(Option.none());
+    expect(read({ nested: {} })).toEqual(Option.none());
+    expect(read({ nested: { label: "Ada" } })).toEqual(Option.some("Ada"));
+    const guarded = await typeCheck('export read = (props: { nested?: { label?: String } }) =>\n  match props.nested\n    | Some(nested) when nested.label.toUpperCase() => "yes"\n    | _ => "no"', "optional-parent-guard.fun");
+    expect(guarded.success).toBe(false);
+    await expectCompileError('export leak = (props: { nested?: { label?: String } }) =>\n  match props.nested\n    | Some(nested) => nested\n    | None => "none"', /cannot be passed/);
+    await expectCompileError('export leak = (props: { nested?: { label?: String } }) => props.nested.label', /nested record with optional fields/);
+  });
+
   it("preserves formatting and rejects unsupported escapes rather than leaking raw undefined", async () => {
     const source = 'export read = (props: { label?: String, count: Number = 2 }) => props.label\n';
     expect(format(format(source))).toBe(format(source));
     expect((await compile(source)).typescript).toContain('readonly label?: string');
     await expectCompileError('export leak = (props: { label?: String }) => props', /cannot be passed, returned, aliased, or indexed/);
     await expectCompileError('export leak = (props: { label?: String }) => props["label"]', /cannot be passed, returned, aliased, or indexed/);
-    await expectCompileError('export leak = (props: { label?: String }) =>\n  alias = props\n  => alias.label', /cannot be passed, returned, aliased, or indexed/);
     await expectCompileError('export x: { label?: String } = { label: "x" }', /only on direct function parameters/);
     await expectCompileError('export js f = (props: { label?: String }) => props.label', /not yet supported on js entry bindings/);
     await expectCompileError('export js f = (props: { label: String = "guest" }) => props.label', /not yet supported on js entry bindings/);
-    await expectCompileError('export f = (props: { label: String = props.label }) => props.label', /cannot be passed, returned, aliased, or indexed/);
+    await expectCompileError('export f = (props: { label: String = props.label }) => props.label', /cannot reference function parameters/);
     await expectCompileError('export f = (prefix: String, props: { label: String = prefix }) => props.label', /cannot reference function parameters/);
-    await expectCompileError('export f = (props: { nested: { label?: String } }) => props.nested', /only on direct function parameters/);
   });
 });

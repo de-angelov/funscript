@@ -42,6 +42,18 @@ Statically type-check files with the TypeScript API.
 funscript check examples/shapes.fun
 ```
 
+### `funscript tsc`
+
+```text
+funscript tsc [TypeScript options]
+```
+
+Run the project's TypeScript compiler and map type-view diagnostics to FunScript sources.
+
+```sh
+funscript tsc --noEmit
+```
+
 ### `funscript run`
 
 ```text

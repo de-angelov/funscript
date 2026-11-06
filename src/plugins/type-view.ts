@@ -13,7 +13,7 @@ export interface TypeViewOptions {
 
 
 /** Resolve relative imports from their real source location before rootDirs overlays. */
-function rewriteRelativeImports(source: string, parsed: ts.SourceFile, originalFile: string, generatedFile: string): string {
+export function rewriteRelativeImports(source: string, parsed: ts.SourceFile, originalFile: string, generatedFile: string): string {
   const edits: Array<{ start: number; end: number; text: string }> = [];
   const visit = (node: ts.Node) => {
     let specifier: ts.Expression | ts.TypeNode | undefined;

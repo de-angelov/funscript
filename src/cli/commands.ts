@@ -11,6 +11,7 @@ export const CLI_COMMANDS: readonly CliCommand[] = [
   { name: "build", usage: "build <file.fun|file.funx...> [--out <file>] [--outDir <dir>] [--sourcemap] [--no-check]", description: "Build FunScript files to TypeScript or TSX.", examples: ["funscript build src/Button.funx --sourcemap"] },
   { name: "emit", usage: "emit <file.fun|file.funx> [--out <file.ts|file.tsx>] [--sourcemap]", description: "Compile one FunScript file to TypeScript or TSX.", examples: ["funscript emit src/main.fun --out src/main.ts --sourcemap"] },
   { name: "check", usage: "check [file.fun|file.funx...]", description: "Statically type-check files with the TypeScript API.", examples: ["funscript check examples/shapes.fun"] },
+  { name: "tsc", usage: "tsc [TypeScript options]", description: "Run the project's TypeScript compiler and map type-view diagnostics to FunScript sources.", examples: ["funscript tsc --noEmit"] },
   { name: "run", usage: "run <file.fun|file.funx> [--no-check]", description: "Compile and run a FunScript program with Node.js.", examples: ["funscript run examples/hello.fun"] },
   { name: "repl", usage: "repl", description: "Start the interactive REPL.", examples: ["funscript repl"] },
   { name: "lsp", usage: "lsp [--stdio]", description: "Start the Language Server Protocol server.", examples: ["funscript lsp --stdio"] },

@@ -107,7 +107,7 @@ function findTokenInLine(
   return null;
 }
 
-function mapDiagnosticLocation(
+export function mapDiagnosticLocation(
   diagnostic: ts.Diagnostic,
   funPath: string,
   funSource: string,
@@ -145,6 +145,23 @@ function mapDiagnosticLocation(
       const idMatch = tsSpanText.match(/^[A-Za-z0-9_$]+/);
       const isId = isExhaustiveError || Boolean(idMatch && idMatch[0] === tsSpanText);
       const searchToken = isExhaustiveError ? "match" : (isId ? idMatch![0] : tsSpanText);
+
+      // Whole declarations can map to one source position. If an identifier is
+      // preserved exactly and occurs equally often on both sides, its occurrence
+      // number disambiguates repeated diagnostics within that declaration.
+      if (isId && !isExhaustiveError) {
+        const pattern = new RegExp(`\\b${escapeRegExp(searchToken)}\\b`, "g");
+        const generated = [...tsCode.matchAll(pattern)];
+        const original = [...funSource.matchAll(pattern)];
+        const ordinal = generated.findIndex((match) => match.index === diagnostic.start);
+        if (generated.length > 1 && generated.length === original.length && ordinal >= 0) {
+          const offset = original[ordinal].index!;
+          const prefix = funSource.slice(0, offset);
+          const line = prefix.split("\n").length;
+          const column = offset - prefix.lastIndexOf("\n");
+          return { file: funPath, line, column, endLine: line, endColumn: column + searchToken.length };
+        }
+      }
 
       // 1. Try finding on current origLine
       let match = findTokenInLine(lineText, searchToken, isId);

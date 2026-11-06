@@ -4,6 +4,16 @@ import { compile, execute, expectCompileError, typeCheck } from "./helpers/index
 import { format } from "../src/formatter/index.js";
 
 describe("optional and defaulted parameters", () => {
+  it("returns record literals from callbacks and match arms", async () => {
+    const source = 'export copy = (items: Array<{ value: Number }>) => items.map((item) => { ...item, extra: 1 })\nexport choose = (flag: Boolean) => match flag\n  | true => { value: 1 }\n  | false => { value: 2 }';
+    const checked = await typeCheck(source, "record-return.fun");
+    expect(checked.success, checked.formattedOutput).toBe(true);
+    const { copy, choose } = await execute(source);
+    expect(copy([{ value: 3 }])).toEqual([{ value: 3, extra: 1 }]);
+    expect(choose(true)).toEqual({ value: 1 });
+    expect(choose(false)).toEqual({ value: 2 });
+  });
+
   it("converts omitted and undefined JavaScript arguments into real Effect Options", async () => {
     const { inspect } = await execute('export inspect = (value?: String) => value');
     expect(Option.isNone(inspect())).toBe(true);

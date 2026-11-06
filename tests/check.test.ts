@@ -169,6 +169,13 @@ export result = calculate("hello", 42)
       expect(err!.frame).toContain("calculate(\"hello\", 42)");
     });
 
+    it("reports repeated invalid members on their respective source lines", async () => {
+      const code = 'export check = (value: Number) =>\n  first = value.toUpperCase()\n  => value.toUpperCase()';
+      const result = await Effect.runPromise(typeCheckSource(code, "repeated.fun"));
+      const errors = result.diagnostics.filter((d) => d.message.includes("toUpperCase"));
+      expect(errors.map((d) => d.line).sort()).toEqual([2, 3]);
+    });
+
     it("detects function return type mismatch", async () => {
       const code = `
 fn getAnswer(): Number {

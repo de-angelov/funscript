@@ -557,16 +557,26 @@ const answer = () => 42;
   They preserve `null` and falsey values. Record-field defaults cannot reference
   function parameters yet.
 - Record types may use `error` as a field name, including for JavaScript logger types.
-- For now, optional/defaulted record fields are supported only on a direct, required
-  function parameter, not nested records or named record types. To keep raw JavaScript
-  values from escaping into FunScript unconverted, access the parameter's fields directly:
-  passing, returning, aliasing, and indexing the whole record are rejected. A direct
-  argument of an explicit `js` call is allowed and forwards the original object. To pass
-  an individual optional field to JavaScript, explicitly convert its `Option`, for example
-  with `Option.getOrUndefined`.
+- Optional fields are supported on direct, required record parameters, including inside
+  required nested records. An optional parent record containing optional fields can be
+  inspected by matching it with `Some(name)` and `None`; reads of its nested optional
+  fields are also `Option`s. Named optional record types and optional records inside
+  callback or container types are not supported yet. Defaulted fields must be directly on the
+  parameter record. Reads of optional fields produce real Effect `Option`s.
+- To keep raw JavaScript values from escaping into FunScript unconverted, passing,
+  returning, and indexing these records are restricted. A record without defaults may
+  have immutable aliases in the function body and may be passed to a statically known
+  local FunScript function whose corresponding parameter also declares optional record
+  fields. An explicit `js` call may receive the original object. To pass an individual
+  optional field to JavaScript, explicitly convert its `Option`, for example with
+  `Option.getOrUndefined`.
 - `SchemaInput<Name>` is the encoded input type of a named schema. It is a static
   type only; using it does not decode or validate a value or apply schema defaults.
   Use the schema's decoder explicitly when decoded values are required.
+- `funscript tsc` runs the project's TypeScript compiler and maps diagnostics from
+  an up-to-date default `.funscript/types` view back to FunScript sources. It leaves
+  ordinary TypeScript and stale-view diagnostics unchanged. Plain `tsc` does not use
+  this mapping; watch mode and custom type-view output directories are not supported.
 
 ### 3.1.1 Explicit returns and conditional execution
 

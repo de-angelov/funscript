@@ -8,6 +8,7 @@ import { transformSync } from "esbuild";
 import { compileString, checkString } from "../compiler.js";
 import { typeCheckFiles } from "../compiler/check.js";
 import { checkCliFiles } from "./typecheck.js";
+import { runTsc } from "./tsc.js";
 import { startLspServer } from "../lsp/index.js";
 import { format } from "../formatter/index.js";
 import { startRepl } from "./repl.js";
@@ -359,6 +360,11 @@ const program = Effect.gen(function* () {
       return yield* emitCommand(commandArgs);
     case "check":
       return yield* checkCommand(commandArgs);
+    case "tsc": {
+      const code = yield* Effect.tryPromise({ try: () => runTsc(commandArgs), catch: (error) => error instanceof Error ? error : new Error(String(error)) });
+      process.exitCode = code;
+      return;
+    }
     case "lsp":
       return yield* lspCommand(commandArgs);
     case "fmt":
