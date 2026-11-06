@@ -193,6 +193,9 @@ export class Lexer {
         case "%":
           this.emitToken(TokenType.PERCENT, "%", 1);
           break;
+        case "?":
+          this.emitToken(TokenType.QUESTION, "?", 1);
+          break;
         case ":":
           this.emitToken(TokenType.COLON, ":", 1);
           break;

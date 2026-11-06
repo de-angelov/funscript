@@ -46,6 +46,7 @@ export enum TokenType {
   BAR = "|",
   UNDERSCORE = "_",
   TYPED_HOLE = "???",
+  QUESTION = "?",
   EQ = "=",
   VALUE_EQ = "#=",
   VALUE_NEQ = "#!",

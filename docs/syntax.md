@@ -540,8 +540,32 @@ const answer = () => 42;
 - Functions use `name = (params) => ...`. Neither `fn` nor `function` is supported; there is no second function keyword, no method
   shorthand, and no class method syntax. An object field that holds a function uses the
   same lambda: `{ greet: (name) => ... }`.
-- There are no default parameters or rest parameters in V1. Use a record parameter,
-  `Option`, or raw TypeScript for interop.
+- A typed optional parameter, such as `(name?: String)`, accepts an omitted or
+  `undefined` JavaScript argument. Inside the function it is a real Effect
+  `Option<String>`; handle `Some` and `None` explicitly. `null` is not treated as
+  absent. This conversion does not validate values supplied by JavaScript.
+- A defaulted parameter, such as `(count: Number = 5)`, accepts omission or
+  `undefined` and is a plain `Number` inside the function. Its default is evaluated
+  only when needed, and does not replace `false`, `0`, empty strings, or `null`.
+- Only optional parameters may follow an optional parameter. Optional and defaulted
+  parameters are not yet supported on `js` entry bindings or in function type
+  signatures.
+- Rest parameters are not supported.
+- Inline record parameters can declare `field?: Type`, read as a real `Option<Type>`,
+  or `field: Type = default`, read as a plain `Type`. Defaulted fields are read once
+  and their fallback evaluated once per call only when the value is `undefined`.
+  They preserve `null` and falsey values. Record-field defaults cannot reference
+  function parameters yet.
+- For now, optional/defaulted record fields are supported only on a direct, required
+  function parameter, not nested records or named record types. To keep raw JavaScript
+  values from escaping into FunScript unconverted, access the parameter's fields directly:
+  passing, returning, aliasing, and indexing the whole record are rejected. A direct
+  argument of an explicit `js` call is allowed and forwards the original object. To pass
+  an individual optional field to JavaScript, explicitly convert its `Option`, for example
+  with `Option.getOrUndefined`.
+- `SchemaInput<Name>` is the encoded input type of a named schema. It is a static
+  type only; using it does not decode or validate a value or apply schema defaults.
+  Use the schema's decoder explicitly when decoded values are required.
 
 ### 3.1.1 Explicit returns and conditional execution
 
@@ -1339,13 +1363,14 @@ Rules:
    `schema`/`error` declarations) compile to a runtime `Schema` value **and**
    `type Name = typeof Name.Type`.
 2. **Absence and default fields in record `schema` declarations:**
-   - **No `?` in records:** There is no `field?: Type` syntax. Absence is explicitly modeled
-     as `field: Option<Type>`, which lowers to `Schema.OptionFromNullOr(...)`. Incoming JSON
-     with `null`, `undefined`, or omitted keys automatically decodes to `Option.none()`,
-     ensuring `null` never leaks into business logic.
-   - `field: Type = defaultExpr` lowers to `Schema.optionalWith(..., { default: () => defaultExpr })`
-     so the field is optional in raw encoded input and automatically populated in the
-     decoded `User` type (`readonly field: T`).
+   - **No `?` in schema records:** Schema records do not support `field?: Type` yet. A field declared
+     `Option<Type>` contains an actual Effect `Option`; it does not automatically decode
+     missing, `undefined`, or `null` values. Use an explicit schema conversion for those
+     JavaScript representations.
+   - `field: Type = defaultExpr` uses Effect's `Schema.withDecodingDefaultType`.
+     Missing or `undefined` input gets the decoded default, evaluated lazily during
+     decoding. The encoded field is optional; the decoded field is required. Defaults
+     are not applied until decoding occurs.
 3. **Deeply `readonly` at rest:** All fields in a `schema` are `readonly` in the static type
    inferred by `Schema.Struct`. Updating a value produces a new immutable value via
    `{ ...user, a.b: 1 }` or a `mut` copy-on-write draft (backed by Mutative's `create`, see

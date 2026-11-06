@@ -1001,7 +1001,9 @@ export class Formatter {
       ? `<${expr.typeParams.map(t => t.name.name).join(", ")}>`
       : "";
     const params = expr.params.map(p => {
-      return p.typeAnnotation ? `${p.name.name}: ${this.formatType(p.typeAnnotation)}` : p.name.name;
+      const type = p.typeAnnotation ? `: ${this.formatType(p.typeAnnotation)}` : "";
+      const defaultValue = p.defaultValue ? ` = ${this.formatExpression(p.defaultValue, indent)}` : "";
+      return `${p.name.name}${p.optional ? "?" : ""}${type}${defaultValue}`;
     }).join(", ");
     const ret = expr.returnType ? `: ${this.formatType(expr.returnType)}` : "";
     const isArrowOnly = expr.params.length === 0 && !expr.returnType && expr.span && this.source.slice(expr.span.start.offset, expr.span.start.offset + 2) === "=>";
@@ -1047,10 +1049,10 @@ export class Formatter {
         if (isMultiline) {
           const fieldIndent = this.spaces(indent + this.indentSize);
           const closingIndent = this.spaces(indent);
-          const fields = node.fields.map(f => `${fieldIndent}${f.name.name}: ${this.formatType(f.typeAnnotation, indent + this.indentSize)}`).join("\n");
+          const fields = node.fields.map(f => `${fieldIndent}${f.name.name}${f.optional ? "?" : ""}: ${this.formatType(f.typeAnnotation, indent + this.indentSize)}${f.defaultValue ? ` = ${this.formatExpression(f.defaultValue, indent + this.indentSize)}` : ""}`).join("\n");
           return `{\n${fields}\n${closingIndent}}`;
         }
-        const fields = node.fields.map(f => `${f.name.name}: ${this.formatType(f.typeAnnotation, indent)}`).join(", ");
+        const fields = node.fields.map(f => `${f.name.name}${f.optional ? "?" : ""}: ${this.formatType(f.typeAnnotation, indent)}${f.defaultValue ? ` = ${this.formatExpression(f.defaultValue, indent)}` : ""}`).join(", ");
         return `{ ${fields} }`;
       }
       case "ArrayTypeNode":

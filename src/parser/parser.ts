@@ -125,6 +125,8 @@ export class Parser {
   private mutDraftVariables = new Set<string>();
   private parsingBraceEffect = false;
   private hasDefaultExport = false;
+  private allowOptionalRecordFields = false;
+  private recordTypeDepth = 0;
   private options: ParserOptions;
   private isFunx: boolean;
 
@@ -660,6 +662,9 @@ export class Parser {
       hasIndent = this.match(TokenType.INDENT);
     }
     const init = this.parseExpression();
+    if (isJs && init.kind === "FunctionExpression" && init.params.some((p) => p.optional || p.defaultValue || (p.typeAnnotation?.kind === "RecordTypeNode" && p.typeAnnotation.fields.some((field) => field.optional || field.defaultValue)))) {
+      throw new ParseError("Optional and defaulted parameters are not yet supported on js entry bindings", init.span);
+    }
     if (hasIndent) {
       this.skipNewlines();
       if (!this.isAtEnd() && !this.check(TokenType.EOF)) {
@@ -679,6 +684,32 @@ export class Parser {
     };
   }
 
+  private parseValueParameter(name: Identifier, nameOnlySpan = false): Parameter {
+    const optional = this.match(TokenType.QUESTION);
+    let typeAnnotation: TypeNode | undefined;
+    if (this.match(TokenType.COLON)) {
+      const previous = this.allowOptionalRecordFields;
+      this.allowOptionalRecordFields = this.check(TokenType.LBRACE);
+      try { typeAnnotation = this.parseTypeNode(); }
+      finally { this.allowOptionalRecordFields = previous; }
+    }
+    if (optional && !typeAnnotation) throw new ParseError("Optional parameters require a type annotation", name.span);
+    const defaultValue = this.match(TokenType.EQ) ? this.parseExpression() : undefined;
+    if (optional && defaultValue) throw new ParseError("A parameter cannot be both optional and defaulted", name.span);
+    if ((optional || defaultValue) && typeAnnotation?.kind === "RecordTypeNode" && typeAnnotation.fields.some((field) => field.optional || field.defaultValue)) {
+      throw new ParseError("An optional or defaulted parameter cannot contain optional record fields yet", name.span);
+    }
+    return { kind: "Parameter", name, typeAnnotation, optional, defaultValue, span: nameOnlySpan ? name.span : { start: name.span.start, end: (defaultValue ?? typeAnnotation ?? name).span.end } };
+  }
+
+  private validateValueParameters(params: Parameter[]): void {
+    for (let i = 0; i < params.length; i++) {
+      if (params[i].optional && params.slice(i + 1).some((p) => !p.optional)) {
+        throw new ParseError("Only optional parameters may follow an optional parameter", params[i].span);
+      }
+    }
+  }
+
   private parseFunctionDeclaration(isJs = false): BindingDeclaration {
     const start = this.peek().span.start;
     this.advance(); // consume 'fn'
@@ -689,20 +720,14 @@ export class Parser {
     const params: Parameter[] = [];
     if (!this.check(TokenType.RPAREN)) {
       do {
-        const pName = this.parseIdentifier();
-        let pType: TypeNode | undefined;
-        if (this.match(TokenType.COLON)) {
-          pType = this.parseTypeNode();
-        }
-        params.push({
-          kind: "Parameter",
-          name: pName,
-          typeAnnotation: pType,
-          span: { start: pName.span.start, end: pType ? pType.span.end : pName.span.end },
-        });
+        params.push(this.parseValueParameter(this.parseIdentifier()));
       } while (this.match(TokenType.COMMA) && !this.check(TokenType.RPAREN));
     }
     this.consume(TokenType.RPAREN, "Expected ')' after parameters");
+    this.validateValueParameters(params);
+    if (isJs && params.some((p) => p.optional || p.defaultValue || (p.typeAnnotation?.kind === "RecordTypeNode" && p.typeAnnotation.fields.some((field) => field.optional || field.defaultValue)))) {
+      throw new ParseError("Optional and defaulted parameters are not yet supported on js entry bindings", params[0].span);
+    }
 
     let returnType: TypeNode | undefined;
     if (this.match(TokenType.COLON)) {
@@ -1164,40 +1189,22 @@ export class Parser {
       // Check if this looks like function params (param: Type, ...) =>
       const firstExpr = this.parseExpression();
 
-      if (this.check(TokenType.COLON) || this.check(TokenType.COMMA)) {
-        const params: Parameter[] = [];
-        let pType: TypeNode | undefined;
-        if (this.match(TokenType.COLON)) {
-          pType = this.parseTypeNode();
-        }
-        params.push({
-          kind: "Parameter",
-          name: firstExpr as Identifier,
-          typeAnnotation: pType,
-          span: firstExpr.span,
-        });
-
+      if (this.check(TokenType.COLON) || this.check(TokenType.COMMA) || this.check(TokenType.QUESTION) || this.check(TokenType.EQ)) {
+        if (firstExpr.kind !== "Identifier") throw new ParseError("Expected a parameter name", firstExpr.span);
+        const params: Parameter[] = [this.parseValueParameter(firstExpr, true)];
         while (this.match(TokenType.COMMA)) {
-          const pName = this.parseIdentifier();
-          let nextType: TypeNode | undefined;
-          if (this.match(TokenType.COLON)) {
-            nextType = this.parseTypeNode();
-          }
-          params.push({
-            kind: "Parameter",
-            name: pName,
-            typeAnnotation: nextType,
-            span: pName.span,
-          });
+          if (this.check(TokenType.RPAREN)) break;
+          params.push(this.parseValueParameter(this.parseIdentifier(), true));
         }
 
         this.consume(TokenType.RPAREN, "Expected ')' after parameters");
+        this.validateValueParameters(params);
         let returnType: TypeNode | undefined;
         if (this.match(TokenType.COLON)) {
           returnType = this.parseTypeNode();
         } else if (
           this.check(TokenType.ARROW) &&
-          (this.peekAhead(1).type === TokenType.UPPER_IDENTIFIER || this.peekAhead(1).type === TokenType.IDENTIFIER) &&
+          this.peekAhead(1).type === TokenType.UPPER_IDENTIFIER &&
           (this.peekAhead(2).type === TokenType.ARROW ||
             this.peekAhead(2).type === TokenType.LBRACE ||
             this.peekAhead(2).type === TokenType.NEWLINE)
@@ -1225,7 +1232,7 @@ export class Parser {
         singleReturnType = this.parseTypeNode();
       } else if (
         this.check(TokenType.ARROW) &&
-        (this.peekAhead(1).type === TokenType.UPPER_IDENTIFIER || this.peekAhead(1).type === TokenType.IDENTIFIER) &&
+        this.peekAhead(1).type === TokenType.UPPER_IDENTIFIER &&
         (this.peekAhead(2).type === TokenType.ARROW ||
           this.peekAhead(2).type === TokenType.LBRACE ||
           this.peekAhead(2).type === TokenType.NEWLINE)
@@ -2167,31 +2174,36 @@ export class Parser {
     if (this.match(TokenType.LBRACE)) {
       const start = this.previous().span.start;
       const fields: RecordTypeField[] = [];
-      this.skipNewlines();
-      const hasIndent = this.match(TokenType.INDENT);
-
-      while (!this.check(TokenType.RBRACE) && !this.check(TokenType.DEDENT) && !this.isAtEnd()) {
+      this.recordTypeDepth++;
+      try {
         this.skipNewlines();
-        if (this.check(TokenType.RBRACE) || this.check(TokenType.DEDENT)) break;
-        const fName = this.parseIdentifier();
-        this.consume(TokenType.COLON, "Expected ':' after field name");
-        const fType = this.parseTypeNode();
-        fields.push({
-          kind: "RecordTypeField",
-          name: fName,
-          typeAnnotation: fType,
-          span: { start: fName.span.start, end: fType.span.end },
-        });
-        this.match(TokenType.COMMA);
+        const hasIndent = this.match(TokenType.INDENT);
+        while (!this.check(TokenType.RBRACE) && !this.check(TokenType.DEDENT) && !this.isAtEnd()) {
+          this.skipNewlines();
+          if (this.check(TokenType.RBRACE) || this.check(TokenType.DEDENT)) break;
+          const fName = this.parseIdentifier();
+          const optional = this.match(TokenType.QUESTION);
+          if (optional && (!this.allowOptionalRecordFields || this.recordTypeDepth !== 1)) {
+            throw new ParseError("Optional record fields are supported only on direct function parameters", fName.span);
+          }
+          this.consume(TokenType.COLON, "Expected ':' after field name");
+          const fType = this.parseTypeNode();
+          const defaultValue = this.match(TokenType.EQ) ? this.parseExpression() : undefined;
+          if (defaultValue && (!this.allowOptionalRecordFields || this.recordTypeDepth !== 1)) {
+            throw new ParseError("Defaulted record fields are supported only on direct function parameters", fName.span);
+          }
+          if (optional && defaultValue) throw new ParseError("A record field cannot be both optional and defaulted", fName.span);
+          fields.push({ kind: "RecordTypeField", name: fName, typeAnnotation: fType, optional, defaultValue, span: { start: fName.span.start, end: (defaultValue ?? fType).span.end } });
+          this.match(TokenType.COMMA);
+          this.skipNewlines();
+        }
+        if (hasIndent) this.consume(TokenType.DEDENT, "Expected unindent in record type");
         this.skipNewlines();
+        const end = this.consume(TokenType.RBRACE, "Expected '}'").span.end;
+        return { kind: "RecordTypeNode", fields, span: { start, end } };
+      } finally {
+        this.recordTypeDepth--;
       }
-
-      if (hasIndent) {
-        this.consume(TokenType.DEDENT, "Expected unindent in record type");
-      }
-      this.skipNewlines();
-      const end = this.consume(TokenType.RBRACE, "Expected '}'").span.end;
-      return { kind: "RecordTypeNode", fields, span: { start, end } };
     }
 
     // TS escape hatch for types: ts { Record<string, unknown> }

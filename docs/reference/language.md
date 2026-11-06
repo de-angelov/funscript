@@ -951,6 +951,19 @@ A single `schema` declaration generates both the runtime validator/constructor a
 
 See also: `record`, `variant`, `error`.
 
+## `SchemaInput`
+
+The encoded input type of a named runtime schema.
+
+```funscript
+SchemaInput<SchemaName>
+```
+
+Describes values before schema decoding. Defaulted schema fields can be omitted in this type; defaults and validation only run when the schema is explicitly decoded.
+
+
+See also: `schema`, `Option`.
+
 ## `service`
 
 Declares a dependency-injected service interface.

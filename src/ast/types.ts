@@ -514,6 +514,8 @@ export interface Parameter extends NodeBase {
   kind: "Parameter";
   name: Identifier;
   typeAnnotation?: TypeNode;
+  optional?: boolean;
+  defaultValue?: Expression;
 }
 
 export interface FunctionTypeNode extends NodeBase {
@@ -539,6 +541,8 @@ export interface RecordTypeField extends NodeBase {
   kind: "RecordTypeField";
   name: Identifier;
   typeAnnotation: TypeNode;
+  optional?: boolean;
+  defaultValue?: Expression;
 }
 
 export interface ArrayTypeNode extends NodeBase {
