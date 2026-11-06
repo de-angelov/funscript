@@ -422,6 +422,10 @@ export class Parser {
 
     // 1. Tagged Union: | Variant(...)
     if (this.check(TokenType.BAR) || (this.check(TokenType.INDENT) && this.peekAhead(1).type === TokenType.BAR)) {
+      const first = this.check(TokenType.INDENT) ? this.peekAhead(2) : this.peekAhead(1);
+      if ([TokenType.STRING, TokenType.NUMBER, TokenType.TRUE, TokenType.FALSE, TokenType.LBRACE].includes(first.type)) {
+        return this.parseStructuralUnionSchema();
+      }
       return this.parseTaggedUnionSchema();
     }
 
@@ -485,7 +489,8 @@ export class Parser {
       this.skipNewlines();
       if (this.check(TokenType.RBRACE) || this.check(TokenType.DEDENT)) break;
 
-      const fieldName = this.parseIdentifier();
+      const fieldToken = this.check(TokenType.ERROR) ? this.advance() : undefined;
+      const fieldName: Identifier = fieldToken ? { kind: "Identifier", name: fieldToken.value, span: fieldToken.span } : this.parseIdentifier();
       const optional = this.match(TokenType.QUESTION);
       this.consume(TokenType.COLON, "Expected ':' after field name");
       const previous = this.allowOptionalRecordFields;
@@ -524,6 +529,21 @@ export class Parser {
       fields,
       span: { start, end },
     };
+  }
+
+  private parseStructuralUnionSchema(): import("../ast/types.js").StructuralUnionSchema {
+    const start = this.peek().span.start;
+    const hasIndent = this.match(TokenType.INDENT);
+    const members: TypeNode[] = [];
+    while (this.match(TokenType.BAR)) {
+      const previous = this.allowOptionalRecordFields;
+      this.allowOptionalRecordFields = true;
+      try { members.push(this.parsePrimaryType()); }
+      finally { this.allowOptionalRecordFields = previous; }
+      this.skipNewlines();
+    }
+    if (hasIndent) this.consume(TokenType.DEDENT, "Expected unindent after union members");
+    return { kind: "StructuralUnionSchema", members, span: { start, end: members[members.length - 1].span.end } };
   }
 
   private parseTaggedUnionSchema(): TaggedUnionSchema {
@@ -2181,6 +2201,11 @@ export class Parser {
   }
 
   private parsePrimaryType(): TypeNode {
+    if (this.match(TokenType.STRING, TokenType.NUMBER, TokenType.TRUE, TokenType.FALSE)) {
+      const token = this.previous();
+      const value = token.type === TokenType.STRING ? token.value : token.type === TokenType.NUMBER ? Number(token.value) : token.type === TokenType.TRUE;
+      return { kind: "LiteralTypeNode", value, span: token.span };
+    }
     if (this.match(TokenType.LBRACE)) {
       const start = this.previous().span.start;
       const fields: RecordTypeField[] = [];

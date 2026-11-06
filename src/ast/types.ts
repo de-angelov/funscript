@@ -85,6 +85,7 @@ export interface SchemaDeclaration extends NodeBase {
 export type SchemaBody =
   | RecordSchema
   | TaggedUnionSchema
+  | StructuralUnionSchema
   | RefinementSchema
   | TypeSignatureSchema
   | TsDerivedSchema
@@ -111,6 +112,11 @@ export interface RecordFieldSchema extends NodeBase {
 export interface TaggedUnionSchema extends NodeBase {
   kind: "TaggedUnionSchema";
   variants: VariantDeclaration[];
+}
+
+export interface StructuralUnionSchema extends NodeBase {
+  kind: "StructuralUnionSchema";
+  members: TypeNode[];
 }
 
 export interface VariantDeclaration extends NodeBase {
@@ -493,7 +499,13 @@ export type TypeNode =
   | RecordTypeNode
   | ArrayTypeNode
   | UnionTypeNode
+  | LiteralTypeNode
   | TsEscapeTypeNode;
+
+export interface LiteralTypeNode extends NodeBase {
+  kind: "LiteralTypeNode";
+  value: string | number | boolean;
+}
 
 export interface TsEscapeTypeNode extends NodeBase {
   kind: "TsEscapeTypeNode";

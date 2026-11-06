@@ -350,6 +350,11 @@ export class Emitter {
 
         return `${exp}type ${name} = Data.TaggedEnum<{\n${typeVariants}\n}>;\nconst $${name} = Data.taggedEnum<${name}>();\n${constructors}`;
       }
+      case "StructuralUnionSchema": {
+        this.effectImports.add("Schema");
+        const members = decl.body.members.map((member) => this.emitSchemaTypeField(member)).join(", ");
+        return `${exp}const ${name} = Schema.Union([${members}]);\n${exp}type ${name} = typeof ${name}.Type;\n${exp}const ${name}FromUnknown = (input: unknown): ${name} => Schema.decodeUnknownSync(${name})(input);`;
+      }
       case "RefinementSchema": {
         this.effectImports.add("pipe");
         return `${exp}const ${name} = pipe(${this.emitSchemaTypeField(decl.body.baseType)}, ${this.emitExpression(decl.body.refinement)});\n${exp}type ${name} = typeof ${name}.Type;`;
@@ -389,6 +394,7 @@ export class Emitter {
 
   private emitSchemaTypeField(typeNode: TypeNode): string {
     this.effectImports.add("Schema");
+    if (typeNode.kind === "LiteralTypeNode") return `Schema.Literal(${JSON.stringify(typeNode.value)})`;
     if (typeNode.kind === "FunctionTypeNode" || typeNode.kind === "EffectTypeNode") {
       throw new FunScriptError("Runtime schema fields cannot validate function or Effect types; use a separate type or an explicit schema", typeNode.span);
     }
@@ -406,7 +412,7 @@ export class Emitter {
       return `Schema.Array(${this.emitSchemaTypeField(typeNode.elementType)})`;
     }
     if (typeNode.kind === "UnionTypeNode") {
-      return `Schema.Union(${typeNode.types.map((type) => this.emitSchemaTypeField(type)).join(", ")})`;
+      return `Schema.Union([${typeNode.types.map((type) => this.emitSchemaTypeField(type)).join(", ")}])`;
     }
     if (typeNode.kind === "TypeReferenceNode") {
       const tName = typeNode.name.name;
@@ -1627,6 +1633,8 @@ export class Emitter {
         return `ReadonlyArray<${this.emitTypeNode(node.elementType)}>`;
       case "UnionTypeNode":
         return node.types.map((t) => this.emitTypeNode(t)).join(" | ");
+      case "LiteralTypeNode":
+        return JSON.stringify(node.value);
       case "TsEscapeTypeNode":
         return node.code;
     }

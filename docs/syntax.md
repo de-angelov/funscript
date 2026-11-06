@@ -591,6 +591,26 @@ export fromInput = (input: SchemaInput<Profile>) => readNickname(ProfileFromUnkn
 `ProfileFromUnknown` validates and decodes its input; `SchemaInput<Profile>` alone
 does not. Encoding the decoded value with Effect Schema produces ordinary optional
 JavaScript properties again. Optional schema fields cannot also have a default.
+
+A schema union can also describe JavaScript literals or structural variants without
+adding a `_tag` property:
+
+```funscript
+export schema StorageVote =
+  | "like"
+  | "dislike"
+
+export schema VoteResult =
+  | { ok: true, data: String }
+  | { ok: false, error: String }
+
+export parseVote = (input: Unknown) => StorageVoteFromUnknown(input)
+```
+
+These declarations emit Effect schemas and derive their static types. Decoding is
+explicit and checks the input; the resulting values retain their JavaScript shape.
+Optional fields in structural members decode to `Option`, as in record schemas.
+Literal and structural members cannot be mixed with tagged constructors in one union.
 Record schemas containing a function or Effect type instead declare a **compile-time
 record contract**. They describe ordinary JavaScript objects and do not provide a
 runtime schema, decoder, or `SchemaInput` type. This distinction applies to the whole

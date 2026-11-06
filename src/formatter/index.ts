@@ -446,6 +446,8 @@ export class Formatter {
         return this.formatRecordSchema(body, indent);
       case "TaggedUnionSchema":
         return this.formatTaggedUnionSchema(body, indent);
+      case "StructuralUnionSchema":
+        return "\n" + body.members.map((member) => `${this.spaces(indent + this.indentSize)}| ${this.formatType(member, indent + this.indentSize)}`).join("\n");
       case "RefinementSchema":
         return `${this.formatType(body.baseType)} | ${this.formatExpression(body.refinement, indent)}`;
       case "TypeSignatureSchema":
@@ -1059,6 +1061,8 @@ export class Formatter {
         return `Array<${this.formatType(node.elementType, indent)}>`;
       case "UnionTypeNode":
         return node.types.map(t => this.formatType(t, indent)).join(" | ");
+      case "LiteralTypeNode":
+        return JSON.stringify(node.value);
       case "TsEscapeTypeNode":
         return this.formatTsEscape(node.code);
     }
