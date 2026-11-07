@@ -2205,6 +2205,20 @@ Rules:
 
 When interacting with external third-party packages or SDKs (such as Redis, Stripe, AWS SDK, or custom npm libraries), declare a domain interface with `service <Name>` and implement it using a `Layer` whose methods lift foreign calls into Effects using the `js` interop operator (or `Effect.tryPromise`).
 
+Static imports retain their TypeScript declarations. Calls to imported functions, including
+overloaded and variadic functions, are checked by TypeScript; FunScript does not add its own
+arity or overload inference. An imported `any` remains TypeScript `any`, so it can bypass
+static checks; wrap such APIs in a typed adapter or explicitly decode untrusted values at
+the boundary. Importing a type or passing a value to a typed function does not validate it
+at runtime. `Unknown` cannot be spread into JSX as a known props object without narrowing
+or explicit decoding.
+
+For immutable prop forwarding, an ordinary TypeScript helper can remove keys while retaining
+the remaining types. [The record helper example](../examples/interop/record.ts) uses a
+distributive `Omit` to preserve discriminated unions and copies enumerable own properties
+without mutating the input. TypeScript object types are open: omitting a known key does not
+close an index signature or guarantee that no other keys exist.
+
 > [!NOTE]
 > FunScript previously experimented with an `extern "pkg" service Name` keyword that generated zero-argument client constructors (`new pkg()`). This was retired under the **Strict Zero-Alias Policy** because real-world production SDKs require explicit options, credentials, and configuration (e.g. `createClient({ url })`, `new Stripe(apiKey)`), making zero-arg instantiation unusable.
 
