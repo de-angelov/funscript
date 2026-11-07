@@ -86,7 +86,7 @@ service_declaration  = "service", upper_identifier, [ string_literal ], NEWLINE,
 service_member       = identifier, ":", function_type ;
 
 (* Binding declarations *)
-binding_declaration  = [ "mut" ], identifier, [ ":", type_annotation ], "=", expression, NEWLINE ;
+binding_declaration  = [ "mut" ], identifier, [ type_params ], [ ":", type_annotation ], "=", expression, NEWLINE ;
 
 (* ========================================================================= *)
 (* 3. Types                                                                  *)
@@ -103,7 +103,8 @@ primary_type         = type_identifier, [ type_args ]
 
 type_identifier      = upper_identifier ;
 type_args            = "<", type_annotation, { ",", type_annotation }, ">" ;
-type_params          = "<", upper_identifier, { ",", upper_identifier }, ">" ;
+type_params          = "<", type_param, { ",", type_param }, ">" ;
+type_param           = upper_identifier, [ "extends", type_annotation ] ;
 
 function_type        = [ type_params ], "(", [ param_types ], ")", "=>", type_annotation ;
 param_types          = param_type, { ",", param_type } ;

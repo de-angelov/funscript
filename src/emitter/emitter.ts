@@ -56,6 +56,7 @@ import {
   EffectDiscardStatement,
   TypeNode,
   TypeReferenceNode,
+  TypeParameter,
   FunctionTypeNode,
   EffectTypeNode,
   TsEscapeDeclaration,
@@ -93,6 +94,8 @@ export interface EmitterOptions {
   /** Direct imported FunScript functions with verified optional-record parameters. */
   importedRecordFunctions?: ReadonlyMap<string, ReadonlySet<number>>;
   importedRecordContracts?: ReadonlyMap<string, import("../ast/types.js").RecordTypeNode>;
+  /** Whether the output is `.tsx`; generic arrows need a comma there. */
+  isJsx?: boolean;
 }
 
 const ARRAY_COMPANION_METHODS = new Set(PIPELINE_COMPANION_CATALOG.Array);
@@ -300,6 +303,10 @@ export class Emitter {
     const name = decl.id.name;
     const exp = isExport ? "export " : "";
 
+    if (decl.typeParams?.length && decl.body.kind !== "TypeSignatureSchema") {
+      throw new FunScriptError("Generic runtime schemas are not supported yet; use a TypeScript type alias", decl.span);
+    }
+
     switch (decl.body.kind) {
       case "RecordSchema": {
         if (isRecordContract(decl.body)) {
@@ -360,7 +367,7 @@ export class Emitter {
         return `${exp}const ${name} = pipe(${this.emitSchemaTypeField(decl.body.baseType)}, ${this.emitExpression(decl.body.refinement)});\n${exp}type ${name} = typeof ${name}.Type;`;
       }
       case "TypeSignatureSchema": {
-        return `${exp}type ${name} = ${this.emitTypeNode(decl.body.signature)};`;
+        return `${exp}type ${name}${this.emitTypeParameters(decl.typeParams)} = ${this.emitTypeNode(decl.body.signature)};`;
       }
       case "TsDerivedSchema": {
         this.effectImports.add("Schema");
@@ -1113,6 +1120,7 @@ export class Emitter {
         return `${name}${p.optional ? "?" : ""}${typeAnn}${defaultValue}`;
       })
       .join(", ");
+    const typeParams = this.emitTypeParameters(expr.typeParams);
     const retType = expr.returnType ? `: ${this.emitTypeNode(expr.returnType)}` : "";
     const optionalBindings = expr.params.flatMap((p, index) => {
       if (!p.optional) return [];
@@ -1180,9 +1188,9 @@ export class Emitter {
       for (const name of records.keys()) if (records.get(name)) this.validateRecordParameterUse(expr, name, aliases);
       if (expr.body.kind === "BlockStatement" || optionalBindings.length || recordDefaults.length) {
         const body = this.emitFunctionBody(expr.body);
-        return `(${params})${retType} => {\n${[...optionalBindings, ...recordDefaults, body].filter(Boolean).join("\n")}\n}`;
+        return `${typeParams}(${params})${retType} => {\n${[...optionalBindings, ...recordDefaults, body].filter(Boolean).join("\n")}\n}`;
       }
-      return `(${params})${retType} => ${this.emitArrowExpression(expr.body)}`;
+      return `${typeParams}(${params})${retType} => ${this.emitArrowExpression(expr.body)}`;
     } finally {
       this.recordScopes.pop();
       this.parameterScopes.pop();
@@ -1587,6 +1595,19 @@ export class Emitter {
 
   // --- Types ---
 
+  private emitTypeParameters(typeParams: TypeParameter[] | undefined): string {
+    if (!typeParams || typeParams.length === 0) return "";
+    const params = typeParams.map((param) =>
+      param.constraint
+        ? `${param.name.name} extends ${this.emitTypeNode(param.constraint)}`
+        : param.name.name,
+    );
+    // TypeScript parses `<A>(...)` as JSX in `.tsx`; a trailing comma keeps
+    // unconstrained generic arrows valid in both `.ts` and `.tsx` output.
+    const needsTsxComma = this.options.isJsx && typeParams.every((param) => !param.constraint);
+    return `<${params.join(", ")}${needsTsxComma ? "," : ""}>`;
+  }
+
   private emitTypeNode(node: TypeNode): string {
     switch (node.kind) {
       case "TypeReferenceNode": {
@@ -1616,7 +1637,7 @@ export class Emitter {
             return p.typeAnnotation ? `${name}: ${this.emitTypeNode(p.typeAnnotation)}` : name;
           })
           .join(", ");
-        return `(${params}) => ${this.emitTypeNode(node.returnType)}`;
+        return `${this.emitTypeParameters(node.typeParams)}(${params}) => ${this.emitTypeNode(node.returnType)}`;
       }
       case "EffectTypeNode": {
         this.effectImports.add("Effect");

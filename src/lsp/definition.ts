@@ -307,6 +307,7 @@ export class DefinitionFinder {
               };
               return;
             }
+            if (tp.constraint) this.visitTypeNode(tp.constraint, schemaScope);
             schemaScope.define(tp.name.name, tp, tp.name, "type");
           }
         }
@@ -588,6 +589,7 @@ export class DefinitionFinder {
               };
               return;
             }
+            if (tp.constraint) this.visitTypeNode(tp.constraint, fnScope);
             fnScope.define(tp.name.name, tp, tp.name, "type");
           }
         }
@@ -984,6 +986,7 @@ export class DefinitionFinder {
               };
               return;
             }
+            if (tp.constraint) this.visitTypeNode(tp.constraint, fnTypeScope);
             fnTypeScope.define(tp.name.name, tp, tp.name, "type");
           }
         }

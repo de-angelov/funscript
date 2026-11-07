@@ -489,6 +489,7 @@ export interface TypeReferenceNode extends NodeBase {
 export interface TypeParameter extends NodeBase {
   kind: "TypeParameter";
   name: UpperIdentifier;
+  constraint?: TypeNode;
 }
 
 export interface Parameter extends NodeBase {

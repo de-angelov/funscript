@@ -677,6 +677,10 @@ export class Parser {
     if (isMut) {
       this.mutableVariables.add(id.name);
     }
+    let typeParams: TypeParameter[] | undefined;
+    if (this.check(TokenType.LT)) {
+      typeParams = this.parseTypeParameters();
+    }
     let typeAnnotation: TypeNode | undefined;
 
     if (this.match(TokenType.COLON)) {
@@ -689,6 +693,16 @@ export class Parser {
       hasIndent = this.match(TokenType.INDENT);
     }
     const init = this.parseExpression();
+    if (typeParams) {
+      if (init.kind !== "FunctionExpression") {
+        throw new ParseError("Generic type parameters require a function initializer", typeParams[0].span);
+      }
+      if (init.typeParams?.length) {
+        throw new ParseError("Generic type parameters may be declared either after the binding name or before the parameter list, not both", typeParams[0].span);
+      }
+      init.typeParams = typeParams;
+      init.span = { start: typeParams[0].span.start, end: init.span.end };
+    }
     if (isJs && init.kind === "FunctionExpression" && init.params.some((p) => p.optional || p.defaultValue || (p.typeAnnotation?.kind === "RecordTypeNode" && p.typeAnnotation.fields.some((field) => field.optional || field.defaultValue)))) {
       throw new ParseError("Optional and defaulted parameters are not yet supported on js entry bindings", init.span);
     }
@@ -742,6 +756,10 @@ export class Parser {
     this.advance(); // consume 'fn'
 
     const id = this.parseIdentifier();
+    let typeParams: TypeParameter[] | undefined;
+    if (this.check(TokenType.LT)) {
+      typeParams = this.parseTypeParameters();
+    }
 
     this.consume(TokenType.LPAREN, "Expected '(' after function name");
     const params: Parameter[] = [];
@@ -798,6 +816,7 @@ export class Parser {
       id,
       init: {
         kind: "FunctionExpression",
+        typeParams,
         params,
         returnType,
         body,
@@ -1129,7 +1148,12 @@ export class Parser {
     if (this.parsingBraceEffect && this.isAtEnd()) {
       throw new ParseError("Expected '}' to close effect block", this.peek().span);
     }
-    // 0. JSX Element: <tag ...> or <tag ... />
+    // 0. Generic function expression: <A>(value: A) => ...
+    if (this.check(TokenType.LT) && this.isGenericCallableStart()) {
+      return this.parseGenericFunctionExpression();
+    }
+
+    // 1. JSX Element: <tag ...> or <tag ... />
     if (this.check(TokenType.JSX_TAG_OPEN)) {
       return this.parseJsxElement();
     }
@@ -1227,6 +1251,7 @@ export class Parser {
         this.consume(TokenType.RPAREN, "Expected ')' after parameters");
         this.validateValueParameters(params);
         let returnType: TypeNode | undefined;
+        let arrowConsumed = false;
         if (this.match(TokenType.COLON)) {
           returnType = this.parseTypeNode();
         } else if (
@@ -1236,10 +1261,12 @@ export class Parser {
             this.peekAhead(2).type === TokenType.LBRACE ||
             this.peekAhead(2).type === TokenType.NEWLINE)
         ) {
-          this.advance(); // consume '=>'
+          this.advance(); // consume the arrow before the return type
+          arrowConsumed = true;
           returnType = this.parseTypeNode();
+          this.match(TokenType.ARROW);
         }
-        if (!this.match(TokenType.ARROW)) {
+        if (!arrowConsumed && !this.match(TokenType.ARROW)) {
           throw new ParseError("Expected '=>' after parameters", this.peek().span);
         }
         const body = this.parseFunctionBody(!this.options.allowLegacyReturns);
@@ -1255,6 +1282,7 @@ export class Parser {
       this.consume(TokenType.RPAREN, "Expected ')' after expression");
 
       let singleReturnType: TypeNode | undefined;
+      let arrowConsumed = false;
       if (this.match(TokenType.COLON)) {
         singleReturnType = this.parseTypeNode();
       } else if (
@@ -1264,11 +1292,13 @@ export class Parser {
           this.peekAhead(2).type === TokenType.LBRACE ||
           this.peekAhead(2).type === TokenType.NEWLINE)
       ) {
-        this.advance(); // consume '=>'
+        this.advance(); // consume the arrow before the return type
+        arrowConsumed = true;
         singleReturnType = this.parseTypeNode();
+        this.match(TokenType.ARROW);
       }
 
-      if (this.match(TokenType.ARROW)) {
+      if (arrowConsumed || this.match(TokenType.ARROW)) {
         const body = this.parseFunctionBody(!this.options.allowLegacyReturns);
         return {
           kind: "FunctionExpression",
@@ -2164,18 +2194,37 @@ export class Parser {
   // --- Types ---
 
   private parseTypeNode(): TypeNode {
-    return this.parseFunctionTypeNode();
+    return this.parseUnionType();
+  }
+
+  private parseUnionType(): TypeNode {
+    const first = this.parseFunctionTypeNode();
+    if (!this.check(TokenType.BAR)) return first;
+
+    const types: TypeNode[] = [first];
+    while (this.match(TokenType.BAR)) {
+      types.push(this.parseFunctionTypeNode());
+    }
+    return {
+      kind: "UnionTypeNode",
+      types,
+      span: { start: first.span.start, end: types[types.length - 1].span.end },
+    };
   }
 
   private parseFunctionTypeNode(): FunctionTypeNode {
     const start = this.peek().span.start;
+    let typeParams: TypeParameter[] | undefined;
+    if (this.check(TokenType.LT) && this.isGenericCallableStart()) {
+      typeParams = this.parseTypeParameters();
+    }
     if (this.match(TokenType.LPAREN)) {
       const params: Parameter[] = [];
       if (!this.check(TokenType.RPAREN)) {
         do {
           const pName = this.parseIdentifier();
           this.consume(TokenType.COLON, "Expected ':' after param name");
-          const pType = this.parsePrimaryType();
+          const pType = this.parseTypeNode();
           params.push({
             kind: "Parameter",
             name: pName,
@@ -2188,15 +2237,19 @@ export class Parser {
       if (!this.match(TokenType.ARROW)) {
         throw new ParseError("Expected '=>' in function type", this.peek().span);
       }
-      const ret = this.parsePrimaryType();
+      const ret = this.parseTypeNode();
       return {
         kind: "FunctionTypeNode",
+        typeParams,
         params,
         returnType: ret,
         span: { start, end: ret.span.end },
       };
     }
 
+    if (typeParams) {
+      throw new ParseError("Expected '(' after generic type parameters", this.peek().span);
+    }
     return this.parsePrimaryType() as any;
   }
 
@@ -2268,7 +2321,7 @@ export class Parser {
     if (this.match(TokenType.LT)) {
       typeArgs = [];
       do {
-        typeArgs.push(this.parsePrimaryType());
+        typeArgs.push(this.parseTypeNode());
       } while (this.match(TokenType.COMMA) && !this.check(TokenType.GT));
       this.consume(TokenType.GT, "Expected '>' after type arguments");
     }
@@ -2284,14 +2337,14 @@ export class Parser {
   private parseEffectTypeNode(): EffectTypeNode {
     const start = this.advance().span.start; // consume 'Effect'
     this.consume(TokenType.LT, "Expected '<' after Effect");
-    const success = this.parsePrimaryType();
+    const success = this.parseTypeNode();
     let error: TypeNode | undefined;
     let requirements: TypeNode | undefined;
 
     if (this.match(TokenType.COMMA)) {
-      error = this.parsePrimaryType();
+      error = this.parseTypeNode();
       if (this.match(TokenType.COMMA)) {
-        requirements = this.parsePrimaryType();
+        requirements = this.parseTypeNode();
       }
     }
 
@@ -2306,12 +2359,68 @@ export class Parser {
     };
   }
 
+  private parseGenericFunctionExpression(): FunctionExpression {
+    const start = this.peek().span.start;
+    const typeParams = this.parseTypeParameters();
+    const expression = this.parsePrimary();
+    if (expression.kind !== "FunctionExpression") {
+      throw new ParseError("Expected a function after generic type parameters", expression.span);
+    }
+    if (expression.typeParams?.length) {
+      throw new ParseError("Generic type parameters may be declared only once", typeParams[0].span);
+    }
+    expression.typeParams = typeParams;
+    expression.span = { start, end: expression.span.end };
+    return expression;
+  }
+
+  private isGenericCallableStart(): boolean {
+    if (!this.check(TokenType.LT)) return false;
+
+    let angleDepth = 1;
+    for (let i = 1; i < 512; i++) {
+      const token = this.peekAhead(i);
+      if (token.type === TokenType.EOF || token.type === TokenType.NEWLINE) return false;
+      if (token.type === TokenType.LT) {
+        angleDepth++;
+      } else if (token.type === TokenType.GT) {
+        angleDepth--;
+        if (angleDepth === 0) {
+          if (this.peekAhead(i + 1).type !== TokenType.LPAREN) return false;
+          let parenDepth = 1;
+          for (let j = i + 2; j < 1024; j++) {
+            const param = this.peekAhead(j);
+            if (param.type === TokenType.EOF || param.type === TokenType.NEWLINE) return false;
+            if (param.type === TokenType.LPAREN) {
+              parenDepth++;
+            } else if (param.type === TokenType.RPAREN) {
+              parenDepth--;
+              if (parenDepth === 0) return this.peekAhead(j + 1).type === TokenType.ARROW;
+            }
+          }
+          return false;
+        }
+      }
+    }
+    return false;
+  }
+
   private parseTypeParameters(): TypeParameter[] {
     this.consume(TokenType.LT, "Expected '<'");
     const params: TypeParameter[] = [];
     do {
       const id = this.parseUpperIdentifier();
-      params.push({ kind: "TypeParameter", name: id, span: id.span });
+      let constraint: TypeNode | undefined;
+      if (this.check(TokenType.IDENTIFIER) && this.peek().value === "extends") {
+        this.advance();
+        constraint = this.parseTypeNode();
+      }
+      params.push({
+        kind: "TypeParameter",
+        name: id,
+        constraint,
+        span: { start: id.span.start, end: constraint?.span.end ?? id.span.end },
+      });
     } while (this.match(TokenType.COMMA) && !this.check(TokenType.GT));
     this.consume(TokenType.GT, "Expected '>'");
     return params;

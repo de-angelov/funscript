@@ -430,11 +430,18 @@ export class Formatter {
     return renderImport(decl, source).slice(0, -1);
   }
 
+  private formatTypeParameters(typeParams: TypeParameter[] | undefined): string {
+    if (!typeParams || typeParams.length === 0) return "";
+    return `<${typeParams.map((param) =>
+      param.constraint
+        ? `${param.name.name} extends ${this.formatType(param.constraint)}`
+        : param.name.name,
+    ).join(", ")}>`;
+  }
+
   private formatSchemaDeclaration(decl: SchemaDeclaration, indent = 0): string {
     const prefix = decl.isTs ? "ts schema " : "schema ";
-    const typeParams = decl.typeParams && decl.typeParams.length > 0
-      ? `<${decl.typeParams.map(p => p.name.name).join(", ")}>`
-      : "";
+    const typeParams = this.formatTypeParameters(decl.typeParams);
     const body = this.formatSchemaBody(decl.body, indent);
     const sep = body.startsWith("\n") ? " =" : " = ";
     return `${prefix}${decl.id.name}${typeParams}${sep}${body}`;
@@ -520,9 +527,7 @@ export class Formatter {
   private formatBindingInit(decl: BindingDeclaration, indent = 0): string {
     const init = decl.init;
     if (init.kind === "FunctionExpression") {
-      const typeParams = init.typeParams && init.typeParams.length > 0
-        ? `<${init.typeParams.map(t => t.name.name).join(", ")}>`
-        : "";
+      const typeParams = this.formatTypeParameters(init.typeParams);
       const params = init.params.map(p => {
         return p.typeAnnotation ? `${p.name.name}: ${this.formatType(p.typeAnnotation)}` : p.name.name;
       }).join(", ");
@@ -999,9 +1004,7 @@ export class Formatter {
   }
 
   private formatFunctionExpression(expr: FunctionExpression, indent = 0): string {
-    const typeParams = expr.typeParams && expr.typeParams.length > 0
-      ? `<${expr.typeParams.map(t => t.name.name).join(", ")}>`
-      : "";
+    const typeParams = this.formatTypeParameters(expr.typeParams);
     const params = expr.params.map(p => {
       const type = p.typeAnnotation ? `: ${this.formatType(p.typeAnnotation)}` : "";
       const defaultValue = p.defaultValue ? ` = ${this.formatExpression(p.defaultValue, indent)}` : "";
@@ -1033,7 +1036,7 @@ export class Formatter {
           const typeStr = p.typeAnnotation ? this.formatType(p.typeAnnotation, indent) : "Unknown";
           return p.name ? `${p.name.name}: ${typeStr}` : typeStr;
         }).join(", ");
-        return `(${params}) => ${this.formatType(node.returnType, indent)}`;
+        return `${this.formatTypeParameters(node.typeParams)}(${params}) => ${this.formatType(node.returnType, indent)}`;
       }
       case "EffectTypeNode": {
         const args = [this.formatType(node.success, indent)];

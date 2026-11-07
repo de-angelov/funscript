@@ -107,8 +107,9 @@ generated output, but not in idiomatic FunScript:
   drafts), `++`, `--`, top-level `mut`, mutating a `mut` binding across a closure boundary,
   and mutating objects/arrays without `mut`.
 - **Loops:** `for`, `while`, `do`, `break`, `continue`, comprehensions.
-- **OOP and ad-hoc types:** `class`, `extends`, `new`, `this`, `super`, `prototype`,
-  `interface`, `enum`, `namespace`, `declare`, `type`, `data` (use `schema`).
+- **OOP and ad-hoc types:** `class`, class-style `extends`, `new`, `this`, `super`, `prototype`,
+  `interface`, `enum`, `namespace`, `declare`, `type`, `data` (use `schema`). Generic
+  constraints use `extends` in type-parameter lists; that is not class inheritance.
 - **Error handling:** `throw`, `try`, `catch`, `finally`.
 - **Async:** `async`, `await`, `yield`, `Promise` as a FunScript-authored effect type.
 - **Null, undefined, and unsafe types:** `null`, `undefined` (in expressions), `any`,
@@ -257,13 +258,13 @@ JavaScript or TypeScript habits into FunScript:
 arguments   as          async       await       break
 catch       class       continue    data        declare
 delete      do          else        enum        eval
-extends     finally     for         function    if
-in          instanceof  interface   let         module
-namespace   new         null        private     protected
-prototype   public      require     return      static
-super       switch      then        this        throw
-try         type        typeof      undefined   var
-void        while       with        yield
+finally     for         function    if          in
+instanceof  interface   let         module      namespace
+new         null        private     protected   prototype
+public      require     return      static      super
+switch      then        this        throw       try
+type        typeof      undefined   var         void
+while       with        yield
 ```
 
 Reserved words are still allowed as record field names and after `.` when the parser
@@ -529,6 +530,10 @@ const answer = () => 42;
   optional TypeScript type annotations.
 - Optional generic type parameters precede the parameter list (`<A, B>(a: A, b: B) => ...`),
   and an explicit return type follows `=>`, before a braced body: `(x: Number) => Number { => x }`.
+  A type parameter may be constrained with `extends` (`<Client extends RedisClient>(...) => ...`);
+  this is a TypeScript generic constraint, not class inheritance. Generic parameters may also
+  follow a binding name (`connect<Client extends RedisClient> = ...`); the formatter normalizes
+  that form to the parameter-list position.
 - Function parameters are always immutable (`readonly`); they cannot be marked `mut` or
   reassigned.
 - A function body is either an inline expression or an indented block.
@@ -1484,7 +1489,8 @@ export type Lookup = (id: string) => Effect.Effect<User, NotFound>;
 ```
 
 Using a compile-time-only `schema` in value position (for example passing `Lookup` to
-`Schema.decodeUnknown`) is reported as a clear compiler error.
+`Schema.decodeUnknown`) is reported as a clear compiler error. Generic runtime schemas
+are not supported yet; use a TypeScript `type` alias for generic data shapes.
 
 ### 8.2 Tagged-union `schema` (`| Variant(...)`)
 

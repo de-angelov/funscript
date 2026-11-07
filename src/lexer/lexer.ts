@@ -762,9 +762,87 @@ export class Lexer {
     return top.kind === "tag" || top.kind === "closing_tag" || top.kind === "children";
   }
 
+  private isGenericFunctionStart(): boolean {
+    if (this.peek() !== "<") return false;
+
+    let angleDepth = 1;
+    let i = 1;
+    while (i < 4096) {
+      const c = this.peekAhead(i);
+      if (c === "\0" || c === "\n" || c === "\r") return false;
+      if (c === "\"" || c === "'" || c === "`") {
+        const quote = c;
+        i++;
+        while (i < 4096) {
+          const inner = this.peekAhead(i);
+          if (inner === "\0" || inner === "\n" || inner === "\r") return false;
+          if (inner === "\\") { i += 2; continue; }
+          if (inner === quote) { i++; break; }
+          i++;
+        }
+        continue;
+      }
+      if (c === "<") {
+        angleDepth++;
+        i++;
+        continue;
+      }
+      if (c === ">") {
+        // Ignore the `>` in function-type arrows inside a constraint.
+        if (this.peekAhead(i - 1) === "=") {
+          i++;
+          continue;
+        }
+        angleDepth--;
+        if (angleDepth === 0) {
+          let j = i + 1;
+          while (this.peekAhead(j) === " ") j++;
+          if (this.peekAhead(j) !== "(") return false;
+
+          let parenDepth = 1;
+          let k = j + 1;
+          while (k < 4096) {
+            const param = this.peekAhead(k);
+            if (param === "\0" || param === "\n" || param === "\r") return false;
+            if (param === "\"" || param === "'" || param === "`") {
+              const quote = param;
+              k++;
+              while (k < 4096) {
+                const inner = this.peekAhead(k);
+                if (inner === "\0" || inner === "\n" || inner === "\r") return false;
+                if (inner === "\\") { k += 2; continue; }
+                if (inner === quote) { k++; break; }
+                k++;
+              }
+              continue;
+            }
+            if (param === "(") parenDepth++;
+            else if (param === ")") {
+              parenDepth--;
+              if (parenDepth === 0) {
+                let after = k + 1;
+                while (this.peekAhead(after) === " ") after++;
+                return this.peekAhead(after) === "=" && this.peekAhead(after + 1) === ">";
+              }
+            }
+            k++;
+          }
+          return false;
+        }
+      }
+      i++;
+    }
+    return false;
+  }
+
   private isJsxTagStart(): boolean {
     if (!this.isFunx) return false;
     if (this.peek() !== "<") return false;
+
+    // `<T>(value: T) => ...` is a generic function, not a JSX tag. Check the
+    // full prefix because `.funx` files otherwise tokenize the parameters as
+    // JSX attributes.
+    if (this.isGenericFunctionStart()) return false;
 
     // Followed by tag name start, or / for closing tag, or > for fragment
     const next = this.peekAhead(1);
