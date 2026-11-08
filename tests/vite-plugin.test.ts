@@ -14,11 +14,12 @@ describe("Vite & Vitest Plugin (vite-plugin-funscript)", () => {
     try {
       await fs.mkdir(path.join(root, "app"));
       await fs.writeFile(path.join(root, "app", "main.fun"), "export value = 1");
-      const view = new TypeView(root);
-      await view.generate();
+      await new TypeView(root).generate();
       const generated = path.join(root, ".funscript", "types", "app", "main.ts");
       await fs.writeFile(generated, "unchanged output sentinel");
-      await view.generate();
+      // A fresh instance must load the persisted content hash and skip the
+      // unchanged source during Vite startup/build generation.
+      await new TypeView(root).generate();
       expect(await fs.readFile(generated, "utf8")).toBe("unchanged output sentinel");
     } finally {
       await fs.rm(root, { recursive: true, force: true });
