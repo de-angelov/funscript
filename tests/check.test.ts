@@ -353,6 +353,20 @@ export Button = (props: Props) =>
   });
 
   describe("CLI integration (funscript check)", () => {
+    it("maps a generic constraint violation to its FunScript call", async () => {
+      const testFile = path.join(tmpDir, "cli-generic.fun");
+      await fs.writeFile(testFile, 'ts { type Client = { close: () => void } }\nexport connect = <A extends Client>(factory: () => A) => factory()\nexport bad = connect(() => "bad")', "utf-8");
+      const result = await execFileAsync("node", [CLI_PATH, "check", testFile]).then(
+        () => undefined,
+        (error: any) => error,
+      );
+      expect(result?.code).toBe(1);
+      const output = `${result.stdout ?? ""}${result.stderr ?? ""}`;
+      expect(output).toContain("cli-generic.fun:3:");
+      expect(output).toContain("not assignable to type 'Client'");
+      expect(output).toContain('connect(() => "bad")');
+    });
+
     it("exits with 0 and prints success message for a valid FunScript file", async () => {
       const testFile = path.join(tmpDir, "cli-valid.fun");
       await fs.writeFile(

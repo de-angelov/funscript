@@ -1,5 +1,7 @@
 import { EventEmitter } from "node:events";
 import type { Readable, Writable } from "node:stream";
+import { fileURLToPath } from "node:url";
+import { Effect } from "effect";
 import {
   createConnection,
   type Connection,
@@ -46,6 +48,7 @@ import { Parser } from "../parser/parser.js";
 import { TypeScriptCompilationContext } from "../compiler/typescript-context.js";
 import { validateNumericComparisons } from "../compiler/numeric-comparisons.js";
 import { resolveImportedSchemas } from "../compiler/imported-schemas.js";
+import { typeCheckVirtualFiles } from "../compiler/check.js";
 import { format } from "../formatter/index.js";
 import type { Span } from "../ast/types.js";
 import { findHover } from "./hover.js";
@@ -152,6 +155,9 @@ export class FunScriptLspServer extends EventEmitter {
   private isShutdown = false;
   private clientCapabilities: any = null;
   private connection: Connection | null = null;
+  private diagnosticTimer: ReturnType<typeof setTimeout> | undefined;
+  private diagnosticRevision = 0;
+  private syntaxErrors = new Set<string>();
 
   constructor() {
     super();
@@ -262,6 +268,7 @@ export class FunScriptLspServer extends EventEmitter {
         params.textDocument.version,
         diagnostics,
       );
+      this.scheduleTypeDiagnostics(params.textDocument.uri, diagnostics);
     }
   }
 
@@ -286,12 +293,15 @@ export class FunScriptLspServer extends EventEmitter {
         updatedVersion,
         diagnostics,
       );
+      this.scheduleTypeDiagnostics(updatedDoc.uri, diagnostics);
     }
   }
 
   public onDidCloseHandler(params: DidCloseTextDocumentParams): void {
     if (params?.textDocument) {
       this.documents.delete(params.textDocument.uri);
+      this.syntaxErrors.delete(params.textDocument.uri);
+      this.scheduleTypeDiagnostics();
       this.publishDiagnostics(params.textDocument.uri, undefined, []);
     }
   }
@@ -564,6 +574,49 @@ export class FunScriptLspServer extends EventEmitter {
     return validateFunScript(source, uri);
   }
 
+  private scheduleTypeDiagnostics(uri?: string, syntaxDiagnostics?: Diagnostic[]): void {
+    if (uri && syntaxDiagnostics) {
+      if (syntaxDiagnostics.length) this.syntaxErrors.add(uri);
+      else this.syntaxErrors.delete(uri);
+    }
+    const revision = ++this.diagnosticRevision;
+    if (this.diagnosticTimer) clearTimeout(this.diagnosticTimer);
+    this.diagnosticTimer = setTimeout(() => {
+      this.diagnosticTimer = undefined;
+      const files: Record<string, string> = {};
+      const documents = new Map<string, TextDocumentItem>();
+      for (const openDoc of this.documents.values()) {
+        if (!openDoc.uri.startsWith("file:")) continue;
+        try {
+          const filename = fileURLToPath(openDoc.uri);
+          files[filename] = openDoc.text;
+          documents.set(filename, openDoc);
+        } catch { /* Ignore non-file documents. */ }
+      }
+      if (!documents.size) return;
+      void Effect.runPromise(typeCheckVirtualFiles(files)).then((result) => {
+        if (this.diagnosticRevision !== revision) return;
+        for (const [filename, doc] of documents) {
+          if (this.syntaxErrors.has(doc.uri)) continue;
+          const diagnostics: Diagnostic[] = result.diagnostics.filter((item) => item.file === filename).map((item) => ({
+            range: {
+              start: { line: Math.max(0, item.line - 1), character: Math.max(0, item.column - 1) },
+              end: { line: Math.max(0, (item.endLine ?? item.line) - 1), character: Math.max(0, (item.endColumn ?? item.column + 1) - 1) },
+            },
+            severity: item.category === "error" ? DiagnosticSeverity.Error : item.category === "warning" ? DiagnosticSeverity.Warning : DiagnosticSeverity.Information,
+            source: "funscript",
+            code: item.code,
+            message: item.message,
+          }));
+          this.publishDiagnostics(doc.uri, doc.version, diagnostics);
+        }
+      }).catch((error) => {
+        console.error("FunScript type checking failed:", error);
+      });
+    }, 250);
+    this.diagnosticTimer.unref();
+  }
+
   public publishDiagnostics(
     uri: string,
     version: number | undefined,
@@ -600,6 +653,9 @@ export class FunScriptLspServer extends EventEmitter {
   }
 
   public dispose(): void {
+    if (this.diagnosticTimer) clearTimeout(this.diagnosticTimer);
+    this.diagnosticTimer = undefined;
+    this.diagnosticRevision++;
     if (this.connection) {
       this.connection.dispose();
       this.connection = null;
