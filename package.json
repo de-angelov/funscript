@@ -15,6 +15,8 @@
     "./record": "./dist/interop/record.js",
     "./zod": "./dist/interop/zod.js",
     "./interop/zod": "./dist/interop/zod.js",
+    "./valibot": "./dist/interop/valibot.js",
+    "./interop/valibot": "./dist/interop/valibot.js",
     "./vite": "./dist/plugins/vite.js",
     "./plugins/vite": "./dist/plugins/vite.js"
   },
@@ -56,6 +58,7 @@
     "ts-pattern": "^5.5.0",
     "type-fest": "^5.10.0",
     "typescript": "^5.6.3",
+    "valibot": "^1.5.0",
     "vscode-languageclient": "^11.0.0",
     "vscode-languageserver": "^11.0.0",
     "zod": "^3.25.76"
