@@ -1,9 +1,10 @@
-// A small native Node HTTP service with schema checked request bodies.
-
-import { Schema } from "effect"
+// Effect HTTP REST example. The Node adapter requires Node 22.19+; the project
+// itself continues to support Node 20 for compiler and non-HTTP examples.
+import { Effect, Layer, Schema } from "effect"
+import { HttpRouter, HttpServerResponse } from "effect/http"
+import { NodeHttpServer, NodeRuntime } from "@effect/platform-node"
 import { createServer } from "node:http"
-
-ts { type Incoming = import('node:http').IncomingMessage; type Outgoing = import('node:http').ServerResponse; type HttpServer = import('node:http').Server; type Chunks = Buffer[]; }
+import process from "node:process"
 
 export schema CreateItemRequest = {
   name: String
@@ -19,32 +20,20 @@ export schema ApiError = {
   message: String
 }
 
-export error NotFoundError(path: String)
-export error ValidationError(message: String)
-export error ServerError(message: String)
+getItems = HttpRouter.add("GET", "/items", HttpServerResponse.json([]))
 
-sendJson = (res: Outgoing, status: Number, body: Unknown) =>
-  => res.writeHead(status).end(JSON.stringify(body))
+createItem = HttpRouter.schemaJson(Schema.Struct({ body: Schema.Struct({ name: Schema.String }) }))
 
-handleRoute = (req: Incoming, res: Outgoing, body: String) => {
-  route = req.method + " " + req.url
-  match route
-    | "GET /items" => sendJson(res, 200, [])
-    | "POST /items" => {
-      decoded = Schema.decodeUnknownExit(CreateItemRequest)(JSON.parse(body))
-      match decoded
-        | { _tag: "Success", value: request } => sendJson(res, 201, { id: 1, name: request.name })
-        | { _tag: "Failure" } => sendJson(res, 400, { error: "ValidationError", message: "Request body must contain a string name" })
-    }
-    | _ => sendJson(res, 404, { error: "NotFoundError", message: "No route for " + req.url })
-}
+createItemResponse = Effect.flatMap(createItem, (request) => HttpServerResponse.json({ id: 1, name: request.body.name }, { status: 201 }))
 
-export createApiServer = () => createServer((req, res) => {
-  chunks: Chunks = []
-  req.on("data", (chunk) => chunks.push(chunk))
-  => req.on("end", () => handleRoute(req, res, Buffer.concat(chunks).toString("utf8")))
-})
+postItems = HttpRouter.add("POST", "/items", Effect.catchCause(createItemResponse, (_) => HttpServerResponse.json({ error: "ValidationError", message: "Request body must contain a string name" }, { status: 400 })))
 
-export server = createApiServer()
-ts { server.listen(3000); }
+notFound = HttpRouter.add("*", "/*", HttpServerResponse.json({ error: "NotFoundError", message: "No route for this path" }, { status: 404 }))
 
+export routes = Layer.mergeAll(getItems, postItems, notFound)
+
+export serverLayer = (port: Number) => HttpRouter.serve(routes).pipe(Layer.provide(NodeHttpServer.layer(createServer, { port })))
+
+port = Number(process.env.PORT) or 3000
+
+export main = Layer.launch(serverLayer(port)) |> NodeRuntime.runMain
