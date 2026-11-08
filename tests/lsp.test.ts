@@ -367,6 +367,32 @@ describe("FunScript LSP Server", () => {
       expect(diagEvents[0].diagnostics).toEqual([]);
     });
 
+    it("reports 0 diagnostics for optional properties and function parameters", async () => {
+      const server = new FunScriptLspServer();
+      await server.handleMessage({ jsonrpc: "2.0", id: 1, method: "initialize", params: {} });
+      const diagEvents: PublishDiagnosticsParams[] = [];
+      server.on("diagnostics", (p) => diagEvents.push(p));
+      await server.handleMessage({
+        jsonrpc: "2.0",
+        method: "textDocument/didOpen",
+        params: {
+          textDocument: {
+            uri: "file:///workspace/optional.fun",
+            languageId: "funscript",
+            version: 1,
+            text: [
+              'ts { type RankingOrder = "asc" | "desc"; }',
+              "export sort = (order?: RankingOrder) => order",
+              "export sorter: (order?: RankingOrder) => Option<RankingOrder> = sort",
+              "export Header = (props: { className?: String }) => props.className",
+            ].join("\n"),
+          },
+        },
+      });
+      expect(diagEvents).toHaveLength(1);
+      expect(diagEvents[0].diagnostics).toEqual([]);
+    });
+
     it("reports diagnostic for banned let keyword with exact line and column range", async () => {
       const server = new FunScriptLspServer();
       await server.handleMessage({
@@ -2027,6 +2053,29 @@ export schema Config = {
       const value = (response.result as Hover).contents as { value: string };
       expect(value.value).toContain("{ id: string; name: string; age: number }");
       expect(value.value).toContain("Schema.Struct");
+    });
+
+    it("shows optional properties in imported TypeScript schema hover", async () => {
+      const server = new FunScriptLspServer();
+      await server.handleMessage({ jsonrpc: "2.0", id: 1, method: "initialize", params: {} });
+      const uri = "file:///workspace/optional-hover.fun";
+      const text = [
+        "ts { type ButtonProps = { label: string; className?: string; count?: number } }",
+        "schema Button = from ts<ButtonProps>",
+      ].join("\n");
+      await server.handleMessage({
+        jsonrpc: "2.0",
+        method: "textDocument/didOpen",
+        params: { textDocument: { uri, languageId: "funscript", version: 1, text } },
+      });
+      const response = (await server.handleMessage({
+        jsonrpc: "2.0", id: 100, method: "textDocument/hover",
+        params: { textDocument: { uri }, position: { line: 1, character: 8 } },
+      })) as ResponseMessage;
+      const value = (response.result as Hover).contents as { value: string };
+      expect(value.value).toContain("label: string");
+      expect(value.value).toContain("className?: string");
+      expect(value.value).toContain("count?: number");
     });
 
     it("returns null when document is not open", async () => {

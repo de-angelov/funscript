@@ -1046,7 +1046,13 @@ export class Emitter {
           }
           if (s.kind === "CallExpression") {
             const callee = s.callee as Identifier | UpperIdentifier;
-            const calleeName = `${res.module}.${res.method ?? callee.name}`;
+            if (res.module === "Schema" && (res.method === "decode" || (!res.method && callee.name === "decode"))) {
+              this.needsDecodeUnknown = true;
+            }
+            const method = res.module === "Schema" && (res.method === "decode" || (!res.method && callee.name === "decode"))
+              ? "decodeUnknown"
+              : res.method ?? callee.name;
+            const calleeName = `${res.module}.${method}`;
             if (this.hasPlaceholder(s)) {
               const placeholderParam = "__p";
               const prevPlaceholderParam = this.currentPlaceholderParam;
@@ -1472,7 +1478,7 @@ export class Emitter {
       if (declared?.kind === "TypeReferenceNode" && recordType && (param.optional || param.defaultValue)) {
         throw new FunScriptError("A compile-time record contract parameter cannot itself be optional or defaulted yet", param.span);
       }
-      if (recordType?.kind !== "RecordTypeNode") { records.set(param.name.name, undefined); return; }
+      if (param.optional || recordType?.kind !== "RecordTypeNode") { records.set(param.name.name, undefined); return; }
       const fields = recordType.fields;
       const nestedFields = (type: TypeNode): Map<string, RecordFieldInfo> | undefined => {
         if (type.kind !== "RecordTypeNode") {
@@ -1974,7 +1980,8 @@ export class Emitter {
         const params = node.params
           .map((p) => {
             const name = p.name ? p.name.name : "_";
-            return p.typeAnnotation ? `${name}: ${this.emitTypeNode(p.typeAnnotation)}` : name;
+            const opt = p.optional ? "?" : "";
+            return p.typeAnnotation ? `${name}${opt}: ${this.emitTypeNode(p.typeAnnotation)}` : `${name}${opt}`;
           })
           .join(", ");
         return `${this.emitTypeParameters(node.typeParams)}(${params}) => ${this.emitTypeNode(node.returnType)}`;

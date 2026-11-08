@@ -46,7 +46,7 @@ function importedSchemaHover(source: string, uri: string, position: Position): H
     );
     const importedType = alias ? checked.checker.getTypeFromTypeNode(alias.type) : undefined;
     const structure = importedType && importedType.getProperties().length > 0
-      ? `{ ${importedType.getProperties().map((property) => `${property.name}: ${checked.checker.typeToString(checked.checker.getTypeOfSymbolAtLocation(property, alias!), alias!, ts.TypeFormatFlags.NoTruncation)}`).join("; ")} }`
+      ? `{ ${importedType.getProperties().map((property) => `${property.name}${property.flags & ts.SymbolFlags.Optional ? "?" : ""}: ${checked.checker.typeToString(checked.checker.getTypeOfSymbolAtLocation(property, alias!), alias!, ts.TypeFormatFlags.NoTruncation)}`).join("; ")} }`
       : importedType
         ? checked.checker.typeToString(importedType, alias, ts.TypeFormatFlags.NoTruncation)
         : "unknown";
