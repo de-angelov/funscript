@@ -170,6 +170,8 @@ const formattedError = codeFrameColumns(
 - Every feature or bugfix must have comprehensive Vitest unit/integration tests.
 - Favor standard ecosystem libraries over custom wheels.
 - Follow functional pipeline-first design (`data |> operator(...)`) with auto-namespace resolution rather than OOP prototype method chaining.
+- Leverage type-directed abstract function resolution in pipelines: `(c: HttpClient) |> Afn |> Bfn` resolves unqualified functions from the abstraction and chains inferred result types across stages.
+- Use typed comparison shorthand in pipelines (`score |> lessThan(deadline)`) or direct calls (`lessThan(score, deadline)`), which automatically lower to matching Effect 4 APIs (`Number.isLessThan`, `DateTime.isLessThan`). Use explicit `Module.function` qualification whenever ambiguity or custom ordering requires it.
 - Follow the base branch `main`. All dev agent work must merge to `main` without breaking existing tests.
 
 ## Strictness Architecture: Compiler Verification & Runtime Boundary Validation

@@ -179,7 +179,7 @@ Cross-module analysis uses `options.virtualSources: Map<absPath, source>` and `s
 | --- | --- |
 | `typescript-context.ts` | Reuses a ts.CompilerHost/Program across passes for one file. |
 | `numeric-comparisons.ts` | Marks `__funscriptNumericOperand(...)` wrappers, checks via tsc that both operands are numbers; throws `NumericComparisonError` with span. |
-| `pipeline-companions.ts` | Marks `__funscriptPipelineSource(id, value)`, runs tsc to infer the source type, maps to companion module (Array/Effect/Option/...). |
+| `pipeline-companions.ts` | Marks `__funscriptPipelineSource` and `__funscriptDirectCall` markers, runs tsc to infer types across stages, resolves companion modules and abstract functions (chaining inferred stage types), and resolves typed comparisons (`lessThan`, `greaterThan`, etc.). |
 | `js-interop-nullability.ts` | Resolves awaited TS type of `__funscriptJs` calls to set nullable flag. |
 | `imported-schemas.ts` | Resolves `schema X = from ts<T>` from imported TS types. |
 | `imported-record-functions.ts` | Tracks functions with optional-record params across modules. |

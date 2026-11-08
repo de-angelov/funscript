@@ -80,9 +80,19 @@ import {
   type PipelineCompanionModule,
 } from "./pipeline-catalog.js";
 
+export interface StageResolution {
+  module: string;
+  method?: string;
+  isComparison?: boolean;
+}
+
 export interface EmitterOptions {
   /** TypeScript-directed companion facts keyed by the pipeline source offset. */
   pipelineCompanions?: ReadonlyMap<number, PipelineCompanionModule>;
+  /** Stage resolutions keyed by pipeline stage offset. */
+  stageResolutions?: ReadonlyMap<number, StageResolution>;
+  /** Direct call resolutions keyed by call expression offset. */
+  directCallResolutions?: ReadonlyMap<number, StageResolution>;
   /** Used only for the checker pre-pass, whose unresolved stage names are intentional. */
   allowAmbiguousPipeline?: boolean;
   /** Wrap pipeline sources so the checker can locate their exact inferred type. */
@@ -104,18 +114,71 @@ const OPTION_COMPANION_METHODS = new Set(PIPELINE_COMPANION_CATALOG.Option);
 const RESULT_COMPANION_METHODS = new Set(PIPELINE_COMPANION_CATALOG.Result);
 const CHUNK_COMPANION_METHODS = new Set(PIPELINE_COMPANION_CATALOG.Chunk);
 
-type CompanionModule = PipelineCompanionModule | "Number" | "String" | "Duration" | "Struct";
+export const EFFECT_MODULE_NAMES = new Set([
+  "Array",
+  "Chunk",
+  "Context",
+  "Data",
+  "DateTime",
+  "Duration",
+  "Effect",
+  "Equal",
+  "Layer",
+  "Number",
+  "Option",
+  "Order",
+  "Result",
+  "Schedule",
+  "Schema",
+  "Stream",
+  "String",
+  "pipe",
+]);
+
+export function isEffectModule(moduleName: string): boolean {
+  return EFFECT_MODULE_NAMES.has(moduleName);
+}
+
+type CompanionModule = PipelineCompanionModule | "Number" | "String" | "Duration" | "Struct" | "DateTime";
 
 const NUMBER_COMPANION_METHODS = new Set([
   "isGreaterThan",
   "isGreaterThanOrEqualTo",
   "isLessThan",
   "isLessThanOrEqualTo",
+  "greaterThan",
+  "greaterThanOrEqualTo",
+  "lessThan",
+  "lessThanOrEqualTo",
   "between",
   "clamp",
   "increment",
   "decrement",
 ]);
+
+const DATETIME_COMPANION_METHODS = new Set([
+  "lessThan",
+  "lessThanOrEqualTo",
+  "greaterThan",
+  "greaterThanOrEqualTo",
+  "between",
+  "isLessThan",
+  "isLessThanOrEqualTo",
+  "isGreaterThan",
+  "isGreaterThanOrEqualTo",
+]);
+
+export const COMPARISON_METHOD_MAP: Readonly<Record<string, string>> = {
+  lessThan: "isLessThan",
+  lessThanOrEqualTo: "isLessThanOrEqualTo",
+  greaterThan: "isGreaterThan",
+  greaterThanOrEqualTo: "isGreaterThanOrEqualTo",
+  between: "between",
+  isLessThan: "isLessThan",
+  isLessThanOrEqualTo: "isLessThanOrEqualTo",
+  isGreaterThan: "isGreaterThan",
+  isGreaterThanOrEqualTo: "isGreaterThanOrEqualTo",
+};
 
 const EFFECT_V4_MEMBER_RENAMES: Readonly<Record<string, string>> = {
   ...EFFECT_PIPELINE_COMPATIBILITY_ALIASES,
@@ -126,7 +189,7 @@ const STRING_COMPANION_METHODS = new Set(["trim", "trimStart", "trimEnd", "split
 const RECORD_COMPANION_METHODS = new Set(["omit", "pick"]);
 const DURATION_COMPANION_METHODS = new Set(["seconds", "millis", "minutes", "hours", "days"]);
 
-class PipelineResolutionError extends Error {
+export class PipelineResolutionError extends Error {
   constructor(message: string, readonly span: Expression["span"]) {
     super(message);
     this.name = "PipelineResolutionError";
@@ -183,6 +246,7 @@ export class Emitter {
   private bindings = new Map<string, BindingDeclaration>();
 
   private declaredTypeNames = new Set<string>();
+  private inPipelineStage = false;
   private recordContracts = new Map<string, import("../ast/types.js").RecordTypeNode>();
 
   constructor(private program?: Program, contextProgram?: Program, private options: EmitterOptions = {}) {
@@ -689,7 +753,7 @@ export class Emitter {
       case "UnaryExpression":
         return this.emitUnaryExpression(expr);
       case "CallExpression":
-        return `${this.emitExpression(expr.callee)}(${expr.args.map((a) => this.emitExpression(a)).join(", ")})`;
+        return this.emitCallExpression(expr);
       case "MemberExpression": {
         const raw = `${this.emitExpression(expr.object)}.${this.emitMemberProperty(expr)}`;
         const field = this.recordField(expr);
@@ -767,6 +831,37 @@ export class Emitter {
     return `\`${template}\``;
   }
 
+  private emitCallExpression(expr: CallExpression): string {
+    if (
+      this.options.markPipelineSources &&
+      !this.inPipelineStage &&
+      expr.callee.kind === "Identifier" &&
+      expr.args.length >= 1
+    ) {
+      const fnName = expr.callee.name;
+      if (
+        fnName in COMPARISON_METHOD_MAP ||
+        (!this.bindings.has(fnName) && !this.userEffectBindings.has(fnName))
+      ) {
+        const firstArg = this.emitExpression(expr.args[0]);
+        const restArgs = expr.args.slice(1).map((a) => this.emitExpression(a));
+        const markedFirstArg = `__funscriptDirectCall(${expr.span.start.offset}, ${firstArg})`;
+        return `${fnName}(${[markedFirstArg, ...restArgs].join(", ")})`;
+      }
+    }
+
+    if (this.options.directCallResolutions?.has(expr.span.start.offset)) {
+      const res = this.options.directCallResolutions.get(expr.span.start.offset)!;
+      if (isEffectModule(res.module)) {
+        this.effectImports.add(res.module);
+      }
+      const callee = `${res.module}.${res.method ?? (expr.callee as Identifier).name}`;
+      return `${callee}(${expr.args.map((a) => this.emitExpression(a)).join(", ")})`;
+    }
+
+    return `${this.emitExpression(expr.callee)}(${expr.args.map((a) => this.emitExpression(a)).join(", ")})`;
+  }
+
   private emitPipelineExpression(expr: PipelineExpression): string {
     this.effectImports.add("pipe");
 
@@ -780,45 +875,79 @@ export class Emitter {
     }
     stages.unshift(curr);
 
-    let preferredCompanion = this.inferPipelineCompanion(stages[0]);
-    const emittedStages = stages.map((s, idx) => {
-      if (idx === 0) {
-        const emitted = this.emitExpression(s);
-        return this.options.markPipelineSources
-          ? `__funscriptPipelineSource(${s.span.start.offset}, ${emitted})`
-          : emitted;
-      }
-
-      if (s.kind === "MutBlockExpression") {
-        this.needsMutative = true;
-        return `(__mutInput) => create(__mutInput, ${this.emitMutativeRecipe(s)})`;
-      }
-
-      // Auto-namespace resolution for pipeline stage callee
-      this.assertPipelineStageIsNotAmbiguous(s, preferredCompanion);
-      const resolvedStage = this.resolvePipelineStage(s, preferredCompanion);
-
-      // `js` runs an Effect and leaves the Effect pipeline domain.
-      if (s.kind === "Identifier" && s.name === "js") preferredCompanion = undefined;
-
-      // Check if stage has placeholder '_'
-      if (this.hasPlaceholder(resolvedStage)) {
-        const placeholderParam = "__p";
-        const prevPlaceholderParam = this.currentPlaceholderParam;
-        this.currentPlaceholderParam = placeholderParam;
-        try {
-          const body = this.emitExpression(resolvedStage);
-          const formattedBody = resolvedStage.kind === "RecordExpression" ? `(${body})` : body;
-          return `(${placeholderParam}) => ${formattedBody}`;
-        } finally {
-          this.currentPlaceholderParam = prevPlaceholderParam;
+    const prevInPipeline = this.inPipelineStage;
+    this.inPipelineStage = true;
+    try {
+      let preferredCompanion = this.inferPipelineCompanion(stages[0]);
+      const emittedStages = stages.map((s, idx) => {
+        if (idx === 0) {
+          const emitted = this.emitExpression(s);
+          return this.options.markPipelineSources
+            ? `__funscriptPipelineSource(${s.span.start.offset}, ${emitted})`
+            : emitted;
         }
-      }
 
-      return this.emitExpression(resolvedStage);
-    });
+        if (s.kind === "MutBlockExpression") {
+          this.needsMutative = true;
+          return `(__mutInput) => create(__mutInput, ${this.emitMutativeRecipe(s)})`;
+        }
 
-    return `pipe(\n  ${emittedStages.join(",\n  ")}\n)`;
+        // Check if stage was resolved by type-directed resolution
+        if (this.options.stageResolutions?.has(s.span.start.offset)) {
+          const res = this.options.stageResolutions.get(s.span.start.offset)!;
+          if (isEffectModule(res.module)) {
+            this.effectImports.add(res.module);
+          }
+          if (s.kind === "Identifier" || s.kind === "UpperIdentifier") {
+            return `${res.module}.${res.method ?? s.name}`;
+          }
+          if (s.kind === "CallExpression") {
+            const callee = s.callee as Identifier | UpperIdentifier;
+            const calleeName = `${res.module}.${res.method ?? callee.name}`;
+            if (this.hasPlaceholder(s)) {
+              const placeholderParam = "__p";
+              const prevPlaceholderParam = this.currentPlaceholderParam;
+              this.currentPlaceholderParam = placeholderParam;
+              try {
+                const args = s.args.map((a) => this.emitExpression(a)).join(", ");
+                return `(${placeholderParam}) => ${calleeName}(${args})`;
+              } finally {
+                this.currentPlaceholderParam = prevPlaceholderParam;
+              }
+            }
+            const args = s.args.map((a) => this.emitExpression(a)).join(", ");
+            return `${calleeName}(${args})`;
+          }
+        }
+
+        // Auto-namespace resolution for pipeline stage callee
+        this.assertPipelineStageIsNotAmbiguous(s, preferredCompanion);
+        const resolvedStage = this.resolvePipelineStage(s, preferredCompanion);
+
+        // `js` runs an Effect and leaves the Effect pipeline domain.
+        if (s.kind === "Identifier" && s.name === "js") preferredCompanion = undefined;
+
+        // Check if stage has placeholder '_'
+        if (this.hasPlaceholder(resolvedStage)) {
+          const placeholderParam = "__p";
+          const prevPlaceholderParam = this.currentPlaceholderParam;
+          this.currentPlaceholderParam = placeholderParam;
+          try {
+            const body = this.emitExpression(resolvedStage);
+            const formattedBody = resolvedStage.kind === "RecordExpression" ? `(${body})` : body;
+            return `(${placeholderParam}) => ${formattedBody}`;
+          } finally {
+            this.currentPlaceholderParam = prevPlaceholderParam;
+          }
+        }
+
+        return this.emitExpression(resolvedStage);
+      });
+
+      return `pipe(\n  ${emittedStages.join(",\n  ")}\n)`;
+    } finally {
+      this.inPipelineStage = prevInPipeline;
+    }
   }
 
   private inferPipelineCompanion(source: Expression): CompanionModule | undefined {
@@ -915,7 +1044,16 @@ export class Emitter {
           callee: {
             kind: "MemberExpression",
             object: { kind: "UpperIdentifier", name: companion, span: stage.callee.span },
-            property: { ...stage.callee, name: name === "lines" ? "linesIterator" : name === "decode" ? "decodeUnknown" : name },
+            property: {
+              ...stage.callee,
+              name: name === "lines"
+                ? "linesIterator"
+                : name === "decode"
+                ? "decodeUnknown"
+                : (companion === "Number" || companion === "DateTime") && name in COMPARISON_METHOD_MAP
+                ? COMPARISON_METHOD_MAP[name]
+                : name,
+            },
             span: stage.callee.span,
           },
         };
@@ -990,11 +1128,13 @@ export class Emitter {
     if (STRING_COMPANION_METHODS.has(name)) return "String";
     if (RECORD_COMPANION_METHODS.has(name)) return "Struct";
     if (DURATION_COMPANION_METHODS.has(name)) return "Duration";
+    if (preferredCompanion === "DateTime" && DATETIME_COMPANION_METHODS.has(name)) return "DateTime";
     return undefined;
   }
 
   private isCompanionOperation(module: CompanionModule, operation: string): boolean {
     if (module === "Number") return NUMBER_COMPANION_METHODS.has(operation);
+    if (module === "DateTime") return DATETIME_COMPANION_METHODS.has(operation);
     if (module === "String") return STRING_COMPANION_METHODS.has(operation);
     if (module === "Struct") return RECORD_COMPANION_METHODS.has(operation);
     if (module === "Duration") return DURATION_COMPANION_METHODS.has(operation);

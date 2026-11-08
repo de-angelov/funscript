@@ -785,6 +785,35 @@ tier =
     | _ => "Silver"
 ```
 
+##### Typed comparison shorthand
+
+For readable pipeline and direct comparison expressions, FunScript supports unqualified
+comparison functions: `lessThan`, `lessThanOrEqualTo`, `greaterThan`, `greaterThanOrEqualTo`,
+and `between` (along with their `is*` aliases like `isLessThan`).
+
+These resolve against the static type of the operand and lower directly to matching Effect 4
+APIs (such as `Number.isLessThan` or `DateTime.isLessThan`), preserving argument order and
+inferred output types:
+
+```funscript
+# Pipeline comparison (resolves against static type of score or timestamp)
+isBeforeDeadline = score |> lessThan(deadline)
+isRecent = timestamp |> greaterThanOrEqualTo(cutoff)
+inRange = score |> between(0, 100)
+
+# Direct-call comparison (preserves argument order: left compared to right)
+isPast = lessThan(currentTimestamp, expiresAt)
+```
+
+Direct calls and pipeline stages lower to the matching Effect companion method:
+- `score |> lessThan(target)` -> `Number.isLessThan(score, target)`
+- `lessThan(score, target)` -> `Number.isLessThan(score, target)`
+- `ts |> lessThan(deadline)` -> `DateTime.isLessThan(ts, deadline)`
+
+When an operand type is not an ordered companion or if resolution is ambiguous, the compiler
+issues a source-mapped `PipelineResolutionError`. Explicit `Module.function` calls (e.g.
+`Number.isLessThan(a, b)` or `Order.isLessThan(String.Order)(...)`) remain available as an escape hatch.
+
 String ordering is deliberately not implicit: choose `String.Order` for stable
 technical values, or construct an explicit locale-aware `Order<String>` with
 `Order.make` and `String.localeCompare` for user-facing text.
@@ -944,6 +973,23 @@ const score = pipe(
   (v) => formatScore(v, "en-US"),
 );
 ```
+
+#### Type-directed abstract function resolution
+
+Pipeline stages can also resolve unqualified abstract functions from custom services,
+data contracts, or interfaces based on the static type entering each stage. Inferred
+output types from each stage automatically feed resolution of subsequent stages:
+
+```funscript
+# c has type HttpClient: Afn is resolved from HttpClient, producing an intermediate type
+# which then resolves Bfn from that resulting abstraction:
+result = (c: HttpClient) |> Afn |> Bfn
+```
+
+This works identically for companion functions, custom services, and typed comparisons:
+1. **Stage chaining:** The static type of stage $N$ determines the available functions for stage $N+1$, chaining inferred types across the entire pipeline.
+2. **Deterministic matching:** Functions must exist on the type or companion module. Missing, incompatible, or ambiguous matches produce source-mapped `PipelineResolutionError` diagnostics pointing directly to the offending stage.
+3. **Explicit qualification escape hatch:** When multiple abstractions expose the same function name or when explicit clarity is preferred, `Module.function` qualification (e.g. `HttpClient.Afn`) is always valid.
 
 ---
 

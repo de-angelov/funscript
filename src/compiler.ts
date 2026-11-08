@@ -70,9 +70,17 @@ export const compileString = (
       const importedRecordFunctions = resolveImportedRecordFunctions(ast, options?.sourcePath ?? filename, options?.virtualSources, importedRecordContracts);
       for (const [name, contract] of resolvePackageRecordContracts(ast, context, importedRecordContracts)) importedRecordContracts.set(name, contract);
       validateNumericComparisons(ast, source, context, importedRecordFunctions, importedRecordContracts);
-      const pipelineCompanions = inferPipelineCompanions(ast, context, importedRecordFunctions, importedRecordContracts);
+      const { pipelineCompanions, stageResolutions, directCallResolutions } = inferPipelineCompanions(ast, context, importedRecordFunctions, importedRecordContracts);
       const importedSchemas = resolveImportedSchemas(ast, source, context);
-      const emitter = new Emitter(ast, undefined, { pipelineCompanions, importedSchemas, importedRecordFunctions, importedRecordContracts, isJsx: filename.endsWith(".funx") });
+      const emitter = new Emitter(ast, undefined, {
+        pipelineCompanions,
+        stageResolutions,
+        directCallResolutions,
+        importedSchemas,
+        importedRecordFunctions,
+        importedRecordContracts,
+        isJsx: filename.endsWith(".funx"),
+      });
       const typescript = applyJsInteropNullability(emitter.emit(), context);
       const targetExtension = filename.endsWith(".funx") ? ".tsx" : ".ts";
 
@@ -109,7 +117,7 @@ export const compileString = (
             const single = new Emitter(
               { kind: "Program", body: [decl], span: decl.span },
               ast,
-              { pipelineCompanions, importedSchemas, importedRecordFunctions, importedRecordContracts, isJsx: filename.endsWith(".funx") },
+              { pipelineCompanions, stageResolutions, directCallResolutions, importedSchemas, importedRecordFunctions, importedRecordContracts, isJsx: filename.endsWith(".funx") },
             );
             const singleOut = single.emit();
             const code = singleOut

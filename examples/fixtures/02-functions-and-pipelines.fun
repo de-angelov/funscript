@@ -7,8 +7,8 @@ export multiplyBy = (factor: Number) =>
 
 export clamp = (min: Number, max: Number, value: Number) =>
   match
-    | value |> Number.isLessThan(min) => min
-    | value |> Number.isGreaterThan(max) => max
+    | value |> lessThan(min) => min
+    | value |> greaterThan(max) => max
     | _ => value
 
 export processed =
