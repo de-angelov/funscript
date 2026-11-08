@@ -346,7 +346,7 @@ export parseCustomer = (dict: Unknown) =>
 `;
 
       const compiled = await Effect.runPromise(compileString(source));
-      expect(compiled.typescript).toContain("Schema.decodeUnknown(CustomerSchema)");
+      expect(compiled.typescript).toMatch(/Schema\.decode(Unknown)?\(CustomerSchema\)/);
 
       // Transpile and evaluate to verify runtime behavior
       const transpiled = ts

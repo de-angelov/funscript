@@ -156,13 +156,15 @@ export const decodeUnknownPromise = Schema.decodeUnknownPromise;
 export const decodeUnknownResult = Schema.decodeUnknownResult;
 
 /**
- * Schema proxy ensuring `Schema.decodeUnknown` is available in all runtimes.
+ * Schema proxy ensuring `Schema.decodeUnknown` and pipeline `Schema.decode`
+ * are available across all runtimes and FunScript pipelines.
  */
 export const InteropSchema: typeof Schema & {
   decodeUnknown: typeof Schema.decodeUnknownEffect;
+  decode: typeof Schema.decodeUnknownEffect;
 } = new Proxy(Schema as any, {
   get(target, prop, receiver) {
-    if (prop === "decodeUnknown") {
+    if (prop === "decodeUnknown" || prop === "decode") {
       return (target as any).decodeUnknown ?? (target as any).decodeUnknownEffect;
     }
     return Reflect.get(target, prop, receiver);
