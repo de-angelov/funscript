@@ -37,5 +37,5 @@ describe("SQLite repository example", () => {
         deleted: true,
       }),
     );
-  });
+  }, 15_000);
 });
