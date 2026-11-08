@@ -61,7 +61,7 @@ examples/
 | `order-fulfillment.fun` | End-to-end e-commerce showcase combining Effect concurrency (`Effect.all`), retry schedules, fiber forking, ts-pattern matching, and Mutative drafts |
 | `pipeline-helpers.fun` | Pipeline data-last helpers powered by `es-toolkit`: string utilities (`slug`, `camelCase`, `snakeCase`), math operations (`clamp`, `round`), and timing helpers |
 | `reactive-widget.funx` | Native `.funx` JSX component emitting `.tsx`, typed props, tagged union view states, template literals in attributes (`className="btn-${variant}"`) |
-| `rest-api-server.fun` | Native Node HTTP server on port 3000 with schema-checked request bodies and structured errors |
+| `rest-api-server.fun` | Effect HTTP routes with schema-checked request bodies and structured errors |
 | `shapes.fun` | Canonical showcase: Tagged-union `schema` definitions (`Circle`, `Rect`, `Point`), guard conditions, exhaustive `match` expressions |
 | `sqlite-repository.fun` | Persistent repository API using Node built-in SQLite, schema decoding, and create/update/delete operations (requires Node.js 22+) |
 | `solid-demo/` | Multi-file Solid.js framework integration showing how compiled FunScript modules interoperate seamlessly with modern TypeScript ecosystems |
@@ -102,7 +102,7 @@ node ./dist/cli/index.js run examples/fibonacci.fun
 node ./dist/cli/index.js run examples/order-fulfillment.fun
 node ./dist/cli/index.js run examples/github-api-client.fun
 node ./dist/cli/index.js run examples/todo-dashboard.funx
-node ./dist/cli/index.js run examples/rest-api-server.fun  # starts HTTP server on port 3000
+PORT=4317 node ./dist/cli/index.js run examples/rest-api-server.fun  # starts HTTP server on port 4317 (default 3000)
 node ./dist/cli/index.js run examples/sqlite-repository.fun # requires Node.js 22+
 ```
 
@@ -123,4 +123,4 @@ node ./dist/cli/index.js build examples/reactive-widget.funx examples/todo-dashb
 
 ### Runtime prerequisites
 
-`rest-api-server.fun` listens on port **3000**. Keep that port available before starting it. `sqlite-repository.fun` uses the built-in `node:sqlite` module and requires **Node.js 22 or newer** for runtime CRUD coverage. The example build and static type check run on supported project Node versions independently of this runtime requirement.
+`rest-api-server.fun` uses Effect HTTP with `@effect/platform-node`, whose package engine requirement is **Node.js 22.19 or newer**. Its sole direct Node HTTP interop is `createServer` passed to `NodeHttpServer.layer`, the adapter's documented platform boundary; the adapter owns routing, request decoding, responses, and scoped server lifecycle. The example defaults to port **3000** and accepts `PORT` to select another port. It cannot run on Node 20, while the project build and non-HTTP examples continue to support Node 20. `sqlite-repository.fun` uses `node:sqlite` and requires Node.js 22 or newer for runtime CRUD coverage.
