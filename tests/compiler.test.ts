@@ -1,7 +1,7 @@
 import { describe, it, expect } from "vitest";
 import { Effect } from "effect";
 import ts from "typescript";
-import { compileString, checkString, CompilerError } from "../src/compiler.js";
+import { compileString, checkString, CompilerError, TypeScriptCompilationContext } from "../src/compiler.js";
 import { typeCheckSource } from "../src/compiler/check.js";
 import {
   compile,
@@ -12,6 +12,14 @@ import {
 } from "./helpers/index.js";
 
 describe("FunScript Compiler", () => {
+  it("reuses a compilation context across different source files", async () => {
+    const context = new TypeScriptCompilationContext("first.fun");
+    const first = await Effect.runPromise(compileString("export first = 1", "first.fun", { context, sourcemap: false }));
+    const second = await Effect.runPromise(compileString('export second = "ok"', "second.fun", { context, sourcemap: false }));
+    expect(first.typescript).toContain("export const first = 1;");
+    expect(second.typescript).toContain('export const second = "ok";');
+  });
+
   it("compiles basic bindings and arithmetic", async () => {
     const code = `
 export name = "Ada"

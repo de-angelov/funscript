@@ -1,10 +1,30 @@
 import { describe, it, expect } from "vitest";
+import * as fs from "node:fs/promises";
+import * as os from "node:os";
+import * as path from "node:path";
 import { TraceMap, originalPositionFor } from "@jridgewell/trace-mapping";
 import { createServer } from "vite";
 import { funscriptPlugin } from "../src/plugins/vite.js";
 import defaultPlugin from "../src/plugins/vite.js";
+import { TypeView } from "../src/plugins/type-view.js";
 
 describe("Vite & Vitest Plugin (vite-plugin-funscript)", () => {
+  it("reuses unchanged generated TypeView files", async () => {
+    const root = await fs.mkdtemp(path.join(os.tmpdir(), "funscript-type-view-"));
+    try {
+      await fs.mkdir(path.join(root, "app"));
+      await fs.writeFile(path.join(root, "app", "main.fun"), "export value = 1");
+      const view = new TypeView(root);
+      await view.generate();
+      const generated = path.join(root, ".funscript", "types", "app", "main.ts");
+      await fs.writeFile(generated, "unchanged output sentinel");
+      await view.generate();
+      expect(await fs.readFile(generated, "utf8")).toBe("unchanged output sentinel");
+    } finally {
+      await fs.rm(root, { recursive: true, force: true });
+    }
+  });
+
   it("exports funscriptPlugin as named and default export", () => {
     expect(typeof funscriptPlugin).toBe("function");
     expect(typeof defaultPlugin).toBe("function");

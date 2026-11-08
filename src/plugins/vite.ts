@@ -3,6 +3,7 @@ import { Effect } from "effect";
 import { compileString } from "../compiler.js";
 import { TypeView, type TypeViewOptions } from "./type-view.js";
 import * as path from "node:path";
+import { TypeScriptCompilationContext } from "../compiler/typescript-context.js";
 
 export interface FunscriptPluginOptions {
   /**
@@ -31,6 +32,7 @@ export function funscriptPlugin(options: FunscriptPluginOptions = {}): Plugin {
   );
 
   let typeView: TypeView | undefined;
+  const context = new TypeScriptCompilationContext(path.resolve("__funscript_vite__.fun"));
   return {
     name: "vite-plugin-funscript",
     enforce: "pre",
@@ -86,6 +88,7 @@ export function funscriptPlugin(options: FunscriptPluginOptions = {}): Plugin {
       const res = await Effect.runPromise(
         compileString(code, cleanId, {
           sourcemap: options.sourcemap ?? true,
+          context,
         }),
       );
 
