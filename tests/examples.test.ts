@@ -12,6 +12,18 @@ const cliPath = path.resolve("dist/cli/index.js");
 describe("Sample Applications & Real-World Programs", () => {
   const examplesDir = path.resolve("examples");
 
+  describe("canonical showcase examples", () => {
+    for (const name of ["hello.fun", "shapes.fun", "todo-http.fun", "greeter-service.fun"]) {
+      it(`compiles ${name} cleanly`, async () => {
+        const examplePath = path.join(examplesDir, name);
+        const source = await fs.readFile(examplePath, "utf-8");
+        const res = await Effect.runPromise(compileString(source, examplePath));
+
+        expect(res.typescript).toBeDefined();
+      });
+    }
+  });
+
   describe("order-fulfillment.fun end-to-end showcase", () => {
     const examplePath = path.join(examplesDir, "order-fulfillment.fun");
 

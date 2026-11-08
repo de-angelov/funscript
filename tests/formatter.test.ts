@@ -596,6 +596,36 @@ export updated = {
     }
   });
 
+  describe("canonical showcase examples arrow syntax", () => {
+    const showcaseFiles = [
+      "examples/hello.fun",
+      "examples/shapes.fun",
+      "examples/greeter-service.fun",
+      "examples/todo-http.fun",
+    ];
+
+    it("preserves canonical => arrows without rewriting to legacy syntax", () => {
+      for (const relPath of showcaseFiles) {
+        const filePath = path.resolve(relPath);
+        const source = fs.readFileSync(filePath, "utf-8");
+        const formatted = format(source, { filename: relPath });
+
+        expect(formatted).not.toContain("->");
+        expect(formatted).toContain("=>");
+        expect(format(formatted, { filename: relPath })).toBe(formatted);
+      }
+    });
+
+    it("ensures each showcase example is already formatted cleanly", () => {
+      for (const relPath of showcaseFiles) {
+        const filePath = path.resolve(relPath);
+        const source = fs.readFileSync(filePath, "utf-8");
+        const check = checkFormat(source, { filename: relPath });
+        expect(check.isFormatted).toBe(true);
+      }
+    });
+  });
+
   describe("Prettier Plugin Interface", () => {
     it("exposes valid languages, parsers, and printers", () => {
       expect(prettierPlugin.languages).toBeDefined();
