@@ -22,12 +22,14 @@ examples/
 │   ├── order-fulfillment.fun     # Full e-commerce workflow: concurrency, retry, fibers, ts-pattern
 │   ├── pipeline-helpers.fun      # es-toolkit helpers: string slug/casing, math clamp/round, timing
 │   ├── shapes.fun                # Tagged-union `schema`, guards, exhaustive `match`
+│   ├── sqlite-repository.fun     # CRUD repository using Node built-in SQLite (Node.js 22+)
 │   ├── todo-http.fun             # HTTP service simulation, effect blocks, retry, layers
 │   ├── todo-service.fun          # In-memory todo repository service and layer injection
 │   └── ts-schema-validation.fun  # Foreign TypeScript schema import (`from ts<Type>`), validation
 │
 ├── [JSX & Reactive UI Components (.funx)]
 │   ├── reactive-widget.funx      # Native JSX component compiling to TSX, typed props, template literals
+│   ├── rest-api-server.fun       # Native Node HTTP server, schema-checked bodies (port 3000)
 │   └── todo-dashboard.funx       # Full reactive dashboard app with composed components and state drafts
 │
 ├── solid-demo/                   # Multi-file Solid.js integration showcase
@@ -59,7 +61,9 @@ examples/
 | `order-fulfillment.fun` | End-to-end e-commerce showcase combining Effect concurrency (`Effect.all`), retry schedules, fiber forking, ts-pattern matching, and Mutative drafts |
 | `pipeline-helpers.fun` | Pipeline data-last helpers powered by `es-toolkit`: string utilities (`slug`, `camelCase`, `snakeCase`), math operations (`clamp`, `round`), and timing helpers |
 | `reactive-widget.funx` | Native `.funx` JSX component emitting `.tsx`, typed props, tagged union view states, template literals in attributes (`className="btn-${variant}"`) |
+| `rest-api-server.fun` | Native Node HTTP server on port 3000 with schema-checked request bodies and structured errors |
 | `shapes.fun` | Canonical showcase: Tagged-union `schema` definitions (`Circle`, `Rect`, `Point`), guard conditions, exhaustive `match` expressions |
+| `sqlite-repository.fun` | Persistent repository API using Node built-in SQLite, schema decoding, and create/update/delete operations (requires Node.js 22+) |
 | `solid-demo/` | Multi-file Solid.js framework integration showing how compiled FunScript modules interoperate seamlessly with modern TypeScript ecosystems |
 | `todo-dashboard.funx` | Interactive multi-component JSX dashboard featuring stat cards, filter buttons, item rows, and Mutative state draft updates |
 | `todo-http.fun` | Canonical showcase: Service simulation with `effect` blocks, runtime schema parsing, retry policies with backoff, layer provision |
@@ -98,6 +102,8 @@ node ./dist/cli/index.js run examples/fibonacci.fun
 node ./dist/cli/index.js run examples/order-fulfillment.fun
 node ./dist/cli/index.js run examples/github-api-client.fun
 node ./dist/cli/index.js run examples/todo-dashboard.funx
+node ./dist/cli/index.js run examples/rest-api-server.fun  # starts HTTP server on port 3000
+node ./dist/cli/index.js run examples/sqlite-repository.fun # requires Node.js 22+
 ```
 
 ### 4. Compilation & Build
@@ -114,3 +120,7 @@ node ./dist/cli/index.js build examples/reactive-widget.funx --out dist/reactive
 # Build all funx components to an output directory
 node ./dist/cli/index.js build examples/reactive-widget.funx examples/todo-dashboard.funx --outDir dist/ui
 ```
+
+### Runtime prerequisites
+
+`rest-api-server.fun` listens on port **3000**. Keep that port available before starting it. `sqlite-repository.fun` uses the built-in `node:sqlite` module and requires **Node.js 22 or newer** for runtime CRUD coverage. The example build and static type check run on supported project Node versions independently of this runtime requirement.

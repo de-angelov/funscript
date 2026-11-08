@@ -16,9 +16,11 @@ Every entry below is compiled by `npm run test:examples`.
 | [`examples/order-fulfillment.fun`](../examples/order-fulfillment.fun) | `FunScript` |
 | [`examples/pipeline-helpers.fun`](../examples/pipeline-helpers.fun) | `FunScript` |
 | [`examples/reactive-widget.funx`](../examples/reactive-widget.funx) | `FunScript JSX` |
+| [`examples/rest-api-server.fun`](../examples/rest-api-server.fun) | `FunScript` |
 | [`examples/shapes.fun`](../examples/shapes.fun) | `FunScript` |
 | [`examples/solid-demo/domain.fun`](../examples/solid-demo/domain.fun) | `FunScript` |
 | [`examples/solid-demo/solid-in-funscript.fun`](../examples/solid-demo/solid-in-funscript.fun) | `FunScript` |
+| [`examples/sqlite-repository.fun`](../examples/sqlite-repository.fun) | `FunScript` |
 | [`examples/todo-dashboard.funx`](../examples/todo-dashboard.funx) | `FunScript JSX` |
 | [`examples/todo-http.fun`](../examples/todo-http.fun) | `FunScript` |
 | [`examples/todo-service.fun`](../examples/todo-service.fun) | `FunScript` |

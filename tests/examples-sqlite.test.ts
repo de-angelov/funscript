@@ -8,7 +8,7 @@ import { compileString } from "../src/compiler.js";
 import { typeCheckFiles } from "../src/compiler/check.js";
 
 const execFileAsync = promisify(execFile);
-const examplePath = path.resolve("programs/09-sqlite-repository.fun");
+const examplePath = path.resolve("examples/sqlite-repository.fun");
 const supportsSqlite = Number(process.versions.node.split(".")[0]) >= 22;
 
 describe("SQLite repository example", () => {

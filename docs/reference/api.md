@@ -12,5 +12,7 @@ Package: `funscript` 0.1.0.
 | `funscript/record` | `./dist/interop/record.js` |
 | `funscript/zod` | `./dist/interop/zod.js` |
 | `funscript/interop/zod` | `./dist/interop/zod.js` |
+| `funscript/valibot` | `./dist/interop/valibot.js` |
+| `funscript/interop/valibot` | `./dist/interop/valibot.js` |
 | `funscript/vite` | `./dist/plugins/vite.js` |
 | `funscript/plugins/vite` | `./dist/plugins/vite.js` |
