@@ -7,7 +7,7 @@ import { compileString } from "../src/compiler.js";
 import { typeCheckFiles } from "../src/compiler/check.js";
 
 describe("REST server example", () => {
-  const examplePath = path.resolve("programs/08-rest-api-server.fun");
+  const examplePath = path.resolve("examples/rest-api-server.fun");
   let child: ChildProcess;
   let port: number;
 
