@@ -1,11 +1,9 @@
 // A persistent repository API backed by native Node SQLite.
 
 import { Effect } from "effect"
-import { createRequire } from "node:module"
 
 ts {
-  const require = createRequire(import.meta.url);
-  const { DatabaseSync } = require("node:sqlite");
+  const { DatabaseSync } = process.getBuiltinModule("node:sqlite") as any;
   const database = new DatabaseSync(":memory:");
   database.exec("CREATE TABLE users (id INTEGER PRIMARY KEY, name TEXT NOT NULL, email TEXT NOT NULL)");
   const dbTry = <A>(work: () => A) => Effect.try({

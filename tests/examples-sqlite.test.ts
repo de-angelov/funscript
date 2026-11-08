@@ -15,7 +15,7 @@ describe("SQLite repository example", () => {
   it("compiles and type-checks the native SQLite repository", async () => {
     const source = await fs.readFile(examplePath, "utf8");
     const compiled = await Effect.runPromise(compileString(source, examplePath));
-    expect(compiled.typescript).toContain("createRequire(import.meta.url)");
+    expect(compiled.typescript).toContain('process.getBuiltinModule("node:sqlite")');
     expect(compiled.typescript).toContain("Schema.Struct");
 
     const check = await Effect.runPromise(typeCheckFiles([examplePath]));
