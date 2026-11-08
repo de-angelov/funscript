@@ -737,9 +737,6 @@ export class Parser {
     if (optional && !typeAnnotation) throw new ParseError("Optional parameters require a type annotation", name.span);
     const defaultValue = this.match(TokenType.EQ) ? this.parseExpression() : undefined;
     if (optional && defaultValue) throw new ParseError("A parameter cannot be both optional and defaulted", name.span);
-    if ((optional || defaultValue) && typeAnnotation?.kind === "RecordTypeNode" && typeAnnotation.fields.some((field) => field.optional || field.defaultValue)) {
-      throw new ParseError("An optional or defaulted parameter cannot contain optional record fields yet", name.span);
-    }
     return { kind: "Parameter", name, typeAnnotation, optional, defaultValue, span: nameOnlySpan ? name.span : { start: name.span.start, end: (defaultValue ?? typeAnnotation ?? name).span.end } };
   }
 
@@ -2223,17 +2220,20 @@ export class Parser {
       if (!this.check(TokenType.RPAREN)) {
         do {
           const pName = this.parseIdentifier();
+          const optional = this.match(TokenType.QUESTION);
           this.consume(TokenType.COLON, "Expected ':' after param name");
           const pType = this.parseTypeNode();
           params.push({
             kind: "Parameter",
             name: pName,
             typeAnnotation: pType,
+            optional: optional ? true : undefined,
             span: { start: pName.span.start, end: pType.span.end },
           });
         } while (this.match(TokenType.COMMA) && !this.check(TokenType.RPAREN));
       }
       this.consume(TokenType.RPAREN, "Expected ')'");
+      this.validateValueParameters(params);
       if (!this.match(TokenType.ARROW)) {
         throw new ParseError("Expected '=>' in function type", this.peek().span);
       }
@@ -2274,9 +2274,6 @@ export class Parser {
             ? { kind: "Identifier", name: fieldToken.value, span: fieldToken.span }
             : this.parseIdentifier();
           const optional = this.match(TokenType.QUESTION);
-          if (optional && !this.allowOptionalRecordFields) {
-            throw new ParseError("Optional record fields are supported only on direct function parameters", fName.span);
-          }
           this.consume(TokenType.COLON, "Expected ':' after field name");
           const fType = this.parseTypeNode();
           const defaultValue = this.match(TokenType.EQ) ? this.parseExpression() : undefined;

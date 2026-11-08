@@ -74,4 +74,54 @@ ts {
     expect(wrong.success).toBe(false);
     expect(wrong.formattedOutput).toMatch(/not assignable to type 'string'/);
   });
+
+  it("supports optional properties and parameters in type emission for consumer interop", async () => {
+    const source = `
+import type { ReactNode } from "react"
+export Header = (props: { className?: String, children?: ReactNode }) =>
+  => <div className="header" />
+
+ts {
+  type RankingOrder = "asc" | "desc";
+}
+export sortCountries = (order?: RankingOrder) =>
+  match order
+    | Some(o) => o
+    | None => "asc"
+
+export customSorter: (order?: RankingOrder) => String = sortCountries
+export config: { className?: String } = { className: "custom" }
+export View = (config?: { className?: String }) =>
+  match config
+    | Some(c) => c.className
+    | None => "default"
+
+export Button = (props: { label: String, className?: String, onClick?: () => Void }) =>
+  => <button className="btn">{props.label}</button>
+
+ts {
+  import React from "react";
+  const el1 = React.createElement(Header);
+  const el2 = React.createElement(Header, {});
+  const el3 = React.createElement(Header, { className: "custom" });
+  const btn1 = React.createElement(Button, { label: "Submit" });
+  const btn2 = React.createElement(Button, { label: "Submit", className: "primary" });
+  const s1: string = sortCountries();
+  const s2: string = sortCountries("desc");
+  const s3: string = customSorter();
+  const v1: string | undefined = View();
+  const v2: string | undefined = View({ className: "light" });
+}
+`;
+    const checked = await typeCheck(source, "header.funx", {
+      compilerOptions: { rootDir: process.cwd(), jsx: 1, types: ["react"], lib: ["lib.es2022.d.ts", "lib.dom.d.ts"] },
+    });
+    expect(checked.success, checked.formattedOutput).toBe(true);
+
+    const compiled = await compile(source, "header.funx");
+    expect(compiled.typescript).toContain("className?:");
+    expect(compiled.typescript).toContain("children?:");
+    expect(compiled.typescript).toContain("onClick?:");
+    expect(compiled.typescript).toContain("customSorter: (order?: RankingOrder) => string");
+  });
 });

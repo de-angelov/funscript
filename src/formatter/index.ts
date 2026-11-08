@@ -1040,7 +1040,7 @@ export class Formatter {
       case "FunctionTypeNode": {
         const params = node.params.map(p => {
           const typeStr = p.typeAnnotation ? this.formatType(p.typeAnnotation, indent) : "Unknown";
-          return p.name ? `${p.name.name}: ${typeStr}` : typeStr;
+          return p.name ? `${p.name.name}${p.optional ? "?" : ""}: ${typeStr}` : typeStr;
         }).join(", ");
         return `${this.formatTypeParameters(node.typeParams)}(${params}) => ${this.formatType(node.returnType, indent)}`;
       }

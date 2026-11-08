@@ -204,7 +204,8 @@ describe("optional fields in inline parameter records", () => {
     expect((await compile(source)).typescript).toContain('readonly label?: string');
     await expectCompileError('export leak = (props: { label?: String }) => props', /cannot be passed, returned, aliased, or indexed/);
     await expectCompileError('export leak = (props: { label?: String }) => props["label"]', /cannot be passed, returned, aliased, or indexed/);
-    await expectCompileError('export x: { label?: String } = { label: "x" }', /only on direct function parameters/);
+    expect((await compile('export x: { label?: String } = { label: "x" }')).typescript).toContain('readonly label?: string');
+    await expectCompileError('export x: { label: String = "x" } = { label: "x" }', /only on direct function parameters/);
     await expectCompileError('export js f = (props: { label?: String }) => props.label', /not yet supported on js entry bindings/);
     await expectCompileError('export js f = (props: { label: String = "guest" }) => props.label', /not yet supported on js entry bindings/);
     await expectCompileError('export f = (props: { label: String = props.label }) => props.label', /cannot reference function parameters/);
