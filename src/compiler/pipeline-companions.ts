@@ -240,6 +240,17 @@ export function inferPipelineCompanions(
     let currentType = checker.getTypeAtLocation(sourceNode.arguments[1]);
     let currentCompanion = companionForType(currentType);
 
+    // Schema constructors such as Schema.String are values whose inferred
+    // TypeScript type is the decoded value (string), not the schema module.
+    // Preserve the syntactic proof so schema combinators can resolve.
+    if (
+      s0.kind === "MemberExpression" &&
+      s0.object.kind === "UpperIdentifier" &&
+      s0.object.name === "Schema"
+    ) {
+      currentCompanion = "Schema";
+    }
+
     if (!currentCompanion && ts.isCallExpression(sourceNode.parent)) {
       for (const stage of sourceNode.parent.arguments.slice(1)) {
         if (
@@ -308,6 +319,10 @@ export function inferPipelineCompanions(
       }
 
       if (!fnName) continue;
+
+      // `js` is a language pipeline operator handled directly by the emitter;
+      // its input is intentionally a Promise, not a companion operation.
+      if (fnName === "js") continue;
 
       // 1. Comparison operations (lessThan, greaterThan, between, etc.)
       if (fnName in COMPARISON_METHOD_MAP) {
