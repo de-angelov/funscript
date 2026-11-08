@@ -547,7 +547,7 @@ numbers = [1, 2, 3, 4]
 
 squares =
   numbers
-  |> Array.filter((n) => n > 0)
+  |> Array.filter((n) => n |> Number.greaterThan(0))
   |> Array.map((n) => n * n)
 ```
 
@@ -568,7 +568,7 @@ const numbers = [1, 2, 3, 4];
 
 const squares = pipe(
   numbers,
-  Array.filter((n) => n > 0),
+  Array.filter((n) => Number.greaterThan(n, 0)),
   Array.map((n) => n * n),
 );
 ```
@@ -660,7 +660,7 @@ export area = (shape: Shape) =>
 
 export describe = (shape: Shape) =>
   match shape
-    | Circle(r) when r > 10 => "large circle ({r})"
+    | Circle(r) when r |> Number.greaterThan(10) => "large circle ({r})"
     | Circle(r) => "circle ({r})"
     | Rect(w, h) => "rectangle {w}x{h}"
 ```
@@ -676,7 +676,7 @@ export const describe = (shape: Shape) =>
   match(shape)
     .with(
       { _tag: "Circle" },
-      ({ radius: r }) => r > 10,
+      ({ radius: r }) => Number.greaterThan(r, 10),
       ({ radius: r }) => `large circle (${r})`,
     )
     .with({ _tag: "Circle" }, ({ radius: r }) => `circle (${r})`)
@@ -1112,7 +1112,7 @@ matching (`match value`) and boolean conditionals (subjectless `match`). There a
 Inline two-branch form:
 
 ```funscript
-label = match | n > 0 => "positive" | _ => "negative"
+label = match | n |> Number.greaterThan(0) => "positive" | _ => "negative"
 ```
 
 Multi-branch block form:
@@ -1120,7 +1120,7 @@ Multi-branch block form:
 ```funscript
 label =
   match
-    | n > 0 => "positive"
+    | n |> Number.greaterThan(0) => "positive"
     | n == 0 => "zero"
     | _ => "negative"
 ```
@@ -1142,7 +1142,7 @@ There are no loops and no comprehensions. There is one way per domain:
 ```funscript
 squares =
   numbers
-  |> Array.filter((n) => n > 0)
+  |> Array.filter((n) => n |> Number.greaterThan(0))
   |> Array.map((n) => n * n)
 
 effect {

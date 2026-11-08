@@ -34,8 +34,8 @@ The design rule is simple:
 | Array                        | `[1, 2, 3]`                                                                                      |
 | Iteration                    | `xs \|> filter((x) => ...)` (auto-resolves `Array.filter`)                                       |
 | Match (value)                | `match shape` newline `\| Circle(r) => ...`                                                      |
-| Match (boolean / cond)       | `match` newline `\| n > 0 => "pos"` newline `\| _ => "neg"`                                      |
-| Match (inline)               | `match \| n > 0 => "pos" \| _ => "neg"`                                                          |
+| Match (boolean / cond)       | `match` newline `\| n |> Number.greaterThan(0) => "pos"` newline `\| _ => "neg"`                 |
+| Match (inline)               | `match \| n |> Number.greaterThan(0) => "pos" \| _ => "neg"`                                     |
 | Or-pattern                   | `\| Admin \| Owner => "elevated"`                                                                |
 | Tagged union schema          | `schema Shape =` newline `\| Circle(radius: Number)`                                             |
 | Record schema                | `schema User = { id: UUID, name: NonEmptyString, role: String = "member", bio: Option<String> }` |
@@ -542,7 +542,7 @@ function or block. A return type can precede a braced body:
 
 ```funscript
 absolute = (value: Number) => Number {
-  when (value < 0) => -value
+  when (value |> Number.lessThan(0)) => -value
   => value
 }
 ```
@@ -596,7 +596,7 @@ From lowest to highest:
 | 2     | `or`                     | logical or                                                                          |
 | 3     | `and`                    | logical and                                                                         |
 | 4     | `??`                     | nullish coalescing                                                                  |
-| 5     | `==`, `!=`, `===`, `!==` | value equality and reference identity; relational operators also compare primitives |
+| 5     | `==`, `!=`, `===`, `!==` | value equality and reference identity                                               |
 | 6     | `+`, `-`                 | additive                                                                            |
 | 7     | `*`, `/`, `%`            | multiplicative                                                                      |
 | 8     | `**`                     | exponent, right-associative                                                         |
@@ -616,13 +616,14 @@ a == b   # value equality
 a != b   # value inequality
 ```
 
-#### Comparisons
+#### Ordering comparisons
 
-Use `<`, `<=`, `>`, and `>=` for primitive comparisons. Effect companion functions
-support pipelines and comparisons on `BigDecimal`, `DateTime`, and `Duration`:
+Relational operators (`<`, `<=`, `>`, `>=`) are not part of FunScript. Use the
+comparison functions for the value's Effect module; use the direct form in nested
+expressions and the data-last form in pipelines:
 
 ```funscript
-# Numbers (using Effect's Number module)
+# Numbers
 isValid = score |> Number.greaterThanOrEqualTo(0)
 isPass = Number.greaterThan(score, 50)
 
@@ -678,7 +679,7 @@ it appears.
 Use `match` (inline or indented block):
 
 ```funscript
-label = match | n > 0 => "positive" | _ => "negative"
+label = match | n |> Number.greaterThan(0) => "positive" | _ => "negative"
 ```
 
 There is one conditional and branching form (`match`) to read, format, and teach.
@@ -932,14 +933,14 @@ There is no loop syntax. There is no comprehension syntax. There is one way per 
 ```funscript
 squares =
   numbers
-  |> Array.filter((n) => n > 0)
+  |> Array.filter((n) => n |> Number.greaterThan(0))
   |> Array.map((n) => n * n)
 ```
 
 ```ts
 const squares = pipe(
   numbers,
-  Array.filter((n) => n > 0),
+  Array.filter((n) => Number.greaterThan(n, 0)),
   Array.map((n) => n * n),
 );
 ```
@@ -978,7 +979,7 @@ and `| _ =>` is the fallback (`else`) branch:
 Inline two-branch form:
 
 ```funscript
-label = match | n > 0 => "positive" | _ => "negative"
+label = match | n |> Number.greaterThan(0) => "positive" | _ => "negative"
 ```
 
 Multi-branch block form:
@@ -986,7 +987,7 @@ Multi-branch block form:
 ```funscript
 label =
   match
-    | n > 0 => "positive"
+    | n |> Number.greaterThan(0) => "positive"
     | n == 0 => "zero"
     | _ => "negative"
 ```
@@ -1010,7 +1011,7 @@ Lowering of subjectless `match` (zero `ts-pattern` runtime overhead):
 - In pure expression position with single-expression arms, subjectless `match` compiles
   directly to a JavaScript conditional expression:
   ```ts
-  const label = n > 0 ? "positive" : n === 0 ? "zero" : "negative";
+  const label = Number.greaterThan(n, 0) ? "positive" : n === 0 ? "zero" : "negative";
   ```
 - In statement position, inside an `effect` block, or when an arm has a multi-statement
   block or mutates a local `mut` binding (`=`), subjectless `match` compiles directly to
@@ -1051,7 +1052,7 @@ Rules:
 ```funscript
 export describe = (shape: Shape) =>
   match shape
-    | Circle(r) when r > 10 => "large circle ({r})"
+    | Circle(r) when r |> Number.greaterThan(10) => "large circle ({r})"
     | Circle(r) => "circle ({r})"
     | Rect(w, h) => "rectangle {w}x{h}"
 ```
@@ -1061,7 +1062,7 @@ export const describe = (shape: Shape) =>
   match(shape)
     .with(
       { _tag: "Circle" },
-      ({ radius: r }) => r > 10,
+      ({ radius: r }) => Number.greaterThan(r, 10),
       ({ radius: r }) => `large circle (${r})`,
     )
     .with({ _tag: "Circle" }, ({ radius: r }) => `circle (${r})`)
@@ -2171,8 +2172,7 @@ mutStage       = "mut" "(" identifier ")" "=>" ( expression | block ) ;
 logicalOr      = logicalAnd { "or" logicalAnd } ;
 logicalAnd     = nullish { "and" nullish } ;
 nullish        = equality { "??" equality } ;
-equality       = comparison { ( "==" | "!=" | "===" | "!==" ) comparison } ;
-comparison     = additive { ( "<" | "<=" | ">" | ">=" ) additive } ;
+equality       = additive { ( "==" | "!=" | "===" | "!==" ) additive } ;
 additive       = multiplicative { ( "+" | "-" ) multiplicative } ;
 multiplicative = exponent { ( "*" | "/" | "%" ) exponent } ;
 exponent       = unary [ "**" exponent ] ;
@@ -2214,7 +2214,8 @@ matchArm       = "|" orPattern [ "when" expression ] "=>" ( expression | block )
 condArm        = "|" ( "_" | expression ) "=>" ( expression | block ) ;
 orPattern      = pattern { "|" pattern } ;
 
-effectExpr     = "effect" INDENT { effectStatement } DEDENT ;
+effectExpr     = "effect" bracedBlock
+               | "effect" INDENT { effectStatement } DEDENT ;
 effectStatement = binding
                 | mutBinding
                 | assignStmt

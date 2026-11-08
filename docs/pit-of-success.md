@@ -37,7 +37,7 @@ flagged by `funscript check`, not left as style advice.
 | Typed errors                           | `error`                                                                                         | error classes written by hand                                    |
 | Primitive numbers                      | `Number`, refined with `Int` / `Float` / `Decimal` when needed                                  | unchecked external numeric input                                 |
 | Nullable values                        | `Option`                                                                                        | `null`, `undefined`, `any`                                       |
-| Equality & comparisons                 | value `==` / `!=`, reference `===` / `!==`; primitive comparisons or Effect companion functions | coercing equality                                                |
+| Equality & ordering                    | value `==` / `!=`, reference `===` / `!==`; typed Effect comparison functions only             | coercing equality and relational operators                       |
 | Booleans                               | `and` / `or` / `not`                                                                            | `&&`, `                                                          |     | `, `!` |
 | Runtime reflection                     | `Schema.is(MyType)` / `match`                                                                   | `typeof`, `instanceof`, `eval`                                   |
 | Functions                              | `=>` lambda (implicit final expression)                                                         | `function`, `return`, method shorthand                           |

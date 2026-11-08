@@ -133,11 +133,10 @@ logical_or_expr      = logical_and_expr, { "or", logical_and_expr } ;
 logical_and_expr     = equality_expr, { "and", equality_expr } ;
 
 (* Level 4: Nullish Coalescing ?? *)
-equality_expr        = relational_expr, { "??", relational_expr } ;
+equality_expr        = equality_operator_expr, { "??", equality_operator_expr } ;
 
-(* Level 5: Equality == / != *)
-relational_expr      = comparison_expr, { ( "==" | "!=" | "===" | "!==" ), comparison_expr } ;
-comparison_expr      = additive_expr, { ( "<" | "<=" | ">" | ">=" ), additive_expr } ;
+(* Level 5: Equality == / !=; ordering uses typed Effect functions *)
+equality_operator_expr = additive_expr, { ( "==" | "!=" | "===" | "!==" ), additive_expr } ;
 
 (* Level 6: Additive + / - *)
 additive_expr        = multiplicative_expr, { ( "+" | "-" ), multiplicative_expr } ;
@@ -253,7 +252,9 @@ array_pattern        = "[", [ pattern_list ], "]" ;
 (* 6. Effect Blocks                                                          *)
 (* ========================================================================= *)
 
-effect_block         = "effect", NEWLINE, INDENT, effect_body, DEDENT ;
+effect_block         = "effect", braced_effect_body
+                     | "effect", NEWLINE, INDENT, effect_body, DEDENT ;
+braced_effect_body   = "{", { NEWLINE }, effect_body, { NEWLINE }, "}" ;
 effect_body          = { effect_statement, NEWLINE }, expression ;
 
 effect_statement     = effect_bind

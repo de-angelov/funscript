@@ -1,5 +1,8 @@
 # FunScript Dogfooding Report: Applications, Edge Cases & Ergonomics
 
+**Status:** Historical report. Its edge cases describe the compiler at the time of
+testing; accepted language decisions are recorded in the current syntax and design docs.
+
 ## 1. Executive Summary
 
 This dogfooding exercise stress-tested FunScript across realistic, non-trivial applications spanning backend API consumption, CLI state management with copy-on-write drafts, and reactive UI component authoring in `.funx`.
@@ -77,9 +80,9 @@ In addition to building and executing these applications, extensive stress testi
   when (x > 0) => "positive"
   ```
 - **Parser Error**: `Expected ')' after when condition (got '>', expected ))`.
-- **Root Cause**: In `src/parser/parser.ts`, `parseEquality` directly calls `parseAdditive`. Relational operators (`<`, `>`, `<=`, `>=`) are never checked in the binary expression precedence chain because `<` was reserved for generics and JSX tags.
+- **Root Cause**: At the time of this report, `parseEquality` called `parseAdditive` directly, so relational operators were not parsed.
 - **Current Workaround**: Developers must call `x |> greaterThan(0)` or `Number.lessThanOrEqualTo(0)`.
-- **Recommendation**: Add `parseRelational` between `parseEquality` and `parseAdditive`, disambiguating `<` as an operator when not in type argument or JSX tag opening position.
+- **Recommendation (superseded)**: Do not add relational operators. The accepted design keeps them out of FunScript and uses typed Effect comparison functions; see `docs/design-effect-comparison-functions.md`.
 
 ---
 
@@ -205,7 +208,7 @@ In addition to building and executing these applications, extensive stress testi
 
 ### 4.2 What Causes Friction
 
-- **Absence of Binary `<` and `>`**: Having to write `Number.greaterThan(50)` or `n |> lessThanOrEqualTo(0)` for simple arithmetic comparisons is surprising and cumbersome.
+- **Typed comparisons (closed design question)**: Dogfooding feedback found comparison functions more verbose for primitive numbers. The accepted language design keeps relational operators out of FunScript so ordering semantics stay explicit across numeric and domain types; use `Number.greaterThan(50)` or `n |> Number.lessThanOrEqualTo(0)`.
 - **Lack of Dot-Path Assignment in `mut`**: Mutative's primary value proposition is drafting with standard JavaScript mutation syntax (`draft.items[i].done = true`). Having to fall back to `draft.splice` inside `mut` diminishes ergonomics.
 - **Manual Error Constructors**: Because `export error` requires `new` in TypeScript, developers cannot simply write `Effect.fail(MyError(code, msg))` without a `ts` bridge.
 - **Header Import Conflicts in `funscript check`**: Having to carefully avoid importing `Effect` or `Schema` if the emitter also emits them creates unnecessary cognitive load.
@@ -214,7 +217,7 @@ In addition to building and executing these applications, extensive stress testi
 
 ## 5. Concrete Recommendations & Next Steps
 
-1. **Implement Relational Operators (`<`, `>`, `<=`, `>=`)**: Introduce `parseRelational` with grammar disambiguation so standard numeric and date comparisons can be written directly in expressions and `when` conditions.
+1. **Keep relational operators rejected**: The earlier dogfooding proposal to add `<`, `>`, `<=`, and `>=` was superseded by the accepted typed-comparison design. Use the corresponding Effect comparison functions.
 2. **Support `when` in `effect` Blocks**: Update `parseEffectBlock` to support `WhenStatement`, allowing early returns and conditional checks directly within effect workflows.
 3. **Enhance Record Schema Equality**: Emit `Data.struct(...)` for record schemas so that `==` evaluates structural equality recursively as specified in TECH.md.
 4. **Auto-Generate Factory Functions for Tagged Errors**: Emit `export const ErrorName = (fields) => new ErrorName$Class(fields)` for all `error` declarations.

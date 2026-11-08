@@ -77,9 +77,9 @@ match score
   but hide which ordering applies to non-primitive types and contradict the documented
   rejected-operator policy.
 
-## Approval choice
+## Decision
 
-Should implementation expose **both** `Type.lessThan(a, b)` direct calls and
-`a |> Type.lessThan(b)` data-last pipeline use, with one typed operation behind both
-forms? The recommendation is yes; approval of this choice is the sole design decision
-needed before implementation planning.
+Use both `Type.lessThan(a, b)` direct calls and `a |> Type.lessThan(b)` data-last
+pipeline use, backed by one typed operation. Relational operators (`<`, `<=`, `>`, `>=`)
+are not part of FunScript. This is the accepted language direction; the syntax reference,
+proposal, examples, and compiler must stay aligned with it.
