@@ -151,7 +151,6 @@ const NUMBER_COMPANION_METHODS = new Set([
   "lessThan",
   "lessThanOrEqualTo",
   "between",
-  "clamp",
   "increment",
   "decrement",
 ]);
@@ -188,6 +187,49 @@ const EFFECT_V4_MEMBER_RENAMES: Readonly<Record<string, string>> = {
 const STRING_COMPANION_METHODS = new Set(["trim", "trimStart", "trimEnd", "split", "lines", "toUpperCase", "toLowerCase"]);
 const RECORD_COMPANION_METHODS = new Set(["omit", "pick"]);
 const DURATION_COMPANION_METHODS = new Set(["seconds", "millis", "minutes", "hours", "days"]);
+
+export const ES_TOOLKIT_STRING_METHODS = new Set([
+  "slug",
+  "camelCase",
+  "snakeCase",
+  "kebabCase",
+  "pascalCase",
+  "constantCase",
+  "capitalize",
+  "lowerCase",
+  "upperCase",
+  "deburr",
+  "words",
+]);
+
+export const ES_TOOLKIT_MATH_DATA_LAST = new Set([
+  "clamp",
+  "round",
+  "inRange",
+]);
+
+export const ES_TOOLKIT_MATH_COLLECTION = new Set([
+  "sum",
+  "mean",
+  "median",
+]);
+
+export const ES_TOOLKIT_TIMING_DATA_LAST = new Set([
+  "debounce",
+  "throttle",
+]);
+
+export const ES_TOOLKIT_DATA_LAST_CALLS = new Set([
+  ...ES_TOOLKIT_MATH_DATA_LAST,
+  ...ES_TOOLKIT_TIMING_DATA_LAST,
+]);
+
+export const ES_TOOLKIT_METHODS = new Set([
+  ...ES_TOOLKIT_STRING_METHODS,
+  ...ES_TOOLKIT_MATH_DATA_LAST,
+  ...ES_TOOLKIT_MATH_COLLECTION,
+  ...ES_TOOLKIT_TIMING_DATA_LAST,
+]);
 
 export class PipelineResolutionError extends Error {
   constructor(message: string, readonly span: Expression["span"]) {
@@ -237,6 +279,8 @@ export class Emitter {
   private recordScopes: Array<Map<string, Map<string, RecordFieldInfo> | undefined>> = [];
   private userEffectBindings = new Set<string>();
   private effectModuleBindings = new Set<string>();
+  private userEsToolkitBindings = new Set<string>();
+  private esToolkitImports = new Set<string>();
   private needsTsPattern = false;
   private needsMutative = false;
   private needsReferenceEquality = false;
@@ -258,6 +302,9 @@ export class Emitter {
       const decl = item.kind === "ExportDeclaration" ? item.declaration : item;
       if (item.kind === "ImportDeclaration" && item.source.raw === '"effect"') {
         for (const spec of item.specifiers) this.userEffectBindings.add(spec.local.name);
+      }
+      if (item.kind === "ImportDeclaration" && item.source.raw === '"es-toolkit"') {
+        for (const spec of item.specifiers) this.userEsToolkitBindings.add(spec.local.name);
       }
       if (item.kind === "ImportDeclaration" && /^"effect(?:\/|\")/.test(item.source.raw)) {
         for (const spec of item.specifiers) this.effectModuleBindings.add(spec.local.name);
@@ -309,6 +356,13 @@ export class Emitter {
     if (generatedEffectImports.length > 0) {
       const sorted = generatedEffectImports.sort().join(", ");
       header += `import { ${sorted} } from "effect";\n`;
+    }
+    const generatedEsToolkitImports = Array.from(this.esToolkitImports)
+      .filter((name) => !this.userEsToolkitBindings.has(name))
+      .map((name) => (name === "slug" ? "kebabCase as slug" : name))
+      .sort((a, b) => a.localeCompare(b));
+    if (generatedEsToolkitImports.length > 0) {
+      header += `import { ${generatedEsToolkitImports.join(", ")} } from "es-toolkit";\n`;
     }
     if (this.needsTsPattern) {
       header += `import { match, P } from "ts-pattern";\n`;
@@ -940,6 +994,14 @@ export class Emitter {
       return `${callee}(${expr.args.map((a) => this.emitExpression(a)).join(", ")})`;
     }
 
+    if (
+      expr.callee.kind === "Identifier" &&
+      !this.bindings.has(expr.callee.name) &&
+      ES_TOOLKIT_METHODS.has(expr.callee.name)
+    ) {
+      this.esToolkitImports.add(expr.callee.name);
+    }
+
     return `${this.emitExpression(expr.callee)}(${expr.args.map((a) => this.emitExpression(a)).join(", ")})`;
   }
 
@@ -1139,6 +1201,19 @@ export class Emitter {
           },
         };
       }
+      if (!this.bindings.has(name) && ES_TOOLKIT_METHODS.has(name)) {
+        this.esToolkitImports.add(name);
+        if (stage.args.length === 0) {
+          return stage.callee;
+        }
+        if (ES_TOOLKIT_DATA_LAST_CALLS.has(name) && !this.hasPlaceholder(stage)) {
+          return {
+            ...stage,
+            args: [{ kind: "Placeholder", span: stage.span }, ...stage.args],
+          };
+        }
+        return stage;
+      }
     }
 
     // 1b. CallExpression with MemberExpression companion call: Array.map(f), Option.getOrElse(f), etc.
@@ -1146,6 +1221,24 @@ export class Emitter {
       const obj = stage.callee.object;
       const prop = stage.callee.property;
       if (obj.kind === "UpperIdentifier") {
+        if (obj.name === "Math" && ES_TOOLKIT_MATH_DATA_LAST.has(prop.name)) {
+          this.esToolkitImports.add(prop.name);
+          if (stage.args.length === 0) {
+            return prop;
+          }
+          if (!this.hasPlaceholder(stage)) {
+            return {
+              ...stage,
+              callee: prop,
+              args: [{ kind: "Placeholder", span: stage.span }, ...stage.args],
+            };
+          }
+          return { ...stage, callee: prop };
+        }
+        if (obj.name === "String" && ES_TOOLKIT_STRING_METHODS.has(prop.name)) {
+          this.esToolkitImports.add(prop.name);
+          return stage.args.length === 0 ? prop : { ...stage, callee: prop };
+        }
         const companion = obj.name as CompanionModule;
         if (this.isCompanionOperation(companion, prop.name)) {
           this.effectImports.add(companion);
@@ -1185,6 +1278,25 @@ export class Emitter {
           property: { ...stage, name: name === "lines" ? "linesIterator" : name },
           span: stage.span,
         };
+      }
+      if (!this.bindings.has(name) && ES_TOOLKIT_METHODS.has(name)) {
+        this.esToolkitImports.add(name);
+        return stage;
+      }
+    }
+
+    // 2b. Bare MemberExpression in pipeline: String.camelCase, Math.round, etc.
+    if (stage.kind === "MemberExpression" && stage.object.kind === "UpperIdentifier") {
+      if (stage.object.name === "String" && ES_TOOLKIT_STRING_METHODS.has(stage.property.name)) {
+        this.esToolkitImports.add(stage.property.name);
+        return stage.property;
+      }
+      if (
+        stage.object.name === "Math" &&
+        (ES_TOOLKIT_MATH_DATA_LAST.has(stage.property.name) || ES_TOOLKIT_MATH_COLLECTION.has(stage.property.name))
+      ) {
+        this.esToolkitImports.add(stage.property.name);
+        return stage.property;
       }
     }
 

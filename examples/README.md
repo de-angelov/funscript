@@ -20,6 +20,7 @@ examples/
 │   ├── js-ts-interop.fun         # TypeScript type escapes, foreign Promise interop, fibers
 │   ├── markdown-task-manager.fun # Mutative draft updates, `when` early returns, file I/O
 │   ├── order-fulfillment.fun     # Full e-commerce workflow: concurrency, retry, fibers, ts-pattern
+│   ├── pipeline-helpers.fun      # es-toolkit helpers: string slug/casing, math clamp/round, timing
 │   ├── shapes.fun                # Tagged-union `schema`, guards, exhaustive `match`
 │   ├── todo-http.fun             # HTTP service simulation, effect blocks, retry, layers
 │   ├── todo-service.fun          # In-memory todo repository service and layer injection
@@ -56,6 +57,7 @@ examples/
 | `js-ts-interop.fun` | Raw TypeScript type escapes (`ts { ... }`), foreign JS Promise lifting (`js promiseFn`), async Effect fibers |
 | `markdown-task-manager.fun` | CLI state management using Mutative copy-on-write `draft` blocks, `when` early returns, conditional execution, Effect file I/O |
 | `order-fulfillment.fun` | End-to-end e-commerce showcase combining Effect concurrency (`Effect.all`), retry schedules, fiber forking, ts-pattern matching, and Mutative drafts |
+| `pipeline-helpers.fun` | Pipeline data-last helpers powered by `es-toolkit`: string utilities (`slug`, `camelCase`, `snakeCase`), math operations (`clamp`, `round`), and timing helpers |
 | `reactive-widget.funx` | Native `.funx` JSX component emitting `.tsx`, typed props, tagged union view states, template literals in attributes (`className="btn-${variant}"`) |
 | `shapes.fun` | Canonical showcase: Tagged-union `schema` definitions (`Circle`, `Rect`, `Point`), guard conditions, exhaustive `match` expressions |
 | `solid-demo/` | Multi-file Solid.js framework integration showing how compiled FunScript modules interoperate seamlessly with modern TypeScript ecosystems |
