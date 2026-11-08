@@ -6,6 +6,7 @@ import { Effect } from "effect";
 import { TraceMap, originalPositionFor } from "@jridgewell/trace-mapping";
 import { codeFrameColumns } from "@babel/code-frame";
 import { compileString, CompilerError } from "../compiler.js";
+import { TS_RESET_DECLARATION, JSX_INTRINSICS_DECLARATION } from "./typescript-context.js";
 
 export type DiagnosticCategory = "error" | "warning" | "suggestion" | "message";
 
@@ -383,19 +384,11 @@ export const typeCheckVirtualFiles = (
       );
       if (hasTsx && !hasJsxIntrinsicTypes) {
         const jsxTypesPath = path.join(cwd, "__funscript_jsx_intrinsics__.d.ts");
-        virtualTsFiles.set(
-          jsxTypesPath,
-          "declare namespace JSX { interface IntrinsicElements { [element: string]: any } }",
-        );
+        virtualTsFiles.set(jsxTypesPath, JSX_INTRINSICS_DECLARATION);
       }
 
       const resetPath = path.join(cwd, "__funscript_ts_reset__.d.ts");
-      virtualTsFiles.set(
-        resetPath,
-        '/// <reference types="@total-typescript/ts-reset" />\n' +
-        'interface JSON { parse(text: string, reviver?: (this: any, key: string, value: any) => any): unknown; }\n' +
-        'interface Body { json(): Promise<unknown>; }\n',
-      );
+      virtualTsFiles.set(resetPath, TS_RESET_DECLARATION);
 
       const defaultHost = ts.createCompilerHost(compilerOptions);
 

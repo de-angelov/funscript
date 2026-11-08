@@ -1,4 +1,13 @@
 import ts from "typescript";
+import path from "node:path";
+
+export const TS_RESET_DECLARATION =
+  '/// <reference types="@total-typescript/ts-reset" />\n' +
+  'interface JSON { parse(text: string, reviver?: (this: any, key: string, value: any) => any): unknown; }\n' +
+  'interface Body { json(): Promise<unknown>; }\n';
+
+export const JSX_INTRINSICS_DECLARATION =
+  'declare namespace JSX { interface IntrinsicElements { [element: string]: any } }';
 
 /** Reuses the host, library files and previous program throughout one compilation. */
 export class TypeScriptCompilationContext {
@@ -8,36 +17,102 @@ export class TypeScriptCompilationContext {
   };
   private readonly virtualFile: string;
   private readonly normalized: string;
+  private readonly resetFile: string;
+  private readonly normalizedReset: string;
+  private readonly jsxFile: string;
+  private readonly normalizedJsx: string;
+  private readonly isJsx: boolean;
   private readonly host: ts.CompilerHost;
   private source = "";
   private program?: ts.Program;
 
   constructor(filename: string) {
     this.virtualFile = filename.endsWith(".funx") ? filename.slice(0, -5) + ".tsx"
-      : filename.endsWith(".fun") ? filename.slice(0, -4) + ".ts" : filename + ".ts";
+      : filename.endsWith(".fun") ? filename.slice(0, -4) + ".ts" : filename.endsWith(".ts") || filename.endsWith(".tsx") ? filename : filename + ".ts";
     this.normalized = ts.sys.resolvePath(this.virtualFile);
+    this.isJsx = this.virtualFile.endsWith(".tsx") || filename.endsWith(".funx");
+
+    const cwd = process.cwd();
+    this.resetFile = path.resolve(cwd, "__funscript_ts_reset__.d.ts");
+    this.normalizedReset = ts.sys.resolvePath(this.resetFile);
+    this.jsxFile = path.resolve(cwd, "__funscript_jsx_intrinsics__.d.ts");
+    this.normalizedJsx = ts.sys.resolvePath(this.jsxFile);
+
+    const resolveVirtualContent = (name: string): string | undefined => {
+      const norm = ts.sys.resolvePath(name);
+      if (norm === this.normalized || name === this.virtualFile) {
+        return this.source;
+      }
+      if (
+        norm === this.normalizedReset ||
+        name === this.resetFile ||
+        path.basename(name) === "__funscript_ts_reset__.d.ts"
+      ) {
+        return TS_RESET_DECLARATION;
+      }
+      if (
+        norm === this.normalizedJsx ||
+        name === this.jsxFile ||
+        path.basename(name) === "__funscript_jsx_intrinsics__.d.ts"
+      ) {
+        return JSX_INTRINSICS_DECLARATION;
+      }
+      return undefined;
+    };
+
     const host = ts.createCompilerHost(this.options, true);
     const getSourceFile = host.getSourceFile.bind(host);
     const sourceFiles = new Map<string, ts.SourceFile>();
     const readFile = host.readFile.bind(host);
     const fileExists = host.fileExists.bind(host);
+
     host.getSourceFile = (name, version, onError, shouldCreateNewSourceFile) => {
-      const key = ts.sys.resolvePath(name);
-      if (key === this.normalized) return ts.createSourceFile(name, this.source, version, true);
-      const cached = sourceFiles.get(key);
+      const norm = ts.sys.resolvePath(name);
+      if (norm === this.normalized || name === this.virtualFile) {
+        return ts.createSourceFile(name, this.source, version, true);
+      }
+      const content = resolveVirtualContent(name);
+      if (content !== undefined) {
+        const cached = sourceFiles.get(norm);
+        if (cached && !shouldCreateNewSourceFile) return cached;
+        const sf = ts.createSourceFile(name, content, version, true);
+        sourceFiles.set(norm, sf);
+        return sf;
+      }
+      const cached = sourceFiles.get(norm);
       if (cached && !shouldCreateNewSourceFile) return cached;
       const file = getSourceFile(name, version, onError, shouldCreateNewSourceFile);
-      if (file) sourceFiles.set(key, file);
+      if (file) sourceFiles.set(norm, file);
       return file;
     };
-    host.readFile = (name) => ts.sys.resolvePath(name) === this.normalized ? this.source : readFile(name);
-    host.fileExists = (name) => ts.sys.resolvePath(name) === this.normalized || fileExists(name);
+
+    host.readFile = (name) => {
+      const content = resolveVirtualContent(name);
+      return content !== undefined ? content : readFile(name);
+    };
+
+    host.fileExists = (name) => {
+      return resolveVirtualContent(name) !== undefined || fileExists(name);
+    };
+
     this.host = host;
   }
 
   check(source: string): { sourceFile: ts.SourceFile; checker: ts.TypeChecker; program: ts.Program } | undefined {
     this.source = source;
-    this.program = ts.createProgram({ rootNames: [this.virtualFile], options: this.options, host: this.host, oldProgram: this.program });
+    const rootNames: string[] = [this.virtualFile, this.resetFile];
+    if (this.isJsx) {
+      const hasJsxIntrinsicTypes = /namespace\s+JSX[\s\S]*?IntrinsicElements/.test(this.source);
+      if (!hasJsxIntrinsicTypes) {
+        rootNames.push(this.jsxFile);
+      }
+    }
+    this.program = ts.createProgram({
+      rootNames,
+      options: this.options,
+      host: this.host,
+      oldProgram: this.program,
+    });
     const sourceFile = this.program.getSourceFile(this.normalized) ?? this.program.getSourceFile(this.virtualFile);
     return sourceFile ? { sourceFile, checker: this.program.getTypeChecker(), program: this.program } : undefined;
   }

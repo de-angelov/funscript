@@ -4,6 +4,7 @@ import path from "node:path";
 import { Effect } from "effect";
 import { FunScriptLspServer } from "../src/lsp/server.js";
 import { typeCheckVirtualFiles, createTypeCheckCache } from "../src/compiler/check.js";
+import { TypeScriptCompilationContext } from "../src/compiler/typescript-context.js";
 
 describe("LSP TypeScript diagnostics", () => {
   it("maps generic constraint errors to FunScript and clears them after an edit", async () => {
@@ -78,5 +79,66 @@ export bad = connect(() => "bad")`;
 
     expect(secondResult.success, secondResult.formattedOutput).toBe(true);
     expect(warmDuration).toBeLessThan(coldDuration);
+  });
+
+  it("verifies TypeScriptCompilationContext loads ts-reset and types JSON.parse as unknown", () => {
+    const context = new TypeScriptCompilationContext("test-reset.fun");
+    const result = context.check('export const parsed = JSON.parse("[]"); export const bad = parsed.foo;');
+    expect(result).toBeDefined();
+    const sourceFiles = result!.program.getSourceFiles().map((sf) => sf.fileName);
+    expect(sourceFiles.some((name) => name.includes("__funscript_ts_reset__.d.ts"))).toBe(true);
+    const stmt = result!.sourceFile.statements[0] as any;
+    const type = result!.checker.getTypeAtLocation(stmt.declarationList.declarations[0].name);
+    expect(result!.checker.typeToString(type)).toBe("unknown");
+  });
+
+  it("verifies TypeScriptCompilationContext loads JSX intrinsics when compiling/checking .funx files", () => {
+    const context = new TypeScriptCompilationContext("test-widget.funx");
+    const result = context.check('export const View = () => <div className="container"><span>Hello</span></div>;');
+    expect(result).toBeDefined();
+    const sourceFiles = result!.program.getSourceFiles().map((sf) => sf.fileName);
+    expect(sourceFiles.some((name) => name.includes("__funscript_jsx_intrinsics__.d.ts"))).toBe(true);
+    expect(sourceFiles.some((name) => name.includes("__funscript_ts_reset__.d.ts"))).toBe(true);
+    const diags = result!.program.getSemanticDiagnostics(result!.sourceFile);
+    expect(diags).toHaveLength(0);
+  });
+
+  it("verifies JSON.parse returns unknown rather than any in LSP diagnostics", async () => {
+    const server = new FunScriptLspServer();
+    const uri = pathToFileURL(path.resolve("lsp-json-parse.fun")).href;
+    const events: any[] = [];
+    server.on("diagnostics", (event) => events.push(event));
+    const source = `export parsed = JSON.parse("[]")\nexport bad = parsed.foo`;
+    try {
+      server.onDidOpenHandler({ textDocument: { uri, languageId: "funscript", version: 1, text: source } });
+      await vi.waitFor(() => {
+        const diagnostic = events
+          .flatMap((event) => event.diagnostics)
+          .find((d: any) => d.message.includes("'parsed' is of type 'unknown'") || String(d.code) === "18046");
+        expect(diagnostic).toBeDefined();
+        expect(diagnostic.message).toContain("unknown");
+      }, { timeout: 10000 });
+    } finally {
+      server.dispose();
+    }
+  });
+
+  it("resolves JSX elements cleanly in .funx files in LSP diagnostics without errors", async () => {
+    const server = new FunScriptLspServer();
+    const uri = pathToFileURL(path.resolve("lsp-clean-jsx.funx")).href;
+    const events: any[] = [];
+    server.on("diagnostics", (event) => events.push(event));
+    const source = `export View = () => <div className="container"><span>Hello FunScript</span></div>`;
+    try {
+      server.onDidOpenHandler({ textDocument: { uri, languageId: "funscriptx", version: 1, text: source } });
+      await vi.waitFor(() => {
+        const fileEvents = events.filter((e) => e.uri === uri);
+        expect(fileEvents.length).toBeGreaterThanOrEqual(1);
+        const diagnostics = fileEvents.flatMap((e) => e.diagnostics);
+        expect(diagnostics).toHaveLength(0);
+      }, { timeout: 10000 });
+    } finally {
+      server.dispose();
+    }
   });
 });
