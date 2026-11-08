@@ -5,6 +5,7 @@ import * as path from "node:path";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import { compileString } from "../src/compiler.js";
+import { checkFormat } from "../src/formatter/index.js";
 
 const execFileAsync = promisify(execFile);
 const cliPath = path.resolve("dist/cli/index.js");
@@ -20,6 +21,14 @@ describe("Sample Applications & Real-World Programs", () => {
         const res = await Effect.runPromise(compileString(source, examplePath));
 
         expect(res.typescript).toBeDefined();
+      });
+
+      it(`formats ${name} cleanly`, async () => {
+        const examplePath = path.join(examplesDir, name);
+        const source = await fs.readFile(examplePath, "utf-8");
+        const check = checkFormat(source, { filename: examplePath });
+
+        expect(check.isFormatted).toBe(true);
       });
     }
   });
