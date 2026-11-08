@@ -226,6 +226,7 @@ const EFFECT_BUILTIN_MODULES = new Set([
   "Record",
   "Duration",
   "Struct",
+  "Brand",
 ]);
 
 type RecordFieldInfo = { optional: boolean; defaultBinding?: string; fields?: Map<string, RecordFieldInfo> };
@@ -427,8 +428,29 @@ export class Emitter {
         return `${exp}const ${name} = Schema.Union([${members}]);\n${exp}type ${name} = typeof ${name}.Type;\n${exp}const ${name}FromUnknown = (input: unknown): ${name} => Schema.decodeUnknownSync(${name})(input);`;
       }
       case "RefinementSchema": {
+        const stages = this.flattenPipelineStages(decl.body.refinement);
+        const brands = this.extractBrandNames(stages);
+
+        if (brands.length > 0) {
+          this.effectImports.add("Schema");
+          this.effectImports.add("Brand");
+          const baseSchema = this.emitSchemaTypeField(decl.body.baseType);
+          const emittedStages = stages.map((s) => this.emitRefinementStage(s));
+
+          const baseTypeName =
+            decl.body.baseType.kind === "TypeReferenceNode" && decl.body.baseType.name.name === "Int"
+              ? "number"
+              : this.emitTypeNode(decl.body.baseType);
+
+          const brandTypeStr = brands.map((b) => `Brand.Brand<${JSON.stringify(b)}>`).join(" & ");
+          const typeDef = `${baseTypeName} & ${brandTypeStr}`;
+
+          return `${exp}const ${name} = ${baseSchema}.pipe(${emittedStages.join(", ")});\n${exp}type ${name} = ${typeDef};\n${exp}const ${name}FromUnknown = (input: unknown): ${name} => Schema.decodeUnknownSync(${name})(input);`;
+        }
+
         this.effectImports.add("pipe");
-        return `${exp}const ${name} = pipe(${this.emitSchemaTypeField(decl.body.baseType)}, ${this.emitExpression(decl.body.refinement)});\n${exp}type ${name} = typeof ${name}.Type;`;
+        this.effectImports.add("Schema");
+        return `${exp}const ${name} = pipe(${this.emitSchemaTypeField(decl.body.baseType)}, ${this.emitExpression(decl.body.refinement)});\n${exp}type ${name} = typeof ${name}.Type;\n${exp}const ${name}FromUnknown = (input: unknown): ${name} => Schema.decodeUnknownSync(${name})(input);`;
       }
       case "TypeSignatureSchema": {
         return `${exp}type ${name}${this.emitTypeParameters(decl.typeParams)} = ${this.emitTypeNode(decl.body.signature)};`;
@@ -496,6 +518,7 @@ export class Emitter {
       }
       if (PRIMITIVE_TYPES[tName] || tName === "Duration") return `Schema.${tName}`;
       if (tName === "UUID") return "Schema.UUID";
+      if (tName === "Int") return "Schema.Int";
       if (tName === "Option" && typeNode.typeArgs) {
         return `Schema.Option(${this.emitSchemaTypeField(typeNode.typeArgs[0])})`;
       }
@@ -508,6 +531,56 @@ export class Emitter {
       return tName;
     }
     return this.emitTypeNode(typeNode);
+  }
+
+  private flattenPipelineStages(expr: Expression): Expression[] {
+    if (expr.kind === "PipelineExpression") {
+      return [...this.flattenPipelineStages(expr.left), ...this.flattenPipelineStages(expr.right)];
+    }
+    return [expr];
+  }
+
+  private extractBrandNames(stages: Expression[]): string[] {
+    const brands: string[] = [];
+    for (const stage of stages) {
+      const b = this.getBrandNameFromStage(stage);
+      if (b) brands.push(b);
+    }
+    return brands;
+  }
+
+  private getBrandNameFromStage(stage: Expression): string | null {
+    if (stage.kind !== "CallExpression") return null;
+    const callee = stage.callee;
+    let isBrand = false;
+    if (
+      (callee.kind === "UpperIdentifier" || callee.kind === "Identifier") &&
+      callee.name === "Brand"
+    ) {
+      isBrand = true;
+    } else if (
+      callee.kind === "MemberExpression" &&
+      (callee.object.kind === "Identifier" || callee.object.kind === "UpperIdentifier") &&
+      (callee.object.name === "Schema" || callee.object.name === "Brand") &&
+      callee.property.name === "brand"
+    ) {
+      isBrand = true;
+    }
+    if (!isBrand || stage.args.length === 0) return null;
+    const first = stage.args[0];
+    if (first.kind === "StringLiteral") {
+      return first.parts.map((p) => (p.kind === "StringRawPart" ? p.value : "")).join("");
+    }
+    return null;
+  }
+
+  private emitRefinementStage(stage: Expression): string {
+    const brandName = this.getBrandNameFromStage(stage);
+    if (brandName !== null) {
+      this.effectImports.add("Schema");
+      return `Schema.brand(${JSON.stringify(brandName)})`;
+    }
+    return this.emitExpression(stage);
   }
 
   private emitErrorDeclaration(decl: ErrorDeclaration, isExport: boolean): string {
@@ -832,6 +905,14 @@ export class Emitter {
   }
 
   private emitCallExpression(expr: CallExpression): string {
+    if (
+      (expr.callee.kind === "UpperIdentifier" || expr.callee.kind === "Identifier") &&
+      expr.callee.name === "Brand"
+    ) {
+      this.effectImports.add("Schema");
+      return `Schema.brand(${expr.args.map((a) => this.emitExpression(a)).join(", ")})`;
+    }
+
     if (
       this.options.markPipelineSources &&
       !this.inPipelineStage &&
