@@ -687,5 +687,11 @@ export schema Config = {
       expect(result).toContain("    timeout: Number");
       expect(result).toContain("    retries: Number");
     });
+
+    it("formats abstract function pipelines and comparison shorthand consistently", () => {
+      const source = "export isSmall = (score: Number, deadline: Number) => score |> lessThan(deadline)\n";
+      const formatted = format(source);
+      expect(formatted).toBe(source);
+    });
   });
 });
