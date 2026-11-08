@@ -137,6 +137,21 @@ Standard sequence collection. In FunScript, Arrays are deeply immutable unless o
 
 See also: `Chunk`, `Record`, `mut`.
 
+## `between`
+
+Typed range comparison resolved from static operand type.
+
+```funscript
+value |> between(min, max)
+# or direct call:
+between(value, min, max)
+```
+
+Resolves unqualified between comparison against the static type of the operand, lowering to matching Effect APIs such as `Number.between` or `DateTime.between`.
+
+
+See also: `lessThan`, `greaterThan`.
+
 ## `boolean`
 
 Primitive boolean logic type.
@@ -600,6 +615,36 @@ Specifies the source file path or npm package name for `import` and `export { ..
 
 See also: `import`, `export`.
 
+## `greaterThan`
+
+Typed greater-than-or-equal comparison resolved from static operand type.
+
+```funscript
+value |> greaterThan(target)
+# or direct call:
+greaterThan(value, target)
+```
+
+Resolves unqualified comparison against the static type of the operand, lowering to matching Effect APIs such as `Number.isGreaterThan` or `DateTime.isGreaterThan`.
+
+
+See also: `lessThan`, `lessThanOrEqualTo`, `greaterThanOrEqualTo`, `between`.
+
+## `greaterThanOrEqualTo`
+
+Typed greater-than-or-equal comparison resolved from static operand type.
+
+```funscript
+value |> greaterThanOrEqualTo(target)
+# or direct call:
+greaterThanOrEqualTo(value, target)
+```
+
+Resolves unqualified comparison against the static type of the operand, lowering to matching Effect APIs such as `Number.isGreaterThanOrEqualTo` or `DateTime.isGreaterThanOrEqualTo`.
+
+
+See also: `lessThan`, `lessThanOrEqualTo`, `greaterThan`, `between`.
+
 ## `HashMap`
 
 Persistent immutable hash map data structure from Effect.
@@ -718,6 +763,36 @@ Supplies a pre-constructed service implementation directly without asynchronous 
 
 
 See also: `Layer`, `Layer.effect`, `service`.
+
+## `lessThan`
+
+Typed less-than comparison resolved from static operand type.
+
+```funscript
+value |> lessThan(target)
+# or direct call:
+lessThan(value, target)
+```
+
+Resolves unqualified comparison against the static type of the operand, lowering to matching Effect APIs such as `Number.isLessThan` or `DateTime.isLessThan`.
+
+
+See also: `lessThanOrEqualTo`, `greaterThan`, `greaterThanOrEqualTo`, `between`.
+
+## `lessThanOrEqualTo`
+
+Typed less-than-or-equal comparison resolved from static operand type.
+
+```funscript
+value |> lessThanOrEqualTo(target)
+# or direct call:
+lessThanOrEqualTo(value, target)
+```
+
+Resolves unqualified comparison against the static type of the operand, lowering to matching Effect APIs such as `Number.isLessThanOrEqualTo` or `DateTime.isLessThanOrEqualTo`.
+
+
+See also: `lessThan`, `greaterThan`, `greaterThanOrEqualTo`, `between`.
 
 ## `match`
 
