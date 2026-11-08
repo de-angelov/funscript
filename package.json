@@ -49,9 +49,10 @@
   "license": "MIT",
   "dependencies": {
     "@babel/code-frame": "^7.29.7",
+    "@effect/sql-sqlite-node": "^4.1.2",
     "@jridgewell/trace-mapping": "^0.3.31",
     "@total-typescript/ts-reset": "^0.6.1",
-    "effect": "^4.1.1",
+    "effect": "^4.1.2",
     "es-toolkit": "^1.53.2",
     "magic-string": "^1.4.5",
     "mutative": "^1.1.0",
