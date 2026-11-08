@@ -87,7 +87,9 @@ export class TypeScriptCompilationContext {
       }
       if (/\.d\.(?:ts|mts|cts)$/.test(name)) {
         const modified = ts.sys.getModifiedTime?.(name)?.getTime() ?? 0;
-        const size = ts.sys.readFile(name)?.length ?? -1;
+        // Avoid reading the declaration just to validate its cache entry. The
+        // compiler host exposes a cheap filesystem size lookup for this.
+        const size = ts.sys.getFileSize?.(name) ?? -1;
         const stamp = `${modified}:${size}`;
         const cached = declarationFiles.get(norm);
         if (cached?.stamp === stamp && !shouldCreateNewSourceFile) return cached.sourceFile;
