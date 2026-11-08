@@ -317,7 +317,7 @@ describe("FunScript LSP Server", () => {
       const response = (await server.handleMessage({
         jsonrpc: "2.0",
         id: 99,
-        method: "funscript/unsupported",
+        method: "workspace/symbol",
         params: {},
       })) as ResponseMessage;
 
