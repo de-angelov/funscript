@@ -55,8 +55,11 @@
   "devDependencies": {
     "@types/babel__code-frame": "^7.27.0",
     "@types/node": "^20.17.0",
+    "@types/react": "^19.3.0",
     "@types/vscode": "^1.140.0",
+    "pino": "^10.4.0",
     "prettier": "^3.9.10",
+    "react": "^19.3.1",
     "solid-js": "^1.9.18",
     "vitest": "^2.1.3"
   }
