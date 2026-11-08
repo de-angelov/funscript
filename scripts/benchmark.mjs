@@ -15,6 +15,7 @@
  */
 
 import { readFileSync, existsSync } from "node:fs";
+import { spawnSync } from "node:child_process";
 import { resolve, join } from "node:path";
 import os from "node:os";
 import { performance } from "node:perf_hooks";
@@ -29,6 +30,7 @@ import {
 const root = resolve(import.meta.dirname, "..");
 
 export const REGRESSION_THRESHOLDS_MS = {
+  "single-file-process-cold": 5000,
   "single-file-cold": 50,
   "single-file-warm": 25,
   "pipeline-cold": 3500,
@@ -37,9 +39,39 @@ export const REGRESSION_THRESHOLDS_MS = {
   "funx-compile": 50,
   "multi-file-project": 3000,
   "lsp-diagnostic": 25,
+  "lsp-type-diagnostic": 5000,
   "lsp-hover": 25,
   "lsp-completion": 25,
 };
+
+const BENCHMARK_TIMEOUT_MS = 30_000;
+
+export function runWithTimeout(promise, label, timeoutMs = BENCHMARK_TIMEOUT_MS) {
+  let timer;
+  return Promise.race([
+    promise,
+    new Promise((_, reject) => {
+      timer = setTimeout(() => reject(new Error(`${label} timed out after ${timeoutMs}ms`)), timeoutMs);
+    }),
+  ]).finally(() => clearTimeout(timer));
+}
+
+export function measureProcessCold(rootDir, fixturePath, iterations) {
+  const timings = [];
+  for (let i = 0; i < iterations; i++) {
+    const start = performance.now();
+    const child = spawnSync(process.execPath, [resolve(rootDir, "scripts/benchmark.mjs"), "--worker-compile", fixturePath], {
+      cwd: rootDir,
+      encoding: "utf8",
+      timeout: BENCHMARK_TIMEOUT_MS,
+    });
+    const elapsed = performance.now() - start;
+    if (child.error) throw new Error(`Fresh-process compile failed: ${child.error.message}`);
+    if (child.status !== 0) throw new Error(`Fresh-process compile failed: ${child.stderr || child.stdout}`);
+    timings.push(elapsed);
+  }
+  return timings;
+}
 
 export function parseArgs(args) {
   const options = {
@@ -147,7 +179,20 @@ export function runSingleFileBenchmarks(rootDir, warmups, iterations) {
     warmTimings.push(elapsed);
   }
 
+  const processColdTimings = measureProcessCold(rootDir, fixturePath, iterations);
   return [
+    {
+      id: "single-file-process-cold",
+      name: "Single File Process Cold Compilation",
+      category: "single-file",
+      file: "tests/fixtures/benchmarks/small.fun",
+      description: "Wall time for a fresh Node process to load the compiler and compile the fixture",
+      warmups: 0,
+      iterations,
+      timings: processColdTimings.map((t) => Number(t.toFixed(3))),
+      stats: calculateStats(processColdTimings),
+      thresholdMs: REGRESSION_THRESHOLDS_MS["single-file-process-cold"],
+    },
     {
       id: "single-file-cold",
       name: "Single File Cold Compilation",
@@ -353,6 +398,49 @@ export async function runMultiFileBenchmarks(rootDir, warmups, iterations) {
   ];
 }
 
+function waitForDiagnostics(server, uri, version, predicate) {
+  return runWithTimeout(new Promise((resolve, reject) => {
+    const listener = (params) => {
+      if (params.uri !== uri || params.version !== version || !predicate(params)) return;
+      server.off("diagnostics", listener);
+      resolve(params);
+    };
+    server.on("diagnostics", listener);
+  }), `Diagnostics for ${uri} version ${version}`);
+}
+
+async function benchmarkMultiFileTypeDiagnostics(rootDir, warmups, iterations) {
+  const projectDir = resolve(rootDir, "tests/fixtures/benchmarks/project");
+  const mathPath = join(projectDir, "math.fun");
+  const appPath = join(projectDir, "app.fun");
+  const mathUri = `file://${mathPath}`;
+  const appUri = `file://${appPath}`;
+  const mathText = readFileSync(mathPath, "utf8");
+  const validApp = readFileSync(appPath, "utf8");
+  const invalidApp = validApp.replace("multiplier: 5", 'multiplier: "bad"');
+  if (invalidApp === validApp) throw new Error("Multi-file benchmark edit did not match fixture");
+  const server = new FunScriptLspServer();
+  server.onDidOpenHandler({ textDocument: { uri: mathUri, languageId: "funscript", version: 1, text: mathText } });
+  server.onDidOpenHandler({ textDocument: { uri: appUri, languageId: "funscript", version: 1, text: validApp } });
+  let version = 2;
+  const sample = async (record) => {
+    const nextVersion = version++;
+    const received = waitForDiagnostics(server, appUri, nextVersion, (p) => p.diagnostics.length > 0);
+    const start = performance.now();
+    server.onDidChangeHandler({ textDocument: { uri: appUri, version: nextVersion }, contentChanges: [{ text: invalidApp }] });
+    const params = await received;
+    const elapsed = performance.now() - start;
+    if (!params.diagnostics.some((d) => d.code === 2322 || d.message.includes("Type 'string' is not assignable"))) {
+      throw new Error(`Expected completed TypeScript diagnostics for edited app.fun; got ${JSON.stringify(params.diagnostics)}`);
+    }
+    if (record) return elapsed;
+  };
+  for (let i = 0; i < warmups; i++) await sample(false);
+  const samples = [];
+  for (let i = 0; i < iterations; i++) samples.push(await sample(true));
+  return samples;
+}
+
 export async function runLspBenchmarks(rootDir, warmups, iterations) {
   const fixturePath = resolve(rootDir, "tests/fixtures/benchmarks/lsp-diagnostics.fun");
   const source = readFileSync(fixturePath, "utf8");
@@ -370,39 +458,29 @@ export async function runLspBenchmarks(rootDir, warmups, iterations) {
 
   let versionCounter = 2;
 
-  // 1. LSP didChange -> publishDiagnostics latency
+  // 1. Immediate syntax diagnostics: this publication is synchronous with didChange.
+  const syntaxTimings = [];
   for (let w = 0; w < warmups; w++) {
-    const diagPromise = new Promise((res) => server.once("diagnostics", res));
+    const version = versionCounter++;
+    const diagPromise = waitForDiagnostics(server, docUri, version, (p) => p.diagnostics.length > 0);
     server.onDidChangeHandler({
-      textDocument: { uri: docUri, version: versionCounter++ },
+      textDocument: { uri: docUri, version },
       contentChanges: [{ text: source }],
     });
     await diagPromise;
   }
 
-  const diagTimings = [];
+  const syntaxTimingsMeasured = [];
   for (let i = 0; i < iterations; i++) {
-    let responseParams = null;
-    const diagPromise = new Promise((res) => {
-      server.once("diagnostics", (params) => {
-        responseParams = params;
-        res(params);
-      });
-    });
-
+    const version = versionCounter++;
+    const pending = waitForDiagnostics(server, docUri, version, (p) => p.diagnostics.length > 0);
     const start = performance.now();
-    server.onDidChangeHandler({
-      textDocument: { uri: docUri, version: versionCounter++ },
-      contentChanges: [{ text: source }],
-    });
-    await diagPromise;
-    const elapsed = performance.now() - start;
-
-    if (!responseParams || !Array.isArray(responseParams.diagnostics)) {
-      throw new Error("LSP did not receive expected diagnostic payload");
-    }
-    diagTimings.push(elapsed);
+    server.onDidChangeHandler({ textDocument: { uri: docUri, version }, contentChanges: [{ text: source }] });
+    await pending;
+    syntaxTimingsMeasured.push(performance.now() - start);
   }
+
+  const multiFileTypeTimings = await benchmarkMultiFileTypeDiagnostics(rootDir, warmups, iterations);
 
   // 2. LSP onHoverHandler latency
   for (let w = 0; w < warmups; w++) {
@@ -445,15 +523,27 @@ export async function runLspBenchmarks(rootDir, warmups, iterations) {
   return [
     {
       id: "lsp-diagnostic",
-      name: "LSP Diagnostics Notification Latency",
+      name: "LSP Immediate Syntax Diagnostics",
       category: "lsp",
       file: "tests/fixtures/benchmarks/lsp-diagnostics.fun",
-      description: "Measures onDidChangeHandler dispatch to publishDiagnostics latency",
+      description: "Measures synchronous syntax diagnostics for matching document version; fixture intentionally contains syntax errors",
       warmups,
       iterations,
-      timings: diagTimings.map((t) => Number(t.toFixed(3))),
-      stats: calculateStats(diagTimings),
+      timings: syntaxTimingsMeasured.map((t) => Number(t.toFixed(3))),
+      stats: calculateStats(syntaxTimingsMeasured),
       thresholdMs: REGRESSION_THRESHOLDS_MS["lsp-diagnostic"],
+    },
+    {
+      id: "lsp-type-diagnostic-multifile",
+      name: "LSP Completed Multi-File Type Diagnostics",
+      category: "lsp",
+      file: "tests/fixtures/benchmarks/project/{math.fun,app.fun}",
+      description: "Measures didChange through debounce and typecheck until matching-version TypeScript diagnostics publish",
+      warmups,
+      iterations,
+      timings: multiFileTypeTimings.map((t) => Number(t.toFixed(3))),
+      stats: calculateStats(multiFileTypeTimings),
+      thresholdMs: REGRESSION_THRESHOLDS_MS["lsp-type-diagnostic"],
     },
     {
       id: "lsp-hover",
@@ -550,6 +640,15 @@ export async function runAllBenchmarks(options = {}) {
 }
 
 async function main() {
+  const workerIndex = process.argv.indexOf("--worker-compile");
+  if (workerIndex !== -1) {
+    const fixturePath = process.argv[workerIndex + 1];
+    if (!fixturePath) throw new Error("--worker-compile requires a fixture path");
+    const source = readFileSync(fixturePath, "utf8");
+    const result = Effect.runSync(compileString(source, fixturePath.split("/").pop()));
+    if (!result.typescript) throw new Error("Fresh-process compilation emitted no TypeScript");
+    return;
+  }
   const options = parseArgs(process.argv.slice(2));
 
   if (options.help) {
