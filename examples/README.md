@@ -2,6 +2,8 @@
 
 This directory contains the canonical collection of runnable FunScript examples, showcases, and full-stack applications. Every runnable example is checked by static type analysis and validated by automated tests (`npm run test:examples`).
 
+The four core canonical showcases (`hello.fun`, `shapes.fun`, `todo-http.fun`, and `greeter-service.fun`) serve as references for standard FunScript syntax (functions, schemas, effects, services, and matching).
+
 ## Directory Layout
 
 ```text
@@ -49,16 +51,16 @@ examples/
 | `bank-account.fun` | Tagged union actions (`Deposit`, `Withdraw`, `Freeze`), pattern matching with numeric guards, immutable record updates |
 | `fibonacci.fun` | Recursive functions with pattern matching, numeric comparison helpers, pipeline chaining with `\|>` |
 | `github-api-client.fun` | REST API client with foreign `js` Promise interop, runtime `Schema.Struct` decoding, Effect tagged error classes, exhaustive pattern matching |
-| `greeter-service.fun` | Effect service definitions, context tags, layer creation (`Layer.succeed`), dependency injection |
-| `hello.fun` | Variable bindings, string template interpolation (`"Hello {name}"`), pipeline transformations, Effect entry point |
+| `greeter-service.fun` | Canonical showcase: Effect service definitions, context tags, layer creation (`Layer.succeed`), dependency injection |
+| `hello.fun` | Canonical showcase: Variable bindings, string template interpolation (`"Hello {name}"`), pipeline transformations, Effect entry point |
 | `js-ts-interop.fun` | Raw TypeScript type escapes (`ts { ... }`), foreign JS Promise lifting (`js promiseFn`), async Effect fibers |
 | `markdown-task-manager.fun` | CLI state management using Mutative copy-on-write `draft` blocks, `when` early returns, conditional execution, Effect file I/O |
 | `order-fulfillment.fun` | End-to-end e-commerce showcase combining Effect concurrency (`Effect.all`), retry schedules, fiber forking, ts-pattern matching, and Mutative drafts |
 | `reactive-widget.funx` | Native `.funx` JSX component emitting `.tsx`, typed props, tagged union view states, template literals in attributes (`className="btn-${variant}"`) |
-| `shapes.fun` | Tagged-union `schema` definitions (`Circle`, `Rect`, `Point`), guard conditions, exhaustive `match` expressions |
+| `shapes.fun` | Canonical showcase: Tagged-union `schema` definitions (`Circle`, `Rect`, `Point`), guard conditions, exhaustive `match` expressions |
 | `solid-demo/` | Multi-file Solid.js framework integration showing how compiled FunScript modules interoperate seamlessly with modern TypeScript ecosystems |
 | `todo-dashboard.funx` | Interactive multi-component JSX dashboard featuring stat cards, filter buttons, item rows, and Mutative state draft updates |
-| `todo-http.fun` | Service simulation with `effect` blocks, runtime schema parsing, retry policies with backoff, layer provision |
+| `todo-http.fun` | Canonical showcase: Service simulation with `effect` blocks, runtime schema parsing, retry policies with backoff, layer provision |
 | `todo-service.fun` | Repository service pattern using Effect services, layers, and TypeScript helper escape hatches |
 | `ts-schema-validation.fun` | Importing external TypeScript type definitions using `from ts<Type>`, Schema decoding, validation error reporting |
 
