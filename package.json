@@ -13,6 +13,8 @@
     "./prettier": "./dist/formatter/prettier.js",
     "./prettier-plugin-funscript": "./dist/formatter/prettier.js",
     "./record": "./dist/interop/record.js",
+    "./zod": "./dist/interop/zod.js",
+    "./interop/zod": "./dist/interop/zod.js",
     "./vite": "./dist/plugins/vite.js",
     "./plugins/vite": "./dist/plugins/vite.js"
   },
@@ -53,7 +55,8 @@
     "ts-pattern": "^5.5.0",
     "typescript": "^5.6.3",
     "vscode-languageclient": "^11.0.0",
-    "vscode-languageserver": "^11.0.0"
+    "vscode-languageserver": "^11.0.0",
+    "zod": "^3.25.76"
   },
   "devDependencies": {
     "@types/babel__code-frame": "^7.27.0",

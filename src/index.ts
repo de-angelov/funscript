@@ -15,3 +15,5 @@ export * as vitePlugin from "./plugins/vite.js";
 export { funscriptPlugin } from "./plugins/vite.js";
 export * as migrate from "./tooling/migrate.js";
 export { migrateSource, migrateFile, migrateFiles, formatMigrationReport } from "./tooling/migrate.js";
+export * as zodInterop from "./interop/zod.js";
+export { fromZod, toZod } from "./interop/zod.js";
