@@ -456,7 +456,7 @@ export class Formatter {
       case "StructuralUnionSchema":
         return "\n" + body.members.map((member) => `${this.spaces(indent + this.indentSize)}| ${this.formatType(member, indent + this.indentSize)}`).join("\n");
       case "RefinementSchema":
-        return `${this.formatType(body.baseType)} | ${this.formatExpression(body.refinement, indent)}`;
+        return `${this.formatType(body.baseType)} |> ${this.formatExpression(body.refinement, indent)}`;
       case "TypeSignatureSchema":
         return this.formatType(body.signature);
       case "TsDerivedSchema":

@@ -249,6 +249,18 @@ describe("language conformance fixture suite", () => {
       });
     });
 
+    it("verifies branded schema compiles, matches expected TypeScript, and decodes successfully", async () => {
+      await verifyPositiveFixture(dir, "branded-schema", {
+        evalExports: ["UserIdFromUnknown", "UserId"],
+        verifyEval: ({ UserIdFromUnknown, UserId }) => {
+          const u = UserIdFromUnknown("user-1");
+          expect(u).toBe("user-1");
+          expect(UserId.make("user-2")).toBe("user-2");
+          expect(() => UserIdFromUnknown(123)).toThrow();
+        },
+      });
+    });
+
     it("reports diagnostic when deprecated 'type' keyword is used instead of 'schema'", async () => {
       await verifyNegativeFixture(dir, "rejected-type-keyword");
     });
