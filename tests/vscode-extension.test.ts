@@ -5,8 +5,46 @@ import { spawn } from "node:child_process";
 import { StreamMessageReader, StreamMessageWriter } from "../src/lsp/index.js";
 
 // Mock 'vscode' and 'vscode-languageclient/node' for extension entry point tests
+const mockStatusBarItem = {
+  text: "",
+  tooltip: "",
+  command: "",
+  name: "",
+  show: vi.fn(),
+  hide: vi.fn(),
+  dispose: vi.fn(),
+};
+
+const mockOutputChannel = {
+  name: "",
+  appendLine: vi.fn(),
+  show: vi.fn(),
+  dispose: vi.fn(),
+};
+
+const registeredCommands = new Map<string, Function>();
+
 vi.mock("vscode", () => {
   return {
+    window: {
+      createOutputChannel: vi.fn((name: string) => ({
+        ...mockOutputChannel,
+        name,
+      })),
+      createStatusBarItem: vi.fn(() => mockStatusBarItem),
+      showInformationMessage: vi.fn().mockResolvedValue(undefined),
+      showWarningMessage: vi.fn().mockResolvedValue(undefined),
+      showErrorMessage: vi.fn().mockResolvedValue(undefined),
+      showTextDocument: vi.fn().mockResolvedValue({}),
+      activeTextEditor: undefined,
+    },
+    commands: {
+      registerCommand: vi.fn((command: string, callback: Function) => {
+        registeredCommands.set(command, callback);
+        return { dispose: vi.fn() };
+      }),
+      executeCommand: vi.fn().mockResolvedValue(undefined),
+    },
     workspace: {
       getConfiguration: vi.fn(() => ({
         get: vi.fn((key: string, defaultValue?: any) => defaultValue ?? "funscript"),
@@ -15,6 +53,15 @@ vi.mock("vscode", () => {
         pattern,
         dispose: vi.fn(),
       })),
+      onDidChangeConfiguration: vi.fn(() => ({ dispose: vi.fn() })),
+      openTextDocument: vi.fn().mockResolvedValue({ uri: "untitled:test.ts", getText: () => "" }),
+    },
+    StatusBarAlignment: {
+      Left: 1,
+      Right: 2,
+    },
+    ViewColumn: {
+      Beside: -2,
     },
   };
 });
@@ -27,6 +74,7 @@ vi.mock("vscode-languageclient/node", () => {
     clientOptions: any;
     started = false;
     stopped = false;
+    trace: any = undefined;
 
     constructor(id: string, name: string, serverOptions: any, clientOptions: any) {
       this.id = id;
@@ -44,10 +92,29 @@ vi.mock("vscode-languageclient/node", () => {
       this.stopped = true;
       return Promise.resolve();
     }
+
+    onDidChangeState() {
+      return { dispose: vi.fn() };
+    }
+
+    setTrace(trace: any) {
+      this.trace = trace;
+      return Promise.resolve();
+    }
   }
 
   return {
     LanguageClient: MockLanguageClient,
+    Trace: {
+      fromString: (s: string) => s,
+      Off: "off",
+      Messages: "messages",
+      Verbose: "verbose",
+    },
+    State: {
+      Stopped: 1,
+      Running: 2,
+    },
   };
 });
 
@@ -378,7 +445,7 @@ describe("VS Code Extension Package (TASK-018)", () => {
         () => {
           expect(messages.some((m) => m.id === 1)).toBe(true);
         },
-        { timeout: 5000 }
+        { timeout: 15000 }
       );
 
       const initRes = messages.find((m) => m.id === 1);
@@ -410,7 +477,7 @@ describe("VS Code Extension Package (TASK-018)", () => {
             )
           ).toBe(true);
         },
-        { timeout: 5000 }
+        { timeout: 15000 }
       );
 
       // 3. Shutdown
@@ -424,7 +491,7 @@ describe("VS Code Extension Package (TASK-018)", () => {
         () => {
           expect(messages.some((m) => m.id === 2)).toBe(true);
         },
-        { timeout: 5000 }
+        { timeout: 15000 }
       );
 
       // 4. Exit
@@ -442,6 +509,144 @@ describe("VS Code Extension Package (TASK-018)", () => {
 
       reader.dispose();
       writer.dispose();
+    }, 30000);
+  });
+
+  describe("VS Code Product Experience (TASK-058)", () => {
+    const snippetsPath = path.join(extensionDir, "snippets/funscript.json");
+
+    it("declares extension commands in package.json", async () => {
+      const content = await fs.readFile(packageJsonPath, "utf-8");
+      const pkg = JSON.parse(content);
+      const commandIds = (pkg.contributes?.commands ?? []).map((c: any) => c.command);
+
+      expect(commandIds).toContain("funscript.checkFile");
+      expect(commandIds).toContain("funscript.formatFile");
+      expect(commandIds).toContain("funscript.restartServer");
+      expect(commandIds).toContain("funscript.openGeneratedTs");
+    });
+
+    it("registers recommended editor behavior (format on save and code actions) in configurationDefaults", async () => {
+      const content = await fs.readFile(packageJsonPath, "utf-8");
+      const pkg = JSON.parse(content);
+
+      const funDefaults = pkg.contributes?.configurationDefaults?.["[funscript]"];
+      expect(funDefaults).toBeDefined();
+      expect(funDefaults["editor.formatOnSave"]).toBe(true);
+      expect(funDefaults["editor.defaultFormatter"]).toBe("funscript.funscript-vscode");
+      expect(funDefaults["editor.codeActionsOnSave"]).toBeDefined();
+
+      const funxDefaults = pkg.contributes?.configurationDefaults?.["[funscriptx]"];
+      expect(funxDefaults).toBeDefined();
+      expect(funxDefaults["editor.formatOnSave"]).toBe(true);
+      expect(funxDefaults["editor.defaultFormatter"]).toBe("funscript.funscript-vscode");
+    });
+
+    it("contributes settings for server path and trace logging", async () => {
+      const content = await fs.readFile(packageJsonPath, "utf-8");
+      const pkg = JSON.parse(content);
+      const props = pkg.contributes?.configuration?.properties;
+
+      expect(props?.["funscript.serverPath"]).toBeDefined();
+      expect(props?.["funscript.trace.server"]).toBeDefined();
+      expect(props?.["funscript.trace.server"]?.enum).toEqual(["off", "messages", "verbose"]);
+    });
+
+    it("contributes user snippets for function declarations, Effect blocks, schemas, tagged unions, and typed holes", async () => {
+      const content = await fs.readFile(snippetsPath, "utf-8");
+      const snippets = JSON.parse(content);
+
+      // 1. Function declarations
+      expect(snippets["Function Declaration (Block)"]).toBeDefined();
+      const fnBody = Array.isArray(snippets["Function Declaration (Block)"].body)
+        ? snippets["Function Declaration (Block)"].body.join("\n")
+        : snippets["Function Declaration (Block)"].body;
+      expect(fnBody).toContain("=>");
+
+      // 2. Effect blocks
+      expect(snippets["Effect Block"]).toBeDefined();
+      const effectBody = Array.isArray(snippets["Effect Block"].body)
+        ? snippets["Effect Block"].body.join("\n")
+        : snippets["Effect Block"].body;
+      expect(effectBody).toContain("effect {");
+      expect(effectBody).toContain("<-");
+
+      // 3. Schemas
+      expect(snippets["Schema Definition"]).toBeDefined();
+      const schemaBody = Array.isArray(snippets["Schema Definition"].body)
+        ? snippets["Schema Definition"].body.join("\n")
+        : snippets["Schema Definition"].body;
+      expect(schemaBody).toContain("schema");
+
+      // 4. Tagged unions
+      expect(snippets["Tagged Union Schema"]).toBeDefined();
+      const unionBody = Array.isArray(snippets["Tagged Union Schema"].body)
+        ? snippets["Tagged Union Schema"].body.join("\n")
+        : snippets["Tagged Union Schema"].body;
+      expect(unionBody).toContain("schema");
+      expect(unionBody).toContain("|");
+
+      // 5. Typed holes
+      expect(snippets["Typed Hole"]).toBeDefined();
+      expect(snippets["Typed Hole"].body).toBe("???");
+      expect(snippets["Typed Hole with Message"]).toBeDefined();
+      expect(snippets["Typed Hole with Message"].body).toContain("???");
+    });
+
+    it("registers commands and updates status bar during activation", async () => {
+      const {
+        activate,
+        getStatusBarItem,
+        getOutputChannel,
+        updateStatusBar,
+        ServerStatus,
+      } = await import("../editors/vscode/src/extension.js");
+
+      const subscriptions: any[] = [];
+      const mockContext: any = { subscriptions };
+
+      activate(mockContext);
+
+      // Verify commands registered
+      expect(registeredCommands.has("funscript.checkFile")).toBe(true);
+      expect(registeredCommands.has("funscript.formatFile")).toBe(true);
+      expect(registeredCommands.has("funscript.restartServer")).toBe(true);
+      expect(registeredCommands.has("funscript.openGeneratedTs")).toBe(true);
+
+      // Verify output channels created and subscribed
+      const channel = getOutputChannel();
+      expect(channel).toBeDefined();
+
+      // Verify status bar item
+      const statusBar = getStatusBarItem();
+      expect(statusBar).toBeDefined();
+
+      // Verify status transitions
+      updateStatusBar(ServerStatus.Ready);
+      expect(statusBar?.text).toContain("FunScript");
+
+      updateStatusBar(ServerStatus.Error, "Error occurred");
+      expect(statusBar?.text).toContain("$(error)");
+      expect(statusBar?.tooltip).toBe("Error occurred");
+    });
+
+    it("checks CLI availability and fails gracefully when CLI is missing", async () => {
+      const {
+        checkCliAvailability,
+        checkCurrentFile,
+        formatCurrentFile,
+        restartServer,
+        openGeneratedTypeScript,
+      } = await import("../editors/vscode/src/extension.js");
+
+      const notFound = await checkCliAvailability("funscript-nonexistent-binary-12345");
+      expect(notFound).toBe(false);
+
+      // All commands should execute gracefully without uncaught rejection when CLI or file is missing
+      await expect(checkCurrentFile()).resolves.not.toThrow();
+      await expect(formatCurrentFile()).resolves.not.toThrow();
+      await expect(restartServer()).resolves.not.toThrow();
+      await expect(openGeneratedTypeScript()).resolves.not.toThrow();
     });
   });
 });

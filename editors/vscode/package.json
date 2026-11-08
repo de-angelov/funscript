@@ -1,19 +1,25 @@
 {
   "name": "funscript-vscode",
   "displayName": "FunScript",
-  "description": "FunScript language support with syntax highlighting and LSP integration",
+  "description": "FunScript language support with syntax highlighting, language server, diagnostics, formatting, and snippets",
   "version": "0.1.0",
   "publisher": "funscript",
   "engines": {
     "vscode": "^1.80.0"
   },
   "categories": [
-    "Programming Languages"
+    "Programming Languages",
+    "Snippets",
+    "Formatters"
   ],
   "main": "./dist/extension.js",
   "activationEvents": [
     "onLanguage:funscript",
-    "onLanguage:funscriptx"
+    "onLanguage:funscriptx",
+    "onCommand:funscript.checkFile",
+    "onCommand:funscript.formatFile",
+    "onCommand:funscript.restartServer",
+    "onCommand:funscript.openGeneratedTs"
   ],
   "contributes": {
     "languages": [
@@ -52,6 +58,80 @@
         "path": "./syntaxes/funscript.tmLanguage.json"
       }
     ],
+    "commands": [
+      {
+        "command": "funscript.checkFile",
+        "title": "Check Current File",
+        "category": "FunScript"
+      },
+      {
+        "command": "funscript.formatFile",
+        "title": "Format Current File",
+        "category": "FunScript"
+      },
+      {
+        "command": "funscript.restartServer",
+        "title": "Restart Language Server",
+        "category": "FunScript"
+      },
+      {
+        "command": "funscript.openGeneratedTs",
+        "title": "Open Generated TypeScript",
+        "category": "FunScript"
+      }
+    ],
+    "menus": {
+      "commandPalette": [
+        {
+          "command": "funscript.checkFile",
+          "when": "editorLangId == funscript || editorLangId == funscriptx"
+        },
+        {
+          "command": "funscript.formatFile",
+          "when": "editorLangId == funscript || editorLangId == funscriptx"
+        },
+        {
+          "command": "funscript.openGeneratedTs",
+          "when": "editorLangId == funscript || editorLangId == funscriptx"
+        },
+        {
+          "command": "funscript.restartServer"
+        }
+      ],
+      "editor/title": [
+        {
+          "command": "funscript.openGeneratedTs",
+          "when": "editorLangId == funscript || editorLangId == funscriptx",
+          "group": "navigation"
+        }
+      ]
+    },
+    "snippets": [
+      {
+        "language": "funscript",
+        "path": "./snippets/funscript.json"
+      },
+      {
+        "language": "funscriptx",
+        "path": "./snippets/funscript.json"
+      }
+    ],
+    "configurationDefaults": {
+      "[funscript]": {
+        "editor.formatOnSave": true,
+        "editor.defaultFormatter": "funscript.funscript-vscode",
+        "editor.codeActionsOnSave": {
+          "source.fixAll": "explicit"
+        }
+      },
+      "[funscriptx]": {
+        "editor.formatOnSave": true,
+        "editor.defaultFormatter": "funscript.funscript-vscode",
+        "editor.codeActionsOnSave": {
+          "source.fixAll": "explicit"
+        }
+      }
+    },
     "configuration": {
       "type": "object",
       "title": "FunScript",
@@ -59,7 +139,7 @@
         "funscript.serverPath": {
           "type": "string",
           "default": "funscript",
-          "description": "Path to the funscript executable for the LSP server"
+          "description": "Path to the funscript executable for the LSP server and commands"
         },
         "funscript.trace.server": {
           "type": "string",

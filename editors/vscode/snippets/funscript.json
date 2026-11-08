@@ -1,0 +1,84 @@
+{
+  "Function Declaration (Block)": {
+    "prefix": ["fun", "fn"],
+    "body": [
+      "${1:name} = (${2:params}) => ${3:ReturnType} {",
+      "  ${0}",
+      "}"
+    ],
+    "description": "FunScript function declaration with block body"
+  },
+  "Function Declaration (Expression)": {
+    "prefix": "funexpr",
+    "body": "${1:name} = (${2:params}) => ${0:expression}",
+    "description": "FunScript single-expression function declaration"
+  },
+  "Effect Block": {
+    "prefix": "effect",
+    "body": [
+      "effect {",
+      "  ${1:res} <- ${2:effectExpr}",
+      "  ${0}",
+      "}"
+    ],
+    "description": "FunScript brace-delimited effect sequencing block"
+  },
+  "Effect Bind": {
+    "prefix": "<-",
+    "body": "${1:result} <- ${0:effectExpr}",
+    "description": "Bind an Effect result inside an effect block"
+  },
+  "Schema Definition": {
+    "prefix": "schema",
+    "body": [
+      "schema ${1:Name} = {",
+      "  ${2:field}: ${3:String},",
+      "  ${0}",
+      "}"
+    ],
+    "description": "FunScript record schema definition"
+  },
+  "Tagged Union Schema": {
+    "prefix": ["union", "tagged"],
+    "body": [
+      "schema ${1:Name} =",
+      "  | ${2:CaseOne}(${3:param}: ${4:Type})",
+      "  | ${5:CaseTwo}",
+      "  | ${0}"
+    ],
+    "description": "FunScript tagged union schema"
+  },
+  "Typed Hole": {
+    "prefix": "???",
+    "body": "???",
+    "description": "FunScript typed hole placeholder"
+  },
+  "Typed Hole with Message": {
+    "prefix": ["hole", "todo"],
+    "body": "??? \"${1:TODO: implement}\"",
+    "description": "FunScript typed hole placeholder with descriptive message"
+  },
+  "Match Expression": {
+    "prefix": "match",
+    "body": [
+      "match ${1:value}",
+      "  | ${2:Pattern} => ${3:result}",
+      "  | _ => ${0:defaultResult}"
+    ],
+    "description": "FunScript pattern match expression"
+  },
+  "When Guard": {
+    "prefix": "when",
+    "body": "when (${1:condition}) => ${0:returnValue}",
+    "description": "FunScript early return with when keyword"
+  },
+  "Service Definition": {
+    "prefix": "service",
+    "body": [
+      "service ${1:ServiceName} {",
+      "  ${0}",
+      "}"
+    ],
+    "description": "FunScript Context service definition"
+  }
+}
