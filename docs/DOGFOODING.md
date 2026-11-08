@@ -123,20 +123,29 @@ In addition to building and executing these applications, extensive stress testi
 
 ---
 
-### Edge Case 5: `export error` Emits Class Requiring `new` in a Language Without `new`
+### Historical Finding 5: `export error` Constructor Requires a Raw TypeScript Workaround (Resolved)
 
-- **Symptom**: `export error MyError(code: Number)` emits `class MyError extends Schema.TaggedError...`. Calling `MyError(404)` in FunScript emits `MyError(404)` without `new` or named fields, causing `TypeError: Value of type 'typeof MyError' is not callable. Did you mean to include 'new'?`.
+This was a valid limitation when this finding was recorded. The compiler now emits a callable companion for each `error` declaration, so native FunScript code can construct tagged errors directly. For fields, pass a record with the declared field names:
+
+```funscript
+export error NotFound(id: String)
+
+lookup = (id: String) =>
+  Effect.fail(NotFound({ id }))
+```
+
+The compiler regression in `tests/compiler.test.ts` verifies that the generated companion constructs a `Schema.TaggedError` instance.
+
+Historical details:
+
+- **Symptom**: The generated `Schema.TaggedError` class required `new` and a named-fields object, while FunScript had no `new` keyword.
 - **Minimal Repro**:
   ```funscript
   export error NotFound(id: Number)
   err = NotFound(1)
   ```
-- **Root Cause**: FunScript has no `new` keyword in its grammar. Schema.TaggedError produces a class constructor expecting `new NotFound({ id: 1 })`.
-- **Current Workaround**: Use `ts` escape hatch: `ts { export const makeNotFound = (id: number) => new NotFound({ id }); }`.
-- **Recommendation**: Emitter should emit a callable constructor companion function alongside the class:
-  ```typescript
-  export const NotFound = (id: number) => new NotFound$Class({ id });
-  ```
+- **Historical workaround**: `ts { export const makeNotFound = (id: number) => new NotFound({ id }); }`.
+- **Resolution**: The emitter now generates the callable constructor companion. `ts` escapes remain appropriate for external TypeScript types and deliberate JavaScript/TypeScript interop; this resolved compiler limitation is not a reason to remove those escapes.
 
 ---
 
