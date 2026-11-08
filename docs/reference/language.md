@@ -165,6 +165,19 @@ Represents logical truth values (`true` or `false`).
 
 See also: `true`, `false`, `and`, `or`, `not`.
 
+## `Brand`
+
+Nominal brand declaration using Effect Brand and Schema.brand.
+
+```funscript
+schema TypeName = BaseType |> Brand("BrandName")
+```
+
+Attaches a nominal brand to a schema for type-safe distinct identifiers without runtime overhead. Emits `Schema.brand("BrandName")` and TypeScript type `Brand.Brand<"BrandName">`.
+
+
+See also: `schema`, `Int`, `String`.
+
 ## `Chunk`
 
 High-performance, immutable indexed sequence from Effect.

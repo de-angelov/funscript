@@ -15,7 +15,7 @@ matching, and immutable updates less ceremonial.
 - Package: `funscript` `0.1.0`
 - Runtime: Effect `^4.1.1`
 - Source extensions: `.fun`, `.funx`
-- Runnable checked examples: 16
+- Runnable checked examples: 17
 
 The exact command surface is generated from the implementation in the [CLI reference](docs/reference/cli.md). The language catalogue used by editor hover help is generated in the [language reference](docs/reference/language.md).
 <!-- /GENERATED: project-facts -=>
@@ -95,6 +95,7 @@ For the current, verified contract and runnable source examples, read the
 | [`examples/js-ts-interop.fun`](examples/js-ts-interop.fun) | `FunScript` |
 | [`examples/markdown-task-manager.fun`](examples/markdown-task-manager.fun) | `FunScript` |
 | [`examples/order-fulfillment.fun`](examples/order-fulfillment.fun) | `FunScript` |
+| [`examples/pipeline-helpers.fun`](examples/pipeline-helpers.fun) | `FunScript` |
 | [`examples/reactive-widget.funx`](examples/reactive-widget.funx) | `FunScript JSX` |
 | [`examples/shapes.fun`](examples/shapes.fun) | `FunScript` |
 | [`examples/solid-demo/domain.fun`](examples/solid-demo/domain.fun) | `FunScript` |

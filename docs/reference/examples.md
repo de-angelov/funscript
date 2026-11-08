@@ -14,6 +14,7 @@ Every entry below is compiled by `npm run test:examples`.
 | [`examples/js-ts-interop.fun`](../examples/js-ts-interop.fun) | `FunScript` |
 | [`examples/markdown-task-manager.fun`](../examples/markdown-task-manager.fun) | `FunScript` |
 | [`examples/order-fulfillment.fun`](../examples/order-fulfillment.fun) | `FunScript` |
+| [`examples/pipeline-helpers.fun`](../examples/pipeline-helpers.fun) | `FunScript` |
 | [`examples/reactive-widget.funx`](../examples/reactive-widget.funx) | `FunScript JSX` |
 | [`examples/shapes.fun`](../examples/shapes.fun) | `FunScript` |
 | [`examples/solid-demo/domain.fun`](../examples/solid-demo/domain.fun) | `FunScript` |

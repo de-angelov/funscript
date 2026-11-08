@@ -1,5 +1,16 @@
 import ts from "typescript";
-import { Emitter, type StageResolution, COMPARISON_METHOD_MAP, PipelineResolutionError, isEffectModule } from "../emitter/emitter.js";
+import {
+  Emitter,
+  type StageResolution,
+  COMPARISON_METHOD_MAP,
+  PipelineResolutionError,
+  isEffectModule,
+  ES_TOOLKIT_METHODS,
+  ES_TOOLKIT_STRING_METHODS,
+  ES_TOOLKIT_MATH_DATA_LAST,
+  ES_TOOLKIT_MATH_COLLECTION,
+  ES_TOOLKIT_TIMING_DATA_LAST,
+} from "../emitter/emitter.js";
 import { type PipelineCompanionModule, PIPELINE_COMPANION_CATALOG, pipelineCompanionCandidates, EFFECT_PIPELINE_COMPATIBILITY_ALIASES } from "../emitter/pipeline-catalog.js";
 import { Program, type Expression, type PipelineExpression, type CallExpression } from "../ast/types.js";
 import { TypeScriptCompilationContext } from "./typescript-context.js";
@@ -364,6 +375,28 @@ export function inferPipelineCompanions(
           }
           continue;
         }
+      }
+
+      // 4b. es-toolkit operations (pure string, math data-last, timing)
+      if (ES_TOOLKIT_METHODS.has(fnName) && !localBindings.has(fnName)) {
+        if (ES_TOOLKIT_STRING_METHODS.has(fnName)) {
+          currentCompanion = "String";
+          currentType = checker.getStringType();
+        } else if (ES_TOOLKIT_MATH_DATA_LAST.has(fnName)) {
+          if (fnName === "inRange") {
+            currentCompanion = "Boolean";
+            currentType = checker.getBooleanType();
+          } else {
+            currentCompanion = "Number";
+            currentType = checker.getNumberType();
+          }
+        } else if (ES_TOOLKIT_MATH_COLLECTION.has(fnName)) {
+          currentCompanion = "Number";
+          currentType = checker.getNumberType();
+        } else if (ES_TOOLKIT_TIMING_DATA_LAST.has(fnName)) {
+          currentCompanion = undefined;
+        }
+        continue;
       }
 
       // 5. Custom Abstractions (e.g. HttpClient, HttpResponse)
