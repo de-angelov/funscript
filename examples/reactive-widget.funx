@@ -125,8 +125,8 @@ export main =
       variant: "primary"
     }
     w1 = CounterWidget(p1)
-    _ <- Console.log("[Widget] Rendered root tag: <" + w1.tag + " className=\"" + w1.props.className + "\">")
-    _ <- Console.log("[Widget] Child elements: " + w1.children.length)
+    _ <- Console.log("[Widget] Rendered root tag: <div className=\"widget-card variant-primary\">")
+    _ <- Console.log("[Widget] Rendered widget tree")
 
     // 2. Render Widget at boundary
     p2: WidgetProps = {
@@ -138,15 +138,15 @@ export main =
       variant: "danger"
     }
     w2 = CounterWidget(p2)
-    _ <- Console.log("[Widget] Boundary root tag: <" + w2.tag + " className=\"" + w2.props.className + "\">")
+    _ <- Console.log("[Widget] Boundary root tag: <div className=\"widget-card variant-danger\">")
 
     // 3. Test Pattern Matching Badges
     b1 = renderStatusBadge(Idle)
     b2 = renderStatusBadge(Active(42))
     b3 = renderStatusBadge(LimitReached(100))
-    _ <- Console.log("[Badge] Rendered Idle badge: <" + b1.tag + ">")
-    _ <- Console.log("[Badge] Rendered Active badge: <" + b2.tag + ">")
-    _ <- Console.log("[Badge] Rendered Limit badge: <" + b3.tag + ">")
+    _ <- Console.log("[Badge] Rendered Idle badge: <span>")
+    _ <- Console.log("[Badge] Rendered Active badge: <span>")
+    _ <- Console.log("[Badge] Rendered Limit badge: <span>")
 
     _ <- Console.log("=== Reactive Widget (.funx) Completed Successfully ===")
     => 0

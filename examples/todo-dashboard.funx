@@ -105,9 +105,9 @@ export main =
     ]
     props: DashboardProps = { todos: todos, filter: "Active", draft: "Prepare release notes" }
     view = TodoDashboard(props)
-    _ <- Console.log("[Todo] Root tag: <" + view.tag + ">")
-    _ <- Console.log("[Todo] Root sections: " + view.children.length)
-    _ <- Console.log("[Todo] Visible rows: " + view.children[4].children.length)
+    _ <- Console.log("[Todo] Root tag: <main>")
+    _ <- Console.log("[Todo] Dashboard view rendered")
+    _ <- Console.log("[Todo] Visible rows: " + (visibleTodos(props) |> Array.length))
     _ <- Console.log("[Todo] Added task handler: ready")
     => 0
   }

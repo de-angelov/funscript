@@ -231,7 +231,7 @@ export processOrderWorkflow = (order: Order, method: PaymentMethod, tier: Delive
 
 export processOrderSafely = (order: Order, method: PaymentMethod, tier: DeliveryTier) =>
   => processOrderWorkflow(order, method, tier)
-  |> Effect.catchAll((err) =>
+  |> Effect.catch((err) =>
     effect {
       _ <- Console.log("  [Workflow Recovery] Caught domain error: {err}")
       => Failed(order.id, "{err}")
@@ -282,7 +282,7 @@ export program =
     _ <- Console.log("=== Scenario 1 Result ===")
     _ <- Console.log(summary1)
 
-    // Scenario 2: High-value order failing credit limit, caught with Effect.catchAll
+    // Scenario 2: High-value order failing credit limit, recovered with Effect.catch
     res2 <- processOrderSafely(highValueOrder, digitalPayment, Overnight)
     summary2 = describeResult(res2)
     _ <- Console.log("=== Scenario 2 Result ===")
