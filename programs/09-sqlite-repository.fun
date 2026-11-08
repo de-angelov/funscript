@@ -1,9 +1,10 @@
 // A persistent repository API backed by native Node SQLite.
 
-import { Console, Effect } from "effect"
+import { Effect } from "effect"
+import { createRequire } from "node:module"
 
 ts {
-  declare const require: (id: string) => any;
+  const require = createRequire(import.meta.url);
   const { DatabaseSync } = require("node:sqlite");
   const database = new DatabaseSync(":memory:");
   database.exec("CREATE TABLE users (id INTEGER PRIMARY KEY, name TEXT NOT NULL, email TEXT NOT NULL)");
@@ -36,11 +37,11 @@ export schema User = {
 
 export error DatabaseError(message: String)
 
-export main = () =>
-  effect {
+export main = effect {
     created <- createUser("Ada", "ada@example.com")
     updated <- updateUser(created.id, "Ada Lovelace", "ada@example.com")
     deleted <- deleteUser(updated.id)
     _ <- Effect.sync(closeDatabase)
-    => Console.log(JSON.stringify({ created, updated, deleted }))
-  }
+    _ <- Effect.sync(() => console.log(JSON.stringify({ created, updated, deleted })))
+    => true
+}
