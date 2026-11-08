@@ -15,7 +15,7 @@ describe("SQLite repository example", () => {
   it("compiles and type-checks the native SQLite repository", async () => {
     const source = await fs.readFile(examplePath, "utf8");
     const compiled = await Effect.runPromise(compileString(source, examplePath));
-    expect(compiled.typescript).toContain("require(\"node:sqlite\")");
+    expect(compiled.typescript).toContain("createRequire(import.meta.url)");
     expect(compiled.typescript).toContain("Schema.Struct");
 
     const check = await Effect.runPromise(typeCheckFiles([examplePath]));
@@ -29,7 +29,7 @@ describe("SQLite repository example", () => {
       "run",
       examplePath,
     ]);
-    expect(stderr).toBe("");
+    expect(stderr.replace(/\(node:\d+\) ExperimentalWarning: SQLite is an experimental feature and might change at any time\n\(Use `node --trace-warnings ...` to show where the warning was created\)\n?/g, "")).toBe("");
     expect(stdout).toContain(
       JSON.stringify({
         created: { id: 1, name: "Ada", email: "ada@example.com" },
