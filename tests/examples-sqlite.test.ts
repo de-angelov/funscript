@@ -9,32 +9,43 @@ import { typeCheckFiles } from "../src/compiler/check.js";
 
 const execFileAsync = promisify(execFile);
 const examplePath = path.resolve("examples/sqlite-repository.fun");
-const supportsSqlite = Number(process.versions.node.split(".")[0]) >= 22;
+const [major, minor] = process.versions.node.split(".").map(Number);
+const supportsSqlite = major > 22 || (major === 22 && minor >= 16);
 
 describe("SQLite repository example", () => {
-  it("compiles and type-checks the native SQLite repository", async () => {
+  it("compiles and type-checks the Effect SQL repository", async () => {
     const source = await fs.readFile(examplePath, "utf8");
     const compiled = await Effect.runPromise(compileString(source, examplePath));
-    expect(compiled.typescript).toContain('process.getBuiltinModule("node:sqlite")');
-    expect(compiled.typescript).toContain("Schema.Struct");
+    expect(compiled.typescript).toContain("SqliteClient.layer");
+    expect(compiled.typescript).toContain("Schema.decodeUnknownEffect");
+    expect(compiled.typescript).toContain("RETURNING id");
 
     const check = await Effect.runPromise(typeCheckFiles([examplePath]));
     expect(check.success, JSON.stringify(check.diagnostics)).toBe(true);
     expect(check.errorCount).toBe(0);
   });
 
-  it.skipIf(!supportsSqlite)("runs create, update, and delete against an in-memory database", async () => {
+  it.skipIf(!supportsSqlite)("runs parameterized CRUD and captures a typed SQL failure", async () => {
     const { stdout, stderr } = await execFileAsync(process.execPath, [
       path.resolve("dist/cli/index.js"),
       "run",
       examplePath,
     ]);
-    expect(stderr.replace(/\(node:\d+\) ExperimentalWarning: SQLite is an experimental feature and might change at any time\n\(Use `node --trace-warnings ...` to show where the warning was created\)\n?/g, "")).toBe("");
+    expect(
+      stderr.replace(
+        /\(node:\d+\) ExperimentalWarning: SQLite is an experimental feature and might change at any time\n\(Use `node --trace-warnings ...` to show where the warning was created\)\n?/g,
+        "",
+      ),
+    ).toBe("");
     expect(stdout).toContain(
       JSON.stringify({
         created: { id: 1, name: "Ada", email: "ada@example.com" },
+        read: { id: 1, name: "Ada", email: "ada@example.com" },
         updated: { id: 1, name: "Ada Lovelace", email: "ada@example.com" },
         deleted: true,
+        duplicateRejected: true,
+        missingUserRejected: true,
+        failureClosed: true,
       }),
     );
   }, 15_000);
