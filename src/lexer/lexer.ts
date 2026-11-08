@@ -822,7 +822,7 @@ export class Lexer {
               if (parenDepth === 0) {
                 let after = k + 1;
                 while (this.peekAhead(after) === " ") after++;
-                return this.peekAhead(after) === "=" && this.peekAhead(after + 1) === ">";
+                return this.peekAhead(after) === ":" || (this.peekAhead(after) === "=" && this.peekAhead(after + 1) === ">");
               }
             }
             k++;

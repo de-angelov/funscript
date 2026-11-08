@@ -529,7 +529,9 @@ export class Formatter {
     if (init.kind === "FunctionExpression") {
       const typeParams = this.formatTypeParameters(init.typeParams);
       const params = init.params.map(p => {
-        return p.typeAnnotation ? `${p.name.name}: ${this.formatType(p.typeAnnotation)}` : p.name.name;
+        const type = p.typeAnnotation ? `: ${this.formatType(p.typeAnnotation)}` : "";
+        const defaultValue = p.defaultValue ? ` = ${this.formatExpression(p.defaultValue, indent)}` : "";
+        return `${p.name.name}${p.optional ? "?" : ""}${type}${defaultValue}`;
       }).join(", ");
       const ret = init.returnType ? `: ${this.formatType(init.returnType)}` : "";
       const isArrowOnly = init.params.length === 0 && !init.returnType && init.span && this.source.slice(init.span.start.offset, init.span.start.offset + 2) === "=>";

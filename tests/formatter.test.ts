@@ -34,6 +34,25 @@ function operatorTree(source: string): unknown {
 }
 
 describe("FunScript Code Formatter", () => {
+  it("preserves optional and defaulted parameters in binding functions", () => {
+    for (const source of [
+      'export read = (value?: String) => value',
+      'export read = (value: Number = 5) => value',
+      'export read = <A>(value?: A) => value',
+    ]) {
+      const formatted = format(source);
+      expect(operatorTree(formatted)).toEqual(operatorTree(source));
+      expect(format(formatted)).toBe(formatted);
+    }
+  });
+
+  it("round-trips generic return annotations in fun and funx", () => {
+    for (const filename of ["test.fun", "test.funx"]) {
+      const source = 'export identity = <A>(value: A) => A { => value }';
+      const formatted = format(source, { filename });
+      expect(format(formatted, { filename })).toBe(formatted);
+    }
+  });
   it("lists a precedence for every binary operator and formats identifier operands", () => {
     const operators = Object.keys(PRECEDENCE);
     expect(operators).toEqual([

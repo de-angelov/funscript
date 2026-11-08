@@ -2395,7 +2395,7 @@ export class Parser {
               parenDepth++;
             } else if (param.type === TokenType.RPAREN) {
               parenDepth--;
-              if (parenDepth === 0) return this.peekAhead(j + 1).type === TokenType.ARROW;
+              if (parenDepth === 0) return this.peekAhead(j + 1).type === TokenType.ARROW || this.peekAhead(j + 1).type === TokenType.COLON;
             }
           }
           return false;
