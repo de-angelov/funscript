@@ -94,7 +94,9 @@ export executeFetch = (repoPath: String) =>
 
 export parseResponse = (repoPath: String, raw: RawApiResponse): ApiResponse =>
   match raw.status
-    | 200 => Success(raw.json |> Schema.decodeUnknownSync(Repository))
+    | 200 =>
+        repo: Repository = raw.json |> Schema.decodeUnknownSync(Repository)
+        Success(repo)
     | 403 =>
         info = raw.json |> Schema.decodeUnknownSync(RateLimitInfo)
         RateLimited(info.resetTime, info.remaining)
@@ -102,10 +104,12 @@ export parseResponse = (repoPath: String, raw: RawApiResponse): ApiResponse =>
     | _ => ServerError(raw.status, raw.message)
 
 // Pattern matching on ApiResponse variants
+formatRepository = (repo: Repository) =>
+  => "[200 OK] " + repo.fullName + " - " + repo.description + " (Stars: " + repo.stargazersCount + ", Forks: " + repo.forksCount + ")"
+
 export formatApiResponse = (res: ApiResponse) =>
   match res
-    | Success(repo) =>
-        "[200 OK] " + repo.fullName + " - " + repo.description + " (Stars: " + repo.stargazersCount + ", Forks: " + repo.forksCount + ")"
+    | Success(repo) => formatRepository(repo)
     | RateLimited(resetTime, remaining) =>
         "[403 Rate Limited] Remaining: " + remaining + ", Reset timestamp: " + resetTime
     | NotFound(repoName) =>
