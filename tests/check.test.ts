@@ -253,6 +253,50 @@ fn broken(
       expect(result.diagnostics[0].line).toBe(1);
       expect(result.diagnostics[0].frame).toBeDefined();
     });
+
+    it("makes ambient type-fest utility types available in .fun source files and passes type checking", async () => {
+      const code = `
+ts {
+  type Base = { id: string } & { name: string; age: number }
+  type Flattened = Simplify<Base>
+  type Prettified = Prettify<Base>
+  type WithoutAge = Except<Flattened, "age">
+  type OptAge = SetOptional<Flattened, "age">
+  type UserId = Tagged<string, "UserId">
+}
+
+export schema User = from ts<Flattened>
+export schema UserWithoutAge = from ts<WithoutAge>
+export schema UserOptAge = from ts<OptAge>
+`.trim();
+
+      const result = await Effect.runPromise(typeCheckSource(code, "type-fest-ambient.fun"));
+      expect(result.success).toBe(true);
+      expect(result.diagnostics).toHaveLength(0);
+      expect(result.errorCount).toBe(0);
+    });
+
+    it("enforces nominal typing with ambient Tagged<T, Tag>", async () => {
+      const code = `
+ts {
+  type UserId = Tagged<string, "UserId">
+  type OrderId = Tagged<string, "OrderId">
+  const takesUserId = (id: UserId) => id
+  const raw: string = "user-1"
+  takesUserId(raw)
+}
+`.trim();
+
+      const result = await Effect.runPromise(typeCheckSource(code, "tagged-err.fun"));
+      expect(result.success).toBe(false);
+      expect(result.errorCount).toBeGreaterThanOrEqual(1);
+      const tagErr = result.diagnostics.find(
+        (d) =>
+          d.message.includes("Argument of type 'string' is not assignable to parameter of type 'UserId'") ||
+          d.message.includes("Tag<\"UserId\", never>")
+      );
+      expect(tagErr).toBeDefined();
+    });
   });
 
   describe("typeCheckVirtualFiles multi-file checks", () => {

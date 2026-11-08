@@ -13,7 +13,10 @@ import { resolveImportedSchemas } from "./compiler/imported-schemas.js";
 import { resolveImportedRecordFunctions } from "./compiler/imported-record-functions.js";
 import { resolvePackageRecordContracts } from "./compiler/package-record-contracts.js";
 
-export { TypeScriptCompilationContext } from "./compiler/typescript-context.js";
+export {
+  TypeScriptCompilationContext,
+  TYPE_FEST_DECLARATION,
+} from "./compiler/typescript-context.js";
 
 export interface CompileOptions {
   sourcemap?: boolean;

@@ -2001,6 +2001,34 @@ export schema Config = {
       expect(value.value).toContain("Schema.Struct");
     });
 
+    it("simplifies complex inferred record types cleanly on LSP hover", async () => {
+      const server = new FunScriptLspServer();
+      await server.handleMessage({ jsonrpc: "2.0", id: 1, method: "initialize", params: {} });
+      const uri = "file:///workspace/simplify-hover.fun";
+      const text = [
+        "ts {",
+        "  type Identity = { id: string }",
+        "  type Details = { name: string; age: number }",
+        "  type Profile = Simplify<Identity & Details>",
+        "}",
+        "schema User = from ts<Profile>",
+      ].join("\n");
+      await server.handleMessage({
+        jsonrpc: "2.0",
+        method: "textDocument/didOpen",
+        params: { textDocument: { uri, languageId: "funscript", version: 1, text } },
+      });
+      const response = (await server.handleMessage({
+        jsonrpc: "2.0",
+        id: 100,
+        method: "textDocument/hover",
+        params: { textDocument: { uri }, position: { line: 5, character: 8 } },
+      })) as ResponseMessage;
+      const value = (response.result as Hover).contents as { value: string };
+      expect(value.value).toContain("{ id: string; name: string; age: number }");
+      expect(value.value).toContain("Schema.Struct");
+    });
+
     it("returns null when document is not open", async () => {
       const server = new FunScriptLspServer();
       await server.handleMessage({

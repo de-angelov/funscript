@@ -6,7 +6,11 @@ import { Effect } from "effect";
 import { TraceMap, originalPositionFor } from "@jridgewell/trace-mapping";
 import { codeFrameColumns } from "@babel/code-frame";
 import { compileString, CompilerError } from "../compiler.js";
-import { TS_RESET_DECLARATION, JSX_INTRINSICS_DECLARATION } from "./typescript-context.js";
+import {
+  TS_RESET_DECLARATION,
+  JSX_INTRINSICS_DECLARATION,
+  TYPE_FEST_DECLARATION,
+} from "./typescript-context.js";
 
 export type DiagnosticCategory = "error" | "warning" | "suggestion" | "message";
 
@@ -390,6 +394,9 @@ export const typeCheckVirtualFiles = (
       const resetPath = path.join(cwd, "__funscript_ts_reset__.d.ts");
       virtualTsFiles.set(resetPath, TS_RESET_DECLARATION);
 
+      const typeFestPath = path.join(cwd, "__funscript_type_fest__.d.ts");
+      virtualTsFiles.set(typeFestPath, TYPE_FEST_DECLARATION);
+
       const defaultHost = ts.createCompilerHost(compilerOptions);
 
       const resolveVirtualContent = (fileName: string): string | undefined => {
@@ -403,6 +410,15 @@ export const typeCheckVirtualFiles = (
         }
         if (norm.endsWith(".jsx") && virtualTsFiles.has(norm.slice(0, -4) + ".tsx")) {
           return virtualTsFiles.get(norm.slice(0, -4) + ".tsx");
+        }
+        if (path.basename(fileName) === "__funscript_type_fest__.d.ts") {
+          return TYPE_FEST_DECLARATION;
+        }
+        if (path.basename(fileName) === "__funscript_ts_reset__.d.ts") {
+          return TS_RESET_DECLARATION;
+        }
+        if (path.basename(fileName) === "__funscript_jsx_intrinsics__.d.ts") {
+          return JSX_INTRINSICS_DECLARATION;
         }
         return undefined;
       };
