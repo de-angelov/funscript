@@ -1,8 +1,10 @@
 import * as fs from "node:fs/promises";
 import * as path from "node:path";
+import { createHash } from "node:crypto";
 import { Effect } from "effect";
 import ts from "typescript";
 import { compileString } from "../compiler.js";
+import { TypeScriptCompilationContext } from "../compiler/typescript-context.js";
 
 export interface TypeViewOptions {
   /** Project-relative source directories or files. Defaults to ["app"]. */
@@ -40,12 +42,15 @@ export class TypeView {
   private readonly inputs: string[];
   private readonly known = new Set<string>();
   private readonly manifest: string;
+  private readonly context: TypeScriptCompilationContext;
+  private readonly hashes = new Map<string, string>();
 
   constructor(root: string, options: TypeViewOptions = {}) {
     this.root = path.resolve(root);
     this.outDir = path.resolve(this.root, options.outDir ?? ".funscript/types");
     this.inputs = (options.include ?? ["app"]).map((input) => path.resolve(this.root, input));
     this.manifest = path.join(this.outDir, ".funscript-type-view.json");
+    this.context = new TypeScriptCompilationContext(path.join(this.root, "__funscript_type_view__.fun"));
     for (const input of this.inputs) {
       if (!this.inside(this.root, input)) throw new Error(`FunScript type view input must be inside project root: ${input}`);
     }
@@ -89,8 +94,14 @@ export class TypeView {
       if (exists) throw new Error(`FunScript type view cannot represent both ${file} and ${other}; rename one of them`);
     }
     const source = await fs.readFile(file, "utf8");
-    const output = await Effect.runPromise(compileString(source, file, { sourcemap: true }));
     const { compiled, shim } = this.paths(file);
+    const relative = path.relative(this.root, file);
+    const hash = createHash("sha256").update(source).digest("hex");
+    if (this.hashes.get(relative) === hash && await Promise.all([compiled, shim].map((output) => fs.stat(output).then(() => true, () => false))).then((exists) => exists.every(Boolean))) {
+      this.known.add(file);
+      return;
+    }
+    const output = await Effect.runPromise(compileString(source, file, { sourcemap: true, context: this.context }));
     const basename = path.basename(file).replace(/\.funx?$/, "");
     const parsed = ts.createSourceFile(compiled, output.typescript, ts.ScriptTarget.Latest, true, compiled.endsWith(".tsx") ? ts.ScriptKind.TSX : ts.ScriptKind.TS);
     const hasDefault = parsed.statements.some((statement) =>
@@ -103,6 +114,7 @@ export class TypeView {
     await fs.writeFile(compiled, rewriteRelativeImports(output.typescript, parsed, file, compiled));
     await fs.writeFile(shim, shimText);
     this.known.add(file);
+    this.hashes.set(relative, hash);
   }
 
   async remove(file: string): Promise<void> {
@@ -111,21 +123,26 @@ export class TypeView {
     const { compiled, shim } = this.paths(file);
     await Promise.all([fs.rm(compiled, { force: true }), fs.rm(shim, { force: true })]);
     this.known.delete(file);
+    this.hashes.delete(path.relative(this.root, file));
   }
 
   private async writeManifest(): Promise<void> {
     await fs.mkdir(this.outDir, { recursive: true });
-    await fs.writeFile(this.manifest, JSON.stringify([...this.known].map((file) => path.relative(this.root, file)).sort(), null, 2) + "\n");
+    await fs.writeFile(this.manifest, JSON.stringify(Object.fromEntries([...this.known].map((file) => [path.relative(this.root, file), this.hashes.get(path.relative(this.root, file))]).sort(([a], [b]) => String(a).localeCompare(String(b)))), null, 2) + "\n");
   }
 
   async generate(): Promise<void> {
     try {
       const saved: unknown = JSON.parse(await fs.readFile(this.manifest, "utf8"));
-      if (!Array.isArray(saved) || !saved.every((item) => typeof item === "string")) throw new Error("invalid file list");
-      for (const item of saved) {
+      const entries: Array<[string, string | undefined]> = Array.isArray(saved)
+        ? saved.map((item) => [item, undefined])
+        : saved && typeof saved === "object" ? Object.entries(saved as Record<string, unknown>).map(([file, hash]) => [file, typeof hash === "string" ? hash : undefined]) : [];
+      if (!entries.every(([item]) => typeof item === "string")) throw new Error("invalid file list");
+      for (const [item, hash] of entries) {
         const file = path.resolve(this.root, item);
         if (!this.inside(this.root, file) || !/\.funx?$/.test(file)) throw new Error("invalid file path");
         this.known.add(file);
+        if (hash) this.hashes.set(item, hash);
       }
     } catch (error: any) {
       if (error.code !== "ENOENT") throw new Error(`Cannot read FunScript type view manifest: ${error.message}`);

@@ -28,7 +28,8 @@ export async function runTsc(args: string[], cwd = process.cwd()): Promise<numbe
   const manifest: unknown = await fs.readFile(path.join(outDir, ".funscript-type-view.json"), "utf8")
     .then((text) => { try { return JSON.parse(text); } catch { return []; } }, () => []);
   const views = new Map<string, string>();
-  if (Array.isArray(manifest)) for (const item of manifest) {
+  const manifestFiles = Array.isArray(manifest) ? manifest : manifest && typeof manifest === "object" ? Object.keys(manifest) : [];
+  for (const item of manifestFiles) {
     if (typeof item !== "string" || !/\.funx?$/.test(item)) continue;
     const original = path.resolve(cwd, item);
     const relative = path.relative(cwd, original);

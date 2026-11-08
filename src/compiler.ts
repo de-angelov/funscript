@@ -69,6 +69,7 @@ export const compileString = (
 
       // 3. Emit TypeScript
       const context = options?.context ?? new TypeScriptCompilationContext(options?.sourcePath ?? filename);
+      context.setFilename(options?.sourcePath ?? filename);
       const importedRecordContracts = new Map<string, RecordTypeNode>();
       const importedRecordFunctions = resolveImportedRecordFunctions(ast, options?.sourcePath ?? filename, options?.virtualSources, importedRecordContracts);
       for (const [name, contract] of resolvePackageRecordContracts(ast, context, importedRecordContracts)) importedRecordContracts.set(name, contract);
