@@ -18,6 +18,7 @@
   },
   "scripts": {
     "build": "tsc && tsc -p editors/vscode",
+    "check": "tsc --noEmit",
     "benchmark": "node scripts/benchmark.mjs",
     "test": "vitest run",
     "test:examples": "vitest run tests/example-apps-build.test.ts",
