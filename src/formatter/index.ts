@@ -1027,6 +1027,10 @@ export class Formatter {
 
   public formatType(node: TypeNode, indent = 0): string {
     switch (node.kind) {
+      case "QualifiedTypeReferenceNode": {
+        const args = node.typeArgs?.length ? `<${node.typeArgs.map((arg) => this.formatType(arg, indent)).join(", ")}>` : "";
+        return `${node.parts.map((part) => part.name).join(".")}${args}`;
+      }
       case "TypeReferenceNode": {
         const typeArgs = node.typeArgs && node.typeArgs.length > 0
           ? `<${node.typeArgs.map(t => this.formatType(t, indent)).join(", ")}>`

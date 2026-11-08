@@ -2308,7 +2308,7 @@ export class Parser {
       };
     }
 
-    if (this.check(TokenType.UPPER_IDENTIFIER) && this.peek().value === "Effect") {
+    if (this.check(TokenType.UPPER_IDENTIFIER) && this.peek().value === "Effect" && this.peekAhead(1).type === TokenType.LT) {
       return this.parseEffectTypeNode();
     }
 
@@ -2316,6 +2316,8 @@ export class Parser {
       throw new ParseError("Type names must begin with an uppercase letter (for example String or Number); use ts for TypeScript types", this.peek().span);
     }
     const typeId = this.parseUpperIdentifier();
+    const parts: (Identifier | UpperIdentifier)[] = [typeId];
+    while (this.match(TokenType.DOT)) parts.push(this.parseAnyIdentifier());
     let typeArgs: TypeNode[] | undefined;
 
     if (this.match(TokenType.LT)) {
@@ -2326,6 +2328,9 @@ export class Parser {
       this.consume(TokenType.GT, "Expected '>' after type arguments");
     }
 
+    if (parts.length > 1) {
+      return { kind: "QualifiedTypeReferenceNode", parts, typeArgs, span: { start: typeId.span.start, end: this.previous().span.end } };
+    }
     return {
       kind: "TypeReferenceNode",
       name: typeId as any,

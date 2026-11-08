@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import path from "node:path";
-import { omit } from "../examples/interop/record.js";
+import { omit } from "funscript/record";
 import { compile, typeCheck } from "./helpers/index.js";
 
 describe("TypeScript interop and record algebra", () => {
@@ -12,7 +12,7 @@ describe("TypeScript interop and record algebra", () => {
   });
 
   it("preserves discriminated props, readonly and optional fields through a FunScript call", async () => {
-    const helper = path.resolve("examples/interop/record.js");
+    const helper = "funscript/record";
     const source = `
 import { omit } from "${helper}"
 ts {
@@ -55,7 +55,7 @@ export log = () => logger.info("country %s count %d", "BG", 3)`;
   });
 
   it("checks forwarded JSX props and rejects unknown spreads", async () => {
-    const helper = path.resolve("examples/interop/record.js");
+    const helper = "funscript/record";
     const prefix = `
 import { omit } from "${helper}"
 ts {

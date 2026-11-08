@@ -1,8 +1,13 @@
 # Interop examples
 
-`record.ts` is a small immutable omission helper for typed records. Its distributive
+`funscript/record` exports a small immutable omission helper for typed records. Its distributive
 return type retains discriminated union members. It copies enumerable own string and
 symbol keys; it does not make open object types exact.
+
+```funscript
+import { omit } from "funscript/record"
+export buttonProps = omit(props, ["internal"])
+```
 
 `cache-success.ts` demonstrates a caller-owned Effect cache. A successful result is
 retained indefinitely and a failure has zero TTL, so the next call can retry. Calling

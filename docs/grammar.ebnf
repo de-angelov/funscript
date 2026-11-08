@@ -101,7 +101,7 @@ primary_type         = type_identifier, [ type_args ]
                      | array_type
                      | "(", type_annotation, ")" ;
 
-type_identifier      = upper_identifier ;
+type_identifier      = upper_identifier, { ".", ( identifier | upper_identifier ) } ;
 type_args            = "<", type_annotation, { ",", type_annotation }, ">" ;
 type_params          = "<", type_param, { ",", type_param }, ">" ;
 type_param           = upper_identifier, [ "extends", type_annotation ] ;

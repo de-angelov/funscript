@@ -1,6 +1,7 @@
 import ts from "typescript";
 import * as path from "node:path";
 import * as fs from "node:fs/promises";
+import * as syncFs from "node:fs";
 import { Effect } from "effect";
 import { TraceMap, originalPositionFor } from "@jridgewell/trace-mapping";
 import { codeFrameColumns } from "@babel/code-frame";
@@ -37,10 +38,45 @@ export interface TypeCheckResult {
   formattedOutput: string;
 }
 
+export interface CachedSourceFile {
+  mtime?: number;
+  sourceFile: ts.SourceFile;
+}
+
+export interface TypeCheckCache {
+  oldProgram?: ts.Program;
+  sourceFiles: Map<string, CachedSourceFile>;
+  compiledFiles: Map<
+    string,
+    {
+      source: string;
+      compiled: {
+        typescript: string;
+        map?: any;
+        ast?: any;
+      };
+    }
+  >;
+  clear(): void;
+}
+
+export function createTypeCheckCache(): TypeCheckCache {
+  return {
+    sourceFiles: new Map(),
+    compiledFiles: new Map(),
+    clear() {
+      this.oldProgram = undefined;
+      this.sourceFiles.clear();
+      this.compiledFiles.clear();
+    },
+  };
+}
+
 export interface CheckOptions {
   compilerOptions?: ts.CompilerOptions;
   cwd?: string;
   highlightCode?: boolean;
+  cache?: TypeCheckCache;
 }
 
 export const DEFAULT_COMPILER_OPTIONS: ts.CompilerOptions = {
@@ -249,11 +285,14 @@ export const typeCheckVirtualFiles = (
           funSource: string;
           traceMap: TraceMap;
           tsCode: string;
+          ast?: any;
         }
       >();
 
       const earlyDiagnostics: TypeCheckDiagnostic[] = [];
       const virtualSources = new Map(Object.entries(virtualInputFiles).map(([file, content]) => [path.resolve(cwd, file), content]));
+
+      const cache = options?.cache;
 
       for (const [filePath, source] of Object.entries(virtualInputFiles)) {
         const fullFunPath = path.isAbsolute(filePath) ? path.normalize(filePath) : path.normalize(path.join(cwd, filePath));
@@ -261,42 +300,54 @@ export const typeCheckVirtualFiles = (
         const virtualTsPath = fullFunPath.replace(/\.(fun|funx)$/, ext);
 
         let compiled;
-        try {
-          compiled = await Effect.runPromise(compileString(source, filePath, { sourcemap: true, sourcePath: fullFunPath, virtualSources }));
-        } catch (err: any) {
-          const compErr = err instanceof CompilerError ? err : new CompilerError(err.message, err);
-          let errLine = 1;
-          let errCol = 1;
-          if ("span" in compErr.error && compErr.error.span?.start) {
-            errLine = compErr.error.span.start.line;
-            errCol = compErr.error.span.start.column;
-          }
-
-          let frame: string | undefined;
+        const cachedCompiled = cache?.compiledFiles.get(fullFunPath);
+        if (cachedCompiled && cachedCompiled.source === source) {
+          compiled = cachedCompiled.compiled;
+        } else {
           try {
-            frame = codeFrameColumns(
-              source,
-              { start: { line: errLine, column: errCol } },
-              { message: compErr.message, highlightCode: options?.highlightCode ?? false },
-            );
-          } catch {
-            frame = undefined;
+            compiled = await Effect.runPromise(compileString(source, filePath, { sourcemap: true, sourcePath: fullFunPath, virtualSources }));
+            if (cache) {
+              cache.compiledFiles.set(fullFunPath, { source, compiled });
+            }
+          } catch (err: any) {
+            if (cache) {
+              cache.compiledFiles.delete(fullFunPath);
+              cache.sourceFiles.delete(virtualTsPath);
+            }
+            const compErr = err instanceof CompilerError ? err : new CompilerError(err.message, err);
+            let errLine = 1;
+            let errCol = 1;
+            if ("span" in compErr.error && compErr.error.span?.start) {
+              errLine = compErr.error.span.start.line;
+              errCol = compErr.error.span.start.column;
+            }
+
+            let frame: string | undefined;
+            try {
+              frame = codeFrameColumns(
+                source,
+                { start: { line: errLine, column: errCol } },
+                { message: compErr.message, highlightCode: options?.highlightCode ?? false },
+              );
+            } catch {
+              frame = undefined;
+            }
+
+            const header = `${filePath}:${errLine}:${errCol} - error: ${compErr.message}`;
+            const formatted = frame ? `${header}\n${frame}` : header;
+
+            earlyDiagnostics.push({
+              file: filePath,
+              line: errLine,
+              column: errCol,
+              message: compErr.message,
+              category: "error",
+              code: "SYNTAX",
+              frame,
+              formatted,
+            });
+            continue;
           }
-
-          const header = `${filePath}:${errLine}:${errCol} - error: ${compErr.message}`;
-          const formatted = frame ? `${header}\n${frame}` : header;
-
-          earlyDiagnostics.push({
-            file: filePath,
-            line: errLine,
-            column: errCol,
-            message: compErr.message,
-            category: "error",
-            code: "SYNTAX",
-            frame,
-            formatted,
-          });
-          continue;
         }
 
         virtualTsFiles.set(virtualTsPath, compiled.typescript);
@@ -305,7 +356,18 @@ export const typeCheckVirtualFiles = (
           funSource: source,
           traceMap: new TraceMap(compiled.map!.toString()),
           tsCode: compiled.typescript,
+          ast: compiled.ast,
         });
+      }
+
+      if (cache) {
+        for (const key of cache.compiledFiles.keys()) {
+          if (!(key in virtualInputFiles) && !virtualSources.has(key)) {
+            cache.compiledFiles.delete(key);
+            const ext = key.endsWith(".funx") ? ".tsx" : ".ts";
+            cache.sourceFiles.delete(key.replace(/\.(fun|funx)$/, ext));
+          }
+        }
       }
 
       const hasTsx = Array.from(virtualTsFiles.keys()).some((fileName) => fileName.endsWith(".tsx"));
@@ -319,6 +381,14 @@ export const typeCheckVirtualFiles = (
           "declare namespace JSX { interface IntrinsicElements { [element: string]: any } }",
         );
       }
+
+      const resetPath = path.join(cwd, "__funscript_ts_reset__.d.ts");
+      virtualTsFiles.set(
+        resetPath,
+        '/// <reference types="@total-typescript/ts-reset" />\n' +
+        'interface JSON { parse(text: string, reviver?: (this: any, key: string, value: any) => any): unknown; }\n' +
+        'interface Body { json(): Promise<unknown>; }\n',
+      );
 
       const defaultHost = ts.createCompilerHost(compilerOptions);
 
@@ -341,9 +411,52 @@ export const typeCheckVirtualFiles = (
         ...defaultHost,
         getSourceFile: (fileName, languageVersion, onError, shouldCreateNewSourceFile) => {
           const content = resolveVirtualContent(fileName);
+          const norm = path.normalize(fileName);
+
           if (content !== undefined) {
+            if (cache) {
+              const cached = cache.sourceFiles.get(norm);
+              if (cached && cached.sourceFile.text === content) {
+                return cached.sourceFile;
+              }
+              const sf = ts.createSourceFile(fileName, content, languageVersion, true);
+              cache.sourceFiles.set(norm, { sourceFile: sf });
+              return sf;
+            }
             return ts.createSourceFile(fileName, content, languageVersion, true);
           }
+
+          if (cache) {
+            const cached = cache.sourceFiles.get(norm);
+            if (cached) {
+              if (norm.includes("node_modules") || norm.includes("typescript/lib") || norm.includes("@types")) {
+                return cached.sourceFile;
+              }
+              try {
+                const stat = syncFs.statSync(fileName);
+                if (cached.mtime !== undefined && stat.mtimeMs === cached.mtime) {
+                  return cached.sourceFile;
+                }
+              } catch {
+                // fall through on stat failure
+              }
+            }
+
+            const sf = defaultHost.getSourceFile(fileName, languageVersion, onError, shouldCreateNewSourceFile);
+            if (sf) {
+              let mtime: number | undefined;
+              if (!norm.includes("node_modules") && !norm.includes("typescript/lib")) {
+                try {
+                  mtime = syncFs.statSync(fileName).mtimeMs;
+                } catch {
+                  // ignore
+                }
+              }
+              cache.sourceFiles.set(norm, { sourceFile: sf, mtime });
+            }
+            return sf;
+          }
+
           return defaultHost.getSourceFile(fileName, languageVersion, onError, shouldCreateNewSourceFile);
         },
         fileExists: (fileName) => {
@@ -366,7 +479,12 @@ export const typeCheckVirtualFiles = (
           rootNames,
           options: compilerOptions,
           host,
+          oldProgram: cache?.oldProgram,
         });
+
+        if (cache) {
+          cache.oldProgram = program;
+        }
 
         const preEmit = ts.getPreEmitDiagnostics(program);
 
@@ -424,10 +542,109 @@ export const typeCheckVirtualFiles = (
           });
         }
 
+        const getFunScriptUnannotatedBindings = (ast?: any): Set<string> => {
+          const names = new Set<string>();
+          const walk = (node: any) => {
+            if (!node || typeof node !== "object") return;
+            if (node.kind === "TsEscapeDeclaration" || node.kind === "TsEscapeExpression") return;
+            if (node.kind === "BindingDeclaration" && node.id?.name) {
+              if (!node.typeAnnotation) {
+                names.add(node.id.name);
+              }
+            }
+            for (const key of Object.keys(node)) {
+              if (key === "span") continue;
+              const child = node[key];
+              if (Array.isArray(child)) {
+                for (const c of child) walk(c);
+              } else if (child && typeof child === "object") {
+                walk(child);
+              }
+            }
+          };
+          walk(ast);
+          return names;
+        };
+
+        const getFunScriptMemberAccesses = (ast?: any): Set<string> => {
+          const names = new Set<string>();
+          const walk = (node: any) => {
+            if (!node || typeof node !== "object") return;
+            if (node.kind === "TsEscapeDeclaration" || node.kind === "TsEscapeExpression") return;
+            if (node.kind === "MemberExpression" && node.property?.name) {
+              names.add(node.property.name);
+            }
+            for (const key of Object.keys(node)) {
+              if (key === "span") continue;
+              const child = node[key];
+              if (Array.isArray(child)) {
+                for (const c of child) walk(c);
+              } else if (child && typeof child === "object") {
+                walk(child);
+              }
+            }
+          };
+          walk(ast);
+          return names;
+        };
+
         const checker = program.getTypeChecker();
         for (const [normFile, meta] of virtualSourceMap) {
           const sf = program.getSourceFile(normFile);
           if (!sf) continue;
+
+          const unannotatedBindings = getFunScriptUnannotatedBindings(meta.ast);
+          const memberAccesses = getFunScriptMemberAccesses(meta.ast);
+
+          const addCustomDiag = (
+            targetNode: ts.Node,
+            code: string,
+            customMsg: string,
+          ) => {
+            const loc = mapDiagnosticLocation(
+              {
+                file: sf,
+                start: targetNode.getStart(sf),
+                length: targetNode.getWidth(sf),
+                messageText: customMsg,
+                category: ts.DiagnosticCategory.Error,
+                code: 9999,
+              } as ts.Diagnostic,
+              meta.funPath,
+              meta.funSource,
+              meta.traceMap,
+              meta.tsCode,
+            );
+            let frame: string | undefined;
+            try {
+              frame = codeFrameColumns(
+                meta.funSource,
+                {
+                  start: { line: loc.line, column: loc.column },
+                  end: loc.endColumn ? { line: loc.line, column: loc.endColumn } : undefined,
+                },
+                {
+                  message: customMsg,
+                  highlightCode: options?.highlightCode ?? false,
+                },
+              );
+            } catch {
+              frame = undefined;
+            }
+            const header = `${loc.file}:${loc.line}:${loc.column} - error ${code}: ${customMsg}`;
+            tsDiagnostics.push({
+              file: loc.file,
+              line: loc.line,
+              column: loc.column,
+              endLine: loc.endLine,
+              endColumn: loc.endColumn,
+              message: customMsg,
+              category: "error",
+              code,
+              frame,
+              formatted: frame ? `${header}\n${frame}` : header,
+            });
+          };
 
           const visit = (node: ts.Node): void => {
             if (ts.isYieldExpression(node) && node.asteriskToken && node.expression) {
@@ -440,50 +657,57 @@ export const typeCheckVirtualFiles = (
                 const type = checker.getTypeAtLocation(node.expression);
                 const isAny = Boolean(type.flags & ts.TypeFlags.Any);
                 if (isAny) {
-                  const customMsg = "Cannot bind untyped 'any' expression in effect block. External asynchronous calls must be explicitly lifted using the 'js' operator (e.g. '<- js <expr>') or validated with a schema.";
-                  const loc = mapDiagnosticLocation(
-                    {
-                      file: sf,
-                      start: node.expression.getStart(sf),
-                      length: node.expression.getWidth(sf),
-                      messageText: customMsg,
-                      category: ts.DiagnosticCategory.Error,
-                      code: 9999,
-                    } as ts.Diagnostic,
-                    meta.funPath,
-                    meta.funSource,
-                    meta.traceMap,
-                    meta.tsCode
+                  addCustomDiag(
+                    node.expression,
+                    "ANY_BIND",
+                    "Cannot bind untyped 'any' expression in effect block. External asynchronous calls must be explicitly lifted using the 'js' operator (e.g. '<- js <expr>') or validated with a schema.",
                   );
-                  let frame: string | undefined;
-                  try {
-                    frame = codeFrameColumns(
-                      meta.funSource,
-                      {
-                        start: { line: loc.line, column: loc.column },
-                        end: loc.endColumn ? { line: loc.line, column: loc.endColumn } : undefined,
-                      },
-                      {
-                        message: customMsg,
-                        highlightCode: options?.highlightCode ?? false,
-                      }
+                }
+              }
+            } else if (ts.isVariableDeclaration(node) && ts.isIdentifier(node.name) && !node.type) {
+              if (unannotatedBindings.has(node.name.text)) {
+                const type = checker.getTypeAtLocation(node.name);
+                if (Boolean(type.flags & ts.TypeFlags.Any)) {
+                  addCustomDiag(
+                    node.name,
+                    "ANY_BINDING",
+                    `Cannot infer untyped 'any' for binding '${node.name.text}'. Values from untyped foreign JavaScript or TypeScript must be explicitly typed as 'Unknown' (e.g. '${node.name.text}: Unknown = ...') or validated with a schema.`,
+                  );
+                }
+              }
+            } else if (ts.isPropertyAccessExpression(node)) {
+              if (memberAccesses.has(node.name.text)) {
+                const targetType = checker.getTypeAtLocation(node.expression);
+                if (Boolean(targetType.flags & ts.TypeFlags.Any)) {
+                  if (!ts.isPropertyAccessExpression(node.expression) && !ts.isElementAccessExpression(node.expression)) {
+                    addCustomDiag(
+                      node.name,
+                      "ANY_ACCESS",
+                      `Cannot access property '${node.name.text}' on untyped 'any' value. External values must be typed as 'Unknown' and validated with a schema before accessing properties.`,
                     );
-                  } catch {
-                    frame = undefined;
                   }
-                  const header = `${loc.file}:${loc.line}:${loc.column} - error ANY_BIND: ${customMsg}`;
-                  tsDiagnostics.push({
-                    file: loc.file,
-                    line: loc.line,
-                    column: loc.column,
-                    endLine: loc.endLine,
-                    endColumn: loc.endColumn,
-                    message: customMsg,
-                    category: "error",
-                    code: "ANY_BIND",
-                    frame,
-                    formatted: frame ? `${header}\n${frame}` : header,
-                  });
+                }
+              }
+            } else if (ts.isElementAccessExpression(node)) {
+              const targetType = checker.getTypeAtLocation(node.expression);
+              if (Boolean(targetType.flags & ts.TypeFlags.Any)) {
+                if (!ts.isPropertyAccessExpression(node.expression) && !ts.isElementAccessExpression(node.expression)) {
+                  addCustomDiag(
+                    node.argumentExpression,
+                    "ANY_ACCESS",
+                    "Cannot access index on untyped 'any' value. External values must be typed as 'Unknown' and validated with a schema.",
+                  );
+                }
+              }
+            } else if (ts.isCallExpression(node)) {
+              const calleeType = checker.getTypeAtLocation(node.expression);
+              if (Boolean(calleeType.flags & ts.TypeFlags.Any)) {
+                if (!ts.isPropertyAccessExpression(node.expression) && !ts.isElementAccessExpression(node.expression)) {
+                  addCustomDiag(
+                    node.expression,
+                    "ANY_CALL",
+                    "Cannot call untyped 'any' value as a function. External functions must have typed signatures or be adapted with an explicit signature.",
+                  );
                 }
               }
             }

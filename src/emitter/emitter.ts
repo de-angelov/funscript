@@ -400,6 +400,9 @@ export class Emitter {
   }
 
   private emitSchemaTypeField(typeNode: TypeNode): string {
+    if (typeNode.kind === "QualifiedTypeReferenceNode") {
+      throw new FunScriptError("A qualified TypeScript type is not a runtime schema; import or define a schema for validation", typeNode.span);
+    }
     this.effectImports.add("Schema");
     if (typeNode.kind === "LiteralTypeNode") return `Schema.Literal(${JSON.stringify(typeNode.value)})`;
     if (typeNode.kind === "FunctionTypeNode" || typeNode.kind === "EffectTypeNode") {
@@ -1610,6 +1613,10 @@ export class Emitter {
 
   private emitTypeNode(node: TypeNode): string {
     switch (node.kind) {
+      case "QualifiedTypeReferenceNode": {
+        const name = node.parts.map((part) => part.name).join(".");
+        return node.typeArgs?.length ? `${name}<${node.typeArgs.map((arg) => this.emitTypeNode(arg)).join(", ")}>` : name;
+      }
       case "TypeReferenceNode": {
         let name = node.name.name;
         if (name === "SchemaInput" && !this.declaredTypeNames.has(name)) {

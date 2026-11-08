@@ -48,7 +48,7 @@ import { Parser } from "../parser/parser.js";
 import { TypeScriptCompilationContext } from "../compiler/typescript-context.js";
 import { validateNumericComparisons } from "../compiler/numeric-comparisons.js";
 import { resolveImportedSchemas } from "../compiler/imported-schemas.js";
-import { typeCheckVirtualFiles } from "../compiler/check.js";
+import { typeCheckVirtualFiles, createTypeCheckCache, type TypeCheckCache } from "../compiler/check.js";
 import { format } from "../formatter/index.js";
 import type { Span } from "../ast/types.js";
 import { findHover } from "./hover.js";
@@ -158,6 +158,7 @@ export class FunScriptLspServer extends EventEmitter {
   private diagnosticTimer: ReturnType<typeof setTimeout> | undefined;
   private diagnosticRevision = 0;
   private syntaxErrors = new Set<string>();
+  private typeCheckCache: TypeCheckCache = createTypeCheckCache();
 
   constructor() {
     super();
@@ -301,6 +302,14 @@ export class FunScriptLspServer extends EventEmitter {
     if (params?.textDocument) {
       this.documents.delete(params.textDocument.uri);
       this.syntaxErrors.delete(params.textDocument.uri);
+      try {
+        const filename = fileURLToPath(params.textDocument.uri);
+        this.typeCheckCache.compiledFiles.delete(filename);
+        const ext = filename.endsWith(".funx") ? ".tsx" : ".ts";
+        this.typeCheckCache.sourceFiles.delete(filename.replace(/\.(fun|funx)$/, ext));
+      } catch {
+        // ignore non-file documents
+      }
       this.scheduleTypeDiagnostics();
       this.publishDiagnostics(params.textDocument.uri, undefined, []);
     }
@@ -594,7 +603,7 @@ export class FunScriptLspServer extends EventEmitter {
         } catch { /* Ignore non-file documents. */ }
       }
       if (!documents.size) return;
-      void Effect.runPromise(typeCheckVirtualFiles(files)).then((result) => {
+      void Effect.runPromise(typeCheckVirtualFiles(files, { cache: this.typeCheckCache })).then((result) => {
         if (this.diagnosticRevision !== revision) return;
         for (const [filename, doc] of documents) {
           if (this.syntaxErrors.has(doc.uri)) continue;
@@ -656,6 +665,7 @@ export class FunScriptLspServer extends EventEmitter {
     if (this.diagnosticTimer) clearTimeout(this.diagnosticTimer);
     this.diagnosticTimer = undefined;
     this.diagnosticRevision++;
+    this.typeCheckCache.clear();
     if (this.connection) {
       this.connection.dispose();
       this.connection = null;

@@ -1,7 +1,9 @@
 import { describe, expect, it, vi } from "vitest";
 import { pathToFileURL } from "node:url";
 import path from "node:path";
+import { Effect } from "effect";
 import { FunScriptLspServer } from "../src/lsp/server.js";
+import { typeCheckVirtualFiles, createTypeCheckCache } from "../src/compiler/check.js";
 
 describe("LSP TypeScript diagnostics", () => {
   it("maps generic constraint errors to FunScript and clears them after an edit", async () => {
@@ -46,5 +48,35 @@ export bad = connect(() => "bad")`;
     } finally {
       server.dispose();
     }
+  });
+
+  it("reuses incremental program and source cache across edits", async () => {
+    const cache = createTypeCheckCache();
+    const files = {
+      "modA.fun": "export num = 42\nexport getNum = () => num",
+      "modB.fun": 'import { getNum } from "./modA.js"\nexport result = getNum()',
+    };
+
+    // Cold check
+    const coldStart = performance.now();
+    const options = { cache, compilerOptions: { rootDir: process.cwd() } };
+    const firstResult = await Effect.runPromise(typeCheckVirtualFiles(files, options));
+    const coldDuration = performance.now() - coldStart;
+
+    expect(firstResult.success, firstResult.formattedOutput).toBe(true);
+    expect(cache.oldProgram).toBeDefined();
+    expect(cache.sourceFiles.size).toBeGreaterThan(0);
+
+    // Warm edit on modB only
+    const updatedFiles = {
+      ...files,
+      "modB.fun": 'import { getNum } from "./modA.js"\nexport result = getNum() + 1',
+    };
+    const warmStart = performance.now();
+    const secondResult = await Effect.runPromise(typeCheckVirtualFiles(updatedFiles, options));
+    const warmDuration = performance.now() - warmStart;
+
+    expect(secondResult.success, secondResult.formattedOutput).toBe(true);
+    expect(warmDuration).toBeLessThan(coldDuration);
   });
 });

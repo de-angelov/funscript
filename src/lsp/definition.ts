@@ -954,6 +954,18 @@ export class DefinitionFinder {
     if (this.found) return;
 
     switch (typeNode.kind) {
+      case "QualifiedTypeReferenceNode": {
+        const root = typeNode.parts[0];
+        if (this.isCursorIn(root)) {
+          const sym = scope.lookup(root.name);
+          if (sym) {
+            this.found = { originNode: root, declarationNode: sym.declarationNode, targetIdentifierNode: sym.identifierNode };
+            return;
+          }
+        }
+        for (const arg of typeNode.typeArgs ?? []) this.visitTypeNode(arg, scope);
+        break;
+      }
       case "TypeReferenceNode": {
         if (this.isCursorIn(typeNode.name)) {
           const sym = scope.lookup(typeNode.name.name);

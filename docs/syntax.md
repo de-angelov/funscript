@@ -2214,7 +2214,7 @@ at runtime. `Unknown` cannot be spread into JSX as a known props object without 
 or explicit decoding.
 
 For immutable prop forwarding, an ordinary TypeScript helper can remove keys while retaining
-the remaining types. [The record helper example](../examples/interop/record.ts) uses a
+the remaining types. The `omit` helper exported from `funscript/record` uses a
 distributive `Omit` to preserve discriminated unions and copies enumerable own properties
 without mutating the input. TypeScript object types are open: omitting a known key does not
 close an index signature or guarantee that no other keys exist.

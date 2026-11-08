@@ -494,6 +494,7 @@ export interface Placeholder extends NodeBase {
 
 export type TypeNode =
   | TypeReferenceNode
+  | QualifiedTypeReferenceNode
   | FunctionTypeNode
   | EffectTypeNode
   | RecordTypeNode
@@ -515,6 +516,12 @@ export interface TsEscapeTypeNode extends NodeBase {
 export interface TypeReferenceNode extends NodeBase {
   kind: "TypeReferenceNode";
   name: UpperIdentifier | Identifier;
+  typeArgs?: TypeNode[];
+}
+
+export interface QualifiedTypeReferenceNode extends NodeBase {
+  kind: "QualifiedTypeReferenceNode";
+  parts: (UpperIdentifier | Identifier)[];
   typeArgs?: TypeNode[];
 }
 

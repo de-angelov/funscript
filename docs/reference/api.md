@@ -9,5 +9,6 @@ Package: `funscript` 0.1.0.
 | `funscript` | `./dist/index.js` |
 | `funscript/prettier` | `./dist/formatter/prettier.js` |
 | `funscript/prettier-plugin-funscript` | `./dist/formatter/prettier.js` |
+| `funscript/record` | `./dist/interop/record.js` |
 | `funscript/vite` | `./dist/plugins/vite.js` |
 | `funscript/plugins/vite` | `./dist/plugins/vite.js` |

@@ -12,6 +12,7 @@
     ".": "./dist/index.js",
     "./prettier": "./dist/formatter/prettier.js",
     "./prettier-plugin-funscript": "./dist/formatter/prettier.js",
+    "./record": "./dist/interop/record.js",
     "./vite": "./dist/plugins/vite.js",
     "./plugins/vite": "./dist/plugins/vite.js"
   },
@@ -44,6 +45,7 @@
   "dependencies": {
     "@babel/code-frame": "^7.29.7",
     "@jridgewell/trace-mapping": "^0.3.31",
+    "@total-typescript/ts-reset": "^0.6.1",
     "effect": "^4.1.1",
     "magic-string": "^1.4.5",
     "mutative": "^1.1.0",

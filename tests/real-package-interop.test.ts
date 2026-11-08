@@ -1,11 +1,10 @@
 import { describe, expect, it } from "vitest";
-import path from "node:path";
 import ts from "typescript";
 import { compile, typeCheck } from "./helpers/index.js";
 
 describe("real package interop", () => {
   const options = { compilerOptions: { rootDir: process.cwd(), jsx: ts.JsxEmit.ReactJSX, types: ["react"], lib: ["lib.es2022.d.ts", "lib.dom.d.ts", "lib.dom.iterable.d.ts"] } };
-  const helper = path.resolve("examples/interop/record.js");
+  const helper = "funscript/record";
 
   it("forwards actual React button props and keeps the ref type", async () => {
     const source = `
@@ -80,5 +79,36 @@ export logObject = () => logger.info({ country: "BG" }, "connected %s", "client"
     const invalid = await typeCheck(source + '\nexport invalid = () => logger.child(42)');
     expect(invalid.success).toBe(false);
     expect(invalid.formattedOutput).toContain("not assignable");
+  });
+
+  describe("foreign any boundary policy", () => {
+    it("rejects unannotated bindings inferring foreign any with ANY_BINDING", async () => {
+      const source = `ts { declare const untypedJson: () => any }\nexport val = untypedJson()`;
+      const checked = await typeCheck(source);
+      expect(checked.success).toBe(false);
+      expect(checked.formattedOutput).toContain("ANY_BINDING");
+      expect(checked.formattedOutput).toContain("Cannot infer untyped 'any' for binding 'val'");
+    });
+
+    it("rejects property access on untyped foreign any with ANY_ACCESS", async () => {
+      const source = `ts { declare const payload: any }\nexport name = payload.user.name`;
+      const checked = await typeCheck(source);
+      expect(checked.success).toBe(false);
+      expect(checked.formattedOutput).toContain("ANY_ACCESS");
+      expect(checked.formattedOutput).toContain("Cannot access property 'user' on untyped 'any' value");
+    });
+
+    it("allows foreign any when explicitly typed as Unknown at the boundary", async () => {
+      const source = `ts { declare const untypedJson: () => any }\nexport val: Unknown = untypedJson()`;
+      const checked = await typeCheck(source);
+      expect(checked.success, checked.formattedOutput).toBe(true);
+    });
+
+    it("resets JSON.parse to return unknown and rejects unvalidated property access", async () => {
+      const source = `export parsed = JSON.parse("[]")\nexport bad = parsed.foo`;
+      const checked = await typeCheck(source);
+      expect(checked.success).toBe(false);
+      expect(checked.formattedOutput).toContain("'parsed' is of type 'unknown'");
+    });
   });
 });
