@@ -27,6 +27,12 @@ import {
 import { format } from "../src/formatter/index.js";
 
 describe("FunScript LSP Server", () => {
+  it("shows the resolved companion for an array pipeline stage", () => {
+    const source = 'export names =\n  ["Ada", "Grace"]\n  |> map((name) => name)';
+    const hover = findHover(source, `file://${process.cwd()}/pipeline.fun`, { line: 2, character: 6 });
+    expect(hover?.contents).toMatchObject({ value: expect.stringContaining("Array.map") });
+    expect(JSON.stringify(hover)).not.toContain("ambiguous");
+  });
   it("explains explicit alternatives when hovering an ambiguous bare stage", () => {
     const hover = findHover("value |> map((item) => item)", "file:///pipeline.fun", { line: 0, character: 10 });
     expect(hover?.contents).toMatchObject({

@@ -18,6 +18,8 @@ import { Parser } from "../parser/parser.js";
 import { Emitter } from "../emitter/emitter.js";
 import { TypeScriptCompilationContext } from "../compiler/typescript-context.js";
 import { resolveImportedSchemas } from "../compiler/imported-schemas.js";
+import { inferPipelineCompanions } from "../compiler/pipeline-companions.js";
+import { fileURLToPath } from "node:url";
 import ts from "typescript";
 
 function importedSchemaHover(source: string, uri: string, position: Position): Hover | null {
@@ -70,6 +72,8 @@ function findHoverInTokens(
   posCol: number,
   currentLine: string,
   lineIndex: number,
+  source: string,
+  uri: string,
 ): Hover | null {
   // Find token on posLine that strictly or best matches posCol
   const lineTokens: { token: Token; index: number }[] = [];
@@ -210,6 +214,20 @@ function findHoverInTokens(
   if (currentLine.slice(0, token.span.start.column - 1).includes("|>")) {
     const candidates = pipelineCompanionCandidates(token.value);
     if (candidates.length > 1) {
+      try {
+        const filename = uri.startsWith("file:") ? fileURLToPath(uri) : uri;
+        const ast = new Parser(tokens, filename, source).parse();
+        const resolution = inferPipelineCompanions(ast, new TypeScriptCompilationContext(filename))
+          .stageResolutions.get(token.span.start.offset);
+        if (resolution) {
+          return {
+            contents: { kind: MarkupKind.Markdown, value: `Resolves to \`${resolution.module}.${resolution.method}\`.` },
+            range: spanToRange(token.span),
+          };
+        }
+      } catch {
+        // Incomplete or ambiguous documents still get the candidate guidance.
+      }
       return {
         contents: {
           kind: MarkupKind.Markdown,
@@ -458,6 +476,8 @@ export function findHover(
       posCol,
       currentLine,
       lineIndex,
+      source,
+      uri,
     );
     if (hoverFromTokens) {
       return hoverFromTokens;
