@@ -20,7 +20,54 @@ import { TypeScriptCompilationContext } from "../compiler/typescript-context.js"
 import { resolveImportedSchemas } from "../compiler/imported-schemas.js";
 import { inferPipelineCompanions } from "../compiler/pipeline-companions.js";
 import { fileURLToPath } from "node:url";
+import { Effect } from "effect";
+import { compileString } from "../compiler.js";
 import ts from "typescript";
+
+function symbolHover(source: string, uri: string, token: Token): Hover | null {
+  if (token.type !== TokenType.IDENTIFIER && token.type !== TokenType.UPPER_IDENTIFIER) return null;
+  try {
+    const filename = uri.startsWith("file:") ? fileURLToPath(uri) : uri;
+    const context = new TypeScriptCompilationContext(filename);
+    const result = Effect.runSync(compileString(source, filename, { context, sourcemap: false }));
+    const checked = context.check(result.typescript);
+    if (!checked) return null;
+    const found = new Map<ts.Symbol, ts.Identifier>();
+    const visit = (node: ts.Node): void => {
+      if (ts.isIdentifier(node) && node.text === token.value) {
+        const symbol = checked.checker.getSymbolAtLocation(node);
+        if (symbol) found.set(symbol, node);
+      }
+      ts.forEachChild(node, visit);
+    };
+    visit(checked.sourceFile);
+    // Without precise source mappings, never guess across shadowed symbols.
+    if (found.size !== 1) return null;
+    const [symbol, node] = [...found.entries()][0];
+    const type = checked.checker.typeToString(
+      checked.checker.getTypeOfSymbolAtLocation(symbol, node), node,
+      ts.TypeFormatFlags.NoTruncation,
+    );
+    const documented = symbol.flags & ts.SymbolFlags.Alias ? checked.checker.getAliasedSymbol(symbol) : symbol;
+    let docs = ts.displayPartsToString(documented.getDocumentationComment(checked.checker));
+    // FunScript comments are not emitted into TypeScript; recover a doc block
+    // only when this name has one unambiguous top-level declaration.
+    const declarations = result.ast.body.flatMap((entry) => {
+      const decl = entry.kind === "ExportDeclaration" ? entry.declaration : entry;
+      return decl.kind === "BindingDeclaration" && decl.id.name === token.value ? [entry] : [];
+    });
+    if (declarations.length === 1) {
+      const before = source.slice(0, declarations[0].span.start.offset);
+      const comment = before.match(/(?:^|\n)((?:[ \t]*\/\/\/[^\n]*\n)+)[ \t]*$/);
+      if (comment) docs = comment[1].split("\n").map((line) => line.replace(/^\s*\/\/\/ ?/, "")).join("\n").trim();
+    }
+    const tags = documented.getJsDocTags(checked.checker).map((tag) => `@${tag.name}${tag.text ? ` ${ts.displayPartsToString(tag.text)}` : ""}`).join("\n");
+    const details = [docs, tags].filter(Boolean).join("\n\n");
+    return { contents: { kind: MarkupKind.Markdown, value: `\`\`\`ts\n${token.value}: ${type}\n\`\`\`${details ? `\n\n${details}` : ""}` }, range: spanToRange(token.span) };
+  } catch {
+    return null;
+  }
+}
 
 function importedSchemaHover(source: string, uri: string, position: Position): Hover | null {
   try {
@@ -250,7 +297,7 @@ function findHoverInTokens(
     };
   }
 
-  return null;
+  return posCol < token.span.end.column ? symbolHover(source, uri, token) : null;
 }
 
 function findHoverInLineText(

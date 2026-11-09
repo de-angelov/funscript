@@ -16,6 +16,21 @@ using the relevant ecosystem tool. Use Vite for web development and builds, Vite
 JavaScript/TypeScript tests, and npm, pnpm, or Bun to manage dependencies. These tools do not
 automatically discover `.fun` tests or start through a FunScript wrapper.
 
+## Hover information
+
+The language server provides type information for unambiguous symbols and
+documentation from TypeScript dependencies. Add consecutive `///` lines
+immediately before a top-level binding to include its FunScript documentation:
+
+```funscript
+/// Greet someone by name.
+export greet = (name: String) => "Hello, {name}!"
+```
+
+Hover also explains language constructs and resolved pipeline operations. When
+the server cannot safely distinguish shadowed symbols or compile an incomplete
+document, type information may be unavailable.
+
 ## Minimal command-line project
 
 In FunScript source, use brace-delimited `effect { ... }` as the canonical form for Effect sequencing. The existing

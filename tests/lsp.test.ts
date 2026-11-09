@@ -27,6 +27,23 @@ import {
 import { format } from "../src/formatter/index.js";
 
 describe("FunScript LSP Server", () => {
+  it("shows inferred function types and preceding documentation on declarations and uses", () => {
+    const source = '/// Say hello to someone.\nexport greet = (name: String) => "Hello, {name}!"\nexport message = greet("Ada")';
+    const uri = `file://${process.cwd()}/hover-example.fun`;
+    for (const position of [{ line: 1, character: 9 }, { line: 2, character: 19 }]) {
+      const value = (findHover(source, uri, position)?.contents as { value: string })?.value;
+      expect(value).toContain("greet");
+      expect(value).toContain("string");
+      expect(value).toContain("Say hello to someone");
+    }
+  });
+  it("shows TypeScript documentation for imported symbols", () => {
+    const source = 'import { readFileSync } from "node:fs"\nexport read = readFileSync';
+    const hover = findHover(source, `file://${process.cwd()}/hover-example.fun`, { line: 1, character: 16 });
+    const value = (hover?.contents as { value: string })?.value;
+    expect(value).toContain("readFileSync");
+    expect(value).toContain("Synchronously");
+  });
   it("shows the resolved companion for an array pipeline stage", () => {
     const source = 'export names =\n  ["Ada", "Grace"]\n  |> map((name) => name)';
     const hover = findHover(source, `file://${process.cwd()}/pipeline.fun`, { line: 2, character: 6 });
@@ -2143,7 +2160,7 @@ export schema Config = {
       expect(response.result).toBeNull();
     });
 
-    it("returns null when cursor is on whitespace or undocumented user identifier", async () => {
+    it("returns null on whitespace and shows the type of a user identifier", async () => {
       const server = new FunScriptLspServer();
       await server.handleMessage({
         jsonrpc: "2.0",
@@ -2188,7 +2205,7 @@ export schema Config = {
           position: { line: 0, character: 4 }, // on 'myCustomVar'
         },
       })) as ResponseMessage;
-      expect(varRes.result).toBeNull();
+      expect((varRes.result as Hover).contents).toMatchObject({ value: expect.stringContaining("myCustomVar: 123") });
     });
 
     it("returns rich Markdown hover documentation for language keywords (service, effect, match, mut)", async () => {
