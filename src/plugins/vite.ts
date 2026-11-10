@@ -43,6 +43,13 @@ export function funscriptPlugin(options: FunscriptPluginOptions = {}): Plugin {
         await typeView.generate();
       }
       return {
+        resolve: {
+          extensions: [
+            ...(config.resolve?.extensions ?? [".mjs", ".js", ".mts", ".ts", ".jsx", ".tsx", ".json"]),
+            ".fun",
+            ".funx",
+          ],
+        },
         esbuild: {
           include: /\.[jt]sx?$|\.funx?$/,
           loader: "tsx",
