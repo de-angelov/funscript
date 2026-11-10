@@ -2080,13 +2080,10 @@ export class Parser {
         this.skipNewlines();
 
         if (this.check(TokenType.RBRACE) || this.check(TokenType.DEDENT)) {
-          const isAllowedImplicitJsxReturn =
-            this.isFunx &&
-            statements.length === 0 &&
-            (expr.kind === "JSXElement" || expr.kind === "JSXSelfClosingElement");
+          const isAllowedImplicitReturn = statements.length === 0;
           if (
             requireExplicitReturn &&
-            !isAllowedImplicitJsxReturn &&
+            !isAllowedImplicitReturn &&
             expr.kind !== "MatchExpression" &&
             expr.kind !== "EffectBlockExpression"
           ) {
@@ -2212,13 +2209,10 @@ export class Parser {
           this.skipNewlines();
 
           if (this.check(TokenType.DEDENT)) {
-            const isAllowedImplicitJsxReturn =
-              this.isFunx &&
-              statements.length === 0 &&
-              (expr.kind === "JSXElement" || expr.kind === "JSXSelfClosingElement");
+            const isAllowedImplicitReturn = statements.length === 0;
             if (
               requireExplicitReturn &&
-              !isAllowedImplicitJsxReturn &&
+              !isAllowedImplicitReturn &&
               expr.kind !== "MatchExpression" &&
               expr.kind !== "EffectBlockExpression"
             ) {

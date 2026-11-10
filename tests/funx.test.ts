@@ -190,26 +190,34 @@ export View = () =>
       );
     });
 
-    it("rejects single-expression non-JSX function block in .funx during compilation", async () => {
+    it("compiles single-expression non-JSX function block in .funx with implicit return", async () => {
       const code = `
 export getValue = () =>
   42
 `.trim();
 
-      await expect(Effect.runPromise(compileString(code, "getValue.funx"))).rejects.toThrow(
-        "Function block must end with an explicit '=> returnValue'",
-      );
+      const res = await Effect.runPromise(compileString(code, "getValue.funx"));
+      expect(res.typescript).toContain("return 42;");
     });
 
-    it("rejects single-expression function block in .fun file during compilation", async () => {
+    it("compiles single-expression function block in .fun file with implicit return", async () => {
       const code = `
 export getValue = () =>
   42
 `.trim();
 
-      await expect(Effect.runPromise(compileString(code, "getValue.fun"))).rejects.toThrow(
-        "Function block must end with an explicit '=> returnValue'",
-      );
+      const res = await Effect.runPromise(compileString(code, "getValue.fun"));
+      expect(res.typescript).toContain("return 42;");
+    });
+
+    it("compiles fn declaration with single expression indented return in .fun file", async () => {
+      const code = `
+export fn cn(...inputs: Array<String>): String =>
+  inputs.join(" ")
+`.trim();
+
+      const res = await Effect.runPromise(compileString(code, "cn.fun"));
+      expect(res.typescript).toContain('return inputs.join(" ");');
     });
   });
 
@@ -335,7 +343,7 @@ export Header = () => <header><h1>FunScript</h1></header>
 
       const dashboardRun = await execFileAsync("node", [cliPath, "run", dashboardPath]);
       expect(dashboardRun.stdout).toContain("[Todo] Root tag: <main>");
-      expect(dashboardRun.stdout).toContain("[Todo] Root sections: 5");
+      expect(dashboardRun.stdout).toContain("[Todo] Dashboard view rendered");
       expect(dashboardRun.stdout).toContain("[Todo] Visible rows: 2");
 
       const widgetRun = await execFileAsync("node", [

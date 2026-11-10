@@ -670,16 +670,19 @@ absolute = (value: Number) => Number {
 and then continues; `| Pattern when condition => value` guards a match arm.
 Early returns require an enclosing function.
 
-In `.funx` source files, a function block whose sole body expression is a bare JSX element, self-closing element, or fragment may return that element implicitly without a leading `=>`:
+In both `.fun` and `.funx` source files, a function block whose sole body expression is a single expression, bare JSX element, self-closing element, or fragment may return that expression implicitly without a leading `=>`:
 
 ```funscript
 export Message = () =>
   <div className="message">
     <p>Hello, World!</p>
   </div>
+
+export fn cn(...inputs: ts { Parameters<typeof cx> }): String =>
+  twMerge(cx(...inputs))
 ```
 
-Any multi-statement function body in `.funx`, non-JSX final expressions, and all function block bodies in `.fun` continue to require an explicit `=> expression` return.
+Multi-statement function bodies continue to require an explicit `=> expression` return to distinguish returned values from side effects.
 
 JSX attributes support spreads such as `<Button {...props} disabled={true} />`.
 They retain JavaScript's source-order override behavior. A record parameter with

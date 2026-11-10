@@ -541,24 +541,27 @@ describe("JSX Parser (.funx mode)", () => {
       expect(block.statements[1].kind).toBe("ReturnStatement");
     });
 
-    it("rejects single-expression non-JSX function blocks in .funx without explicit return", () => {
+    it("accepts single-expression non-JSX function blocks in .funx without explicit return", () => {
       const codeIndented = `getValue = () =>
   42`;
-      expect(() => parse(codeIndented)).toThrow(ParseError);
-      expect(() => parse(codeIndented)).toThrow("Function block must end with an explicit '=> returnValue'");
+      const astIndented = parse(codeIndented);
+      const fnIndented = ((astIndented.body[0] as BindingDeclaration).init as FunctionExpression).body as BlockStatement;
+      expect(fnIndented.finalExpression).toBeDefined();
 
       const codeBraced = `getValue = () => {
   "hello"
 }`;
-      expect(() => parse(codeBraced)).toThrow(ParseError);
-      expect(() => parse(codeBraced)).toThrow("Function block must end with an explicit '=> returnValue'");
+      const astBraced = parse(codeBraced);
+      const fnBraced = ((astBraced.body[0] as BindingDeclaration).init as FunctionExpression).body as BlockStatement;
+      expect(fnBraced.finalExpression).toBeDefined();
     });
 
-    it("rejects single-expression function blocks in .fun files without explicit return", () => {
+    it("accepts single-expression function blocks in .fun files without explicit return", () => {
       const code = `render = () =>
   42`;
-      expect(() => parse(code, "test.fun")).toThrow(ParseError);
-      expect(() => parse(code, "test.fun")).toThrow("Function block must end with an explicit '=> returnValue'");
+      const ast = parse(code, "test.fun");
+      const fn = ((ast.body[0] as BindingDeclaration).init as FunctionExpression).body as BlockStatement;
+      expect(fn.finalExpression).toBeDefined();
     });
   });
 });
