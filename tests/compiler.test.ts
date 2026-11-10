@@ -743,5 +743,21 @@ getUser = () =>
       expect(failure).toBeInstanceOf(CompilerError);
       expect(failure.message).toContain("FunScript has no 'var'");
     });
+
+    it("automatically emits new for standard constructors like Set and Map without new keyword", async () => {
+      const code = `
+export s = Set([1, 2, 3])
+export m = Map([["a", 1]])
+export u = URL("https://example.com")
+export schema ItemMap = Map<String, Number>
+export schema TagSet = Set<String>
+`.trim();
+      const res = await Effect.runPromise(compileString(code));
+      expect(res.typescript).toContain(`export const s = new Set([1, 2, 3]);`);
+      expect(res.typescript).toContain(`export const m = new Map([["a", 1]]);`);
+      expect(res.typescript).toContain(`export const u = new URL("https://example.com");`);
+      expect(res.typescript).toContain(`export type ItemMap = ReadonlyMap<string, number>;`);
+      expect(res.typescript).toContain(`export type TagSet = ReadonlySet<string>;`);
+    });
   });
 });

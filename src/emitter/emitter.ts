@@ -248,6 +248,23 @@ const PRIMITIVE_TYPES: Readonly<Record<string, string>> = {
   Never: "never",
 };
 
+const AUTO_NEW_CONSTRUCTORS = new Set([
+  "Set",
+  "Map",
+  "WeakSet",
+  "WeakMap",
+  "Date",
+  "URL",
+  "URLSearchParams",
+  "FormData",
+  "Headers",
+  "Request",
+  "Response",
+  "AbortController",
+  "Blob",
+  "File",
+]);
+
 const EFFECT_BUILTIN_MODULES = new Set([
   "Console",
   "Effect",
@@ -990,6 +1007,24 @@ export class Emitter {
   }
 
   private emitCallExpression(expr: CallExpression): string {
+    if (
+      (expr.callee.kind === "UpperIdentifier" || expr.callee.kind === "Identifier") &&
+      AUTO_NEW_CONSTRUCTORS.has(expr.callee.name) &&
+      !this.bindings.has(expr.callee.name) &&
+      !this.declaredTypeNames.has(expr.callee.name)
+    ) {
+      return `new ${expr.callee.name}(${expr.args.map((a) => this.emitExpression(a)).join(", ")})`;
+    }
+
+    if (
+      expr.callee.kind === "MemberExpression" &&
+      AUTO_NEW_CONSTRUCTORS.has(expr.callee.property.name) &&
+      expr.callee.object.kind === "Identifier" &&
+      (expr.callee.object.name === "globalThis" || expr.callee.object.name === "window")
+    ) {
+      return `new ${this.emitExpression(expr.callee)}(${expr.args.map((a) => this.emitExpression(a)).join(", ")})`;
+    }
+
     if (
       (expr.callee.kind === "UpperIdentifier" || expr.callee.kind === "Identifier") &&
       expr.callee.name === "Brand"
@@ -2007,6 +2042,8 @@ export class Emitter {
         }
         if (PRIMITIVE_TYPES[name]) return PRIMITIVE_TYPES[name];
         if (name === "Array" && !this.declaredTypeNames.has(name)) name = "ReadonlyArray";
+        else if (name === "Map" && !this.declaredTypeNames.has(name)) name = "ReadonlyMap";
+        else if (name === "Set" && !this.declaredTypeNames.has(name)) name = "ReadonlySet";
         else if (["Option", "Record", "Duration"].includes(name) && !this.declaredTypeNames.has(name)) {
           this.effectImports.add(name);
           name = name === "Record" ? "Record.ReadonlyRecord" : `${name}.${name}`;
