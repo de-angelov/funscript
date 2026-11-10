@@ -219,6 +219,29 @@ export fn cn(...inputs: Array<String>): String =>
       const res = await Effect.runPromise(compileString(code, "cn.fun"));
       expect(res.typescript).toContain('return inputs.join(" ");');
     });
+    it("compiles HtmlProps with intrinsic JSX element spread", async () => {
+      const code = `
+export Button = (props: HtmlProps<"button">) =>
+  <button {...props} />
+`.trim();
+
+      const res = await Effect.runPromise(compileString(code, "Button.funx"));
+      expect(res.typescript).toContain('export const Button = (props: React.ComponentPropsWithoutRef<"button">)');
+      expect(res.typescript).toContain("return <button {...props} />;");
+    });
+
+    it("compiles intersection types with HtmlProps and custom props", async () => {
+      const code = `
+import { Slot } from "@radix-ui/react-slot"
+
+export Card = (props: HtmlProps<"div"> & { asChild?: Boolean }) =>
+  <Slot {...props} />
+`.trim();
+
+      const res = await Effect.runPromise(compileString(code, "Card.funx"));
+      expect(res.typescript).toContain('export const Card = (props: React.ComponentPropsWithoutRef<"div"> & { readonly asChild?: boolean })');
+      expect(res.typescript).toContain("return <Slot {...props} />;");
+    });
   });
 
   describe("CLI build command with .funx files", () => {

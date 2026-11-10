@@ -59,6 +59,7 @@ import {
   TypeParameter,
   FunctionTypeNode,
   EffectTypeNode,
+  IntersectionTypeNode,
   TsEscapeDeclaration,
   JsExpression,
   TsEscapeExpression,
@@ -716,6 +717,28 @@ export class Emitter {
     return fields?.get(expr.property.name);
   }
 
+  private isHtmlPropsType(type?: TypeNode): boolean {
+    if (!type) return false;
+    if (type.kind === "TypeReferenceNode" && type.name.name === "HtmlProps") return true;
+    if (type.kind === "IntersectionTypeNode") {
+      return type.types.some((t) => this.isHtmlPropsType(t));
+    }
+    return false;
+  }
+
+  private isDomOrExternalJsxTarget(target: unknown): boolean {
+    if (!target || typeof target !== "object") return true;
+    const node = target as Record<string, unknown>;
+    if (node.kind === "Identifier" && typeof node.name === "string") {
+      return /^[a-z]/.test(node.name);
+    }
+    if (node.kind === "UpperIdentifier" && typeof node.name === "string") {
+      return node.name === "Slot" || node.name === "Comp" || !this.recordContracts.has(node.name);
+    }
+    if (node.kind === "MemberExpression") return true;
+    return false;
+  }
+
   private isOptionalValue(expr: Expression): boolean {
     if (expr.kind === "Identifier") return this.isOptionalParameter(expr.name);
     if (expr.kind === "MemberExpression") return this.recordField(expr)?.optional ?? false;
@@ -737,6 +760,7 @@ export class Emitter {
     };
     collectBindings(expr.body);
     const source = expr.params.find((param) => param.name.name === name)?.typeAnnotation;
+    if (this.isHtmlPropsType(source)) return;
     const hasDefaults = source?.kind === "RecordTypeNode" && source.fields.some((field) => field.defaultValue);
     const isSafeLocalForward = (parent: Record<string, unknown>, index: number | undefined): boolean => {
       if (hasDefaults || index === undefined || parent.kind !== "CallExpression") return false;
@@ -772,7 +796,7 @@ export class Emitter {
         if (allowMember && parent?.kind === "MemberExpression" && key === "object") return;
         if (allowMember && inJs && parent?.kind === "CallExpression" && key === "args") return;
         if (allowMember && parent && key === "args" && isSafeLocalForward(parent, index)) return;
-        if (allowMember && parent?.kind === "JSXSpreadAttribute" && key === "argument" && isSafeLocalForward({ kind: "CallExpression", callee: jsxTarget }, 0)) return;
+        if (allowMember && parent?.kind === "JSXSpreadAttribute" && key === "argument" && (this.isDomOrExternalJsxTarget(jsxTarget) || isSafeLocalForward({ kind: "CallExpression", callee: jsxTarget }, 0))) return;
         if ((parent?.kind === "MemberExpression" && key === "property") || (parent?.kind === "FieldEntry" && key === "key") || (parent?.kind === "JSXAttribute" && key === "name")) return;
         throw new FunScriptError(`A record parameter with optional fields cannot be passed, returned, aliased, or indexed yet; access ${name}.field directly`, node.span as any);
       }
@@ -1479,6 +1503,7 @@ export class Emitter {
     const recordDefaults: string[] = [];
     expr.params.forEach((param, paramIndex) => {
       const declared = param.typeAnnotation;
+      if (this.isHtmlPropsType(declared)) { records.set(param.name.name, undefined); return; }
       const recordType = declared?.kind === "TypeReferenceNode" ? this.recordContracts.get(declared.name.name) : declared;
       if (declared?.kind === "TypeReferenceNode" && recordType && (param.optional || param.defaultValue)) {
         throw new FunScriptError("A compile-time record contract parameter cannot itself be optional or defaulted yet", param.span);
@@ -1970,6 +1995,10 @@ export class Emitter {
           }
           return `typeof ${arg.name.name}.Encoded`;
         }
+        if (name === "HtmlProps") {
+          const tag = node.typeArgs?.[0] ? this.emitTypeNode(node.typeArgs[0]) : '"div"';
+          return `React.ComponentPropsWithoutRef<${tag}>`;
+        }
         if (PRIMITIVE_TYPES[name]) return PRIMITIVE_TYPES[name];
         if (name === "Array" && !this.declaredTypeNames.has(name)) name = "ReadonlyArray";
         else if (["Option", "Record", "Duration"].includes(name) && !this.declaredTypeNames.has(name)) {
@@ -2007,6 +2036,8 @@ export class Emitter {
         return `ReadonlyArray<${this.emitTypeNode(node.elementType)}>`;
       case "UnionTypeNode":
         return node.types.map((t) => this.emitTypeNode(t)).join(" | ");
+      case "IntersectionTypeNode":
+        return node.types.map((t) => this.emitTypeNode(t)).join(" & ");
       case "LiteralTypeNode":
         return JSON.stringify(node.value);
       case "TsEscapeTypeNode":

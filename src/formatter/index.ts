@@ -69,6 +69,7 @@ import {
   RecordTypeField,
   ArrayTypeNode,
   UnionTypeNode,
+  IntersectionTypeNode,
   Literal,
   NumberLiteral,
   StringLiteral,
@@ -1075,6 +1076,8 @@ export class Formatter {
         return `Array<${this.formatType(node.elementType, indent)}>`;
       case "UnionTypeNode":
         return node.types.map(t => this.formatType(t, indent)).join(" | ");
+      case "IntersectionTypeNode":
+        return node.types.map(t => this.formatType(t, indent)).join(" & ");
       case "LiteralTypeNode":
         return JSON.stringify(node.value);
       case "TsEscapeTypeNode":

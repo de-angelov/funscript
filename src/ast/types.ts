@@ -506,6 +506,7 @@ export type TypeNode =
   | RecordTypeNode
   | ArrayTypeNode
   | UnionTypeNode
+  | IntersectionTypeNode
   | LiteralTypeNode
   | TsEscapeTypeNode;
 
@@ -580,6 +581,11 @@ export interface ArrayTypeNode extends NodeBase {
 
 export interface UnionTypeNode extends NodeBase {
   kind: "UnionTypeNode";
+  types: TypeNode[];
+}
+
+export interface IntersectionTypeNode extends NodeBase {
+  kind: "IntersectionTypeNode";
   types: TypeNode[];
 }
 

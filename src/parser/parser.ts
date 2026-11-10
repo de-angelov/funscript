@@ -76,6 +76,7 @@ import {
   RecordTypeField,
   ArrayTypeNode,
   UnionTypeNode,
+  IntersectionTypeNode,
   TsEscapeDeclaration,
   JsExpression,
   TsEscapeExpression,
@@ -1133,9 +1134,16 @@ export class Parser {
 
     while (true) {
       if (this.match(TokenType.LPAREN)) {
+        this.skipNewlines();
+        while (this.match(TokenType.INDENT) || this.match(TokenType.DEDENT)) {}
+        this.skipNewlines();
         const args: Expression[] = [];
         if (!this.check(TokenType.RPAREN)) {
           do {
+            this.skipNewlines();
+            while (this.match(TokenType.INDENT) || this.match(TokenType.DEDENT)) {}
+            this.skipNewlines();
+            if (this.check(TokenType.RPAREN)) break;
             if (this.match(TokenType.DOTDOTDOT)) {
               const dotSpan = this.previous().span;
               const arg = this.parseExpression();
@@ -1147,8 +1155,14 @@ export class Parser {
             } else {
               args.push(this.parseExpression());
             }
+            this.skipNewlines();
+            while (this.match(TokenType.INDENT) || this.match(TokenType.DEDENT)) {}
+            this.skipNewlines();
           } while (this.match(TokenType.COMMA) && !this.check(TokenType.RPAREN));
         }
+        this.skipNewlines();
+        while (this.match(TokenType.INDENT) || this.match(TokenType.DEDENT)) {}
+        this.skipNewlines();
         const end = this.consume(TokenType.RPAREN, "Expected ')' after call arguments").span.end;
         expr = {
           kind: "CallExpression",
@@ -2265,15 +2279,30 @@ export class Parser {
   }
 
   private parseUnionType(): TypeNode {
-    const first = this.parseFunctionTypeNode();
+    const first = this.parseIntersectionType();
     if (!this.check(TokenType.BAR)) return first;
 
     const types: TypeNode[] = [first];
     while (this.match(TokenType.BAR)) {
-      types.push(this.parseFunctionTypeNode());
+      types.push(this.parseIntersectionType());
     }
     return {
       kind: "UnionTypeNode",
+      types,
+      span: { start: first.span.start, end: types[types.length - 1].span.end },
+    };
+  }
+
+  private parseIntersectionType(): TypeNode {
+    const first = this.parseFunctionTypeNode();
+    if (!this.check(TokenType.AMP)) return first;
+
+    const types: TypeNode[] = [first];
+    while (this.match(TokenType.AMP)) {
+      types.push(this.parseFunctionTypeNode());
+    }
+    return {
+      kind: "IntersectionTypeNode",
       types,
       span: { start: first.span.start, end: types[types.length - 1].span.end },
     };

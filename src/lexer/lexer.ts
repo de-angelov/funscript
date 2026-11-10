@@ -148,6 +148,9 @@ export class Lexer {
         this.emitToken(TokenType.STARSTAR, "**", 2);
         continue;
       }
+      if (this.matchAhead("&&")) {
+        throw new LexerError(BANNED_SYMBOLS["&&"], this.currentSpan(2));
+      }
       if (this.matchAhead("??")) {
         throw new LexerError(BANNED_SYMBOLS["??"], this.currentSpan(2));
       }
@@ -177,6 +180,9 @@ export class Lexer {
           break;
         case "|":
           this.emitToken(TokenType.BAR, "|", 1);
+          break;
+        case "&":
+          this.emitToken(TokenType.AMP, "&", 1);
           break;
         case "+":
           this.emitToken(TokenType.PLUS, "+", 1);

@@ -59,6 +59,7 @@ import type {
   RecordTypeField,
   ArrayTypeNode,
   UnionTypeNode,
+  IntersectionTypeNode,
   Span,
   NodeBase,
   JSXElement,
@@ -1039,7 +1040,8 @@ export class DefinitionFinder {
         break;
       }
 
-      case "UnionTypeNode": {
+      case "UnionTypeNode":
+      case "IntersectionTypeNode": {
         for (const t of typeNode.types) {
           this.visitTypeNode(t, scope);
         }
