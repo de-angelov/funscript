@@ -242,6 +242,30 @@ export Card = (props: HtmlProps<"div"> & { asChild?: Boolean }) =>
       expect(res.typescript).toContain('export const Card = (props: React.ComponentPropsWithoutRef<"div"> & { readonly asChild?: boolean })');
       expect(res.typescript).toContain("return <Slot {...props} />;");
     });
+
+    it("compiles contextual keywords and string keys in record literals and types", async () => {
+      const code = `
+export variants = {
+  variants: {
+    variant: {
+      default: "base",
+      "data-active": "active"
+    }
+  },
+  defaultVariants: {
+    variant: "default"
+  }
+}
+export Config = (props: { default?: String, "data-slot"?: String }) =>
+  <div>{props.default}</div>
+`.trim();
+
+      const res = await Effect.runPromise(compileString(code, "Config.funx"));
+      expect(res.typescript).toContain('default: "base"');
+      expect(res.typescript).toContain('"data-active": "active"');
+      expect(res.typescript).toContain('readonly default?: string');
+      expect(res.typescript).toContain('readonly "data-slot"?: string');
+    });
   });
 
   describe("CLI build command with .funx files", () => {

@@ -94,7 +94,7 @@ import {
   JSXChild,
   JSXTagName,
 } from "../ast/types.js";
-import { Token, TokenType } from "../lexer/tokens.js";
+import { Token, TokenType, KEYWORDS } from "../lexer/tokens.js";
 import { FunScriptError } from "../errors.js";
 
 export class ParseError extends FunScriptError {
@@ -491,8 +491,7 @@ export class Parser {
       this.skipNewlines();
       if (this.check(TokenType.RBRACE) || this.check(TokenType.DEDENT)) break;
 
-      const fieldToken = this.check(TokenType.ERROR) ? this.advance() : undefined;
-      const fieldName: Identifier = fieldToken ? { kind: "Identifier", name: fieldToken.value, span: fieldToken.span } : this.parseIdentifier();
+      const fieldName: Identifier = this.parseRecordKeyIdentifier();
       const optional = this.match(TokenType.QUESTION);
       this.consume(TokenType.COLON, "Expected ':' after field name");
       const previous = this.allowOptionalRecordFields;
@@ -1171,7 +1170,7 @@ export class Parser {
           span: { start: expr.span.start, end },
         };
       } else if (this.match(TokenType.DOT)) {
-        const prop = this.parseAnyIdentifier();
+        const prop = this.parsePropertyIdentifier();
         expr = {
           kind: "MemberExpression",
           object: expr,
@@ -1478,15 +1477,12 @@ export class Parser {
           span: { start: this.previous().span.start, end: arg.span.end },
         });
       } else {
-        const fieldToken = this.check(TokenType.ERROR) ? this.advance() : undefined;
-        const firstId: Identifier = fieldToken
-          ? { kind: "Identifier", name: fieldToken.value, span: fieldToken.span }
-          : this.parseIdentifier();
+        const firstId: Identifier = this.parseRecordKeyIdentifier();
         if (this.match(TokenType.DOT)) {
           // Dot-path entry: address.city: "Paris"
           const path: Identifier[] = [firstId];
           do {
-            path.push(this.parseIdentifier());
+            path.push(this.parsePropertyIdentifier() as Identifier);
           } while (this.match(TokenType.DOT));
 
           this.consume(TokenType.COLON, "Expected ':' after dot-path");
@@ -2375,10 +2371,7 @@ export class Parser {
         while (!this.check(TokenType.RBRACE) && !this.check(TokenType.DEDENT) && !this.isAtEnd()) {
           this.skipNewlines();
           if (this.check(TokenType.RBRACE) || this.check(TokenType.DEDENT)) break;
-          const fieldToken = this.check(TokenType.ERROR) ? this.advance() : undefined;
-          const fName: Identifier = fieldToken
-            ? { kind: "Identifier", name: fieldToken.value, span: fieldToken.span }
-            : this.parseIdentifier();
+          const fName: Identifier = this.parseRecordKeyIdentifier();
           const optional = this.match(TokenType.QUESTION);
           this.consume(TokenType.COLON, "Expected ':' after field name");
           const fType = this.parseTypeNode();
@@ -2420,7 +2413,7 @@ export class Parser {
     }
     const typeId = this.parseUpperIdentifier();
     const parts: (Identifier | UpperIdentifier)[] = [typeId];
-    while (this.match(TokenType.DOT)) parts.push(this.parseAnyIdentifier());
+    while (this.match(TokenType.DOT)) parts.push(this.parsePropertyIdentifier());
     let typeArgs: TypeNode[] | undefined;
 
     if (this.match(TokenType.LT)) {
@@ -2642,7 +2635,7 @@ export class Parser {
 
     let name: JSXTagName = this.parseAnyIdentifier();
     while (this.match(TokenType.DOT)) {
-      const prop = this.parseAnyIdentifier();
+      const prop = this.parsePropertyIdentifier();
       name = {
         kind: "MemberExpression",
         object: name as Expression,
@@ -2755,6 +2748,34 @@ export class Parser {
     }
     if (this.check(TokenType.UPPER_IDENTIFIER)) return this.parseUpperIdentifier();
     return this.parseIdentifier();
+  }
+
+  private parsePropertyIdentifier(): Identifier | UpperIdentifier {
+    if (this.check(TokenType.ERROR)) {
+      const token = this.advance();
+      return { kind: "Identifier", name: token.value, span: token.span };
+    }
+    if (this.check(TokenType.UPPER_IDENTIFIER)) {
+      return this.parseUpperIdentifier();
+    }
+    if (this.check(TokenType.IDENTIFIER)) {
+      return this.parseIdentifier();
+    }
+    const peek = this.peek();
+    if (Object.values(KEYWORDS).includes(peek.type)) {
+      const tok = this.advance();
+      return { kind: "Identifier", name: tok.value, span: tok.span };
+    }
+    return this.parseIdentifier();
+  }
+
+  private parseRecordKeyIdentifier(): Identifier {
+    if (this.match(TokenType.STRING)) {
+      const tok = this.previous();
+      return { kind: "Identifier", name: tok.value, span: tok.span };
+    }
+    const prop = this.parsePropertyIdentifier();
+    return { kind: "Identifier", name: prop.name, span: prop.span };
   }
 
   private parseStringLiteral(): StringLiteral {

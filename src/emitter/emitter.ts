@@ -274,6 +274,10 @@ const EFFECT_BUILTIN_MODULES = new Set([
 
 type RecordFieldInfo = { optional: boolean; defaultBinding?: string; fields?: Map<string, RecordFieldInfo> };
 
+function emitPropertyKey(name: string): string {
+  return /^[a-zA-Z_$][a-zA-Z0-9_$]*$/.test(name) ? name : JSON.stringify(name);
+}
+
 export class Emitter {
   private effectImports = new Set<string>();
   private parameterScopes: Array<Map<string, boolean>> = [];
@@ -443,11 +447,12 @@ export class Emitter {
         this.effectImports.add("Schema");
         const schemaFields = decl.body.fields
           .map((f) => {
+            const fieldKey = emitPropertyKey(f.name.name);
             const schema = this.emitSchemaTypeField(f.typeAnnotation);
-            if (f.optional) return `  ${f.name.name}: Schema.OptionFromOptional(${schema})`;
-            if (!f.defaultValue) return `  ${f.name.name}: ${schema}`;
+            if (f.optional) return `  ${fieldKey}: Schema.OptionFromOptional(${schema})`;
+            if (!f.defaultValue) return `  ${fieldKey}: ${schema}`;
             this.effectImports.add("Effect");
-            return `  ${f.name.name}: ${schema}.pipe(Schema.withDecodingDefaultType(Effect.sync(() => ${this.emitExpression(f.defaultValue!)})))`;
+            return `  ${fieldKey}: ${schema}.pipe(Schema.withDecodingDefaultType(Effect.sync(() => ${this.emitExpression(f.defaultValue!)})))`;
           })
           .join(",\n");
         return `${exp}const ${name} = Schema.Struct({\n${schemaFields}\n});\n${exp}type ${name} = typeof ${name}.Type;\n${exp}const ${name}FromUnknown = (input: unknown): ${name} => Schema.decodeUnknownSync(${name})(input);`;
@@ -733,7 +738,7 @@ export class Emitter {
       return /^[a-z]/.test(node.name);
     }
     if (node.kind === "UpperIdentifier" && typeof node.name === "string") {
-      return node.name === "Slot" || node.name === "Comp" || !this.recordContracts.has(node.name);
+      return node.name === "Slot" || node.name === "Comp";
     }
     if (node.kind === "MemberExpression") return true;
     return false;
@@ -1457,7 +1462,8 @@ export class Emitter {
             return `  draft.${e.path.map((p) => p.name).join(".")} = ${this.emitExpression(e.value)};`;
           }
           if (e.kind === "FieldEntry") {
-            return `  draft.${e.key.name} = ${this.emitExpression(e.value)};`;
+            const keyAccess = /^[a-zA-Z_$][a-zA-Z0-9_$]*$/.test(e.key.name) ? `.${e.key.name}` : `[${JSON.stringify(e.key.name)}]`;
+            return `  draft${keyAccess} = ${this.emitExpression(e.value)};`;
           }
           return `  draft.${e.key.name} = ${e.key.name};`;
         })
@@ -1468,7 +1474,7 @@ export class Emitter {
     const entries = expr.entries
       .map((e) => {
         if (e.kind === "SpreadEntry") return `...${this.emitExpression(e.argument)}`;
-        if (e.kind === "FieldEntry") return `${e.key.name}: ${this.emitExpression(e.value)}`;
+        if (e.kind === "FieldEntry") return `${emitPropertyKey(e.key.name)}: ${this.emitExpression(e.value)}`;
         if (e.kind === "ShorthandEntry") return e.key.name;
         return "";
       })
@@ -2029,7 +2035,7 @@ export class Emitter {
         return `Effect.Effect<${succ}, ${err}, ${req}>`;
       }
       case "RecordTypeNode": {
-        const fields = node.fields.map((f) => `readonly ${f.name.name}${f.optional || f.defaultValue ? "?" : ""}: ${this.emitTypeNode(f.typeAnnotation)}`).join("; ");
+        const fields = node.fields.map((f) => `readonly ${emitPropertyKey(f.name.name)}${f.optional || f.defaultValue ? "?" : ""}: ${this.emitTypeNode(f.typeAnnotation)}`).join("; ");
         return `{ ${fields} }`;
       }
       case "ArrayTypeNode":
