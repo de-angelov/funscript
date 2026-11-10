@@ -754,7 +754,7 @@ export schema TagSet = Set<String>
 `.trim();
       const res = await Effect.runPromise(compileString(code));
       expect(res.typescript).toContain(`export const s = new Set([1, 2, 3]);`);
-      expect(res.typescript).toContain(`export const m = new Map([["a", 1]]);`);
+      expect(res.typescript).toContain(`export const m = new Map([["a", 1]] as any);`);
       expect(res.typescript).toContain(`export const u = new URL("https://example.com");`);
       expect(res.typescript).toContain(`export type ItemMap = ReadonlyMap<string, number>;`);
       expect(res.typescript).toContain(`export type TagSet = ReadonlySet<string>;`);

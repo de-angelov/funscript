@@ -1013,6 +1013,9 @@ export class Emitter {
       !this.bindings.has(expr.callee.name) &&
       !this.declaredTypeNames.has(expr.callee.name)
     ) {
+      if ((expr.callee.name === "Map" || expr.callee.name === "WeakMap") && expr.args.length === 1) {
+        return `new ${expr.callee.name}(${this.emitExpression(expr.args[0])} as any)`;
+      }
       return `new ${expr.callee.name}(${expr.args.map((a) => this.emitExpression(a)).join(", ")})`;
     }
 
