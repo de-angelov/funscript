@@ -238,14 +238,13 @@ or a compiler-known pattern (`Some`, `None`, `Left`, `Right`, `Success`, `Failur
 The compiler enforces the convention for declarations it generates. Imported JavaScript
 values may have any casing; they are only relevant in expression position.
 
+<!-- GENERATED: keywords -->
 ### 1.5 Keywords (18 total)
 
 ```text
-and       default   effect    error     export
-false     from      import    js        match
-mut       not       or        schema    service
-true      ts        when
+and default effect error export false from import js match mut not or schema service true ts when
 ```
+<!-- /GENERATED: keywords -->
 
 `_` is a special token (wildcard in patterns, discard in `_ <-`, and call-argument
 placeholder in `|> f(a, _)`), not a keyword in the usual sense. `???` is the typed-hole
