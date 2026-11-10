@@ -72,6 +72,8 @@ Contract coverage for both rules is verified in [tests/language-rules.test.ts](.
 
 ## Change checklist
 
+For new features, use the detailed [language feature checklist](language-feature-checklist.md).
+
 - [ ] Preserve the syntax contract and explicit `Order` guidance.
 - [ ] Update lexer/token, parser/AST, compiler type validation, emission, and
   formatter only where the behavior or representation actually changes.
@@ -103,3 +105,22 @@ These checks cover syntax, not type checking, runtime behavior, or every hover
 snippet. Other snippets may be illustrative fragments. Use the language rule
 contract tests for behavior and keep the prose and examples in sync when rules
 change; no automatic check can infer the intended meaning of arbitrary prose.
+
+## Behavior-tested language contracts
+
+[The tested examples](reference/tested-examples.md) are generated from
+`tests/fixtures/language-contracts/*.fun`. Each contract in
+`tests/fixtures/language-contracts/catalog.json` names its source file, covered
+lexer token values, and expected runtime behavior. The language contract test
+compiles and executes that same source; the documentation generator embeds it.
+For a new token, add a contract with a representative example and behavior
+expectations, then run `npm run docs:generate` and the contract tests.
+
+The `legacyTokens` list records existing tokens that do not yet have this level
+of contract coverage, including internal and layout tokens. Move a token out of
+the list when adding coverage; do not add new public syntax to the baseline.
+CI fails for unclassified token values. This is a migration baseline, not a
+measure of overall language feature coverage. Features that reuse existing tokens
+or add no token, including changed semantics, cannot be detected by this gate;
+reviewers must require a contract for those changes. Contracts supplement the
+other parser, compiler, diagnostics, and formatter tests.

@@ -1,0 +1,119 @@
+{
+  "contracts": [
+    {
+      "id": "effect-return",
+      "title": "Effect binding and return",
+      "description": "Execute an effect, bind its result, and return a computed value.",
+      "file": "effect-return.fun",
+      "tokens": [
+        "effect",
+        "<-",
+        "=>"
+      ],
+      "behavior": {
+        "export": "program",
+        "effect": true,
+        "expected": 3
+      }
+    },
+    {
+      "id": "numeric-comparison",
+      "title": "Numeric comparison",
+      "description": "Combine numeric comparisons with short-circuit conjunction.",
+      "file": "numeric-comparison.fun",
+      "tokens": [
+        ">=",
+        "<",
+        "and"
+      ],
+      "behavior": {
+        "export": "inRange",
+        "cases": [
+          {
+            "args": [
+              5
+            ],
+            "expected": true
+          },
+          {
+            "args": [
+              10
+            ],
+            "expected": false
+          },
+          {
+            "args": [
+              -1
+            ],
+            "expected": false
+          }
+        ]
+      }
+    }
+  ],
+  "legacyTokens": [
+    "#!",
+    "#=",
+    "%",
+    "(",
+    ")",
+    "*",
+    "**",
+    "+",
+    ",",
+    "-",
+    ".",
+    "...",
+    "/",
+    ":",
+    "<=",
+    "=",
+    ">",
+    "?",
+    "???",
+    "@!",
+    "@=",
+    "DEDENT",
+    "EOF",
+    "IDENTIFIER",
+    "INDENT",
+    "INTERPOLATION_END",
+    "INTERPOLATION_START",
+    "JSX_ATTRIBUTE_NAME",
+    "JSX_CLOSING_TAG_OPEN",
+    "JSX_SLASH_CLOSE",
+    "JSX_TAG_CLOSE",
+    "JSX_TAG_NAME",
+    "JSX_TAG_OPEN",
+    "JSX_TEXT",
+    "NEWLINE",
+    "NUMBER",
+    "STRING",
+    "STRING_PART",
+    "TS_CODE",
+    "UPPER_IDENTIFIER",
+    "[",
+    "]",
+    "_",
+    "default",
+    "error",
+    "export",
+    "false",
+    "from",
+    "import",
+    "js",
+    "match",
+    "mut",
+    "not",
+    "or",
+    "schema",
+    "service",
+    "true",
+    "ts",
+    "when",
+    "{",
+    "|",
+    "|>",
+    "}"
+  ]
+}

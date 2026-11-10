@@ -1,5 +1,5 @@
 import { execFileSync } from "node:child_process";
-import { access, copyFile, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { access, copyFile, cp, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { describe, expect, it } from "vitest";
@@ -27,6 +27,7 @@ describe("generated reference documentation", () => {
     const tempDir = await mkdtemp(join(tmpdir(), "funscript-docs-drift-"));
     try {
       await mkdir(join(tempDir, "docs", "reference"), { recursive: true });
+      await cp(resolve(root, "tests/fixtures/language-contracts"), join(tempDir, "tests/fixtures/language-contracts"), { recursive: true });
       await copyFile(resolve(root, "package.json"), join(tempDir, "package.json"));
       await copyFile(resolve(root, "README.md"), join(tempDir, "README.md"));
       await copyFile(resolve(root, "docs/syntax.md"), join(tempDir, "docs/syntax.md"));
@@ -71,6 +72,7 @@ describe("generated reference documentation", () => {
     const tempDir = await mkdtemp(join(tmpdir(), "funscript-docs-markers-"));
     try {
       await mkdir(join(tempDir, "docs"), { recursive: true });
+      await cp(resolve(root, "tests/fixtures/language-contracts"), join(tempDir, "tests/fixtures/language-contracts"), { recursive: true });
       await copyFile(resolve(root, "package.json"), join(tempDir, "package.json"));
       await copyFile(resolve(root, "docs/syntax.md"), join(tempDir, "docs/syntax.md"));
       const readme = await readFile(resolve(root, "README.md"), "utf8");

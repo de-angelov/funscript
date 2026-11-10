@@ -3,7 +3,7 @@
 # Language reference
 
 This catalogue is the same metadata used by Language Server hover help. For runnable
-programs, use the [validated example inventory](examples.md).
+programs, use the [validated example inventory](examples.md) and [behavior-tested language examples](tested-examples.md).
 
 ## `???`
 
