@@ -89,3 +89,17 @@ npm run build
 npm run docs:check
 git diff --check
 ```
+
+## Syntax-checked documentation examples
+
+`PARSED_DOC_EXAMPLES` in [the hover catalogue](../src/lsp/docs.ts) names complete
+examples that the reference generator publishes and the documentation tests parse
+with the current lexer and parser. To add one, write a complete FunScript program
+in the catalogue and add its name to that list. Run `npm run docs:generate` and
+`npm run docs:check`, then run `npx vitest run tests/reference-docs.test.ts`.
+A parser failure means the example or language changed and requires review.
+
+These checks cover syntax, not type checking, runtime behavior, or every hover
+snippet. Other snippets may be illustrative fragments. Use the language rule
+contract tests for behavior and keep the prose and examples in sync when rules
+change; no automatic check can infer the intended meaning of arbitrary prose.

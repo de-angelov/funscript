@@ -1,7 +1,7 @@
 import { mkdir, readFile, readdir, writeFile } from "node:fs/promises";
 import { join, relative, resolve } from "node:path";
 import { renderCliReference } from "../dist/cli/commands.js";
-import { DOC_CATALOG } from "../dist/lsp/docs.js";
+import { DOC_CATALOG, PARSED_DOC_EXAMPLES } from "../dist/lsp/docs.js";
 import { KEYWORDS } from "../dist/lexer/tokens.js";
 
 export const findFunScriptFiles = async (directory) => {
@@ -39,6 +39,7 @@ ${item.signature}
 
 ${item.description}
 
+${PARSED_DOC_EXAMPLES.includes(item.name) ? `### Syntax-checked example\n\n\`\`\`funscript\n${item.snippet}\n\`\`\`\n` : ""}
 ${item.seeAlso?.length ? `\nSee also: ${item.seeAlso.map((name) => `\`${name}\``).join(", ")}.` : ""}`).join("\n\n")}
 `;
 };

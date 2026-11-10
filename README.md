@@ -13,7 +13,7 @@ matching, and immutable updates less ceremonial.
 ## Generated project facts
 
 - Package: `funscript` `0.1.0`
-- Runtime: Effect `^4.1.1`
+- Runtime: Effect `^4.1.2`
 - Source extensions: `.fun`, `.funx`
 - Runnable checked examples: 19
 

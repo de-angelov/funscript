@@ -6,8 +6,10 @@ import { describe, expect, it } from "vitest";
 import { generateReferenceDocs } from "../scripts/generate-reference-docs.mjs";
 import { KEYWORDS } from "../src/lexer/tokens.js";
 import { PIPELINE_COMPANION_CATALOG } from "../src/emitter/pipeline-catalog.js";
+import { Lexer } from "../src/lexer/lexer.js";
+import { Parser } from "../src/parser/parser.js";
 import { CLI_COMMANDS } from "../src/cli/commands.js";
-import { DOC_CATALOG } from "../src/lsp/docs.js";
+import { DOC_CATALOG, PARSED_DOC_EXAMPLES } from "../src/lsp/docs.js";
 
 const root = resolve(import.meta.dirname, "..");
 
@@ -77,6 +79,12 @@ describe("generated reference documentation", () => {
     } finally {
       await rm(tempDir, { recursive: true, force: true });
     }
+  });
+
+  it.each(PARSED_DOC_EXAMPLES)("parses the documented %s example with the current language", (name) => {
+    const source = DOC_CATALOG[name].snippet;
+    const filename = `documentation-${name}.fun`;
+    expect(() => new Parser(new Lexer(source, filename).tokenize(), filename, source).parse()).not.toThrow();
   });
 
   describe("code-owned documentation fact assertions", () => {
