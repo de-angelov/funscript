@@ -59,13 +59,16 @@ Contract coverage for both rules is verified in [tests/language-rules.test.ts](.
 
 - Edit [the syntax guide](syntax.md#42-equality-and-comparisons) when the
   language contract changes. Its grammar also records the comparison
-  production in [the grammar appendix](syntax.md#appendix-a-grammar).
+  production in [the grammar appendix](syntax.md#appendix-a-grammar). The keyword
+  list is generated from the lexer; do not edit that section directly.
 - Edit [LSP documentation metadata](../src/lsp/docs.ts) for hover text. The
   language reference at [docs/reference/language.md](reference/language.md) is
   generated from that metadata; do not edit it directly.
 - [The reference generator](../scripts/generate-reference-docs.mjs) defines
   the generated outputs and `--check` mode. `docs:generate` builds first and
-  regenerates references; `docs:check` verifies the checked-in outputs.
+  regenerates references; `docs:check` builds first and verifies the checked-in outputs.
+  Generation and keyword coverage checks cannot infer semantic changes: update the
+  syntax guide, hover metadata, and behavior tests when language behavior changes.
 
 ## Change checklist
 

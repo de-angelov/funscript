@@ -1,5 +1,5 @@
 import { execFileSync } from "node:child_process";
-import { copyFile, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { access, copyFile, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { describe, expect, it } from "vitest";
@@ -27,6 +27,7 @@ describe("generated reference documentation", () => {
       await mkdir(join(tempDir, "docs", "reference"), { recursive: true });
       await copyFile(resolve(root, "package.json"), join(tempDir, "package.json"));
       await copyFile(resolve(root, "README.md"), join(tempDir, "README.md"));
+      await copyFile(resolve(root, "docs/syntax.md"), join(tempDir, "docs/syntax.md"));
       await writeFile(join(tempDir, "docs", "reference", "cli.md"), "# Outdated CLI docs\n");
 
       let loggedError = "";
@@ -50,6 +51,29 @@ describe("generated reference documentation", () => {
           stdio: "pipe",
         });
       }).toThrowError();
+    } finally {
+      await rm(tempDir, { recursive: true, force: true });
+    }
+  });
+
+  it("links every generated example to an existing file", async () => {
+    const reference = await readFile(resolve(root, "docs/reference/examples.md"), "utf8");
+    const links = [...reference.matchAll(/\]\(([^)]+)\)/g)];
+    expect(links.length).toBeGreaterThan(0);
+    for (const [, target] of links) {
+      await expect(access(resolve(root, "docs/reference", target))).resolves.toBeUndefined();
+    }
+  });
+
+  it("rejects missing generated section markers", async () => {
+    const tempDir = await mkdtemp(join(tmpdir(), "funscript-docs-markers-"));
+    try {
+      await mkdir(join(tempDir, "docs"), { recursive: true });
+      await copyFile(resolve(root, "package.json"), join(tempDir, "package.json"));
+      await copyFile(resolve(root, "docs/syntax.md"), join(tempDir, "docs/syntax.md"));
+      const readme = await readFile(resolve(root, "README.md"), "utf8");
+      await writeFile(join(tempDir, "README.md"), readme.replace("<!-- GENERATED: example-inventory -->", ""));
+      await expect(generateReferenceDocs({ root: tempDir, check: true })).rejects.toThrow("example-inventory");
     } finally {
       await rm(tempDir, { recursive: true, force: true });
     }

@@ -9,7 +9,7 @@ matching, and immutable updates less ceremonial.
 
 **Status:** experimental compiler and tooling under active development.
 
-<!-- GENERATED: project-facts -=>
+<!-- GENERATED: project-facts -->
 ## Generated project facts
 
 - Package: `funscript` `0.1.0`
@@ -18,7 +18,7 @@ matching, and immutable updates less ceremonial.
 - Runnable checked examples: 16
 
 The exact command surface is generated from the implementation in the [CLI reference](docs/reference/cli.md). The language catalogue used by editor hover help is generated in the [language reference](docs/reference/language.md).
-<!-- /GENERATED: project-facts -=>
+<!-- /GENERATED: project-facts -->
 
 ## Why FunScript?
 
@@ -86,7 +86,7 @@ For the current, verified contract and runnable source examples, read the
 
 ## Examples
 
-<!-- GENERATED: example-inventory -=>
+<!-- GENERATED: example-inventory -->
 | [`examples/bank-account.fun`](examples/bank-account.fun) | `FunScript` |
 | [`examples/fibonacci.fun`](examples/fibonacci.fun) | `FunScript` |
 | [`examples/github-api-client.fun`](examples/github-api-client.fun) | `FunScript` |
@@ -103,7 +103,7 @@ For the current, verified contract and runnable source examples, read the
 | [`examples/todo-http.fun`](examples/todo-http.fun) | `FunScript` |
 | [`examples/todo-service.fun`](examples/todo-service.fun) | `FunScript` |
 | [`examples/ts-schema-validation.fun`](examples/ts-schema-validation.fun) | `FunScript` |
-<!-- /GENERATED: example-inventory -=>
+<!-- /GENERATED: example-inventory -->
 
 ## Development
 
