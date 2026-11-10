@@ -7,7 +7,7 @@
 import { Effect } from "effect"
 
 ts {
-  import * as Schema from "effect/Schema";
+import * as Schema from "effect/Schema";
   import * as SqlClient from "effect/sql/SqlClient";
   import * as SqliteClient from "@effect/sql-sqlite-node/SqliteClient";
 
@@ -78,9 +78,10 @@ ts {
   );
 }
 
-export main = effect {
+export main =
+  effect {
     result <- js runRepository
     failureClosed <- js runFailureAndClose
     _ <- Effect.sync(() => console.log(JSON.stringify({ ...result, failureClosed })))
     => true
-}
+  }

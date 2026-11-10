@@ -8,7 +8,7 @@
  * shape are absent. Predicate-only exports are also absent: a bare predicate
  * is an ordinary function unless it is explicitly namespaced.
  */
-export const EFFECT_PIPELINE_CATALOG_VERSION = "4.1.1";
+export const EFFECT_PIPELINE_CATALOG_VERSION = "4.1.2";
 
 export type PipelineCompanionModule = "Array" | "Option" | "Result" | "Chunk" | "Effect" | "Schedule" | "Layer" | "Stream" | "Schema";
 

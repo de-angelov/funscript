@@ -39,6 +39,7 @@ import {
   RecordExpression,
   RecordEntry,
   SpreadEntry,
+  SpreadElement,
   FieldEntry,
   DotPathEntry,
   ShorthandEntry,
@@ -725,7 +726,7 @@ export class Parser {
     };
   }
 
-  private parseValueParameter(name: Identifier, nameOnlySpan = false): Parameter {
+  private parseValueParameter(name: Identifier, nameOnlySpan = false, isRest = false): Parameter {
     const optional = this.match(TokenType.QUESTION);
     let typeAnnotation: TypeNode | undefined;
     if (this.match(TokenType.COLON)) {
@@ -737,13 +738,32 @@ export class Parser {
     if (optional && !typeAnnotation) throw new ParseError("Optional parameters require a type annotation", name.span);
     const defaultValue = this.match(TokenType.EQ) ? this.parseExpression() : undefined;
     if (optional && defaultValue) throw new ParseError("A parameter cannot be both optional and defaulted", name.span);
-    return { kind: "Parameter", name, typeAnnotation, optional, defaultValue, span: nameOnlySpan ? name.span : { start: name.span.start, end: (defaultValue ?? typeAnnotation ?? name).span.end } };
+    return {
+      kind: "Parameter",
+      name,
+      typeAnnotation,
+      optional,
+      defaultValue,
+      isRest: isRest ? true : undefined,
+      span: nameOnlySpan ? name.span : { start: name.span.start, end: (defaultValue ?? typeAnnotation ?? name).span.end },
+    };
   }
 
   private validateValueParameters(params: Parameter[]): void {
     for (let i = 0; i < params.length; i++) {
-      if (params[i].optional && params.slice(i + 1).some((p) => !p.optional)) {
+      if (params[i].optional && params.slice(i + 1).some((p) => !p.optional && !p.isRest)) {
         throw new ParseError("Only optional parameters may follow an optional parameter", params[i].span);
+      }
+      if (params[i].isRest) {
+        if (i !== params.length - 1) {
+          throw new ParseError("A rest parameter must be the last parameter in a parameter list", params[i].span);
+        }
+        if (params[i].optional) {
+          throw new ParseError("A rest parameter cannot be optional", params[i].span);
+        }
+        if (params[i].defaultValue) {
+          throw new ParseError("A rest parameter cannot have a default value", params[i].span);
+        }
       }
     }
   }
@@ -762,7 +782,17 @@ export class Parser {
     const params: Parameter[] = [];
     if (!this.check(TokenType.RPAREN)) {
       do {
-        params.push(this.parseValueParameter(this.parseIdentifier()));
+        let isRest = false;
+        let dotSpan: Span | undefined;
+        if (this.match(TokenType.DOTDOTDOT)) {
+          isRest = true;
+          dotSpan = this.previous().span;
+        }
+        const p = this.parseValueParameter(this.parseIdentifier(), false, isRest);
+        if (dotSpan) {
+          p.span = { start: dotSpan.start, end: p.span.end };
+        }
+        params.push(p);
       } while (this.match(TokenType.COMMA) && !this.check(TokenType.RPAREN));
     }
     this.consume(TokenType.RPAREN, "Expected ')' after parameters");
@@ -1106,7 +1136,17 @@ export class Parser {
         const args: Expression[] = [];
         if (!this.check(TokenType.RPAREN)) {
           do {
-            args.push(this.parseExpression());
+            if (this.match(TokenType.DOTDOTDOT)) {
+              const dotSpan = this.previous().span;
+              const arg = this.parseExpression();
+              args.push({
+                kind: "SpreadElement",
+                argument: arg,
+                span: { start: dotSpan.start, end: arg.span.end },
+              });
+            } else {
+              args.push(this.parseExpression());
+            }
           } while (this.match(TokenType.COMMA) && !this.check(TokenType.RPAREN));
         }
         const end = this.consume(TokenType.RPAREN, "Expected ')' after call arguments").span.end;
@@ -1234,15 +1274,37 @@ export class Parser {
         throw new ParseError("Empty parentheses '()' must be followed by '=>'", this.previous().span);
       }
 
-      // Check if this looks like function params (param: Type, ...) =>
-      const firstExpr = this.parseExpression();
+      // Check if this looks like function params (param: Type, ...) => or (...rest) =>
+      let firstIsRest = false;
+      let firstDotSpan: Span | undefined;
+      if (this.match(TokenType.DOTDOTDOT)) {
+        firstIsRest = true;
+        firstDotSpan = this.previous().span;
+      }
 
-      if (this.check(TokenType.COLON) || this.check(TokenType.COMMA) || this.check(TokenType.QUESTION) || this.check(TokenType.EQ)) {
+      const firstExpr = firstIsRest ? this.parseIdentifier() : this.parseExpression();
+
+      if (firstIsRest || this.check(TokenType.COLON) || this.check(TokenType.COMMA) || this.check(TokenType.QUESTION) || this.check(TokenType.EQ)) {
         if (firstExpr.kind !== "Identifier") throw new ParseError("Expected a parameter name", firstExpr.span);
-        const params: Parameter[] = [this.parseValueParameter(firstExpr, true)];
+        const firstParam = this.parseValueParameter(firstExpr, true, firstIsRest);
+        if (firstDotSpan) {
+          firstParam.span = { start: firstDotSpan.start, end: firstParam.span.end };
+        }
+        const params: Parameter[] = [firstParam];
         while (this.match(TokenType.COMMA)) {
           if (this.check(TokenType.RPAREN)) break;
-          params.push(this.parseValueParameter(this.parseIdentifier(), true));
+          let isRest = false;
+          let dotSpan: Span | undefined;
+          if (this.match(TokenType.DOTDOTDOT)) {
+            isRest = true;
+            dotSpan = this.previous().span;
+          }
+          const pName = this.parseIdentifier();
+          const p = this.parseValueParameter(pName, true, isRest);
+          if (dotSpan) {
+            p.span = { start: dotSpan.start, end: p.span.end };
+          }
+          params.push(p);
         }
 
         this.consume(TokenType.RPAREN, "Expected ')' after parameters");
@@ -1297,9 +1359,13 @@ export class Parser {
 
       if (arrowConsumed || this.match(TokenType.ARROW)) {
         const body = this.parseFunctionBody(!this.options.allowLegacyReturns);
+        const paramName: Identifier =
+          firstExpr.kind === "Placeholder"
+            ? { kind: "Identifier", name: "_", span: firstExpr.span }
+            : (firstExpr as Identifier);
         return {
           kind: "FunctionExpression",
-          params: [{ kind: "Parameter", name: firstExpr as Identifier, span: firstExpr.span }],
+          params: [{ kind: "Parameter", name: paramName, span: firstExpr.span }],
           returnType: singleReturnType,
           body,
           span: { start, end: body.span.end },
@@ -1461,7 +1527,17 @@ export class Parser {
       do {
         this.skipNewlines();
         if (this.check(TokenType.RBRACKET)) break;
-        elements.push(this.parseExpression());
+        if (this.match(TokenType.DOTDOTDOT)) {
+          const dotSpan = this.previous().span;
+          const element = this.parseExpression();
+          elements.push({
+            kind: "SpreadElement",
+            argument: element,
+            span: { start: dotSpan.start, end: element.span.end },
+          });
+        } else {
+          elements.push(this.parseExpression());
+        }
       } while (this.match(TokenType.COMMA) && !this.check(TokenType.RBRACKET));
     }
 
@@ -2219,6 +2295,12 @@ export class Parser {
       const params: Parameter[] = [];
       if (!this.check(TokenType.RPAREN)) {
         do {
+          let isRest = false;
+          let dotSpan: Span | undefined;
+          if (this.match(TokenType.DOTDOTDOT)) {
+            isRest = true;
+            dotSpan = this.previous().span;
+          }
           const pName = this.parseIdentifier();
           const optional = this.match(TokenType.QUESTION);
           this.consume(TokenType.COLON, "Expected ':' after param name");
@@ -2228,7 +2310,8 @@ export class Parser {
             name: pName,
             typeAnnotation: pType,
             optional: optional ? true : undefined,
-            span: { start: pName.span.start, end: pType.span.end },
+            isRest: isRest ? true : undefined,
+            span: { start: dotSpan ? dotSpan.start : pName.span.start, end: pType.span.end },
           });
         } while (this.match(TokenType.COMMA) && !this.check(TokenType.RPAREN));
       }

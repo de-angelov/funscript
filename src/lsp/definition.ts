@@ -577,6 +577,11 @@ export class DefinitionFinder {
         break;
       }
 
+      case "SpreadElement": {
+        this.visitExpression(expr.argument, scope);
+        break;
+      }
+
       case "FunctionExpression": {
         const fnScope = new Scope(scope);
         if (expr.typeParams) {

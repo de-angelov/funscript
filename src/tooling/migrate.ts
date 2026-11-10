@@ -464,6 +464,10 @@ function visitExpression(
       }
       break;
 
+    case "SpreadElement":
+      visitExpression(expr.argument, source, options, changes, diagnostics, filename);
+      break;
+
     case "RecordExpression":
       for (const entry of expr.entries) {
         if ("value" in entry && entry.value) {

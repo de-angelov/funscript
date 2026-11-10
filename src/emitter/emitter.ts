@@ -914,6 +914,8 @@ export class Emitter {
         return this.emitJsExpression(expr);
       case "TsEscapeExpression":
         return expr.code;
+      case "SpreadElement":
+        return `...${this.emitExpression(expr.argument)}`;
     }
   }
 
@@ -1159,6 +1161,8 @@ export class Emitter {
         return this.hasPlaceholder(expr.left) || this.hasPlaceholder(expr.right);
       case "JsExpression":
         return this.hasPlaceholder(expr.expression);
+      case "SpreadElement":
+        return this.hasPlaceholder(expr.argument);
       default:
         return false;
     }
@@ -1456,10 +1460,11 @@ export class Emitter {
     }
     const params = expr.params
       .map((p, index) => {
+        const rest = p.isRest ? "..." : "";
         const name = p.optional ? `$funscriptOptional${index}` : p.name.name;
         const typeAnn = p.typeAnnotation ? `: ${this.emitTypeNode(p.typeAnnotation)}` : "";
         const defaultValue = p.defaultValue ? ` = ${this.emitExpression(p.defaultValue)}` : "";
-        return `${name}${p.optional ? "?" : ""}${typeAnn}${defaultValue}`;
+        return `${rest}${name}${p.optional ? "?" : ""}${typeAnn}${defaultValue}`;
       })
       .join(", ");
     const typeParams = this.emitTypeParameters(expr.typeParams);
@@ -1979,9 +1984,10 @@ export class Emitter {
       case "FunctionTypeNode": {
         const params = node.params
           .map((p) => {
+            const rest = p.isRest ? "..." : "";
             const name = p.name ? p.name.name : "_";
             const opt = p.optional ? "?" : "";
-            return p.typeAnnotation ? `${name}${opt}: ${this.emitTypeNode(p.typeAnnotation)}` : `${name}${opt}`;
+            return p.typeAnnotation ? `${rest}${name}${opt}: ${this.emitTypeNode(p.typeAnnotation)}` : `${rest}${name}${opt}`;
           })
           .join(", ");
         return `${this.emitTypeParameters(node.typeParams)}(${params}) => ${this.emitTypeNode(node.returnType)}`;

@@ -197,7 +197,13 @@ export type Expression =
   | JSXElement
   | JSXSelfClosingElement
   | JsExpression
-  | TsEscapeExpression;
+  | TsEscapeExpression
+  | SpreadElement;
+
+export interface SpreadElement extends NodeBase {
+  kind: "SpreadElement";
+  argument: Expression;
+}
 
 export interface JsExpression extends NodeBase {
   kind: "JsExpression";
@@ -537,6 +543,7 @@ export interface Parameter extends NodeBase {
   typeAnnotation?: TypeNode;
   optional?: boolean;
   defaultValue?: Expression;
+  isRest?: boolean;
 }
 
 export interface FunctionTypeNode extends NodeBase {

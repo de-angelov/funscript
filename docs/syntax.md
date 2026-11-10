@@ -133,8 +133,7 @@ generated output, but not in idiomatic FunScript:
   `Schema.is(MySchema)`, `match`, and `{ ...x, a.b: 1 }` / `mut` instead. Type-level `typeof`
   inside a raw TypeScript type is still allowed. Convert nullable JavaScript values to `Option`
   at an interop boundary rather than using nullish operators in FunScript.
-- **Other function forms:** `fn`, `function`, unparenthesized `x =>`, default
-  parameters, rest parameters, point-free `>>`.
+- **Other function forms:** `function`, unparenthesized `x =>`, point-free `>>`.
 - **CommonJS and export variants:** `require`, `module.exports`, `export default`,
   local `export { ... }` without `from`.
 - **Formatting noise:** semicolons.
@@ -555,7 +554,9 @@ const answer = () => 42;
 - Only optional parameters may follow an optional parameter. Optional and defaulted
   parameters are not yet supported on `js` entry bindings or in function type
   signatures.
-- Rest parameters are not supported.
+- Rest parameters are supported on the final parameter using `...name: Array<T>` or `...name`.
+  Argument spread `f(...args)` in calls and array spread `[1, ...items, 3]` are also supported.
+  A rest parameter cannot be optional and cannot have a default value.
 - Inline record parameters can declare `field?: Type`, read as a real `Option<Type>`,
   or `field: Type = default`, read as a plain `Type`. Defaulted fields are read once
   and their fallback evaluated once per call only when the value is `undefined`.
