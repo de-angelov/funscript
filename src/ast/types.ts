@@ -508,7 +508,26 @@ export type TypeNode =
   | UnionTypeNode
   | IntersectionTypeNode
   | LiteralTypeNode
-  | TsEscapeTypeNode;
+  | TsEscapeTypeNode
+  | TypeQueryNode
+  | IndexedAccessTypeNode
+  | ParenthesizedTypeNode;
+
+export interface TypeQueryNode extends NodeBase {
+  kind: "TypeQueryNode";
+  expr: Expression;
+}
+
+export interface IndexedAccessTypeNode extends NodeBase {
+  kind: "IndexedAccessTypeNode";
+  objectType: TypeNode;
+  indexType: TypeNode;
+}
+
+export interface ParenthesizedTypeNode extends NodeBase {
+  kind: "ParenthesizedTypeNode";
+  typeNode: TypeNode;
+}
 
 export interface LiteralTypeNode extends NodeBase {
   kind: "LiteralTypeNode";

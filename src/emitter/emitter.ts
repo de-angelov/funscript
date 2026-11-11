@@ -245,6 +245,9 @@ const PRIMITIVE_TYPES: Readonly<Record<string, string>> = {
   Boolean: "boolean",
   Void: "void",
   Unknown: "unknown",
+  Any: "any",
+  Null: "null",
+  Undefined: "undefined",
   Never: "never",
 };
 
@@ -444,7 +447,7 @@ export class Emitter {
     const name = decl.id.name;
     const exp = isExport ? "export " : "";
 
-    if (decl.typeParams?.length && decl.body.kind !== "TypeSignatureSchema") {
+    if (decl.typeParams?.length && decl.body.kind !== "TypeSignatureSchema" && !(decl.body.kind === "RecordSchema" && isRecordContract(decl.body))) {
       throw new FunScriptError("Generic runtime schemas are not supported yet; use a TypeScript type alias", decl.span);
     }
 
@@ -459,7 +462,8 @@ export class Emitter {
           };
           if (hasDefault(decl.body)) throw new FunScriptError("Compile-time record contracts cannot declare schema defaults", decl.span);
           const brand = `${RECORD_CONTRACT_BRAND}$${name}`;
-          return `declare const ${brand}: unique symbol;\n${exp}type ${name} = ${this.emitTypeNode(recordContractType(decl.body))} & { readonly [${brand}]?: never };`;
+          const typeParamsStr = this.emitTypeParameters(decl.typeParams);
+          return `declare const ${brand}: unique symbol;\n${exp}type ${name}${typeParamsStr} = ${this.emitTypeNode(recordContractType(decl.body))} & { readonly [${brand}]?: never };`;
         }
         this.effectImports.add("Schema");
         const schemaFields = decl.body.fields
@@ -563,8 +567,12 @@ export class Emitter {
   }
 
   private emitSchemaTypeField(typeNode: TypeNode): string {
-    if (typeNode.kind === "QualifiedTypeReferenceNode") {
-      throw new FunScriptError("A qualified TypeScript type is not a runtime schema; import or define a schema for validation", typeNode.span);
+    if (typeNode.kind === "QualifiedTypeReferenceNode" || typeNode.kind === "TypeQueryNode" || typeNode.kind === "IndexedAccessTypeNode") {
+      this.effectImports.add("Schema");
+      return `(Schema.Unknown as unknown as Schema.Schema<${this.emitTypeNode(typeNode)}>)`;
+    }
+    if (typeNode.kind === "ParenthesizedTypeNode") {
+      return this.emitSchemaTypeField(typeNode.typeNode);
     }
     this.effectImports.add("Schema");
     if (typeNode.kind === "LiteralTypeNode") return `Schema.Literal(${JSON.stringify(typeNode.value)})`;
@@ -2086,6 +2094,12 @@ export class Emitter {
         return node.types.map((t) => this.emitTypeNode(t)).join(" & ");
       case "LiteralTypeNode":
         return JSON.stringify(node.value);
+      case "TypeQueryNode":
+        return `typeof ${this.emitExpression(node.expr)}`;
+      case "IndexedAccessTypeNode":
+        return `${this.emitTypeNode(node.objectType)}[${this.emitTypeNode(node.indexType)}]`;
+      case "ParenthesizedTypeNode":
+        return `(${this.emitTypeNode(node.typeNode)})`;
       case "TsEscapeTypeNode":
         return node.code;
     }

@@ -2310,43 +2310,74 @@ export class Parser {
     if (this.check(TokenType.LT) && this.isGenericCallableStart()) {
       typeParams = this.parseTypeParameters();
     }
-    if (this.match(TokenType.LPAREN)) {
-      const params: Parameter[] = [];
-      if (!this.check(TokenType.RPAREN)) {
-        do {
-          let isRest = false;
-          let dotSpan: Span | undefined;
-          if (this.match(TokenType.DOTDOTDOT)) {
-            isRest = true;
-            dotSpan = this.previous().span;
-          }
-          const pName = this.parseIdentifier();
-          const optional = this.match(TokenType.QUESTION);
-          this.consume(TokenType.COLON, "Expected ':' after param name");
-          const pType = this.parseTypeNode();
-          params.push({
-            kind: "Parameter",
-            name: pName,
-            typeAnnotation: pType,
-            optional: optional ? true : undefined,
-            isRest: isRest ? true : undefined,
-            span: { start: dotSpan ? dotSpan.start : pName.span.start, end: pType.span.end },
-          });
-        } while (this.match(TokenType.COMMA) && !this.check(TokenType.RPAREN));
+    if (this.check(TokenType.LPAREN)) {
+      const isFunctionType =
+        typeParams !== undefined ||
+        (this.peekAhead(1).type === TokenType.RPAREN && this.peekAhead(2).type === TokenType.ARROW) ||
+        this.peekAhead(1).type === TokenType.DOTDOTDOT ||
+        (this.peekAhead(1).type === TokenType.IDENTIFIER &&
+          (this.peekAhead(2).type === TokenType.COLON ||
+            (this.peekAhead(2).type === TokenType.QUESTION && this.peekAhead(3).type === TokenType.COLON)));
+
+      if (isFunctionType) {
+        this.advance(); // consume '('
+        const params: Parameter[] = [];
+        if (!this.check(TokenType.RPAREN)) {
+          do {
+            let isRest = false;
+            let dotSpan: Span | undefined;
+            if (this.match(TokenType.DOTDOTDOT)) {
+              isRest = true;
+              dotSpan = this.previous().span;
+            }
+            const pName = this.parseIdentifier();
+            const optional = this.match(TokenType.QUESTION);
+            this.consume(TokenType.COLON, "Expected ':' after param name");
+            const pType = this.parseTypeNode();
+            params.push({
+              kind: "Parameter",
+              name: pName,
+              typeAnnotation: pType,
+              optional: optional ? true : undefined,
+              isRest: isRest ? true : undefined,
+              span: { start: dotSpan ? dotSpan.start : pName.span.start, end: pType.span.end },
+            });
+          } while (this.match(TokenType.COMMA) && !this.check(TokenType.RPAREN));
+        }
+        this.consume(TokenType.RPAREN, "Expected ')'");
+        this.validateValueParameters(params);
+        if (!this.match(TokenType.ARROW)) {
+          throw new ParseError("Expected '=>' in function type", this.peek().span);
+        }
+        const ret = this.parseTypeNode();
+        return {
+          kind: "FunctionTypeNode",
+          typeParams,
+          params,
+          returnType: ret,
+          span: { start, end: ret.span.end },
+        };
+      } else {
+        const pStart = this.advance().span.start; // consume '('
+        const inner = this.parseTypeNode();
+        const pEnd = this.consume(TokenType.RPAREN, "Expected ')'").span.end;
+        let resultType: TypeNode = {
+          kind: "ParenthesizedTypeNode",
+          typeNode: inner,
+          span: { start: pStart, end: pEnd },
+        };
+        while (this.match(TokenType.LBRACKET)) {
+          const indexType = this.parseTypeNode();
+          const bracketEnd = this.consume(TokenType.RBRACKET, "Expected ']' after index type").span.end;
+          resultType = {
+            kind: "IndexedAccessTypeNode",
+            objectType: resultType,
+            indexType,
+            span: { start: resultType.span.start, end: bracketEnd },
+          };
+        }
+        return resultType as any;
       }
-      this.consume(TokenType.RPAREN, "Expected ')'");
-      this.validateValueParameters(params);
-      if (!this.match(TokenType.ARROW)) {
-        throw new ParseError("Expected '=>' in function type", this.peek().span);
-      }
-      const ret = this.parseTypeNode();
-      return {
-        kind: "FunctionTypeNode",
-        typeParams,
-        params,
-        returnType: ret,
-        span: { start, end: ret.span.end },
-      };
     }
 
     if (typeParams) {
@@ -2408,6 +2439,36 @@ export class Parser {
       return this.parseEffectTypeNode();
     }
 
+    if (this.check(TokenType.IDENTIFIER) && this.peek().value === "typeof") {
+      const start = this.advance().span.start;
+      let expr: Expression = this.parsePrimary();
+      while (this.match(TokenType.DOT)) {
+        const prop = this.parsePropertyIdentifier();
+        expr = {
+          kind: "MemberExpression",
+          object: expr,
+          property: prop as any,
+          span: { start: expr.span.start, end: prop.span.end },
+        };
+      }
+      let resultType: TypeNode = {
+        kind: "TypeQueryNode",
+        expr,
+        span: { start, end: expr.span.end },
+      };
+      while (this.match(TokenType.LBRACKET)) {
+        const indexType = this.parseTypeNode();
+        const bracketEnd = this.consume(TokenType.RBRACKET, "Expected ']' after index type").span.end;
+        resultType = {
+          kind: "IndexedAccessTypeNode",
+          objectType: resultType,
+          indexType,
+          span: { start: resultType.span.start, end: bracketEnd },
+        };
+      }
+      return resultType;
+    }
+
     if (!this.check(TokenType.UPPER_IDENTIFIER)) {
       throw new ParseError("Type names must begin with an uppercase letter (for example String or Number); use ts for TypeScript types", this.peek().span);
     }
@@ -2424,15 +2485,21 @@ export class Parser {
       this.consume(TokenType.GT, "Expected '>' after type arguments");
     }
 
-    if (parts.length > 1) {
-      return { kind: "QualifiedTypeReferenceNode", parts, typeArgs, span: { start: typeId.span.start, end: this.previous().span.end } };
+    let resultType: TypeNode = parts.length > 1
+      ? { kind: "QualifiedTypeReferenceNode", parts, typeArgs, span: { start: typeId.span.start, end: this.previous().span.end } }
+      : { kind: "TypeReferenceNode", name: typeId as any, typeArgs, span: { start: typeId.span.start, end: this.previous().span.end } };
+
+    while (this.match(TokenType.LBRACKET)) {
+      const indexType = this.parseTypeNode();
+      const bracketEnd = this.consume(TokenType.RBRACKET, "Expected ']' after index type").span.end;
+      resultType = {
+        kind: "IndexedAccessTypeNode",
+        objectType: resultType,
+        indexType,
+        span: { start: resultType.span.start, end: bracketEnd },
+      };
     }
-    return {
-      kind: "TypeReferenceNode",
-      name: typeId as any,
-      typeArgs,
-      span: { start: typeId.span.start, end: this.previous().span.end },
-    };
+    return resultType;
   }
 
   private parseEffectTypeNode(): EffectTypeNode {

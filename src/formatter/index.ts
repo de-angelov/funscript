@@ -1080,6 +1080,12 @@ export class Formatter {
         return node.types.map(t => this.formatType(t, indent)).join(" & ");
       case "LiteralTypeNode":
         return JSON.stringify(node.value);
+      case "TypeQueryNode":
+        return `typeof ${this.formatExpression(node.expr, indent)}`;
+      case "IndexedAccessTypeNode":
+        return `${this.formatType(node.objectType, indent)}[${this.formatType(node.indexType, indent)}]`;
+      case "ParenthesizedTypeNode":
+        return `(${this.formatType(node.typeNode, indent)})`;
       case "TsEscapeTypeNode":
         return this.formatTsEscape(node.code);
     }
