@@ -6,6 +6,26 @@ import * as path from "node:path";
 import * as fs from "node:fs";
 import { TypeScriptCompilationContext } from "../compiler/typescript-context.js";
 
+export interface ServerBoundaryOptions {
+  /**
+   * Whether to enforce compile-time separation of server modules in client builds.
+   * Defaults to true.
+   */
+  enabled?: boolean;
+  /**
+   * Matchers for server-only modules that must not be bundled into client builds.
+   * Defaults to [/\.server(\.|$)/].
+   */
+  serverPatterns?: (string | RegExp)[];
+  /**
+   * Matchers for permitted boundary/bridge modules (e.g. route modules in full-stack
+   * frameworks) where a framework compiler plugin tree-shakes server code from client outputs.
+   * Defaults to route conventions: [/\/routes\//, /\/pages\//, /\/app\/routes\//] when router support is active,
+   * or [] if disabled.
+   */
+  allowedImporters?: (string | RegExp)[];
+}
+
 export interface FunscriptPluginOptions {
   /**
    * Filter pattern(s) for files to include. Defaults to [/\.fun$/, /\.funx$/].
@@ -26,6 +46,20 @@ export interface FunscriptPluginOptions {
    * Defaults to true when `app/root.funx` is present.
    */
   reactRouter?: boolean | { rootModule?: string };
+  /**
+   * Compile-time server/client boundary enforcement.
+   * Prevents server-only modules from accidentally leaking into client-side bundles.
+   * Defaults to true (enforced).
+   */
+  serverBoundary?: boolean | ServerBoundaryOptions;
+}
+
+function matchesPattern(value: string, pattern: string | RegExp): boolean {
+  return typeof pattern === "string" ? value.includes(pattern) : pattern.test(value);
+}
+
+function matchesAnyPattern(value: string, patterns: (string | RegExp)[]): boolean {
+  return patterns.some((p) => matchesPattern(value, p));
 }
 
 /**
@@ -80,21 +114,35 @@ export function funscriptPlugin(options: FunscriptPluginOptions = {}): Plugin {
     },
 
     async resolveId(source, importer, resolveOptions) {
-      if (
-        importer &&
-        !resolveOptions?.ssr &&
-        (source.includes(".server.") || source.endsWith(".server"))
-      ) {
-        // Enforce server boundary: client UI components cannot import server-only modules
-        const isClientComponent =
-          !importer.includes(".server.") &&
-          !importer.includes("/routes/") &&
-          !importer.endsWith(".server.fun") &&
-          !importer.endsWith(".server.ts");
-        if (isClientComponent) {
-          throw new Error(
-            `[vite-plugin-funscript] Server module '${source}' cannot be imported into client component '${importer}'. FunScript enforces strict server/client boundary separation.`,
-          );
+      const boundaryOption = options.serverBoundary;
+      const boundaryEnabled =
+        typeof boundaryOption === "boolean"
+          ? boundaryOption
+          : (boundaryOption?.enabled ?? true);
+
+      if (boundaryEnabled && importer && !resolveOptions?.ssr) {
+        const serverPatterns =
+          (typeof boundaryOption === "object" && boundaryOption?.serverPatterns) ||
+          [/\.server(\.|$)/];
+
+        if (matchesAnyPattern(source, serverPatterns)) {
+          const isServerImporter = matchesAnyPattern(importer, serverPatterns);
+          if (!isServerImporter) {
+            const defaultAllowed =
+              options.reactRouter !== false
+                ? [/\/routes\//, /\/pages\//, /\/app\/routes\//]
+                : [];
+            const allowedImporters =
+              (typeof boundaryOption === "object" && boundaryOption?.allowedImporters) ||
+              defaultAllowed;
+
+            const isAllowedImporter = matchesAnyPattern(importer, allowedImporters);
+            if (!isAllowedImporter) {
+              throw new Error(
+                `[vite-plugin-funscript] Server module '${source}' cannot be imported into client module '${importer}'. FunScript enforces strict server/client boundary separation. To permit framework bridge modules (e.g. route loaders), configure 'serverBoundary.allowedImporters' in funscriptPlugin().`,
+              );
+            }
+          }
         }
       }
 

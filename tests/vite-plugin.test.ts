@@ -297,10 +297,10 @@ export Button = (props: Props) => <button className="btn">{props.label}</button>
           { ssr: false }
         )
       ).rejects.toThrow(
-        "[vite-plugin-funscript] Server module './database.server.js' cannot be imported into client component '/src/components/UserCard.funx'."
+        "[vite-plugin-funscript] Server module './database.server.js' cannot be imported into client module '/src/components/UserCard.funx'."
       );
 
-      // Route modules are permitted because router frameworks extract loaders/actions
+      // Route modules are permitted by default when router support is active
       const routeResult = await resolveFn.call(
         { resolve: async () => null },
         "./home.server.js",
@@ -308,6 +308,56 @@ export Button = (props: Props) => <button className="btn">{props.label}</button>
         { ssr: false }
       );
       expect(routeResult).toBeNull();
+    });
+
+    it("supports configurable serverBoundary options", async () => {
+      // 1. Fully disabled serverBoundary
+      const disabledPlugin = funscriptPlugin({ serverBoundary: false });
+      const disabledResolve = disabledPlugin.resolveId as Function;
+      const disabledRes = await disabledResolve.call(
+        { resolve: async () => null },
+        "./db.server.js",
+        "/src/components/Button.funx",
+        { ssr: false }
+      );
+      expect(disabledRes).toBeNull();
+
+      // 2. Strict client app (no allowed bridge routes)
+      const strictPlugin = funscriptPlugin({ serverBoundary: { allowedImporters: [] } });
+      const strictResolve = strictPlugin.resolveId as Function;
+      await expect(
+        strictResolve.call(
+          {},
+          "./db.server.js",
+          "/src/routes/home.funx",
+          { ssr: false }
+        )
+      ).rejects.toThrow(/Server module '\.\/db\.server\.js' cannot be imported into client module/);
+
+      // 3. Custom server patterns and custom allowed importers
+      const customPlugin = funscriptPlugin({
+        serverBoundary: {
+          serverPatterns: [/\.backend\./],
+          allowedImporters: [/\/server-bridges\//],
+        },
+      });
+      const customResolve = customPlugin.resolveId as Function;
+      await expect(
+        customResolve.call(
+          {},
+          "./api.backend.js",
+          "/src/views/Home.funx",
+          { ssr: false }
+        )
+      ).rejects.toThrow(/Server module '\.\/api\.backend\.js' cannot be imported into client module/);
+
+      const customBridgeRes = await customResolve.call(
+        { resolve: async () => null },
+        "./api.backend.js",
+        "/src/server-bridges/home.funx",
+        { ssr: false }
+      );
+      expect(customBridgeRes).toBeNull();
     });
   });
 });
