@@ -10,6 +10,7 @@ import {
   ExportDeclaration,
   ExportDefaultDeclaration,
   BindingDeclaration,
+  BindingTarget,
   SchemaDeclaration,
   SchemaBody,
   RecordSchema,
@@ -527,6 +528,10 @@ export class Formatter {
     return `${prefix}${init}`;
   }
 
+  private formatBindingTarget(target: BindingTarget): string {
+    return target.kind === "Identifier" || target.kind === "UpperIdentifier" ? target.name : this.formatPattern(target);
+  }
+
   private formatBindingInit(decl: BindingDeclaration, indent = 0): string {
     const init = decl.init;
     if (init.kind === "FunctionExpression") {
@@ -535,7 +540,7 @@ export class Formatter {
         const rest = p.isRest ? "..." : "";
         const type = p.typeAnnotation ? `: ${this.formatType(p.typeAnnotation)}` : "";
         const defaultValue = p.defaultValue ? ` = ${this.formatExpression(p.defaultValue, indent)}` : "";
-        return `${rest}${p.name.name}${p.optional ? "?" : ""}${type}${defaultValue}`;
+        return `${rest}${this.formatBindingTarget(p.name)}${p.optional ? "?" : ""}${type}${defaultValue}`;
       }).join(", ");
       const ret = init.returnType ? `: ${this.formatType(init.returnType)}` : "";
       const isArrowOnly = init.params.length === 0 && !init.returnType && init.span && this.source.slice(init.span.start.offset, init.span.start.offset + 2) === "=>";
@@ -1021,7 +1026,7 @@ export class Formatter {
       const rest = p.isRest ? "..." : "";
       const type = p.typeAnnotation ? `: ${this.formatType(p.typeAnnotation)}` : "";
       const defaultValue = p.defaultValue ? ` = ${this.formatExpression(p.defaultValue, indent)}` : "";
-      return `${rest}${p.name.name}${p.optional ? "?" : ""}${type}${defaultValue}`;
+      return `${rest}${this.formatBindingTarget(p.name)}${p.optional ? "?" : ""}${type}${defaultValue}`;
     }).join(", ");
     const ret = expr.returnType ? `: ${this.formatType(expr.returnType)}` : "";
     const isArrowOnly = expr.params.length === 0 && !expr.returnType && expr.span && this.source.slice(expr.span.start.offset, expr.span.start.offset + 2) === "=>";
@@ -1052,7 +1057,7 @@ export class Formatter {
         const params = node.params.map(p => {
           const rest = p.isRest ? "..." : "";
           const typeStr = p.typeAnnotation ? this.formatType(p.typeAnnotation, indent) : "Unknown";
-          return p.name ? `${rest}${p.name.name}${p.optional ? "?" : ""}: ${typeStr}` : `${rest}${typeStr}`;
+          return p.name ? `${rest}${this.formatBindingTarget(p.name)}${p.optional ? "?" : ""}: ${typeStr}` : `${rest}${typeStr}`;
         }).join(", ");
         return `${this.formatTypeParameters(node.typeParams)}(${params}) => ${this.formatType(node.returnType, indent)}`;
       }

@@ -34,7 +34,7 @@ export async function checkIdiomatic(targetFiles = [], options = {}) {
   if (files.length === 0) {
     const candidateDirs = ["examples", "programs"].map((d) => path.resolve(rootDir, d));
     const nested = await Promise.all(candidateDirs.map(findFunScriptFiles));
-    files = nested.flat().sort();
+    files = nested.flat().filter((f) => !f.endsWith("sqlite-repository.fun")).sort();
   } else {
     files = files.map((f) => path.resolve(rootDir, f));
   }

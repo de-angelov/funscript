@@ -254,4 +254,53 @@ export sumList = (list: Array<Number>) =>
     expect(sumList([])).toBe(0);
     expect(sumList([1, 2, 3, 4])).toBe(10);
   });
+
+  it("supports record and tuple destructuring in function parameters", () => {
+    const src = `
+export getProps = ({ name, age }: { name: String, age: Number }) =>
+  => name
+
+export getPair = ([first, ...rest]: Array<String>) =>
+  => first
+`;
+    const res = Effect.runSync(compileString(src));
+    expect(res.typescript).toContain("({ name, age }: { readonly name: string; readonly age: number }) =>");
+    expect(res.typescript).toContain("([first, ...rest]: ReadonlyArray<string>) =>");
+
+    const getProps = evaluateTsFunction(res.typescript, "getProps");
+    const getPair = evaluateTsFunction(res.typescript, "getPair");
+    expect(getProps({ name: "Alice", age: 30 })).toBe("Alice");
+    expect(getPair(["hello", "world"])).toBe("hello");
+  });
+
+  it("formats function parameter destructuring cleanly", () => {
+    const src = `export getProps = ({ name, age }: { name: String, age: Number }) =>
+  => name
+
+export getPair = ([first, ...rest]: Array<String>) =>
+  => first
+`;
+    const formatted = format(src);
+    expect(formatted).toBe(src);
+  });
+
+  it("compiles and executes Option.try safely capturing throws and nulls", () => {
+    const src = `
+import { Option } from "effect"
+
+export safeSuccess = (val: String) =>
+  => Option.try(() => val)
+
+export safeThrow = (invalidJson: String) =>
+  => Option.try(() => JSON.parse(invalidJson))
+`;
+    const res = Effect.runSync(compileString(src));
+    expect(res.typescript).toContain("__funscriptOptionTry(() => val)");
+    expect(res.typescript).toContain("__funscriptOptionTry");
+
+    const safeSuccess = evaluateTsFunction(res.typescript, "safeSuccess");
+    const safeThrow = evaluateTsFunction(res.typescript, "safeThrow");
+    expect(safeSuccess("ok")).toEqual(Option.some("ok"));
+    expect(safeThrow("not json {")).toEqual(Option.none());
+  });
 });

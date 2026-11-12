@@ -315,6 +315,7 @@ export class Emitter {
   private needsDecodeUnknown = false;
   private needsFromNullishOrElse = false;
   private needsFromNullishOr = false;
+  private needsOptionTry = false;
   private needsOr = false;
   private primitiveIdentifiers = new Set<string>();
   private currentPlaceholderParam: string | null = null;
@@ -448,8 +449,12 @@ export class Emitter {
       this.effectImports.add("Option");
       header += `function __funscriptOptionFromNullishOr<A>(value: A): A extends import("effect").Option.Option<any> ? A : import("effect").Option.Option<NonNullable<A>> {\n  if (Option.isOption(value)) return value as any;\n  return Option.fromNullishOr(value) as any;\n}\n`;
     }
+    if (this.needsOptionTry) {
+      this.effectImports.add("Option");
+      header += `function __funscriptOptionTry<A>(thunk: () => A): import("effect").Option.Option<NonNullable<A>> {\n  try {\n    return Option.fromNullishOr(thunk()) as any;\n  } catch {\n    return Option.none();\n  }\n}\n`;
+    }
     if (this.needsOr) {
-      header += `function __funscriptOr<A, B>(a: A, b: B): any {\n  if (a !== null && a !== undefined && typeof a === "object" && "_tag" in a) {\n    if (a._tag === "Some") return (a as any).value;\n    if (a._tag === "None") return b;\n  }\n  return a || b;\n}\n`;
+      header += `type __FunscriptOr<A, B> = A extends { readonly _tag: "Some"; readonly value: infer V } ? V | B : A extends { readonly _tag: "None" } ? B : NonNullable<A> | B;\nfunction __funscriptOr<A, B>(a: A, b: B): __FunscriptOr<A, B> {\n  if (a !== null && a !== undefined && typeof a === "object" && "_tag" in a) {\n    if (a._tag === "Some") return (a as any).value;\n    if (a._tag === "None") return b as any;\n  }\n  return (a || b) as any;\n}\n`;
     }
 
     if (header.length > 0) {
@@ -810,11 +815,12 @@ export class Emitter {
   private isOptionalValue(expr: Expression): boolean {
     if (expr.kind === "Identifier") return this.isOptionalParameter(expr.name);
     if (expr.kind === "MemberExpression") return this.recordField(expr)?.optional ?? false;
+    if (expr.kind === "IndexExpression") return true;
     return false;
   }
 
   private validateRecordParameterUse(expr: FunctionExpression, name: string, aliases: Set<BindingDeclaration>): void {
-    const shadowed = new Set(expr.params.map((param) => param.name.name));
+    const shadowed = new Set(expr.params.flatMap((param) => this.collectBindingNames(param.name)));
     const collectBindings = (value: unknown): void => {
       if (!value || typeof value !== "object") return;
       if (Array.isArray(value)) { value.forEach(collectBindings); return; }
@@ -822,12 +828,12 @@ export class Emitter {
       if ((node.kind === "BindingDeclaration" || node.kind === "EffectBindStatement") && node.id && typeof node.id === "object") shadowed.add((node.id as { name: string }).name);
       if (node.kind === "VariablePattern" && node.name && typeof node.name === "object") shadowed.add((node.name as { name: string }).name);
       if (node.kind === "FunctionExpression" && Array.isArray(node.params)) {
-        for (const param of node.params) if (param?.name?.name) shadowed.add(param.name.name);
+        for (const param of node.params) if (param?.name) for (const n of this.collectBindingNames(param.name)) shadowed.add(n);
       }
       for (const [key, child] of Object.entries(node)) if (key !== "span") collectBindings(child);
     };
     collectBindings(expr.body);
-    const source = expr.params.find((param) => param.name.name === name)?.typeAnnotation;
+    const source = expr.params.find((param) => param.name.kind === "Identifier" && param.name.name === name)?.typeAnnotation;
     if (this.isHtmlPropsType(source)) return;
     const hasDefaults = source?.kind === "RecordTypeNode" && source.fields.some((field) => field.defaultValue);
     const isSafeLocalForward = (parent: Record<string, unknown>, index: number | undefined): boolean => {
@@ -850,7 +856,7 @@ export class Emitter {
       if (!value || typeof value !== "object") return;
       if (Array.isArray(value)) { value.forEach((child, i) => visit(child, parent, key, allowMember, inJs, i, jsxTarget)); return; }
       const node = value as Record<string, unknown>;
-      if (node.kind === "FunctionExpression" && Array.isArray(node.params) && node.params.some((param: any) => param.name?.name === name)) return;
+      if (node.kind === "FunctionExpression" && Array.isArray(node.params) && node.params.some((param: any) => param.name && this.collectBindingNames(param.name).includes(name))) return;
       if (node.kind === "MemberExpression") {
         const field = this.recordField(node as unknown as Expression);
         const matchedOptional = field?.optional && parent?.kind === "MatchExpression" && key === "scrutinee";
@@ -874,7 +880,7 @@ export class Emitter {
       }
     };
     visit(expr.body);
-    const param = expr.params.find((item) => item.name.name === name);
+    const param = expr.params.find((item) => item.name.kind === "Identifier" && item.name.name === name);
     if (param?.typeAnnotation?.kind === "RecordTypeNode") {
       for (const field of param.typeAnnotation.fields) if (field.defaultValue) visit(field.defaultValue, undefined, undefined, false);
     }
@@ -920,19 +926,21 @@ export class Emitter {
       if (decl.init.kind === "FunctionExpression") {
         const fn = decl.init;
         const validations = fn.params
-          .filter((p) => p.typeAnnotation)
-          .map((p) => `  ${p.name.name} = Schema.decodeUnknownSync(${this.emitSchemaTypeField(p.typeAnnotation!)})(${p.name.name});`)
+          .filter((p) => p.typeAnnotation && p.name.kind === "Identifier")
+          .map((p) => `  ${(p.name as Identifier).name} = Schema.decodeUnknownSync(${this.emitSchemaTypeField(p.typeAnnotation!)})(${(p.name as Identifier).name});`)
           .join("\n");
         if (validations) this.effectImports.add("Schema");
         for (const p of fn.params) {
           if (this.isPrimitiveType(p.typeAnnotation)) {
-            this.primitiveIdentifiers.add(p.name.name);
+            for (const n of this.collectBindingNames(p.name)) {
+              this.primitiveIdentifiers.add(n);
+            }
           }
         }
         const params = fn.params
           .map((p) => {
             const t = p.typeAnnotation ? `: ${this.emitTypeNode(p.typeAnnotation)}` : "";
-            return `${p.name.name}${t}`;
+            return `${this.emitBindingTarget(p.name)}${t}`;
           })
           .join(", ");
         if (fn.body.kind === "BlockStatement") {
@@ -981,6 +989,19 @@ export class Emitter {
       return `[${elements.join(", ")}]`;
     }
     return "_";
+  }
+
+  private collectBindingNames(target: BindingTarget | Pattern): string[] {
+    if (target.kind === "Identifier" || target.kind === "UpperIdentifier") return [target.name];
+    if (target.kind === "VariablePattern") return [target.name.name];
+    if (target.kind === "RestPattern") return this.collectBindingNames(target.argument);
+    if (target.kind === "RecordPattern") {
+      return target.fields.flatMap((f) => (f.pattern ? this.collectBindingNames(f.pattern) : [f.key.name]));
+    }
+    if (target.kind === "ArrayPattern") {
+      return target.elements.flatMap((el) => this.collectBindingNames(el));
+    }
+    return [];
   }
 
   // --- Expressions ---
@@ -1113,6 +1134,17 @@ export class Emitter {
       this.needsFromNullishOr = true;
       this.effectImports.add("Option");
       return `__funscriptOptionFromNullishOr(${expr.args.map((a) => this.emitExpression(a)).join(", ")})`;
+    }
+
+    if (
+      expr.callee.kind === "MemberExpression" &&
+      (expr.callee.object.kind === "Identifier" || expr.callee.object.kind === "UpperIdentifier") &&
+      expr.callee.object.name === "Option" &&
+      expr.callee.property.name === "try"
+    ) {
+      this.needsOptionTry = true;
+      this.effectImports.add("Option");
+      return `__funscriptOptionTry(${expr.args.map((a) => this.emitExpression(a)).join(", ")})`;
     }
 
     if (
@@ -1632,13 +1664,15 @@ export class Emitter {
   private emitFunctionExpression(expr: FunctionExpression): string {
     for (const p of expr.params) {
       if (this.isPrimitiveType(p.typeAnnotation)) {
-        this.primitiveIdentifiers.add(p.name.name);
+        for (const n of this.collectBindingNames(p.name)) {
+          this.primitiveIdentifiers.add(n);
+        }
       }
     }
     const params = expr.params
       .map((p, index) => {
         const rest = p.isRest ? "..." : "";
-        const name = p.optional ? `$funscriptOptional${index}` : p.name.name;
+        const name = p.optional ? `$funscriptOptional${index}` : this.emitBindingTarget(p.name);
         let typeAnn = "";
         if (p.typeAnnotation) {
           const base = this.emitTypeNode(p.typeAnnotation);
@@ -1659,16 +1693,18 @@ export class Emitter {
     const optionalBindings = expr.params.flatMap((p, index) => {
       if (!p.optional) return [];
       this.effectImports.add("Option");
-      return [`  const ${p.name.name} = Option.isOption($funscriptOptional${index}) ? $funscriptOptional${index} : Option.fromUndefinedOr($funscriptOptional${index});`];
+      return [`  const ${this.emitBindingTarget(p.name)} = Option.isOption($funscriptOptional${index}) ? $funscriptOptional${index} : Option.fromUndefinedOr($funscriptOptional${index});`];
     });
 
     const records = new Map<string, Map<string, RecordFieldInfo> | undefined>();
     const recordDefaults: string[] = [];
     expr.params.forEach((param, paramIndex) => {
+      if (param.name.kind !== "Identifier") return;
+      const paramName = param.name.name;
       const declared = param.typeAnnotation;
-      if (this.isHtmlPropsType(declared)) { records.set(param.name.name, undefined); return; }
+      if (this.isHtmlPropsType(declared)) { records.set(paramName, undefined); return; }
       const recordType = declared?.kind === "TypeReferenceNode" ? this.recordContracts.get(declared.name.name) : declared;
-      if (param.optional || recordType?.kind !== "RecordTypeNode") { records.set(param.name.name, undefined); return; }
+      if (param.optional || recordType?.kind !== "RecordTypeNode") { records.set(paramName, undefined); return; }
       const fields = recordType.fields;
       const nestedFields = (type: TypeNode): Map<string, RecordFieldInfo> | undefined => {
         if (type.kind !== "RecordTypeNode") {
@@ -1689,20 +1725,20 @@ export class Emitter {
         }
         return [...result.values()].some((field) => field.optional || field.fields) ? result : undefined;
       };
-      if (!fields.some((field) => field.optional || field.defaultValue || nestedFields(field.typeAnnotation))) { records.set(param.name.name, undefined); return; }
+      if (!fields.some((field) => field.optional || field.defaultValue || nestedFields(field.typeAnnotation))) { records.set(paramName, undefined); return; }
       const mapped = new Map<string, RecordFieldInfo>();
       fields.forEach((field, fieldIndex) => {
         const binding = field.defaultValue ? `$funscriptField${paramIndex}_${fieldIndex}` : undefined;
         if (field.defaultValue) {
-          this.validateRecordDefault(field.defaultValue, new Set(expr.params.map((p) => p.name.name)));
+          this.validateRecordDefault(field.defaultValue, new Set(expr.params.flatMap((p) => this.collectBindingNames(p.name))));
           const raw = `$funscriptFieldRaw${paramIndex}_${fieldIndex}`;
-          recordDefaults.push(`  const ${raw} = ${param.name.name}.${field.name.name};`);
+          recordDefaults.push(`  const ${raw} = ${paramName}.${field.name.name};`);
           recordDefaults.push(`  const ${binding} = ${raw} === undefined ? ${this.emitExpression(field.defaultValue)} : ${raw};`);
         }
         const children = nestedFields(field.typeAnnotation);
         mapped.set(field.name.name, { optional: Boolean(field.optional), defaultBinding: binding, fields: children });
       });
-      records.set(param.name.name, mapped);
+      records.set(paramName, mapped);
     });
     const aliases = new Set<BindingDeclaration>();
     if (expr.body.kind === "BlockStatement") {
@@ -1714,7 +1750,13 @@ export class Emitter {
         aliases.add(stmt);
       }
     }
-    this.parameterScopes.push(new Map(expr.params.map((p) => [p.name.name, Boolean(p.optional)])));
+    const paramScopeEntries: [string, boolean][] = [];
+    for (const p of expr.params) {
+      for (const n of this.collectBindingNames(p.name)) {
+        paramScopeEntries.push([n, Boolean(p.optional)]);
+      }
+    }
+    this.parameterScopes.push(new Map(paramScopeEntries));
     this.recordScopes.push(records);
     try {
       for (const name of records.keys()) if (records.get(name)) this.validateRecordParameterUse(expr, name, aliases);
@@ -2061,15 +2103,15 @@ export class Emitter {
     }
 
     const vars = pat ? this.collectPatternVariables(pat) : [];
-    const optionalParameter = scrutinee?.kind === "Identifier" && this.isOptionalParameter(scrutinee.name);
+    const isOptional = scrutinee ? this.isOptionalValue(scrutinee) : false;
     if (pat?.kind === "ConstructorPattern" && pat.constructorName.name === "Some" && pat.args.length === 1) {
       const bindingTarget = this.emitBindingTarget(pat.args[0]);
       if (bindingTarget && bindingTarget !== "[]" && bindingTarget !== "{}") {
-        const unpack = optionalParameter
+        const unpack = isOptional
           ? `const { value: ${bindingTarget} } = $matched;`
-          : `const { value: ${bindingTarget} } = $matched as any;`;
-        if (body.kind === "BlockStatement") return `($matched: any) => {\n    ${unpack}\n${this.emitFunctionBody(body)}\n  }`;
-        return `($matched: any) => {\n    ${unpack}\n    return ${this.emitExpression(body)};\n  }`;
+          : `const { value: ${bindingTarget} } = $matched as unknown as { value: typeof $matched extends import("effect").Option.Some<infer V> ? V : any };`;
+        if (body.kind === "BlockStatement") return `($matched) => {\n    ${unpack}\n${this.emitFunctionBody(body)}\n  }`;
+        return `($matched) => {\n    ${unpack}\n    return ${this.emitExpression(body)};\n  }`;
       }
       if (body.kind === "BlockStatement") return `() => {\n${this.emitFunctionBody(body)}\n}`;
       return `() => ${this.emitArrowExpression(body)}`;
@@ -2225,7 +2267,7 @@ export class Emitter {
         const params = node.params
           .map((p) => {
             const rest = p.isRest ? "..." : "";
-            const name = p.name ? p.name.name : "_";
+            const name = p.name ? this.emitBindingTarget(p.name) : "_";
             const opt = p.optional ? "?" : "";
             if (p.optional && p.typeAnnotation) {
               this.effectImports.add("Option");

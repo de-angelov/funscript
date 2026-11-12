@@ -33,11 +33,14 @@ export TodoRepoLive =
       match
         | idx #= -1 => Effect.fail(TodoNotFound({ id }))
         | _ =>
-            updated = { ...store[idx], completed: true }
-            store = store |> mut (draft) =>
-              draft[idx] = updated
-              draft
-            Effect.succeed(updated)
+            match store[idx]
+              | Some(todo) =>
+                  updated = { ...todo, completed: true }
+                  store = store |> mut (draft) =>
+                    draft[idx] = updated
+                    draft
+                  Effect.succeed(updated)
+              | None => Effect.fail(TodoNotFound({ id }))
 
     all: () =>
       => Effect.succeed(store)

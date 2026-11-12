@@ -568,7 +568,7 @@ export interface TypeParameter extends NodeBase {
 
 export interface Parameter extends NodeBase {
   kind: "Parameter";
-  name: Identifier;
+  name: BindingTarget;
   typeAnnotation?: TypeNode;
   optional?: boolean;
   defaultValue?: Expression;

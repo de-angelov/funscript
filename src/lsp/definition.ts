@@ -619,15 +619,20 @@ export class DefinitionFinder {
         }
 
         for (const param of expr.params) {
-          if (this.isCursorIn(param.name)) {
-            this.found = {
-              originNode: param.name,
-              declarationNode: param,
-              targetIdentifierNode: param.name,
-            };
-            return;
+          if (param.name.kind === "Identifier" || param.name.kind === "UpperIdentifier") {
+            if (this.isCursorIn(param.name)) {
+              this.found = {
+                originNode: param.name,
+                declarationNode: param,
+                targetIdentifierNode: param.name,
+              };
+              return;
+            }
+            fnScope.define(param.name.name, param, param.name, "parameter");
+          } else {
+            definePatternInScope(param.name, fnScope, param, "variable");
+            this.collectAndVisitPattern(param.name as Pattern, fnScope);
           }
-          fnScope.define(param.name.name, param, param.name, "parameter");
           if (param.typeAnnotation) {
             this.visitTypeNode(param.typeAnnotation, fnScope);
           }

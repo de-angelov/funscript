@@ -738,7 +738,85 @@ export class Parser {
     };
   }
 
-  private parseValueParameter(name: Identifier, nameOnlySpan = false, isRest = false): Parameter {
+  private expressionToBindingTarget(expr: Expression): BindingTarget | null {
+    if (expr.kind === "Identifier" || expr.kind === "UpperIdentifier") {
+      return expr;
+    }
+    if (expr.kind === "Placeholder") {
+      return { kind: "Identifier", name: "_", span: expr.span };
+    }
+    if (expr.kind === "RecordExpression") {
+      const fields: RecordPatternField[] = [];
+      for (const entry of expr.entries) {
+        if (entry.kind === "SpreadEntry") {
+          if (entry.argument.kind !== "Identifier") return null;
+          fields.push({
+            kind: "RecordPatternField",
+            key: entry.argument,
+            isRest: true,
+            span: entry.span,
+          });
+        } else if (entry.kind === "ShorthandEntry") {
+          fields.push({
+            kind: "RecordPatternField",
+            key: entry.key,
+            span: entry.span,
+          });
+        } else if (entry.kind === "FieldEntry") {
+          const subTarget = this.expressionToBindingTarget(entry.value);
+          if (!subTarget) return null;
+          const subPattern: Pattern = subTarget.kind === "Identifier" || subTarget.kind === "UpperIdentifier"
+            ? { kind: "VariablePattern", name: subTarget as Identifier, span: subTarget.span }
+            : subTarget;
+          fields.push({
+            kind: "RecordPatternField",
+            key: entry.key,
+            pattern: subPattern,
+            span: entry.span,
+          });
+        } else {
+          return null;
+        }
+      }
+      return {
+        kind: "RecordPattern",
+        fields,
+        span: expr.span,
+      };
+    }
+    if (expr.kind === "ArrayExpression") {
+      const elements: Pattern[] = [];
+      for (const el of expr.elements) {
+        if (el.kind === "SpreadElement") {
+          const subTarget = this.expressionToBindingTarget(el.argument);
+          if (!subTarget) return null;
+          elements.push({
+            kind: "RestPattern",
+            argument: subTarget.kind === "Identifier" || subTarget.kind === "UpperIdentifier"
+              ? { kind: "VariablePattern", name: subTarget as Identifier, span: subTarget.span }
+              : subTarget,
+            span: el.span,
+          });
+        } else {
+          const subTarget = this.expressionToBindingTarget(el);
+          if (!subTarget) return null;
+          elements.push(
+            subTarget.kind === "Identifier" || subTarget.kind === "UpperIdentifier"
+              ? { kind: "VariablePattern", name: subTarget as Identifier, span: subTarget.span }
+              : subTarget
+          );
+        }
+      }
+      return {
+        kind: "ArrayPattern",
+        elements,
+        span: expr.span,
+      };
+    }
+    return null;
+  }
+
+  private parseValueParameter(name: BindingTarget, nameOnlySpan = false, isRest = false): Parameter {
     const optional = this.match(TokenType.QUESTION);
     let typeAnnotation: TypeNode | undefined;
     if (this.match(TokenType.COLON)) {
@@ -800,7 +878,13 @@ export class Parser {
           isRest = true;
           dotSpan = this.previous().span;
         }
-        const p = this.parseValueParameter(this.parseIdentifier(), false, isRest);
+        let target: BindingTarget;
+        if (this.check(TokenType.LBRACE) || this.check(TokenType.LBRACKET)) {
+          target = this.parsePattern() as RecordPattern | ArrayPattern;
+        } else {
+          target = this.parseIdentifier();
+        }
+        const p = this.parseValueParameter(target, false, isRest);
         if (dotSpan) {
           p.span = { start: dotSpan.start, end: p.span.end };
         }
@@ -1189,7 +1273,8 @@ export class Parser {
           property: prop as any,
           span: { start: expr.span.start, end: prop.span.end },
         };
-      } else if (this.match(TokenType.LBRACKET)) {
+      } else if (this.check(TokenType.LBRACKET) && this.peek().span.start.line === expr.span.end.line) {
+        this.advance();
         const index = this.parseExpression();
         const end = this.consume(TokenType.RBRACKET, "Expected ']' after index").span.end;
         expr = {
@@ -1310,8 +1395,9 @@ export class Parser {
       const firstExpr = firstIsRest ? this.parseIdentifier() : this.parseExpression();
 
       if (firstIsRest || this.check(TokenType.COLON) || this.check(TokenType.COMMA) || this.check(TokenType.QUESTION) || this.check(TokenType.EQ)) {
-        if (firstExpr.kind !== "Identifier") throw new ParseError("Expected a parameter name", firstExpr.span);
-        const firstParam = this.parseValueParameter(firstExpr, true, firstIsRest);
+        const firstTarget = this.expressionToBindingTarget(firstExpr);
+        if (!firstTarget) throw new ParseError("Expected a parameter name or pattern", firstExpr.span);
+        const firstParam = this.parseValueParameter(firstTarget, true, firstIsRest);
         if (firstDotSpan) {
           firstParam.span = { start: firstDotSpan.start, end: firstParam.span.end };
         }
@@ -1324,8 +1410,13 @@ export class Parser {
             isRest = true;
             dotSpan = this.previous().span;
           }
-          const pName = this.parseIdentifier();
-          const p = this.parseValueParameter(pName, true, isRest);
+          let pTarget: BindingTarget;
+          if (this.check(TokenType.LBRACE) || this.check(TokenType.LBRACKET)) {
+            pTarget = this.parsePattern() as RecordPattern | ArrayPattern;
+          } else {
+            pTarget = this.parseIdentifier();
+          }
+          const p = this.parseValueParameter(pTarget, true, isRest);
           if (dotSpan) {
             p.span = { start: dotSpan.start, end: p.span.end };
           }
@@ -1384,13 +1475,11 @@ export class Parser {
 
       if (arrowConsumed || this.match(TokenType.ARROW)) {
         const body = this.parseFunctionBody(!this.options.allowLegacyReturns);
-        const paramName: Identifier =
-          firstExpr.kind === "Placeholder"
-            ? { kind: "Identifier", name: "_", span: firstExpr.span }
-            : (firstExpr as Identifier);
+        const paramTarget = this.expressionToBindingTarget(firstExpr);
+        if (!paramTarget) throw new ParseError("Expected parameter name or pattern", firstExpr.span);
         return {
           kind: "FunctionExpression",
-          params: [{ kind: "Parameter", name: paramName, span: firstExpr.span }],
+          params: [{ kind: "Parameter", name: paramTarget, span: firstExpr.span }],
           returnType: singleReturnType,
           body,
           span: { start, end: body.span.end },
@@ -2454,17 +2543,22 @@ export class Parser {
               isRest = true;
               dotSpan = this.previous().span;
             }
-            const pName = this.parseIdentifier();
+            let pTarget: BindingTarget;
+            if (this.check(TokenType.LBRACE) || this.check(TokenType.LBRACKET)) {
+              pTarget = this.parsePattern() as RecordPattern | ArrayPattern;
+            } else {
+              pTarget = this.parseIdentifier();
+            }
             const optional = this.match(TokenType.QUESTION);
             this.consume(TokenType.COLON, "Expected ':' after param name");
             const pType = this.parseTypeNode();
             params.push({
               kind: "Parameter",
-              name: pName,
+              name: pTarget,
               typeAnnotation: pType,
               optional: optional ? true : undefined,
               isRest: isRest ? true : undefined,
-              span: { start: dotSpan ? dotSpan.start : pName.span.start, end: pType.span.end },
+              span: { start: dotSpan ? dotSpan.start : pTarget.span.start, end: pType.span.end },
             });
           } while (this.match(TokenType.COMMA) && !this.check(TokenType.RPAREN));
         }
