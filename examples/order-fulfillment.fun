@@ -82,7 +82,7 @@ export applyDiscount = (order: Order, discount: Number) =>
 export appendAuditEntry = (logs: Array<String>, entry: String) =>
   => logs
   |> mut (draft) =>
-    draft.push(entry)
+    draft[draft.length] = entry
     draft
 
 // --- Effect Services & Dependencies ---

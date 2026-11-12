@@ -61,8 +61,8 @@ export fn logAll(logger: Logger, ...msgs: Array<String>): Unit =>
 `.trim();
 
     const res = await compile(code);
-    expect(res.typescript).toContain("type Logger = (...messages: ReadonlyArray<string>) => Unit;");
-    expect(res.typescript).toContain("const logAll = (logger: Logger, ...msgs: ReadonlyArray<string>): Unit =>");
+    expect(res.typescript).toContain("type Logger = (...messages: ReadonlyArray<string>) => void;");
+    expect(res.typescript).toContain("const logAll = (logger: Logger, ...msgs: ReadonlyArray<string>): void =>");
   });
 
   it("rejects rest parameters that are not the final parameter", async () => {

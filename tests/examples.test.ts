@@ -59,7 +59,7 @@ describe("Sample Applications & Real-World Programs", () => {
       // Mutative deep updates & draft recipe
       expect(res.typescript).toContain("draft.shipping.carrier = carrier;");
       expect(res.typescript).toContain("draft.shipping.trackingNumber = trackingNumber;");
-      expect(res.typescript).toContain("draft.push(entry);");
+      expect(res.typescript).toContain("draft[draft.length] = entry;");
 
       // Effect concurrency, retry, fiber, and layers
       expect(res.typescript).toContain("Effect.all(checks, { concurrency: \"unbounded\" })");

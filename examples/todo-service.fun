@@ -29,10 +29,9 @@ export TodoRepoLive =
       }
 
     complete: (id) =>
-      idx = store.findIndex((t) => t.id #= id)
-      match
-        | idx #= -1 => Effect.fail(TodoNotFound({ id }))
-        | _ =>
+      store |> Array.findFirstIndex((t) => t.id #= id) |> match
+        | None => Effect.fail(TodoNotFound({ id }))
+        | Some(idx) =>
             match store[idx]
               | Some(todo) =>
                   updated = { ...todo, completed: true }
