@@ -10,7 +10,7 @@
  */
 export const EFFECT_PIPELINE_CATALOG_VERSION = "4.1.2";
 
-export type PipelineCompanionModule = "Array" | "Option" | "Result" | "Chunk" | "Effect" | "Schedule" | "Layer" | "Stream" | "Schema" | "String" | "Record";
+export type PipelineCompanionModule = "Array" | "Option" | "Result" | "Chunk" | "Effect" | "Schedule" | "Layer" | "Stream" | "Schema" | "String" | "Record" | "HashMap" | "HashSet" | "DateTime";
 
 const entries = <const T extends readonly string[]>(...operations: T) => operations;
 
@@ -50,6 +50,15 @@ export const PIPELINE_COMPANION_CATALOG: Readonly<Record<PipelineCompanionModule
   ),
   Record: entries(
     "assignProperty", "collect", "difference", "every", "filter", "filterMap", "findFirst", "fromEntries", "fromIterableBy", "fromIterableWith", "get", "getFailures", "getSomes", "getSuccesses", "has", "intersection", "isEmptyReadonlyRecord", "isEmptyRecord", "isSubrecord", "isSubrecordBy", "keys", "map", "mapEntries", "mapKeys", "modify", "partition", "pop", "reduce", "remove", "replace", "separate", "set", "size", "some", "toEntries", "union", "values",
+  ),
+  HashMap: entries(
+    "compact", "entries", "every", "filter", "filterMap", "findFirst", "flatMap", "forEach", "get", "has", "keys", "map", "modify", "modifyAt", "reduce", "remove", "removeMany", "set", "setMany", "size", "some", "toEntries", "toValues", "union", "values",
+  ),
+  HashSet: entries(
+    "add", "difference", "every", "filter", "has", "intersection", "map", "reduce", "remove", "size", "some", "union",
+  ),
+  DateTime: entries(
+    "add", "addDuration", "between", "clamp", "distance", "endOf", "format", "formatIntl", "formatIso", "formatIsoDate", "formatIsoDateUtc", "formatIsoOffset", "formatIsoZoned", "formatLocal", "formatUtc", "getPart", "getPartUtc", "isFuture", "isFutureUnsafe", "isPast", "isPastUnsafe", "mapEpochMillis", "match", "max", "min", "mutate", "mutateUtc", "nearest", "removeTime", "setParts", "setPartsUtc", "setZone", "setZoneCurrent", "setZoneNamed", "setZoneNamedUnsafe", "setZoneOffset", "startOf", "subtract", "subtractDuration", "toDate", "toDateUtc", "toEpochMillis", "toEpochSeconds", "toParts", "toPartsUtc", "toUtc", "withCurrentZone", "withCurrentZoneNamed", "withCurrentZoneOffset", "withDate", "withDateUtc", "zoneToString", "zonedOffset", "zonedOffsetIso",
   ),
 };
 

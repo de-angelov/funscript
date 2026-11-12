@@ -595,4 +595,36 @@ export fn formatSlug(name: String): String =>
     const formatSlug = evaluateTsFunction(res.typescript, "formatSlug");
     expect(formatSlug("  Hello World  ")).toBe("hello world");
   });
+
+  it("bans Math.random in favor of Effect.Random", () => {
+    const invalidMathRandom = `
+export fn roll() => Math.random()
+`;
+    expect(() => Effect.runSync(compileString(invalidMathRandom))).toThrow(
+      "'Math.random()' is banned by the Effect style guide because it is unmanaged and non-deterministic. Use 'Random.next' or 'Random.nextIntBetween' instead."
+    );
+  });
+
+  it("bans mutating Date prototype methods in favor of DateTime", () => {
+    const invalidDateMutation = `
+export fn updateYear(d: Object) => d.setFullYear(2026)
+`;
+    expect(() => Effect.runSync(compileString(invalidDateMutation))).toThrow(
+      "Native date method '.setFullYear()' is banned by the Effect style guide"
+    );
+  });
+
+  it("supports HashMap, HashSet, and DateTime companion modules and auto-imports", () => {
+    const valid = `
+export fn manageCollections(map: Object, set: Object) =>
+  m2 = map |> HashMap.set("key", "val")
+  s2 = set |> HashSet.add("item")
+  => [m2, s2]
+`;
+    const res = Effect.runSync(compileString(valid));
+    expect(res.typescript).toMatch(/HashMap/);
+    expect(res.typescript).toMatch(/HashSet/);
+    expect(res.typescript).toContain("HashMap.set");
+    expect(res.typescript).toContain("HashSet.add");
+  });
 });

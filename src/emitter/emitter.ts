@@ -120,6 +120,9 @@ const RESULT_COMPANION_METHODS = new Set(PIPELINE_COMPANION_CATALOG.Result);
 const CHUNK_COMPANION_METHODS = new Set(PIPELINE_COMPANION_CATALOG.Chunk);
 const STRING_COMPANION_METHODS = new Set(PIPELINE_COMPANION_CATALOG.String);
 const RECORD_COMPANION_METHODS = new Set(PIPELINE_COMPANION_CATALOG.Record);
+const HASHMAP_COMPANION_METHODS = new Set(PIPELINE_COMPANION_CATALOG.HashMap);
+const HASHSET_COMPANION_METHODS = new Set(PIPELINE_COMPANION_CATALOG.HashSet);
+const DATETIME_COMPANION_METHODS = new Set(PIPELINE_COMPANION_CATALOG.DateTime);
 
 export const EFFECT_MODULE_NAMES = new Set([
   "Array",
@@ -130,6 +133,8 @@ export const EFFECT_MODULE_NAMES = new Set([
   "Duration",
   "Effect",
   "Equal",
+  "HashMap",
+  "HashSet",
   "Layer",
   "Number",
   "Option",
@@ -187,6 +192,16 @@ const BANNED_INSTANCE_METHODS = new Map<string, { category: string; replacement:
   ["clear", { category: "collection", replacement: "HashMap.empty() / HashSet.empty()", pipeline: "HashMap.empty()" }],
   ["delete", { category: "collection", replacement: "HashMap.remove / Record.remove", pipeline: "|> HashMap.remove(...)" }],
   ["set", { category: "collection", replacement: "HashMap.set / Record.set", pipeline: "|> HashMap.set(...)" }],
+
+  // Date mutation methods
+  ["setFullYear", { category: "date", replacement: "DateTime.*", pipeline: "|> DateTime.*" }],
+  ["setMonth", { category: "date", replacement: "DateTime.*", pipeline: "|> DateTime.*" }],
+  ["setDate", { category: "date", replacement: "DateTime.*", pipeline: "|> DateTime.*" }],
+  ["setHours", { category: "date", replacement: "DateTime.*", pipeline: "|> DateTime.*" }],
+  ["setMinutes", { category: "date", replacement: "DateTime.*", pipeline: "|> DateTime.*" }],
+  ["setSeconds", { category: "date", replacement: "DateTime.*", pipeline: "|> DateTime.*" }],
+  ["setTime", { category: "date", replacement: "DateTime.*", pipeline: "|> DateTime.*" }],
+  ["setMilliseconds", { category: "date", replacement: "DateTime.*", pipeline: "|> DateTime.*" }],
 ]);
 
 const BANNED_OBJECT_STATIC_METHODS = new Map<string, string>([
@@ -230,18 +245,6 @@ const NUMBER_COMPANION_METHODS = new Set([
   "between",
   "increment",
   "decrement",
-]);
-
-const DATETIME_COMPANION_METHODS = new Set([
-  "lessThan",
-  "lessThanOrEqualTo",
-  "greaterThan",
-  "greaterThanOrEqualTo",
-  "between",
-  "isLessThan",
-  "isLessThanOrEqualTo",
-  "isGreaterThan",
-  "isGreaterThanOrEqualTo",
 ]);
 
 export const COMPARISON_METHOD_MAP: Readonly<Record<string, string>> = {
@@ -362,6 +365,8 @@ const EFFECT_BUILTIN_MODULES = new Set([
   "Number",
   "Record",
   "Duration",
+  "HashMap",
+  "HashSet",
   "Result",
   "Struct",
   "Brand",
@@ -1311,6 +1316,13 @@ export class Emitter {
         );
       }
 
+      if ((objName === "Math" || objName === "globalThis") && prop === "random") {
+        throw new FunScriptError(
+          `'Math.random()' is banned by the Effect style guide because it is unmanaged and non-deterministic. Use 'Random.next' or 'Random.nextIntBetween' instead.`,
+          expr.callee.property.span,
+        );
+      }
+
       if (
         (expr.callee.object.kind === "Identifier" || expr.callee.object.kind === "UpperIdentifier") &&
         expr.callee.object.name === "Object" &&
@@ -1738,6 +1750,9 @@ export class Emitter {
     if (CHUNK_COMPANION_METHODS.has(name)) candidates.push("Chunk");
     if (STRING_COMPANION_METHODS.has(name)) candidates.push("String");
     if (RECORD_COMPANION_METHODS.has(name)) candidates.push("Record");
+    if (HASHMAP_COMPANION_METHODS.has(name)) candidates.push("HashMap");
+    if (HASHSET_COMPANION_METHODS.has(name)) candidates.push("HashSet");
+    if (DATETIME_COMPANION_METHODS.has(name)) candidates.push("DateTime");
     if (name === "decode" || (preferredCompanion === "Schema" && this.isCompanionOperation("Schema", name))) candidates.push("Schema");
     if (preferredCompanion && candidates.includes(preferredCompanion)) return preferredCompanion;
     if (candidates.length === 1) return candidates[0];
@@ -1746,13 +1761,11 @@ export class Emitter {
     if (candidates.length > 1) return undefined;
     if (NUMBER_COMPANION_METHODS.has(name)) return "Number";
     if (DURATION_COMPANION_METHODS.has(name)) return "Duration";
-    if (preferredCompanion === "DateTime" && DATETIME_COMPANION_METHODS.has(name)) return "DateTime";
     return undefined;
   }
 
   private isCompanionOperation(module: CompanionModule, operation: string): boolean {
     if (module === "Number") return NUMBER_COMPANION_METHODS.has(operation);
-    if (module === "DateTime") return DATETIME_COMPANION_METHODS.has(operation);
     if (module === "Duration") return DURATION_COMPANION_METHODS.has(operation);
     return (PIPELINE_COMPANION_CATALOG[module as PipelineCompanionModule]?.includes(operation) ?? false) ||
       (module === "Effect" && operation in EFFECT_PIPELINE_COMPATIBILITY_ALIASES);
