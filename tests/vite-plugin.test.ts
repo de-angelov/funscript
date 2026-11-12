@@ -283,5 +283,31 @@ export Button = (props: Props) => <button className="btn">{props.label}</button>
         await server.close();
       }
     });
+
+    it("prevents server-only modules from being imported into client components", async () => {
+      const plugin = funscriptPlugin();
+      const resolveFn = plugin.resolveId as Function;
+
+      // Importing a server module from a client component during client build throws
+      await expect(
+        resolveFn.call(
+          {},
+          "./database.server.js",
+          "/src/components/UserCard.funx",
+          { ssr: false }
+        )
+      ).rejects.toThrow(
+        "[vite-plugin-funscript] Server module './database.server.js' cannot be imported into client component '/src/components/UserCard.funx'."
+      );
+
+      // Route modules are permitted because router frameworks extract loaders/actions
+      const routeResult = await resolveFn.call(
+        { resolve: async () => null },
+        "./home.server.js",
+        "/src/routes/home.funx",
+        { ssr: false }
+      );
+      expect(routeResult).toBeNull();
+    });
   });
 });

@@ -80,6 +80,24 @@ export function funscriptPlugin(options: FunscriptPluginOptions = {}): Plugin {
     },
 
     async resolveId(source, importer, resolveOptions) {
+      if (
+        importer &&
+        !resolveOptions?.ssr &&
+        (source.includes(".server.") || source.endsWith(".server"))
+      ) {
+        // Enforce server boundary: client UI components cannot import server-only modules
+        const isClientComponent =
+          !importer.includes(".server.") &&
+          !importer.includes("/routes/") &&
+          !importer.endsWith(".server.fun") &&
+          !importer.endsWith(".server.ts");
+        if (isClientComponent) {
+          throw new Error(
+            `[vite-plugin-funscript] Server module '${source}' cannot be imported into client component '${importer}'. FunScript enforces strict server/client boundary separation.`,
+          );
+        }
+      }
+
       if (!importer || !source.endsWith(".js") || (!source.startsWith(".") && !path.isAbsolute(source))) return null;
       const existing = await this.resolve(source, importer, { ...resolveOptions, skipSelf: true });
       if (existing) return existing;
