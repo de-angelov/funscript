@@ -423,4 +423,77 @@ export fn doubleArrayDirect(items: Array<Number>): Array<Number> =>
     expect(doubleArray([1, 2, 3])).toEqual([2, 4, 6]);
     expect(doubleArrayDirect([1, 2, 3])).toEqual([2, 4, 6]);
   });
+
+  it("bans native String prototype methods under Effect style guide", () => {
+    const invalidTrim = `
+export fn clean(s: String) => s.trim()
+`;
+    expect(() => Effect.runSync(compileString(invalidTrim))).toThrow(
+      "Native string method '.trim()' is banned by the Effect style guide. Use 'String.trim(...)' or pipeline '|> String.trim' instead."
+    );
+
+    const invalidLower = `
+export fn lower(s: String) => s.toLowerCase()
+`;
+    expect(() => Effect.runSync(compileString(invalidLower))).toThrow(
+      "Native string method '.toLowerCase()' is banned by the Effect style guide. Use 'String.toLowerCase(...)' or pipeline '|> String.toLowerCase' instead."
+    );
+
+    const invalidSplit = `
+export fn parts(s: String) => s.split(",")
+`;
+    expect(() => Effect.runSync(compileString(invalidSplit))).toThrow(
+      "Native string method '.split()' is banned by the Effect style guide. Use 'String.split(...)' or pipeline '|> String.split(...)' instead."
+    );
+  });
+
+  it("bans Object static methods under Effect style guide", () => {
+    const invalidKeys = `
+export fn getKeys(o: Object) => Object.keys(o)
+`;
+    expect(() => Effect.runSync(compileString(invalidKeys))).toThrow(
+      "'Object.keys()' is banned by the Effect style guide. Use Record.keys(...) instead."
+    );
+
+    const invalidValues = `
+export fn getValues(o: Object) => Object.values(o)
+`;
+    expect(() => Effect.runSync(compileString(invalidValues))).toThrow(
+      "'Object.values()' is banned by the Effect style guide. Use Record.values(...) instead."
+    );
+
+    const invalidAssign = `
+export fn merge(a: Object, b: Object) => Object.assign({}, a, b)
+`;
+    expect(() => Effect.runSync(compileString(invalidAssign))).toThrow(
+      "'Object.assign()' is banned by the Effect style guide. Use Record.union(...) or object spread '{ ...a, ...b }' instead."
+    );
+
+    const invalidFreeze = `
+export fn freezeObj(o: Object) => Object.freeze(o)
+`;
+    expect(() => Effect.runSync(compileString(invalidFreeze))).toThrow(
+      "'Object.freeze()' is banned by the Effect style guide. Use plain record literals '{ ... }' (FunScript records are already immutable) instead."
+    );
+  });
+
+  it("allows String and Record companion modules cleanly", () => {
+    const valid = `
+export fn cleanString(s: String): String =>
+  s |> String.trim |> String.toUpperCase
+
+export fn recordKeys(r: Object): Array<String> =>
+  Record.keys(r)
+`;
+    const res = Effect.runSync(compileString(valid));
+    expect(res.typescript).toMatch(/import \{.*Record.*String.*\} from "effect";|import \{.*String.*Record.*\} from "effect";/);
+    expect(res.typescript).toContain("String.trim");
+    expect(res.typescript).toContain("Record.keys");
+
+    const cleanString = evaluateTsFunction(res.typescript, "cleanString");
+    const recordKeys = evaluateTsFunction(res.typescript, "recordKeys");
+
+    expect(cleanString("  funscript  ")).toBe("FUNSCRIPT");
+    expect(recordKeys({ a: 1, b: 2 })).toEqual(["a", "b"]);
+  });
 });

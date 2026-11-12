@@ -132,6 +132,7 @@ export const EFFECT_MODULE_NAMES = new Set([
   "Number",
   "Option",
   "Order",
+  "Record",
   "Result",
   "Schedule",
   "Schema",
@@ -140,26 +141,54 @@ export const EFFECT_MODULE_NAMES = new Set([
   "pipe",
 ]);
 
-const BANNED_ARRAY_METHODS = new Map<string, { replacement: string; pipeline: string }>([
-  ["map", { replacement: "Array.map", pipeline: "|> Array.map(...)" }],
-  ["filter", { replacement: "Array.filter", pipeline: "|> Array.filter(...)" }],
-  ["reduce", { replacement: "Array.reduce", pipeline: "|> Array.reduce(...)" }],
-  ["reduceRight", { replacement: "Array.reduceRight", pipeline: "|> Array.reduceRight(...)" }],
-  ["flatMap", { replacement: "Array.flatMap", pipeline: "|> Array.flatMap(...)" }],
-  ["flat", { replacement: "Array.flatten", pipeline: "|> Array.flatten" }],
-  ["find", { replacement: "Array.findFirst", pipeline: "|> Array.findFirst(...)" }],
-  ["findIndex", { replacement: "Array.findFirstIndex", pipeline: "|> Array.findFirstIndex(...)" }],
-  ["findLast", { replacement: "Array.findLast", pipeline: "|> Array.findLast(...)" }],
-  ["findLastIndex", { replacement: "Array.findLastIndex", pipeline: "|> Array.findLastIndex(...)" }],
-  ["some", { replacement: "Array.some", pipeline: "|> Array.some(...)" }],
-  ["every", { replacement: "Array.every", pipeline: "|> Array.every(...)" }],
-  ["sort", { replacement: "Array.sort", pipeline: "|> Array.sort(...)" }],
-  ["reverse", { replacement: "Array.reverse", pipeline: "|> Array.reverse" }],
-  ["push", { replacement: "Array.append", pipeline: "|> Array.append(...)" }],
-  ["pop", { replacement: "Array.unappend", pipeline: "|> Array.unappend" }],
-  ["shift", { replacement: "Array.unprepend", pipeline: "|> Array.unprepend" }],
-  ["unshift", { replacement: "Array.prepend", pipeline: "|> Array.prepend(...)" }],
-  ["splice", { replacement: "Array.remove / Array.modify", pipeline: "Array.remove(...)" }],
+const BANNED_INSTANCE_METHODS = new Map<string, { category: string; replacement: string; pipeline: string }>([
+  // Array methods
+  ["map", { category: "array", replacement: "Array.map", pipeline: "|> Array.map(...)" }],
+  ["filter", { category: "array", replacement: "Array.filter", pipeline: "|> Array.filter(...)" }],
+  ["reduce", { category: "array", replacement: "Array.reduce", pipeline: "|> Array.reduce(...)" }],
+  ["reduceRight", { category: "array", replacement: "Array.reduceRight", pipeline: "|> Array.reduceRight(...)" }],
+  ["flatMap", { category: "array", replacement: "Array.flatMap", pipeline: "|> Array.flatMap(...)" }],
+  ["flat", { category: "array", replacement: "Array.flatten", pipeline: "|> Array.flatten" }],
+  ["find", { category: "array", replacement: "Array.findFirst", pipeline: "|> Array.findFirst(...)" }],
+  ["findIndex", { category: "array", replacement: "Array.findFirstIndex", pipeline: "|> Array.findFirstIndex(...)" }],
+  ["findLast", { category: "array", replacement: "Array.findLast", pipeline: "|> Array.findLast(...)" }],
+  ["findLastIndex", { category: "array", replacement: "Array.findLastIndex", pipeline: "|> Array.findLastIndex(...)" }],
+  ["some", { category: "array", replacement: "Array.some", pipeline: "|> Array.some(...)" }],
+  ["every", { category: "array", replacement: "Array.every", pipeline: "|> Array.every(...)" }],
+  ["sort", { category: "array", replacement: "Array.sort", pipeline: "|> Array.sort(...)" }],
+  ["reverse", { category: "array", replacement: "Array.reverse", pipeline: "|> Array.reverse" }],
+  ["push", { category: "array", replacement: "Array.append", pipeline: "|> Array.append(...)" }],
+  ["pop", { category: "array", replacement: "Array.unappend", pipeline: "|> Array.unappend" }],
+  ["shift", { category: "array", replacement: "Array.unprepend", pipeline: "|> Array.unprepend" }],
+  ["unshift", { category: "array", replacement: "Array.prepend", pipeline: "|> Array.prepend(...)" }],
+  ["splice", { category: "array", replacement: "Array.remove / Array.modify", pipeline: "Array.remove(...)" }],
+
+  // String methods
+  ["trim", { category: "string", replacement: "String.trim", pipeline: "|> String.trim" }],
+  ["trimStart", { category: "string", replacement: "String.trimStart", pipeline: "|> String.trimStart" }],
+  ["trimEnd", { category: "string", replacement: "String.trimEnd", pipeline: "|> String.trimEnd" }],
+  ["toLowerCase", { category: "string", replacement: "String.toLowerCase", pipeline: "|> String.toLowerCase" }],
+  ["toUpperCase", { category: "string", replacement: "String.toUpperCase", pipeline: "|> String.toUpperCase" }],
+  ["toLocaleLowerCase", { category: "string", replacement: "String.toLocaleLowerCase", pipeline: "|> String.toLocaleLowerCase" }],
+  ["toLocaleUpperCase", { category: "string", replacement: "String.toLocaleUpperCase", pipeline: "|> String.toLocaleUpperCase" }],
+  ["startsWith", { category: "string", replacement: "String.startsWith", pipeline: "|> String.startsWith(...)" }],
+  ["endsWith", { category: "string", replacement: "String.endsWith", pipeline: "|> String.endsWith(...)" }],
+  ["split", { category: "string", replacement: "String.split", pipeline: "|> String.split(...)" }],
+  ["replace", { category: "string", replacement: "String.replace", pipeline: "|> String.replace(...)" }],
+  ["replaceAll", { category: "string", replacement: "String.replaceAll", pipeline: "|> String.replaceAll(...)" }],
+  ["padStart", { category: "string", replacement: "String.padStart", pipeline: "|> String.padStart(...)" }],
+  ["padEnd", { category: "string", replacement: "String.padEnd", pipeline: "|> String.padEnd(...)" }],
+  ["repeat", { category: "string", replacement: "String.repeat", pipeline: "|> String.repeat(...)" }],
+]);
+
+const BANNED_OBJECT_STATIC_METHODS = new Map<string, string>([
+  ["keys", "Record.keys(...)"],
+  ["values", "Record.values(...)"],
+  ["entries", "Record.toEntries(...)"],
+  ["fromEntries", "Record.fromEntries(...)"],
+  ["assign", "Record.union(...) or object spread '{ ...a, ...b }'"],
+  ["freeze", "plain record literals '{ ... }' (FunScript records are already immutable)"],
+  ["hasOwn", "Record.has(...)"],
 ]);
 
 function getRootCalleeName(node: Expression): string | null {
@@ -323,7 +352,6 @@ const EFFECT_BUILTIN_MODULES = new Set([
   "Fiber",
   "Context",
   "Layer",
-  "Math",
   "String",
   "Number",
   "Record",
@@ -1217,16 +1245,29 @@ export class Emitter {
     if (expr.callee.kind === "MemberExpression") {
       const prop = expr.callee.property.name;
       const root = getRootCalleeName(expr.callee.object);
+
+      if (
+        (expr.callee.object.kind === "Identifier" || expr.callee.object.kind === "UpperIdentifier") &&
+        expr.callee.object.name === "Object" &&
+        BANNED_OBJECT_STATIC_METHODS.has(prop)
+      ) {
+        const replacement = BANNED_OBJECT_STATIC_METHODS.get(prop)!;
+        throw new FunScriptError(
+          `'Object.${prop}()' is banned by the Effect style guide. Use ${replacement} instead.`,
+          expr.callee.property.span,
+        );
+      }
+
       const isAllowed =
         root !== null &&
         (root[0] === root[0].toUpperCase() ||
           EFFECT_MODULE_NAMES.has(root) ||
           EFFECT_BUILTIN_MODULES.has(root));
 
-      if (!isAllowed && BANNED_ARRAY_METHODS.has(prop)) {
-        const info = BANNED_ARRAY_METHODS.get(prop)!;
+      if (!isAllowed && BANNED_INSTANCE_METHODS.has(prop)) {
+        const info = BANNED_INSTANCE_METHODS.get(prop)!;
         throw new FunScriptError(
-          `Native array method '.${prop}()' is banned by the Effect style guide. Use '${info.replacement}(...)' or pipeline '${info.pipeline}' instead.`,
+          `Native ${info.category} method '.${prop}()' is banned by the Effect style guide. Use '${info.replacement}(...)' or pipeline '${info.pipeline}' instead.`,
           expr.callee.property.span,
         );
       }
