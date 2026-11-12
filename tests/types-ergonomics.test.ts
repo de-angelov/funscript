@@ -47,4 +47,19 @@ export schema OptionalParam = Number | Undefined
     expect(res.typescript).toContain("string | null");
     expect(res.typescript).toContain("number | undefined");
   });
+
+  it("compiles Option.fromNullishOrElse with eager values", () => {
+    const src = `
+import { Option } from "effect"
+
+export testFn = (raw: Unknown, opt: Option<String>) =>
+  a = Option.fromNullishOrElse(raw, "default")
+  b = Option.fromNullishOrElse(opt, "fallback")
+  => [a, b]
+`;
+    const res = Effect.runSync(compileString(src));
+    expect(res.typescript).toContain("__funscriptOptionFromNullishOrElse");
+    expect(res.typescript).toContain('__funscriptOptionFromNullishOrElse(raw, "default")');
+    expect(res.typescript).toContain('__funscriptOptionFromNullishOrElse(opt, "fallback")');
+  });
 });

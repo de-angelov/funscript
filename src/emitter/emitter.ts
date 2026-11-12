@@ -311,11 +311,13 @@ export class Emitter {
   private needsReferenceEquality = false;
   private needsJsInterop = false;
   private needsDecodeUnknown = false;
+  private needsFromNullishOrElse = false;
   private primitiveIdentifiers = new Set<string>();
   private currentPlaceholderParam: string | null = null;
   private bindings = new Map<string, BindingDeclaration>();
 
   private declaredTypeNames = new Set<string>();
+  private runtimeSchemaNames = new Set<string>();
   private inPipelineStage = false;
   private recordContracts = new Map<string, import("../ast/types.js").RecordTypeNode>();
 
@@ -323,7 +325,8 @@ export class Emitter {
     for (const [name, contract] of options.importedRecordContracts ?? []) this.recordContracts.set(name, contract);
     // Source-map emission renders declarations individually, but resolution
     // still needs the bindings from the complete source program.
-    for (const item of (contextProgram ?? program)?.body ?? []) {
+    const allItems = (contextProgram ?? program)?.body ?? [];
+    for (const item of allItems) {
       const decl = item.kind === "ExportDeclaration" ? item.declaration : item;
       if (item.kind === "ImportDeclaration" && item.source.raw === '"effect"') {
         for (const spec of item.specifiers) this.userEffectBindings.add(spec.local.name);
@@ -347,10 +350,46 @@ export class Emitter {
       ) {
         this.declaredTypeNames.add(decl.id.name);
       }
-      if (decl.kind === "SchemaDeclaration" && decl.body.kind === "RecordSchema" && isRecordContract(decl.body)) {
-        this.recordContracts.set(decl.id.name, recordContractType(decl.body));
-      }
       if (decl.kind === "BindingDeclaration") this.bindings.set(decl.id.name, decl);
+    }
+
+    const staticTypeNames = new Set<string>();
+    for (const [name] of this.recordContracts) staticTypeNames.add(name);
+    for (const item of allItems) {
+      const decl = item.kind === "ExportDeclaration" ? item.declaration : item;
+      if (decl.kind === "SchemaDeclaration" && decl.body.kind === "TypeSignatureSchema") {
+        staticTypeNames.add(decl.id.name);
+      }
+    }
+    let changed = true;
+    while (changed) {
+      changed = false;
+      for (const item of allItems) {
+        const decl = item.kind === "ExportDeclaration" ? item.declaration : item;
+        if (decl.kind === "SchemaDeclaration" && decl.body.kind === "RecordSchema" && !staticTypeNames.has(decl.id.name)) {
+          if (isRecordContract(decl.body, staticTypeNames)) {
+            staticTypeNames.add(decl.id.name);
+            changed = true;
+          }
+        }
+      }
+    }
+
+    for (const item of allItems) {
+      const decl = item.kind === "ExportDeclaration" ? item.declaration : item;
+      if (decl.kind === "SchemaDeclaration") {
+        if (decl.body.kind === "RecordSchema" && staticTypeNames.has(decl.id.name)) {
+          this.recordContracts.set(decl.id.name, recordContractType(decl.body));
+        } else if (
+          (decl.body.kind === "RecordSchema" && !staticTypeNames.has(decl.id.name)) ||
+          decl.body.kind === "StructuralUnionSchema" ||
+          decl.body.kind === "RefinementSchema" ||
+          decl.body.kind === "TsDerivedSchema" ||
+          decl.body.kind === "ImportedTsSchema"
+        ) {
+          this.runtimeSchemaNames.add(decl.id.name);
+        }
+      }
     }
   }
 
@@ -358,18 +397,6 @@ export class Emitter {
     let bodyCode = "";
 
     if (this.program) {
-      const visit = (value: unknown, parent?: Record<string, unknown>, grandparent?: Record<string, unknown>, key?: string): void => {
-        if (!value || typeof value !== "object") return;
-        if (Array.isArray(value)) { value.forEach((child) => visit(child, parent, grandparent, key)); return; }
-        const node = value as Record<string, any>;
-        if (node.kind === "TypeReferenceNode" && this.recordContracts.has(node.name.name)) {
-          if (!(parent?.kind === "Parameter" && grandparent?.kind === "FunctionExpression" && key === "typeAnnotation")) {
-            throw new FunScriptError(`${node.name.name} is a compile-time record contract and is currently supported only as a direct function parameter`, node.span);
-          }
-        }
-        for (const [childKey, child] of Object.entries(node)) if (childKey !== "span") visit(child, node, parent, childKey);
-      };
-      visit(this.program);
       for (const decl of this.program.body) {
         bodyCode += this.emitTopLevelDeclaration(decl) + "\n\n";
       }
@@ -407,6 +434,11 @@ export class Emitter {
     }
     if (this.needsDecodeUnknown) {
       header += `declare module "effect" {\n  namespace Schema {\n    export const decodeUnknown: typeof Schema.decodeUnknownEffect;\n  }\n}\n`;
+    }
+    if (this.needsFromNullishOrElse) {
+      header += `function __funscriptOptionFromNullishOrElse<A, B>(value: A | null | undefined, onNone: B): NonNullable<A> | B;\n`;
+      header += `function __funscriptOptionFromNullishOrElse<B>(onNone: B): <A>(value: A | null | undefined) => NonNullable<A> | B;\n`;
+      header += `function __funscriptOptionFromNullishOrElse(...args: any[]): any {\n  if (args.length === 1) { const onNone = args[0]; return (value: any) => __funscriptOptionFromNullishOrElse(value, onNone); }\n  let [value, onNone] = args;\n  while (value !== null && value !== undefined && typeof value === "object" && "_tag" in value) {\n    if (value._tag === "Some") value = value.value;\n    else if (value._tag === "None") return onNone;\n    else break;\n  }\n  if (value !== null && value !== undefined) return value;\n  return onNone;\n}\n`;
     }
 
     if (header.length > 0) {
@@ -447,13 +479,13 @@ export class Emitter {
     const name = decl.id.name;
     const exp = isExport ? "export " : "";
 
-    if (decl.typeParams?.length && decl.body.kind !== "TypeSignatureSchema" && !(decl.body.kind === "RecordSchema" && isRecordContract(decl.body))) {
+    if (decl.typeParams?.length && decl.body.kind !== "TypeSignatureSchema" && !(decl.body.kind === "RecordSchema" && this.recordContracts.has(name))) {
       throw new FunScriptError("Generic runtime schemas are not supported yet; use a TypeScript type alias", decl.span);
     }
 
     switch (decl.body.kind) {
       case "RecordSchema": {
-        if (isRecordContract(decl.body)) {
+        if (this.recordContracts.has(name)) {
           const hasDefault = (value: unknown): boolean => {
             if (!value || typeof value !== "object") return false;
             if (Array.isArray(value)) return value.some(hasDefault);
@@ -597,7 +629,6 @@ export class Emitter {
     }
     if (typeNode.kind === "TypeReferenceNode") {
       const tName = typeNode.name.name;
-      if (this.recordContracts.has(tName)) throw new FunScriptError(`${tName} is a compile-time record contract, not a runtime schema`, typeNode.span);
       if (tName === "SchemaInput" && !this.declaredTypeNames.has(tName)) {
         throw new Error("SchemaInput is a static input type, not a runtime schema; use the schema itself for validation");
       }
@@ -612,6 +643,9 @@ export class Emitter {
       }
       if (tName === "Record" && typeNode.typeArgs?.length === 2) {
         return `Schema.Record(${this.emitSchemaTypeField(typeNode.typeArgs[0])}, ${this.emitSchemaTypeField(typeNode.typeArgs[1])})`;
+      }
+      if (!this.runtimeSchemaNames.has(tName)) {
+        return `(Schema.Unknown as unknown as Schema.Schema<${this.emitTypeNode(typeNode)}>)`;
       }
       return tName;
     }
@@ -1015,6 +1049,16 @@ export class Emitter {
   }
 
   private emitCallExpression(expr: CallExpression): string {
+    if (
+      expr.callee.kind === "MemberExpression" &&
+      (expr.callee.object.kind === "Identifier" || expr.callee.object.kind === "UpperIdentifier") &&
+      expr.callee.object.name === "Option" &&
+      expr.callee.property.name === "fromNullishOrElse"
+    ) {
+      this.needsFromNullishOrElse = true;
+      return `__funscriptOptionFromNullishOrElse(${expr.args.map((a) => this.emitExpression(a)).join(", ")})`;
+    }
+
     if (
       (expr.callee.kind === "UpperIdentifier" || expr.callee.kind === "Identifier") &&
       AUTO_NEW_CONSTRUCTORS.has(expr.callee.name) &&
@@ -1543,7 +1587,7 @@ export class Emitter {
         return `${rest}${name}${p.optional ? "?" : ""}${typeAnn}${defaultValue}`;
       })
       .join(", ");
-    const typeParams = this.emitTypeParameters(expr.typeParams);
+    const typeParams = this.emitTypeParameters(expr.typeParams, true);
     const retType = expr.returnType ? `: ${this.emitTypeNode(expr.returnType)}` : "";
     const optionalBindings = expr.params.flatMap((p, index) => {
       if (!p.optional) return [];
@@ -1557,10 +1601,7 @@ export class Emitter {
       const declared = param.typeAnnotation;
       if (this.isHtmlPropsType(declared)) { records.set(param.name.name, undefined); return; }
       const recordType = declared?.kind === "TypeReferenceNode" ? this.recordContracts.get(declared.name.name) : declared;
-      if (declared?.kind === "TypeReferenceNode" && recordType && (param.optional || param.defaultValue)) {
-        throw new FunScriptError("A compile-time record contract parameter cannot itself be optional or defaulted yet", param.span);
-      }
-      if (param.optional || recordType?.kind !== "RecordTypeNode") { records.set(param.name.name, undefined); return; }
+      if (param.optional || param.defaultValue || recordType?.kind !== "RecordTypeNode") { records.set(param.name.name, undefined); return; }
       const fields = recordType.fields;
       const nestedFields = (type: TypeNode): Map<string, RecordFieldInfo> | undefined => {
         if (type.kind !== "RecordTypeNode") {
@@ -2019,16 +2060,16 @@ export class Emitter {
 
   // --- Types ---
 
-  private emitTypeParameters(typeParams: TypeParameter[] | undefined): string {
+  private emitTypeParameters(typeParams: TypeParameter[] | undefined, forArrowExpression = false): string {
     if (!typeParams || typeParams.length === 0) return "";
     const params = typeParams.map((param) =>
       param.constraint
         ? `${param.name.name} extends ${this.emitTypeNode(param.constraint)}`
         : param.name.name,
     );
-    // TypeScript parses `<A>(...)` as JSX in `.tsx`; a trailing comma keeps
-    // unconstrained generic arrows valid in both `.ts` and `.tsx` output.
-    const needsTsxComma = this.options.isJsx && typeParams.every((param) => !param.constraint);
+    // TypeScript parses `<A>(...)` as JSX in `.tsx` (and in JSX-enabled contexts like Vite);
+    // a trailing comma keeps unconstrained generic arrow functions valid in both `.ts` and `.tsx`.
+    const needsTsxComma = forArrowExpression && (this.options.isJsx || typeParams.length === 1) && typeParams.every((param) => !param.constraint);
     return `<${params.join(", ")}${needsTsxComma ? "," : ""}>`;
   }
 
