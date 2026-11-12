@@ -270,6 +270,12 @@ export class Parser {
       }
       throw new ParseError("Expected 'schema' after 'export ts'", this.peek().span);
     }
+    if (this.match(TokenType.AS)) {
+      const start = this.previous().span.start;
+      const code = this.consume(TokenType.AS_CODE, "Expected '{ ... }' after 'as'");
+      this.consumeNewlineOrEof("Expected newline after as declaration");
+      return { kind: "AsDeclaration", code: code.value, codeStart: code.contentStart, span: { start, end: code.span.end } };
+    }
     if (this.match(TokenType.TS)) {
       const start = this.previous().span.start;
       if (this.check(TokenType.SCHEMA)) {

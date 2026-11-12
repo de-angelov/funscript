@@ -31,7 +31,15 @@ export type TopLevelDeclaration =
   | ServiceDeclaration
   | BindingDeclaration
   | TsEscapeDeclaration
+  | AsDeclaration
   | WhenStatement;
+
+export interface AsDeclaration extends NodeBase {
+  kind: "AsDeclaration";
+  serviceName?: UpperIdentifier;
+  code: string;
+  codeStart?: Position;
+}
 
 export interface TsEscapeDeclaration extends NodeBase {
   kind: "TsEscapeDeclaration";

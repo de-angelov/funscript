@@ -86,17 +86,17 @@ export testFn = (raw: Unknown, opt: Option<String>) =>
     expect(res.typescript).toContain('fromNullishOrElse(opt, "fallback")');
   });
 
-  it("transparently forwards Option into optional parameters without double wrapping", () => {
+  it("forwards an Option into an optional parameter explicitly", () => {
     const src = `
 export f = (x?: String) =>
   => x
 
 export g = (x?: String) =>
-  => f(x)
+  => f(Option.getOrUndefined(x))
 `;
     const res = Effect.runSync(compileString(src));
-    expect(res.typescript).toContain("($funscriptOptional0?: string | Option.Option<string>)");
-    expect(res.typescript).toContain("Option.isOption($funscriptOptional0) ? $funscriptOptional0 : Option.fromUndefinedOr($funscriptOptional0)");
+    expect(res.typescript).toContain("($funscriptOptional0?: string)");
+    expect(res.typescript).toContain("Option.fromUndefinedOr($funscriptOptional0)");
   });
 
   it("supports default values on record contract schemas and defaulted record parameter", () => {

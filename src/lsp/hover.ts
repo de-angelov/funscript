@@ -21,7 +21,7 @@ import { resolveImportedSchemas } from "../compiler/imported-schemas.js";
 import { inferPipelineCompanions } from "../compiler/pipeline-companions.js";
 import { fileURLToPath } from "node:url";
 import { Effect } from "effect";
-import { compileString } from "../compiler.js";
+import { compileString, type CompileResult } from "../compiler.js";
 import ts from "typescript";
 
 function symbolHover(source: string, uri: string, token: Token): Hover | null {
@@ -30,6 +30,14 @@ function symbolHover(source: string, uri: string, token: Token): Hover | null {
     const filename = uri.startsWith("file:") ? fileURLToPath(uri) : uri;
     const context = new TypeScriptCompilationContext(filename);
     const result = Effect.runSync(compileString(source, filename, { context, sourcemap: false }));
+    return symbolHoverFromResult(source, token, context, result);
+  } catch {
+    return null;
+  }
+}
+
+function symbolHoverFromResult(source: string, token: Token, context: TypeScriptCompilationContext, result: CompileResult): Hover | null {
+  try {
     const checked = context.check(result.typescript);
     if (!checked) return null;
     const found = new Map<ts.Symbol, ts.Identifier>();
@@ -121,6 +129,7 @@ function findHoverInTokens(
   lineIndex: number,
   source: string,
   uri: string,
+  skipSymbol = false,
 ): Hover | null {
   // Find token on posLine that strictly or best matches posCol
   const lineTokens: { token: Token; index: number }[] = [];
@@ -297,7 +306,7 @@ function findHoverInTokens(
     };
   }
 
-  return posCol < token.span.end.column ? symbolHover(source, uri, token) : null;
+  return !skipSymbol && posCol < token.span.end.column ? symbolHover(source, uri, token) : null;
 }
 
 function findHoverInLineText(
@@ -484,6 +493,7 @@ export function findHover(
   source: string,
   uri: string,
   position: Position,
+  skipSymbol = false,
 ): Hover | null {
   if (!source || source.trim().length === 0) {
     return null;
@@ -525,6 +535,7 @@ export function findHover(
       lineIndex,
       source,
       uri,
+      skipSymbol,
     );
     if (hoverFromTokens) {
       return hoverFromTokens;
@@ -533,4 +544,22 @@ export function findHover(
 
   // 2. Fallback to line text-based inspection (e.g. if lexer threw or comments/unparsed code)
   return findHoverInLineText(currentLine, lineIndex, charIndex);
+}
+
+/** Async hover retains synchronous behavior for ordinary sources and compiles Wasm blocks when needed. */
+export async function findHoverAsync(source: string, uri: string, position: Position): Promise<Hover | null> {
+  if (!/\bas[ \t]*\{/.test(source)) return findHover(source, uri, position);
+  const immediate = findHover(source, uri, position, true);
+  if (immediate) return immediate;
+  try {
+    const tokens = new Lexer(source, uri).tokenize();
+    const token = tokens.find(t => t.span.start.line === position.line + 1 && t.span.start.column <= position.character + 1 && t.span.end.column > position.character + 1);
+    if (!token || (token.type !== TokenType.IDENTIFIER && token.type !== TokenType.UPPER_IDENTIFIER)) return null;
+    const filename = uri.startsWith("file:") ? fileURLToPath(uri) : uri;
+    const context = new TypeScriptCompilationContext(filename);
+    const result = await Effect.runPromise(compileString(source, filename, { context, sourcemap: false }));
+    return symbolHoverFromResult(source, token, context, result);
+  } catch {
+    return null;
+  }
 }

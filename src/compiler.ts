@@ -1,3 +1,4 @@
+import { prepareAssemblyScript } from "./emitter/assemblyscript.js";
 import { Effect } from "effect";
 import MagicString, { type SourceMap } from "magic-string";
 import { Lexer, LexerError } from "./lexer/lexer.js";
@@ -57,7 +58,20 @@ export const compileString = (
   filename: string = "<anonymous>",
   options?: CompileOptions,
 ): Effect.Effect<CompileResult, CompilerError> =>
-  Effect.try({
+  Effect.flatMap(
+    /\bas[ \t]*\{/.test(source)
+      ? Effect.flatMap(Effect.try({
+          try: () => new Parser(new Lexer(source, filename).tokenize(), filename, source).parse(),
+          catch: (error: any) => new CompilerError(error.message, error),
+        }), ast => {
+          const blocks = ast.body.filter(decl => decl.kind === "AsDeclaration");
+          return blocks.length === 0 ? Effect.succeed(ast) : Effect.tryPromise({
+            try: async () => { for (const decl of blocks) await prepareAssemblyScript(decl); return ast; },
+            catch: (error: any) => new CompilerError(error.message, error),
+          });
+        })
+      : Effect.succeed(undefined),
+    (preparedAst) => Effect.try({
     try: () => {
       // 1. Tokenize
       const lexer = new Lexer(source, filename);
@@ -65,7 +79,7 @@ export const compileString = (
 
       // 2. Parse AST
       const parser = new Parser(tokens, filename, source);
-      const ast = parser.parse();
+      const ast = preparedAst ?? parser.parse();
 
       // 3. Emit TypeScript
       const context = options?.context ?? new TypeScriptCompilationContext(options?.sourcePath ?? filename);
@@ -172,7 +186,7 @@ export const compileString = (
       };
     },
     catch: (error: any) => new CompilerError(error.message, error),
-  });
+  }));
 
 /**
  * Parses and checks a FunScript source string.

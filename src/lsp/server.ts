@@ -53,7 +53,7 @@ import { resolveImportedSchemas } from "../compiler/imported-schemas.js";
 import { typeCheckVirtualFiles, createTypeCheckCache, type TypeCheckCache } from "../compiler/check.js";
 import { format } from "../formatter/index.js";
 import type { Span } from "../ast/types.js";
-import { findHover } from "./hover.js";
+import { findHoverAsync } from "./hover.js";
 import { complete } from "./completion.js";
 import { documentSymbols, workspaceSymbols, references, prepareRename, rename, findWorkspaceDefinition } from "./navigation.js";
 
@@ -132,7 +132,10 @@ export function validateFunScript(
     if (diagnostics.length === 0) {
       try {
         const context = new TypeScriptCompilationContext(uri);
-        validateNumericComparisons(ast, source, context);
+        // AssemblyScript kernels are prepared asynchronously by type checking.
+        if (!ast.body.some(decl => decl.kind === "AsDeclaration")) {
+          validateNumericComparisons(ast, source, context);
+        }
         resolveImportedSchemas(ast, source, context);
       } catch (error: any) {
         diagnostics.push(toDiagnostic(error));
@@ -433,14 +436,14 @@ export class FunScriptLspServer extends EventEmitter {
     return findWorkspaceDefinition(doc.text, uri, params.position, this.getDocuments(), clientSupportsLink);
   }
 
-  public onHoverHandler(params: HoverParams): Hover | null {
+  public async onHoverHandler(params: HoverParams): Promise<Hover | null> {
     const uri = params?.textDocument?.uri;
     const doc = uri ? this.documents.get(uri) : undefined;
     if (!doc || !params?.position) {
       return null;
     }
 
-    return findHover(doc.text, uri, params.position);
+    return findHoverAsync(doc.text, uri, params.position);
   }
 
   public onCompletionHandler(params: CompletionParams): CompletionItem[] {
@@ -488,7 +491,7 @@ export class FunScriptLspServer extends EventEmitter {
     return undefined;
   }
 
-  private handleRequest(req: RequestMessage): ResponseMessage {
+  private async handleRequest(req: RequestMessage): Promise<ResponseMessage> {
     if (req.method === "initialize") {
       const result = this.onInitializeHandler(req.params as InitializeParams);
       return {
@@ -554,7 +557,7 @@ export class FunScriptLspServer extends EventEmitter {
     }
 
     if (req.method === "textDocument/hover") {
-      const result = this.onHoverHandler(req.params as HoverParams);
+      const result = await this.onHoverHandler(req.params as HoverParams);
       return {
         jsonrpc: "2.0",
         id: req.id,

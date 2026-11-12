@@ -410,6 +410,8 @@ export class Formatter {
         return this.formatStatement(decl, 0);
       case "TsEscapeDeclaration":
         return this.formatTsEscape(decl.code);
+      case "AsDeclaration":
+        return decl.code.includes("\n") ? `as {\n${decl.code}\n}` : `as { ${decl.code} }`;
     }
   }
 

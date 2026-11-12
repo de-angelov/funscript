@@ -11,6 +11,7 @@ export enum TokenType {
   NUMBER = "NUMBER",
   STRING = "STRING",
   TS_CODE = "TS_CODE",
+  AS_CODE = "AS_CODE",
   STRING_PART = "STRING_PART",
   TEMPLATE_STRING = "TEMPLATE_STRING",
   TEMPLATE_PART = "TEMPLATE_PART",
@@ -23,6 +24,7 @@ export enum TokenType {
 
   // Keywords
   AND = "and",
+  AS = "as",
   DEFAULT = "default",
   EFFECT = "effect",
   ERROR = "error",
@@ -97,6 +99,8 @@ export interface Token {
   type: TokenType;
   value: string;
   span: Span;
+  /** Start of the trimmed payload inside a verbatim block. */
+  contentStart?: Position;
 }
 
 export const KEYWORDS: Record<string, TokenType> = {

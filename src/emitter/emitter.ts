@@ -1,3 +1,4 @@
+import { emitAssemblyScript } from "./assemblyscript.js";
 import { FunScriptError } from "../errors.js";
 import { renderImport } from "./imports.js";
 import { isRecordContract, recordContractType, RECORD_CONTRACT_BRAND } from "../compiler/record-contracts.js";
@@ -570,6 +571,9 @@ export class Emitter {
         return this.emitWhenStatement(decl);
       case "TsEscapeDeclaration":
         return decl.code + "\n";
+      case "AsDeclaration":
+        this.effectImports.add("Effect");
+        return emitAssemblyScript(decl);
     }
   }
 
@@ -2031,13 +2035,7 @@ export class Emitter {
         let typeAnn = "";
         if (p.typeAnnotation) {
           const base = this.emitTypeNode(p.typeAnnotation);
-          if (p.optional) {
-            this.effectImports.add("Option");
-            const wrappedBase = p.typeAnnotation.kind === "FunctionTypeNode" ? `(${base})` : base;
-            typeAnn = `: ${wrappedBase} | Option.Option<${base}>`;
-          } else {
-            typeAnn = `: ${base}`;
-          }
+          typeAnn = `: ${base}`;
         }
         const defaultValue = p.defaultValue ? ` = ${this.emitExpression(p.defaultValue)}` : "";
         return `${rest}${name}${p.optional ? "?" : ""}${typeAnn}${defaultValue}`;
@@ -2048,7 +2046,7 @@ export class Emitter {
     const optionalBindings = expr.params.flatMap((p, index) => {
       if (!p.optional) return [];
       this.effectImports.add("Option");
-      return [`  const ${this.emitBindingTarget(p.name)} = Option.isOption($funscriptOptional${index}) ? $funscriptOptional${index} : Option.fromUndefinedOr($funscriptOptional${index});`];
+      return [`  const ${this.emitBindingTarget(p.name)} = Option.fromUndefinedOr($funscriptOptional${index});`];
     });
 
     const records = new Map<string, Map<string, RecordFieldInfo> | undefined>();

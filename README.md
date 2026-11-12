@@ -15,7 +15,7 @@ matching, and immutable updates less ceremonial.
 - Package: `funscript` `0.1.0`
 - Runtime: Effect `^4.1.2`
 - Source extensions: `.fun`, `.funx`
-- Runnable checked examples: 19
+- Runnable checked examples: 21
 
 The exact command surface is generated from the implementation in the [CLI reference](docs/reference/cli.md). The language catalogue used by editor hover help is generated in the [language reference](docs/reference/language.md).
 <!-- /GENERATED: project-facts -->
@@ -87,6 +87,8 @@ For the current, verified contract and runnable source examples, read the
 ## Examples
 
 <!-- GENERATED: example-inventory -->
+| [`examples/assemblyscript-numeric.fun`](examples/assemblyscript-numeric.fun) | `FunScript` |
+| [`examples/assemblyscript-primes.fun`](examples/assemblyscript-primes.fun) | `FunScript` |
 | [`examples/bank-account.fun`](examples/bank-account.fun) | `FunScript` |
 | [`examples/fibonacci.fun`](examples/fibonacci.fun) | `FunScript` |
 | [`examples/github-api-client.fun`](examples/github-api-client.fun) | `FunScript` |
@@ -159,3 +161,42 @@ development, Vitest for tests, and npm/pnpm/Bun for packages. The planned `new`,
 ## License
 
 License selection is pending.
+
+### Numeric AssemblyScript blocks
+
+A top-level `as { ... }` block can define numeric WebAssembly kernels. Exported
+functions are available locally in the FunScript module:
+
+```funscript
+as {
+  export function square(value: f64): f64 { return value * value; }
+}
+
+export result = square(12)
+export safeResult = square.effect(12)
+```
+
+The current boundary supports explicit `i32`, `u32`, `f32`, and `f64` parameters
+and return values. Strings, arrays, objects, 64-bit integers, imported modules,
+and non-function exports are not supported. Wasm integer operations and numeric
+conversions follow WebAssembly semantics; traps throw JavaScript exceptions and
+can be handled explicitly with Effect. Kernels compile when FunScript compiles,
+and each block instantiates Wasm synchronously on its first call. Each
+function also has a lazy `functionName.effect(...)` companion that returns an
+Effect: it checks inputs before calling Wasm and reports tagged `WasmInputError`,
+`WasmTrapError`, or `WasmInitializationError` failures. Integer inputs must be whole numbers in range;
+floating-point inputs must be finite, and `f32` inputs must be in range (they
+are still rounded to 32-bit precision). Direct calls retain Wasm conversion and
+trap behavior, including throwing initialization failures. A successfully initialized
+instance is reused; a failed initialization is retried on the next call. Calls
+cross a JS/Wasm boundary, so benchmark real workloads before assuming a speedup.
+Compilation of files containing these blocks is asynchronous: use
+`Effect.runPromise(compileString(...))` rather than `Effect.runSync`. Effect
+service generation and automatic currying are not provided.
+
+See [the numeric and Effect example](examples/assemblyscript-numeric.fun) and
+[the prime-counting example](examples/assemblyscript-primes.fun) for complete
+programs.
+
+See [optional arguments and Effect Option](docs/optional-arguments.md) for
+the omission, default, and explicit Option rules and migration guidance.

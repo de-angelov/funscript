@@ -6,6 +6,8 @@ Every entry below is compiled by `npm run test:examples`.
 
 | File | Kind |
 | --- | --- |
+| [`examples/assemblyscript-numeric.fun`](../../examples/assemblyscript-numeric.fun) | `FunScript` |
+| [`examples/assemblyscript-primes.fun`](../../examples/assemblyscript-primes.fun) | `FunScript` |
 | [`examples/bank-account.fun`](../../examples/bank-account.fun) | `FunScript` |
 | [`examples/fibonacci.fun`](../../examples/fibonacci.fun) | `FunScript` |
 | [`examples/github-api-client.fun`](../../examples/github-api-client.fun) | `FunScript` |

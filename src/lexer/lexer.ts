@@ -611,12 +611,12 @@ export class Lexer {
    *   ts { Record<string, { a: number }> }
    *   ts { interface Foo { a: number } }
    */
-  private readTsCode(): void {
-    while (this.peek() === " ") this.advance();
+  private readTsCode(language: "ts" | "as" = "ts"): void {
+    while (this.peek() === " " || this.peek() === "\t") this.advance();
     const startPos = this.currentPosition();
 
     if (this.peek() !== "{") {
-      throw new LexerError("Expected '{ ... }' after 'ts'", this.currentSpan(1));
+      throw new LexerError(`Expected '{ ... }' after '${language}'`, this.currentSpan(1));
     }
 
     this.advance(); // opening '{'
@@ -658,9 +658,16 @@ export class Lexer {
       code += c;
     }
 
-    if (depth !== 0) throw new LexerError("Unterminated 'ts { ... }' block", { start: startPos, end: this.currentPosition() });
-    if (code.trim() === "") throw new LexerError("Empty 'ts { ... }' block", { start: startPos, end: this.currentPosition() });
-    this.tokens.push({ type: TokenType.TS_CODE, value: code.trim(), span: { start: startPos, end: this.currentPosition() } });
+    if (depth !== 0) throw new LexerError(`Unterminated '${language} { ... }' block`, { start: startPos, end: this.currentPosition() });
+    if (code.trim() === "") throw new LexerError(`Empty '${language} { ... }' block`, { start: startPos, end: this.currentPosition() });
+    const leading = code.slice(0, code.search(/\S/));
+    const lines = leading.split("\n");
+    const contentStart: Position = {
+      offset: startPos.offset + 1 + leading.length,
+      line: startPos.line + lines.length - 1,
+      column: lines.length === 1 ? startPos.column + 1 + leading.length : lines[lines.length - 1].length + 1,
+    };
+    this.tokens.push({ type: language === "ts" ? TokenType.TS_CODE : TokenType.AS_CODE, value: code.trim(), contentStart, span: { start: startPos, end: this.currentPosition() } });
   }
 
   private continueStringAfterInterpolation(): void {
@@ -789,6 +796,13 @@ export class Lexer {
         }
       }
       throw new LexerError(BANNED_KEYWORDS[raw], span);
+    }
+
+    // Keep import aliases named `as` compatible; only recognize a block here.
+    if (raw === "as" && /^[ \t]*\{/.test(this.source.slice(this.offset))) {
+      this.tokens.push({ type: TokenType.AS, value: raw, span });
+      this.readTsCode("as");
+      return;
     }
 
     // Check active keywords

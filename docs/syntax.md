@@ -547,6 +547,11 @@ const answer = () => 42;
   `undefined` JavaScript argument. Inside the function it is a real Effect
   `Option<String>`; handle `Some` and `None` explicitly. `null` is not treated as
   absent. This conversion does not validate values supplied by JavaScript.
+  A supplied `Option` is a value, not a signal to bypass this conversion: for
+  `(value?: Option<String>)`, omission is `None`, while `Option.none()` is
+  `Some(None)`. To forward an optional parameter to another optional parameter,
+  explicitly convert its outer `Option` using `Option.getOrUndefined(value)`.
+  This is a change from older versions that accepted an `Option` directly.
 - A defaulted parameter, such as `(count: Number = 5)`, accepts omission or
   `undefined` and is a plain `Number` inside the function. Its default is evaluated
   only when needed, and does not replace `false`, `0`, empty strings, or `null`.

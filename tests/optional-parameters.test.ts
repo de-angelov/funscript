@@ -2,10 +2,12 @@ import { describe, expect, it } from "vitest";
 import { Option } from "effect";
 import { compile, execute, expectCompileError, typeCheck } from "./helpers/index.js";
 import { format } from "../src/formatter/index.js";
+import { Effect } from "effect";
+import { typeCheckVirtualFiles } from "../src/compiler/check.js";
 
 describe("optional and defaulted parameters", () => {
   it("returns record literals from callbacks and match arms", async () => {
-    const source = 'export copy = (items: Array<{ value: Number }>) => items.map((item) => { ...item, extra: 1 })\nexport choose = (flag: Boolean) => match flag\n  | true => { value: 1 }\n  | false => { value: 2 }';
+    const source = 'export copy = (items: Array<{ value: Number }>) => items |> Array.map((item) => { ...item, extra: 1 })\nexport choose = (flag: Boolean) => match flag\n  | true => { value: 1 }\n  | false => { value: 2 }';
     const checked = await typeCheck(source, "record-return.fun");
     expect(checked.success, checked.formattedOutput).toBe(true);
     const { copy, choose } = await execute(source);
@@ -22,16 +24,71 @@ describe("optional and defaulted parameters", () => {
     expect(inspect(null)).toEqual(Option.some(null));
   });
 
+  it("distinguishes omitted arguments from Option values, including nested Options", async () => {
+    const source = `import { Option } from "effect"
+export inspect = (value?: Option<String>) => value
+export forward = (value?: Option<String>) => inspect(Option.getOrUndefined(value))
+export absent = inspect()
+export suppliedNone = inspect(Option.none())
+export suppliedSome = inspect(Option.some("Ada"))
+export forwardedNone = forward(Option.none())`;
+    const checked = await typeCheck(source, "optional-option.fun");
+    expect(checked.success, checked.formattedOutput).toBe(true);
+    const { inspect, forward, absent, suppliedNone, suppliedSome, forwardedNone } = await execute(source);
+    expect(absent).toEqual(Option.none());
+    expect(suppliedNone).toEqual(Option.some(Option.none()));
+    expect(suppliedSome).toEqual(Option.some(Option.some("Ada")));
+    expect(forwardedNone).toEqual(Option.some(Option.none()));
+    expect(inspect(undefined)).toEqual(Option.none());
+    expect(inspect(Option.none())).toEqual(Option.some(Option.none()));
+    expect(forward(Option.some("Ada"))).toEqual(Option.some(Option.some("Ada")));
+  });
+
+  it("requires explicit conversion when forwarding an Option into an optional parameter", async () => {
+    const invalid = await typeCheck('read = (value?: String) => value\nexport forward = (value?: String) => read(value)', "optional-forward.fun");
+    expect(invalid.success).toBe(false);
+    const source = 'import { Option } from "effect"\nread = (value?: String) => value\nexport forward = (value?: String) => read(Option.getOrUndefined(value))';
+    const checked = await typeCheck(source, "optional-forward.fun");
+    expect(checked.success, checked.formattedOutput).toBe(true);
+    const { forward } = await execute(source);
+    expect(forward()).toEqual(Option.none());
+    expect(forward("Ada")).toEqual(Option.some("Ada"));
+  });
+
+  it("checks JavaScript-facing TypeScript calls against the value type", async () => {
+    const base = 'import { Option } from "effect"\nexport read = (value?: Option<String>) => value';
+    const valid = await typeCheck(base + '\nts { const a = read(); const b = read(Option.none<string>()); const c = read(Option.some("Ada")); }', "optional-typescript.fun");
+    expect(valid.success, valid.formattedOutput).toBe(true);
+    const invalid = await typeCheck(base + '\nts { const bad = read("Ada"); }', "optional-typescript.fun");
+    expect(invalid.success).toBe(false);
+  });
+
+  it("preserves optional Option values across module boundaries", async () => {
+    const files = {
+      "optional-reader.fun": 'export read = (value?: Option<String>) => value',
+      "optional-caller.fun": 'import { Option } from "effect"\nimport { read } from "./optional-reader.js"\nexport forward = (value?: Option<String>) => read(Option.getOrUndefined(value))\nexport result = read(Option.none())',
+    };
+    const checked = await Effect.runPromise(typeCheckVirtualFiles(files, { compilerOptions: { rootDir: process.cwd() } }));
+    expect(checked.success, checked.formattedOutput).toBe(true);
+  });
+
+  it("treats an Option supplied as Unknown as a value", async () => {
+    const { inspect } = await execute('export inspect = (value?: Unknown) => value');
+    expect(inspect()).toEqual(Option.none());
+    expect(inspect(Option.none())).toEqual(Option.some(Option.none()));
+    expect(inspect(Option.some("Ada"))).toEqual(Option.some(Option.some("Ada")));
+  });
+
   it("requires explicit handling and retains the contained type in Some patterns", async () => {
     const unsafe = await typeCheck('export use = (name?: String) => name.toUpperCase()', "optional-unsafe.fun");
     expect(unsafe.success).toBe(false);
     const invalid = await typeCheck('export use = (name?: String) =>\n  match name\n    | Some(value) => value.notAStringMethod()\n    | None => "none"', "optional-match.fun");
     expect(invalid.success).toBe(false);
-    const valid = await typeCheck('export use = (name?: String) =>\n  match name\n    | Some(value) => value.toUpperCase()\n    | None => "none"', "optional-match.fun");
+    const valid = await typeCheck('export use = (name?: String) =>\n  match name\n    | Some(value) => value + "!"\n    | None => "none"', "optional-match.fun");
     expect(valid.success, valid.formattedOutput).toBe(true);
-    const { use } = await execute('export use = (name?: String) =>\n  match name\n    | Some(value) => value.toUpperCase()\n    | None => "none"');
+    const { use } = await execute('export use = (name?: String) =>\n  match name\n    | Some(value) => value + "!"\n    | None => "none"');
     expect(use()).toBe("none");
-    expect(use("ada")).toBe("ADA");
+    expect(use("ada")).toBe("ada!");
   });
 
   it("safely handles an optional JavaScript callback and checks its argument type", async () => {
@@ -76,6 +133,17 @@ describe("optional and defaulted parameters", () => {
     expect(get(0)).toBe(0);
     expect(calls).toBe(0);
     expect(get()).toBe(1);
+    expect(calls).toBe(1);
+  });
+
+  it("evaluates parameter defaults when constructing an Effect", async () => {
+    let calls = 0;
+    const source = 'ts { declare function next(): number }\nexport get = (value: Number = next()) => Effect.succeed(value)';
+    const { get } = await execute(source, { scope: { next: () => ++calls } });
+    const effect = get();
+    expect(calls).toBe(1);
+    expect(await Effect.runPromise(effect)).toBe(1);
+    expect(await Effect.runPromise(effect)).toBe(1);
     expect(calls).toBe(1);
   });
 
