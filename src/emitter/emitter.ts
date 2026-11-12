@@ -2654,11 +2654,6 @@ export class Emitter {
             const rest = p.isRest ? "..." : "";
             const name = p.name ? this.emitBindingTarget(p.name) : "_";
             const opt = p.optional ? "?" : "";
-            if (p.optional && p.typeAnnotation) {
-              this.effectImports.add("Option");
-              const baseType = this.emitTypeNode(p.typeAnnotation);
-              return `${rest}${name}${opt}: ${baseType} | Option.Option<${baseType}>`;
-            }
             return p.typeAnnotation ? `${rest}${name}${opt}: ${this.emitTypeNode(p.typeAnnotation)}` : `${rest}${name}${opt}`;
           })
           .join(", ");
