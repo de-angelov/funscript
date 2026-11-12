@@ -10,7 +10,7 @@
  */
 export const EFFECT_PIPELINE_CATALOG_VERSION = "4.1.2";
 
-export type PipelineCompanionModule = "Array" | "Option" | "Result" | "Chunk" | "Effect" | "Schedule" | "Layer" | "Stream" | "Schema";
+export type PipelineCompanionModule = "Array" | "Option" | "Result" | "Chunk" | "Effect" | "Schedule" | "Layer" | "Stream" | "Schema" | "String" | "Record";
 
 const entries = <const T extends readonly string[]>(...operations: T) => operations;
 
@@ -44,6 +44,12 @@ export const PIPELINE_COMPANION_CATALOG: Readonly<Record<PipelineCompanionModule
   // decode. Schema constructors and codecs remain explicit API calls.
   Schema: entries(
     "annotate", "annotateEncoded", "annotateKey", "optional", "optionalKey", "mutable", "mutableKey", "toType", "toEncoded", "encodeKeys", "decodeTo", "decode", "Array", "NonEmptyArray", "NullOr", "UndefinedOr", "NullishOr", "check", "brand", "catchDecoding", "catchDecodingWithContext", "catchEncoding", "catchEncodingWithContext", "withDecodingDefaultKey", "withDecodingDefaultTypeKey", "withDecodingDefault", "withDecodingDefaultType", "overrideToFormatter", "overrideToEquivalence",
+  ),
+  String: entries(
+    "at", "camelCase", "camelToSnake", "capitalize", "charAt", "charCodeAt", "codePointAt", "concat", "configCase", "constantCase", "endsWith", "includes", "indexOf", "isEmpty", "isNonEmpty", "kebabCase", "kebabToSnake", "lastIndexOf", "length", "linesIterator", "localeCompare", "match", "matchAll", "noCase", "normalize", "padEnd", "padStart", "pascalCase", "pascalToSnake", "repeat", "replace", "replaceAll", "search", "slice", "snakeCase", "snakeToCamel", "snakeToKebab", "snakeToPascal", "split", "startsWith", "stripMargin", "stripMarginWith", "substring", "takeLeft", "takeRight", "toLocaleLowerCase", "toLocaleUpperCase", "toLowerCase", "toUpperCase", "trim", "trimEnd", "trimStart", "uncapitalize",
+  ),
+  Record: entries(
+    "assignProperty", "collect", "difference", "every", "filter", "filterMap", "findFirst", "fromEntries", "fromIterableBy", "fromIterableWith", "get", "getFailures", "getSomes", "getSuccesses", "has", "intersection", "isEmptyReadonlyRecord", "isEmptyRecord", "isSubrecord", "isSubrecordBy", "keys", "map", "mapEntries", "mapKeys", "modify", "partition", "pop", "reduce", "remove", "replace", "separate", "set", "size", "some", "toEntries", "union", "values",
   ),
 };
 

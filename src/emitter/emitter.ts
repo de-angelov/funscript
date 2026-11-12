@@ -118,6 +118,8 @@ const EFFECT_COMPANION_METHODS = new Set(PIPELINE_COMPANION_CATALOG.Effect);
 const OPTION_COMPANION_METHODS = new Set(PIPELINE_COMPANION_CATALOG.Option);
 const RESULT_COMPANION_METHODS = new Set(PIPELINE_COMPANION_CATALOG.Result);
 const CHUNK_COMPANION_METHODS = new Set(PIPELINE_COMPANION_CATALOG.Chunk);
+const STRING_COMPANION_METHODS = new Set(PIPELINE_COMPANION_CATALOG.String);
+const RECORD_COMPANION_METHODS = new Set(PIPELINE_COMPANION_CATALOG.Record);
 
 export const EFFECT_MODULE_NAMES = new Set([
   "Array",
@@ -179,6 +181,12 @@ const BANNED_INSTANCE_METHODS = new Map<string, { category: string; replacement:
   ["padStart", { category: "string", replacement: "String.padStart", pipeline: "|> String.padStart(...)" }],
   ["padEnd", { category: "string", replacement: "String.padEnd", pipeline: "|> String.padEnd(...)" }],
   ["repeat", { category: "string", replacement: "String.repeat", pipeline: "|> String.repeat(...)" }],
+
+  // Collection mutation methods
+  ["add", { category: "collection", replacement: "HashSet.add", pipeline: "|> HashSet.add(...)" }],
+  ["clear", { category: "collection", replacement: "HashMap.empty() / HashSet.empty()", pipeline: "HashMap.empty()" }],
+  ["delete", { category: "collection", replacement: "HashMap.remove / Record.remove", pipeline: "|> HashMap.remove(...)" }],
+  ["set", { category: "collection", replacement: "HashMap.set / Record.set", pipeline: "|> HashMap.set(...)" }],
 ]);
 
 const BANNED_OBJECT_STATIC_METHODS = new Map<string, string>([
@@ -208,7 +216,7 @@ export function isEffectModule(moduleName: string): boolean {
   return EFFECT_MODULE_NAMES.has(moduleName);
 }
 
-type CompanionModule = PipelineCompanionModule | "Number" | "String" | "Duration" | "Struct" | "DateTime";
+type CompanionModule = PipelineCompanionModule | "Number" | "Duration" | "Struct" | "DateTime";
 
 const NUMBER_COMPANION_METHODS = new Set([
   "isGreaterThan",
@@ -253,8 +261,6 @@ const EFFECT_V4_MEMBER_RENAMES: Readonly<Record<string, string>> = {
   fork: "forkChild",
 };
 
-const STRING_COMPANION_METHODS = new Set(["trim", "trimStart", "trimEnd", "split", "lines", "toUpperCase", "toLowerCase"]);
-const RECORD_COMPANION_METHODS = new Set(["omit", "pick"]);
 const DURATION_COMPANION_METHODS = new Set(["seconds", "millis", "minutes", "hours", "days"]);
 
 export const ES_TOOLKIT_STRING_METHODS = new Set([
@@ -388,6 +394,7 @@ export class Emitter {
   private primitiveIdentifiers = new Set<string>();
   private currentPlaceholderParam: string | null = null;
   private bindings = new Map<string, BindingDeclaration>();
+  private tryContextDepth = 0;
 
   private declaredTypeNames = new Set<string>();
   private runtimeSchemaNames = new Set<string>();
@@ -525,7 +532,7 @@ export class Emitter {
       header += `type Or<A, B> = A extends { readonly _tag: "Some"; readonly value: infer V } ? V | B : A extends { readonly _tag: "None" } ? B : Exclude<NonNullable<A>, false> | B;\nfunction or<A, B>(a: A, b: B): Or<A, B> {\n  if (a !== null && a !== undefined && typeof a === "object" && "_tag" in a) {\n    if (a._tag === "Some") return (a as any).value;\n    if (a._tag === "None") return b as any;\n  }\n  return (a || b) as any;\n}\n`;
     }
     if (this.needsSafeDivide) {
-      header += `function safeDivide(a: number, b: number): number {\n  const result = a / b;\n  return Number.isFinite(result) ? result : 0;\n}\n`;
+      header += `function safeDivide(a: number, b: number): number {\n  const result = a / b;\n  return globalThis.Number.isFinite(result) ? result : 0;\n}\n`;
     }
 
     if (header.length > 0) {
@@ -1232,6 +1239,27 @@ export class Emitter {
     }
 
     if (
+      expr.callee.kind === "Identifier" &&
+      (expr.callee.name === "parseInt" || expr.callee.name === "parseFloat")
+    ) {
+      throw new FunScriptError(
+        `'${expr.callee.name}()' is banned by the Effect style guide because it produces NaN on invalid input. Use 'Number.parse(s)' instead for total parsing returning Option<number>.`,
+        expr.callee.span,
+      );
+    }
+
+    if (
+      (expr.callee.kind === "UpperIdentifier" || expr.callee.kind === "Identifier") &&
+      expr.callee.name === "URL" &&
+      this.tryContextDepth === 0
+    ) {
+      throw new FunScriptError(
+        `'URL(...)' is unsafe because URL constructors throw on malformed input. Guard it with 'Result.try(() => URL(...))' or 'Option.try(() => URL(...))'.`,
+        expr.callee.span,
+      );
+    }
+
+    if (
       expr.callee.kind === "MemberExpression" &&
       (expr.callee.object.kind === "Identifier" || expr.callee.object.kind === "UpperIdentifier") &&
       expr.callee.object.name === "Option" &&
@@ -1239,12 +1267,49 @@ export class Emitter {
     ) {
       this.needsOptionTry = true;
       this.effectImports.add("Option");
-      return `optionTry(${expr.args.map((a) => this.emitExpression(a)).join(", ")})`;
+      this.tryContextDepth++;
+      try {
+        return `optionTry(${expr.args.map((a) => this.emitExpression(a)).join(", ")})`;
+      } finally {
+        this.tryContextDepth--;
+      }
+    }
+
+    if (
+      expr.callee.kind === "MemberExpression" &&
+      (expr.callee.object.kind === "Identifier" || expr.callee.object.kind === "UpperIdentifier") &&
+      expr.callee.object.name === "Result" &&
+      expr.callee.property.name === "try"
+    ) {
+      this.effectImports.add("Result");
+      this.tryContextDepth++;
+      try {
+        return `Result.try(${expr.args.map((a) => this.emitExpression(a)).join(", ")})`;
+      } finally {
+        this.tryContextDepth--;
+      }
     }
 
     if (expr.callee.kind === "MemberExpression") {
       const prop = expr.callee.property.name;
       const root = getRootCalleeName(expr.callee.object);
+      const objName = (expr.callee.object.kind === "Identifier" || expr.callee.object.kind === "UpperIdentifier")
+        ? expr.callee.object.name
+        : null;
+
+      if ((objName === "Number" || objName === "globalThis") && (prop === "parseInt" || prop === "parseFloat")) {
+        throw new FunScriptError(
+          `'${objName}.${prop}()' is banned by the Effect style guide because it produces NaN on invalid input. Use 'Number.parse(s)' instead for total parsing returning Option<number>.`,
+          expr.callee.property.span,
+        );
+      }
+
+      if ((objName === "JSON" || objName === "globalThis") && prop === "parse" && this.tryContextDepth === 0) {
+        throw new FunScriptError(
+          `'JSON.parse()' is unsafe because it throws on malformed input. Guard it with 'Result.try(() => JSON.parse(...))' or use 'Schema.decodeUnknown'.`,
+          expr.callee.property.span,
+        );
+      }
 
       if (
         (expr.callee.object.kind === "Identifier" || expr.callee.object.kind === "UpperIdentifier") &&
@@ -1266,10 +1331,16 @@ export class Emitter {
 
       if (!isAllowed && BANNED_INSTANCE_METHODS.has(prop)) {
         const info = BANNED_INSTANCE_METHODS.get(prop)!;
-        throw new FunScriptError(
-          `Native ${info.category} method '.${prop}()' is banned by the Effect style guide. Use '${info.replacement}(...)' or pipeline '${info.pipeline}' instead.`,
-          expr.callee.property.span,
-        );
+        const isWebMutable =
+          (prop === "set" || prop === "delete") &&
+          root !== null &&
+          /^(url|search|query|param|header|form|request|response|req|res)/i.test(root);
+        if (!isWebMutable) {
+          throw new FunScriptError(
+            `Native ${info.category} method '.${prop}()' is banned by the Effect style guide. Use '${info.replacement}(...)' or pipeline '${info.pipeline}' instead.`,
+            expr.callee.property.span,
+          );
+        }
       }
 
       if (
@@ -1446,7 +1517,7 @@ export class Emitter {
     if (inferred) return inferred;
     if (source.kind === "ArrayExpression") return "Array";
     if (source.kind === "StringLiteral") return "String";
-    if (source.kind === "RecordExpression") return "Struct";
+    if (source.kind === "RecordExpression") return "Record";
     if (source.kind === "EffectBlockExpression" || source.kind === "JsExpression") return "Effect";
     if (source.kind === "Identifier") {
       const binding = this.bindings.get(source.name);
@@ -1665,6 +1736,8 @@ export class Emitter {
     if (OPTION_COMPANION_METHODS.has(name)) candidates.push("Option");
     if (RESULT_COMPANION_METHODS.has(name)) candidates.push("Result");
     if (CHUNK_COMPANION_METHODS.has(name)) candidates.push("Chunk");
+    if (STRING_COMPANION_METHODS.has(name)) candidates.push("String");
+    if (RECORD_COMPANION_METHODS.has(name)) candidates.push("Record");
     if (name === "decode" || (preferredCompanion === "Schema" && this.isCompanionOperation("Schema", name))) candidates.push("Schema");
     if (preferredCompanion && candidates.includes(preferredCompanion)) return preferredCompanion;
     if (candidates.length === 1) return candidates[0];
@@ -1672,8 +1745,6 @@ export class Emitter {
     // Keeping the sentinel local avoids silently reintroducing priority order.
     if (candidates.length > 1) return undefined;
     if (NUMBER_COMPANION_METHODS.has(name)) return "Number";
-    if (STRING_COMPANION_METHODS.has(name)) return "String";
-    if (RECORD_COMPANION_METHODS.has(name)) return "Struct";
     if (DURATION_COMPANION_METHODS.has(name)) return "Duration";
     if (preferredCompanion === "DateTime" && DATETIME_COMPANION_METHODS.has(name)) return "DateTime";
     return undefined;
@@ -1682,10 +1753,8 @@ export class Emitter {
   private isCompanionOperation(module: CompanionModule, operation: string): boolean {
     if (module === "Number") return NUMBER_COMPANION_METHODS.has(operation);
     if (module === "DateTime") return DATETIME_COMPANION_METHODS.has(operation);
-    if (module === "String") return STRING_COMPANION_METHODS.has(operation);
-    if (module === "Struct") return RECORD_COMPANION_METHODS.has(operation);
     if (module === "Duration") return DURATION_COMPANION_METHODS.has(operation);
-    return (PIPELINE_COMPANION_CATALOG[module]?.includes(operation) ?? false) ||
+    return (PIPELINE_COMPANION_CATALOG[module as PipelineCompanionModule]?.includes(operation) ?? false) ||
       (module === "Effect" && operation in EFFECT_PIPELINE_COMPATIBILITY_ALIASES);
   }
 

@@ -496,4 +496,103 @@ export fn recordKeys(r: Object): Array<String> =>
     expect(cleanString("  funscript  ")).toBe("FUNSCRIPT");
     expect(recordKeys({ a: 1, b: 2 })).toEqual(["a", "b"]);
   });
+
+  it("bans parseInt and parseFloat in favor of total Number.parse", () => {
+    const invalidParseInt = `
+export fn toNum(s: String) => parseInt(s)
+`;
+    expect(() => Effect.runSync(compileString(invalidParseInt))).toThrow(
+      "'parseInt()' is banned by the Effect style guide because it produces NaN on invalid input. Use 'Number.parse(s)' instead for total parsing returning Option<number>."
+    );
+
+    const invalidParseFloat = `
+export fn toFloat(s: String) => parseFloat(s)
+`;
+    expect(() => Effect.runSync(compileString(invalidParseFloat))).toThrow(
+      "'parseFloat()' is banned by the Effect style guide because it produces NaN on invalid input. Use 'Number.parse(s)' instead for total parsing returning Option<number>."
+    );
+
+    const invalidNumberParseInt = `
+export fn toNum(s: String) => Number.parseInt(s)
+`;
+    expect(() => Effect.runSync(compileString(invalidNumberParseInt))).toThrow(
+      "'Number.parseInt()' is banned by the Effect style guide because it produces NaN on invalid input. Use 'Number.parse(s)' instead for total parsing returning Option<number>."
+    );
+
+    const validNumberParse = `
+export fn parseTotal(s: String): Number =>
+  Number.parse(s) or 0
+`;
+    const res = Effect.runSync(compileString(validNumberParse));
+    expect(res.typescript).toContain("Number.parse");
+    const parseTotal = evaluateTsFunction(res.typescript, "parseTotal");
+    expect(parseTotal("42")).toBe(42);
+    expect(parseTotal("invalid")).toBe(0);
+  });
+
+  it("guards synchronous throwing globals (JSON.parse, URL)", () => {
+    const directJson = `
+export fn parsePayload(raw: String) => JSON.parse(raw)
+`;
+    expect(() => Effect.runSync(compileString(directJson))).toThrow(
+      "'JSON.parse()' is unsafe because it throws on malformed input. Guard it with 'Result.try(() => JSON.parse(...))' or use 'Schema.decodeUnknown'."
+    );
+
+    const directUrl = `
+export fn makeUrl(raw: String) => URL(raw)
+`;
+    expect(() => Effect.runSync(compileString(directUrl))).toThrow(
+      "'URL(...)' is unsafe because URL constructors throw on malformed input. Guard it with 'Result.try(() => URL(...))' or 'Option.try(() => URL(...))'."
+    );
+
+    const guardedJson = `
+export fn safeJson(raw: String) =>
+  Result.try(() => JSON.parse(raw))
+`;
+    const res = Effect.runSync(compileString(guardedJson));
+    expect(res.typescript).toContain("Result.try");
+  });
+
+  it("bans mutating collection methods on Map and Set while allowing web params", () => {
+    const invalidSetAdd = `
+export fn addItem(items: Object, item: String) => items.add(item)
+`;
+    expect(() => Effect.runSync(compileString(invalidSetAdd))).toThrow(
+      "Native collection method '.add()' is banned by the Effect style guide"
+    );
+
+    const invalidCollectionClear = `
+export fn reset(c: Object) => c.clear()
+`;
+    expect(() => Effect.runSync(compileString(invalidCollectionClear))).toThrow(
+      "Native collection method '.clear()' is banned by the Effect style guide"
+    );
+
+    const invalidMapSet = `
+export fn updateMap(map: Object, k: String, v: String) => map.set(k, v)
+`;
+    expect(() => Effect.runSync(compileString(invalidMapSet))).toThrow(
+      "Native collection method '.set()' is banned by the Effect style guide"
+    );
+
+    const validWebParams = `
+export fn updateQuery(searchParams: Object, q: String) =>
+  searchParams.set("q", q)
+`;
+    const res = Effect.runSync(compileString(validWebParams));
+    expect(res.typescript).toContain('searchParams.set("q", q)');
+  });
+
+  it("resolves bare pipeline combinators for String and Record", () => {
+    const stringPipeline = `
+export fn formatSlug(name: String): String =>
+  name |> trim |> toLowerCase
+`;
+    const res = Effect.runSync(compileString(stringPipeline));
+    expect(res.typescript).toContain("String.trim");
+    expect(res.typescript).toContain("String.toLowerCase");
+
+    const formatSlug = evaluateTsFunction(res.typescript, "formatSlug");
+    expect(formatSlug("  Hello World  ")).toBe("hello world");
+  });
 });
