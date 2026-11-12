@@ -91,6 +91,8 @@
     "NUMBER",
     "STRING",
     "STRING_PART",
+    "TEMPLATE_PART",
+    "TEMPLATE_STRING",
     "TS_CODE",
     "UPPER_IDENTIFIER",
     "[",
