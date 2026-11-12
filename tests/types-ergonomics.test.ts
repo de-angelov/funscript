@@ -364,4 +364,63 @@ export fn doNothing(): Unit =>
     const runEffect = evaluateTsFunction(res.typescript, "runEffect");
     expect(Effect.runSync(runEffect)).toBeUndefined();
   });
+
+  it("enforces safe division operator without NaN/Infinity leaks", () => {
+    const src = `
+export fn divide(a: Number, b: Number): Number => a / b
+export fn half(a: Number): Number => a / 2
+`;
+    const res = Effect.runSync(compileString(src));
+    expect(res.typescript).toContain("safeDivide(a, b)");
+    expect(res.typescript).toContain("(a / 2)");
+
+    const divide = evaluateTsFunction(res.typescript, "divide");
+    const half = evaluateTsFunction(res.typescript, "half");
+
+    expect(divide(10, 2)).toBe(5);
+    expect(divide(10, 0)).toBe(0);
+    expect(divide(0, 0)).toBe(0);
+    expect(half(10)).toBe(5);
+  });
+
+  it("bans native Array prototype methods under Effect style guide", () => {
+    const invalidMap = `
+export fn doubleAll(items: Array<Number>) => items.map((x) => x * 2)
+`;
+    expect(() => Effect.runSync(compileString(invalidMap))).toThrow(
+      "Native array method '.map()' is banned by the Effect style guide. Use 'Array.map(...)' or pipeline '|> Array.map(...)' instead."
+    );
+
+    const invalidFilter = `
+export fn positive(items: Array<Number>) => items.filter((x) => x > 0)
+`;
+    expect(() => Effect.runSync(compileString(invalidFilter))).toThrow(
+      "Native array method '.filter()' is banned by the Effect style guide. Use 'Array.filter(...)' or pipeline '|> Array.filter(...)' instead."
+    );
+
+    const invalidSort = `
+export fn sortItems(items: Array<Number>) => items.sort((a, b) => a - b)
+`;
+    expect(() => Effect.runSync(compileString(invalidSort))).toThrow(
+      "Native array method '.sort()' is banned by the Effect style guide. Use 'Array.sort(...)' or pipeline '|> Array.sort(...)' instead."
+    );
+  });
+
+  it("allows companion calls like Array.map and pipeline companions cleanly", () => {
+    const valid = `
+export fn doubleArray(items: Array<Number>): Array<Number> =>
+  items |> Array.map((x) => x * 2)
+
+export fn doubleArrayDirect(items: Array<Number>): Array<Number> =>
+  Array.map(items, (x) => x * 2)
+`;
+    const res = Effect.runSync(compileString(valid));
+    expect(res.typescript).toMatch(/import \{.*Array.*\} from "effect";/);
+    expect(res.typescript).toContain("Array.map");
+
+    const doubleArray = evaluateTsFunction(res.typescript, "doubleArray");
+    const doubleArrayDirect = evaluateTsFunction(res.typescript, "doubleArrayDirect");
+    expect(doubleArray([1, 2, 3])).toEqual([2, 4, 6]);
+    expect(doubleArrayDirect([1, 2, 3])).toEqual([2, 4, 6]);
+  });
 });

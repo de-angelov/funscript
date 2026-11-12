@@ -1,5 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { Effect, Equal, Data, pipe } from "effect";
+import ts from "typescript";
 import { Lexer } from "../src/lexer/lexer.js";
 import { TokenType } from "../src/lexer/tokens.js";
 import { compileString, CompilerError } from "../src/compiler.js";
@@ -124,7 +125,7 @@ export fn divide(a: Number, b: Number) => Number {
 
       const res = await Effect.runPromise(compileString(code));
       expect(res.typescript).toContain("if ((b === 0)) return 0;");
-      expect(res.typescript).toContain("return (a / b);");
+      expect(res.typescript).toContain("safeDivide(a, b)");
     });
 
     it("Form 1 (Early return): compiler rejects outside function context", async () => {
@@ -277,7 +278,11 @@ export fn safeDiv(num, den) => {
 
       const res = await Effect.runPromise(compileString(code));
       // Evaluate generated JS
-      const fn = new Function(`${res.typescript.replace(/export /g, "")}; return safeDiv;`)();
+      const js = ts.transpileModule(res.typescript, {
+        compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 },
+      }).outputText;
+      const exports = {} as any;
+      const fn = new Function("exports", `${js}; return exports.safeDiv;`)(exports);
       expect(fn(10, 2)).toBe(5);
       expect(fn(10, 0)).toBe(-1);
     });

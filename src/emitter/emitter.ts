@@ -140,6 +140,41 @@ export const EFFECT_MODULE_NAMES = new Set([
   "pipe",
 ]);
 
+const BANNED_ARRAY_METHODS = new Map<string, { replacement: string; pipeline: string }>([
+  ["map", { replacement: "Array.map", pipeline: "|> Array.map(...)" }],
+  ["filter", { replacement: "Array.filter", pipeline: "|> Array.filter(...)" }],
+  ["reduce", { replacement: "Array.reduce", pipeline: "|> Array.reduce(...)" }],
+  ["reduceRight", { replacement: "Array.reduceRight", pipeline: "|> Array.reduceRight(...)" }],
+  ["flatMap", { replacement: "Array.flatMap", pipeline: "|> Array.flatMap(...)" }],
+  ["flat", { replacement: "Array.flatten", pipeline: "|> Array.flatten" }],
+  ["find", { replacement: "Array.findFirst", pipeline: "|> Array.findFirst(...)" }],
+  ["findIndex", { replacement: "Array.findFirstIndex", pipeline: "|> Array.findFirstIndex(...)" }],
+  ["findLast", { replacement: "Array.findLast", pipeline: "|> Array.findLast(...)" }],
+  ["findLastIndex", { replacement: "Array.findLastIndex", pipeline: "|> Array.findLastIndex(...)" }],
+  ["some", { replacement: "Array.some", pipeline: "|> Array.some(...)" }],
+  ["every", { replacement: "Array.every", pipeline: "|> Array.every(...)" }],
+  ["sort", { replacement: "Array.sort", pipeline: "|> Array.sort(...)" }],
+  ["reverse", { replacement: "Array.reverse", pipeline: "|> Array.reverse" }],
+  ["push", { replacement: "Array.append", pipeline: "|> Array.append(...)" }],
+  ["pop", { replacement: "Array.unappend", pipeline: "|> Array.unappend" }],
+  ["shift", { replacement: "Array.unprepend", pipeline: "|> Array.unprepend" }],
+  ["unshift", { replacement: "Array.prepend", pipeline: "|> Array.prepend(...)" }],
+  ["splice", { replacement: "Array.remove / Array.modify", pipeline: "Array.remove(...)" }],
+]);
+
+function getRootCalleeName(node: Expression): string | null {
+  if (node.kind === "Identifier" || node.kind === "UpperIdentifier") {
+    return node.name;
+  }
+  if (node.kind === "MemberExpression") {
+    return getRootCalleeName(node.object);
+  }
+  if (node.kind === "CallExpression") {
+    return getRootCalleeName(node.callee);
+  }
+  return null;
+}
+
 export function isEffectModule(moduleName: string): boolean {
   return EFFECT_MODULE_NAMES.has(moduleName);
 }
@@ -293,6 +328,7 @@ const EFFECT_BUILTIN_MODULES = new Set([
   "Number",
   "Record",
   "Duration",
+  "Result",
   "Struct",
   "Brand",
 ]);
@@ -320,6 +356,7 @@ export class Emitter {
   private needsFromNullishOr = false;
   private needsOptionTry = false;
   private needsOr = false;
+  private needsSafeDivide = false;
   private primitiveIdentifiers = new Set<string>();
   private currentPlaceholderParam: string | null = null;
   private bindings = new Map<string, BindingDeclaration>();
@@ -457,7 +494,10 @@ export class Emitter {
       header += `function optionTry<A>(thunk: () => A): import("effect").Option.Option<NonNullable<A>> {\n  try {\n    return Option.fromNullishOr(thunk()) as any;\n  } catch {\n    return Option.none();\n  }\n}\n`;
     }
     if (this.needsOr) {
-      header += `type Or<A, B> = A extends { readonly _tag: "Some"; readonly value: infer V } ? V | B : A extends { readonly _tag: "None" } ? B : NonNullable<A> | B;\nfunction or<A, B>(a: A, b: B): Or<A, B> {\n  if (a !== null && a !== undefined && typeof a === "object" && "_tag" in a) {\n    if (a._tag === "Some") return (a as any).value;\n    if (a._tag === "None") return b as any;\n  }\n  return (a || b) as any;\n}\n`;
+      header += `type Or<A, B> = A extends { readonly _tag: "Some"; readonly value: infer V } ? V | B : A extends { readonly _tag: "None" } ? B : Exclude<NonNullable<A>, false> | B;\nfunction or<A, B>(a: A, b: B): Or<A, B> {\n  if (a !== null && a !== undefined && typeof a === "object" && "_tag" in a) {\n    if (a._tag === "Some") return (a as any).value;\n    if (a._tag === "None") return b as any;\n  }\n  return (a || b) as any;\n}\n`;
+    }
+    if (this.needsSafeDivide) {
+      header += `function safeDivide(a: number, b: number): number {\n  const result = a / b;\n  return Number.isFinite(result) ? result : 0;\n}\n`;
     }
 
     if (header.length > 0) {
@@ -1174,6 +1214,31 @@ export class Emitter {
       return `optionTry(${expr.args.map((a) => this.emitExpression(a)).join(", ")})`;
     }
 
+    if (expr.callee.kind === "MemberExpression") {
+      const prop = expr.callee.property.name;
+      const root = getRootCalleeName(expr.callee.object);
+      const isAllowed =
+        root !== null &&
+        (root[0] === root[0].toUpperCase() ||
+          EFFECT_MODULE_NAMES.has(root) ||
+          EFFECT_BUILTIN_MODULES.has(root));
+
+      if (!isAllowed && BANNED_ARRAY_METHODS.has(prop)) {
+        const info = BANNED_ARRAY_METHODS.get(prop)!;
+        throw new FunScriptError(
+          `Native array method '.${prop}()' is banned by the Effect style guide. Use '${info.replacement}(...)' or pipeline '${info.pipeline}' instead.`,
+          expr.callee.property.span,
+        );
+      }
+
+      if (
+        (expr.callee.object.kind === "Identifier" || expr.callee.object.kind === "UpperIdentifier") &&
+        EFFECT_BUILTIN_MODULES.has(expr.callee.object.name)
+      ) {
+        this.effectImports.add(expr.callee.object.name);
+      }
+    }
+
     if (
       (expr.callee.kind === "UpperIdentifier" || expr.callee.kind === "Identifier") &&
       AUTO_NEW_CONSTRUCTORS.has(expr.callee.name) &&
@@ -1646,6 +1711,13 @@ export class Emitter {
         const mark = (operand: string, offset: number) =>
           `__funscriptNumericOperand(${offset}, ${JSON.stringify(expr.operator)}, ${operand})`;
         return `(${mark(left, expr.left.span.start.offset)} ${expr.operator} ${mark(right, expr.right.span.start.offset)})`;
+      }
+      case "/": {
+        if (expr.right.kind === "NumberLiteral" && expr.right.value !== 0) {
+          return `(${left} / ${right})`;
+        }
+        this.needsSafeDivide = true;
+        return `safeDivide(${left}, ${right})`;
       }
       default:
         return `(${left} ${expr.operator} ${right})`;
@@ -2298,7 +2370,7 @@ export class Emitter {
         if (name === "Array" && !this.declaredTypeNames.has(name)) name = "ReadonlyArray";
         else if (name === "Map" && !this.declaredTypeNames.has(name)) name = "ReadonlyMap";
         else if (name === "Set" && !this.declaredTypeNames.has(name)) name = "ReadonlySet";
-        else if (["Option", "Record", "Duration"].includes(name) && !this.declaredTypeNames.has(name)) {
+        else if (["Option", "Record", "Duration", "Result"].includes(name) && !this.declaredTypeNames.has(name)) {
           this.effectImports.add(name);
           name = name === "Record" ? "Record.ReadonlyRecord" : `${name}.${name}`;
         }
