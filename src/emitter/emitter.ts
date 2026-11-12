@@ -486,13 +486,6 @@ export class Emitter {
     switch (decl.body.kind) {
       case "RecordSchema": {
         if (this.recordContracts.has(name)) {
-          const hasDefault = (value: unknown): boolean => {
-            if (!value || typeof value !== "object") return false;
-            if (Array.isArray(value)) return value.some(hasDefault);
-            const node = value as Record<string, unknown>;
-            return Boolean(node.defaultValue) || Object.entries(node).some(([key, child]) => key !== "span" && hasDefault(child));
-          };
-          if (hasDefault(decl.body)) throw new FunScriptError("Compile-time record contracts cannot declare schema defaults", decl.span);
           const brand = `${RECORD_CONTRACT_BRAND}$${name}`;
           const typeParamsStr = this.emitTypeParameters(decl.typeParams);
           return `declare const ${brand}: unique symbol;\n${exp}type ${name}${typeParamsStr} = ${this.emitTypeNode(recordContractType(decl.body))} & { readonly [${brand}]?: never };`;
@@ -1582,7 +1575,16 @@ export class Emitter {
       .map((p, index) => {
         const rest = p.isRest ? "..." : "";
         const name = p.optional ? `$funscriptOptional${index}` : p.name.name;
-        const typeAnn = p.typeAnnotation ? `: ${this.emitTypeNode(p.typeAnnotation)}` : "";
+        let typeAnn = "";
+        if (p.typeAnnotation) {
+          const base = this.emitTypeNode(p.typeAnnotation);
+          if (p.optional) {
+            this.effectImports.add("Option");
+            typeAnn = `: ${base} | Option.Option<${base}>`;
+          } else {
+            typeAnn = `: ${base}`;
+          }
+        }
         const defaultValue = p.defaultValue ? ` = ${this.emitExpression(p.defaultValue)}` : "";
         return `${rest}${name}${p.optional ? "?" : ""}${typeAnn}${defaultValue}`;
       })
@@ -1592,7 +1594,7 @@ export class Emitter {
     const optionalBindings = expr.params.flatMap((p, index) => {
       if (!p.optional) return [];
       this.effectImports.add("Option");
-      return [`  const ${p.name.name} = Option.fromUndefinedOr($funscriptOptional${index});`];
+      return [`  const ${p.name.name} = Option.isOption($funscriptOptional${index}) ? $funscriptOptional${index} : Option.fromUndefinedOr($funscriptOptional${index});`];
     });
 
     const records = new Map<string, Map<string, RecordFieldInfo> | undefined>();
@@ -1601,7 +1603,7 @@ export class Emitter {
       const declared = param.typeAnnotation;
       if (this.isHtmlPropsType(declared)) { records.set(param.name.name, undefined); return; }
       const recordType = declared?.kind === "TypeReferenceNode" ? this.recordContracts.get(declared.name.name) : declared;
-      if (param.optional || param.defaultValue || recordType?.kind !== "RecordTypeNode") { records.set(param.name.name, undefined); return; }
+      if (param.optional || recordType?.kind !== "RecordTypeNode") { records.set(param.name.name, undefined); return; }
       const fields = recordType.fields;
       const nestedFields = (type: TypeNode): Map<string, RecordFieldInfo> | undefined => {
         if (type.kind !== "RecordTypeNode") {
@@ -2111,6 +2113,11 @@ export class Emitter {
             const rest = p.isRest ? "..." : "";
             const name = p.name ? p.name.name : "_";
             const opt = p.optional ? "?" : "";
+            if (p.optional && p.typeAnnotation) {
+              this.effectImports.add("Option");
+              const baseType = this.emitTypeNode(p.typeAnnotation);
+              return `${rest}${name}${opt}: ${baseType} | Option.Option<${baseType}>`;
+            }
             return p.typeAnnotation ? `${rest}${name}${opt}: ${this.emitTypeNode(p.typeAnnotation)}` : `${rest}${name}${opt}`;
           })
           .join(", ");

@@ -62,4 +62,34 @@ export testFn = (raw: Unknown, opt: Option<String>) =>
     expect(res.typescript).toContain('__funscriptOptionFromNullishOrElse(raw, "default")');
     expect(res.typescript).toContain('__funscriptOptionFromNullishOrElse(opt, "fallback")');
   });
+
+  it("transparently forwards Option into optional parameters without double wrapping", () => {
+    const src = `
+export f = (x?: String) =>
+  => x
+
+export g = (x?: String) =>
+  => f(x)
+`;
+    const res = Effect.runSync(compileString(src));
+    expect(res.typescript).toContain("($funscriptOptional0?: string | Option.Option<string>)");
+    expect(res.typescript).toContain("Option.isOption($funscriptOptional0) ? $funscriptOptional0 : Option.fromUndefinedOr($funscriptOptional0)");
+  });
+
+  it("supports default values on record contract schemas and defaulted record parameter", () => {
+    const src = `
+export defaultNumber = 42
+
+export schema MyConfig = {
+  timeout: Number = defaultNumber
+  handler: () => Void
+}
+
+export run = (config: MyConfig = {}) =>
+  => config.timeout
+`;
+    const res = Effect.runSync(compileString(src));
+    expect(res.typescript).toContain("readonly timeout?: number;");
+    expect(res.typescript).toContain("config: MyConfig = {  }");
+  });
 });
