@@ -200,6 +200,8 @@ export type Expression =
   | JSXSelfClosingElement
   | JsExpression
   | TsEscapeExpression
+  | TemplateLiteral
+  | TaggedTemplateExpression
   | SpreadElement;
 
 export interface SpreadElement extends NodeBase {
@@ -472,6 +474,19 @@ export interface StringLiteral extends NodeBase {
   kind: "StringLiteral";
   parts: StringPart[];
   raw: string;
+}
+
+export interface TemplateLiteral extends NodeBase {
+  kind: "TemplateLiteral";
+  parts: StringPart[];
+  raw: string;
+}
+
+export interface TaggedTemplateExpression extends NodeBase {
+  kind: "TaggedTemplateExpression";
+  tag: Expression;
+  typeArguments?: TypeNode[];
+  template: TemplateLiteral;
 }
 
 export type StringPart =

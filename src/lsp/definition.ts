@@ -829,6 +829,25 @@ export class DefinitionFinder {
         break;
       }
 
+      case "TemplateLiteral": {
+        for (const part of expr.parts) {
+          if (part.kind === "StringInterpolationPart") {
+            this.visitExpression(part.expression, scope);
+          }
+        }
+        break;
+      }
+
+      case "TaggedTemplateExpression": {
+        this.visitExpression(expr.tag, scope);
+        for (const part of expr.template.parts) {
+          if (part.kind === "StringInterpolationPart") {
+            this.visitExpression(part.expression, scope);
+          }
+        }
+        break;
+      }
+
       default:
         break;
     }

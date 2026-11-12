@@ -303,4 +303,36 @@ export safeThrow = (invalidJson: String) =>
     expect(safeSuccess("ok")).toEqual(Option.some("ok"));
     expect(safeThrow("not json {")).toEqual(Option.none());
   });
+
+  it("compiles and executes template literals and tagged templates with type arguments", () => {
+    const src = `
+export tagFn = (strings: Array<String>, id: Number) =>
+  s0 = strings[0] or ""
+  s1 = strings[1] or ""
+  => s0 + id + s1
+
+export query = (id: Number) =>
+  => tagFn\`SELECT * FROM users WHERE id = \${id} LIMIT 1\`
+
+export withGenericTag = (id: Number) =>
+  => sql<{ id: Number }>\`INSERT INTO users (id) VALUES (\${id})\`
+`;
+    const res = Effect.runSync(compileString(src));
+    expect(res.typescript).toContain("tagFn`SELECT * FROM users WHERE id = ${id} LIMIT 1`");
+    expect(res.typescript).toContain("sql<{ readonly id: number }>`INSERT INTO users (id) VALUES (${id})`");
+
+    const query = evaluateTsFunction(res.typescript, "query");
+    expect(query(42)).toBe("SELECT * FROM users WHERE id = 42 LIMIT 1");
+  });
+
+  it("formats template literals and tagged template expressions cleanly", () => {
+    const src = `export query = (id: Number) =>
+  => tagFn\`SELECT * FROM users WHERE id = \${id} LIMIT 1\`
+
+export typedQuery = (id: Number) =>
+  => sql<{ id: Number }>\`INSERT INTO users VALUES (\${id})\`
+`;
+    const formatted = format(src);
+    expect(formatted).toBe(src);
+  });
 });

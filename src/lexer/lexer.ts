@@ -26,7 +26,7 @@ export class Lexer {
   private indentStack: number[] = [0];
   private parenLevel = 0;
   private bracketLevel = 0;
-  private braceStack: ("record" | "interpolation" | "jsx_expr")[] = [];
+  private braceStack: ("record" | "interpolation" | "template_interpolation" | "jsx_expr")[] = [];
   private jsxStack: Array<{ kind: "tag" | "closing_tag" | "children" | "expr"; hasTagName?: boolean }> = [];
   private isFunx: boolean;
   private tokens: Token[] = [];
@@ -161,6 +161,12 @@ export class Lexer {
         continue;
       }
 
+      // Template Literals
+      if (char === "`") {
+        this.readTemplateString();
+        continue;
+      }
+
       // Numbers
       if (this.isDigit(char)) {
         this.readNumber();
@@ -232,7 +238,11 @@ export class Lexer {
           this.emitToken(TokenType.LBRACE, "{", 1);
           break;
         case "}":
-          if (this.braceStack.length > 0 && this.braceStack[this.braceStack.length - 1] === "interpolation") {
+          if (this.braceStack.length > 0 && this.braceStack[this.braceStack.length - 1] === "template_interpolation") {
+            this.braceStack.pop();
+            this.emitToken(TokenType.INTERPOLATION_END, "}", 1);
+            this.continueTemplateAfterInterpolation();
+          } else if (this.braceStack.length > 0 && this.braceStack[this.braceStack.length - 1] === "interpolation") {
             this.braceStack.pop();
             this.emitToken(TokenType.INTERPOLATION_END, "}", 1);
             this.continueStringAfterInterpolation();
@@ -433,6 +443,162 @@ export class Lexer {
 
     this.tokens.push({
       type: TokenType.STRING,
+      value: buffer,
+      span: { start: startPos, end: this.currentPosition() },
+    });
+  }
+
+  private readTemplateString(): void {
+    const startPos = this.currentPosition();
+    this.advance(); // consume opening '`'
+
+    let buffer = "";
+
+    while (!this.isAtEnd() && this.peek() !== "`") {
+      const c = this.peek();
+
+      if (c === "\\") {
+        this.advance();
+        if (this.isAtEnd()) break;
+        const esc = this.advance();
+        if (esc === "`") buffer += "\\`";
+        else if (esc === "\\") buffer += "\\\\";
+        else if (esc === "$") buffer += "\\$";
+        else if (esc === "{") buffer += "\\{";
+        else buffer += "\\" + esc;
+        continue;
+      }
+
+      if (c === "$" && this.peekAhead(1) === "{") {
+        if (buffer.length > 0) {
+          this.tokens.push({
+            type: TokenType.TEMPLATE_PART,
+            value: buffer,
+            span: { start: startPos, end: this.currentPosition() },
+          });
+          buffer = "";
+        }
+        this.advance(); // consume '$'
+        this.advance(); // consume '{'
+        this.braceStack.push("template_interpolation");
+        this.tokens.push({
+          type: TokenType.INTERPOLATION_START,
+          value: "{",
+          span: this.currentSpan(2),
+        });
+        return;
+      }
+
+      if (c === "{") {
+        if (buffer.length > 0) {
+          this.tokens.push({
+            type: TokenType.TEMPLATE_PART,
+            value: buffer,
+            span: { start: startPos, end: this.currentPosition() },
+          });
+          buffer = "";
+        }
+        this.advance(); // consume '{'
+        this.braceStack.push("template_interpolation");
+        this.tokens.push({
+          type: TokenType.INTERPOLATION_START,
+          value: "{",
+          span: this.currentSpan(1),
+        });
+        return;
+      }
+
+      buffer += this.advance();
+    }
+
+    if (this.isAtEnd()) {
+      throw new LexerError("Unterminated template literal", {
+        start: startPos,
+        end: this.currentPosition(),
+      });
+    }
+
+    this.advance(); // consume closing '`'
+
+    this.tokens.push({
+      type: TokenType.TEMPLATE_STRING,
+      value: buffer,
+      span: { start: startPos, end: this.currentPosition() },
+    });
+  }
+
+  private continueTemplateAfterInterpolation(): void {
+    const startPos = this.currentPosition();
+    let buffer = "";
+
+    while (!this.isAtEnd() && this.peek() !== "`") {
+      const c = this.peek();
+
+      if (c === "\\") {
+        this.advance();
+        if (this.isAtEnd()) break;
+        const esc = this.advance();
+        if (esc === "`") buffer += "\\`";
+        else if (esc === "\\") buffer += "\\\\";
+        else if (esc === "$") buffer += "\\$";
+        else if (esc === "{") buffer += "\\{";
+        else buffer += "\\" + esc;
+        continue;
+      }
+
+      if (c === "$" && this.peekAhead(1) === "{") {
+        if (buffer.length > 0) {
+          this.tokens.push({
+            type: TokenType.TEMPLATE_PART,
+            value: buffer,
+            span: { start: startPos, end: this.currentPosition() },
+          });
+          buffer = "";
+        }
+        this.advance(); // consume '$'
+        this.advance(); // consume '{'
+        this.braceStack.push("template_interpolation");
+        this.tokens.push({
+          type: TokenType.INTERPOLATION_START,
+          value: "{",
+          span: this.currentSpan(2),
+        });
+        return;
+      }
+
+      if (c === "{") {
+        if (buffer.length > 0) {
+          this.tokens.push({
+            type: TokenType.TEMPLATE_PART,
+            value: buffer,
+            span: { start: startPos, end: this.currentPosition() },
+          });
+          buffer = "";
+        }
+        this.advance(); // consume '{'
+        this.braceStack.push("template_interpolation");
+        this.tokens.push({
+          type: TokenType.INTERPOLATION_START,
+          value: "{",
+          span: this.currentSpan(1),
+        });
+        return;
+      }
+
+      buffer += this.advance();
+    }
+
+    if (this.isAtEnd()) {
+      throw new LexerError("Unterminated template literal", {
+        start: startPos,
+        end: this.currentPosition(),
+      });
+    }
+
+    this.advance(); // consume closing '`'
+
+    this.tokens.push({
+      type: TokenType.TEMPLATE_PART,
       value: buffer,
       span: { start: startPos, end: this.currentPosition() },
     });

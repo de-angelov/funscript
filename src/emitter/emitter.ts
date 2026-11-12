@@ -21,6 +21,8 @@ import {
   Literal,
   NumberLiteral,
   StringLiteral,
+  TemplateLiteral,
+  TaggedTemplateExpression,
   BooleanLiteral,
   Identifier,
   UpperIdentifier,
@@ -1012,6 +1014,10 @@ export class Emitter {
         return expr.raw;
       case "StringLiteral":
         return this.emitStringLiteral(expr);
+      case "TemplateLiteral":
+        return this.emitTemplateLiteral(expr);
+      case "TaggedTemplateExpression":
+        return this.emitTaggedTemplateExpression(expr);
       case "BooleanLiteral":
         return expr.value ? "true" : "false";
       case "Identifier":
@@ -1112,6 +1118,25 @@ export class Emitter {
       })
       .join("");
     return `\`${template}\``;
+  }
+
+  private emitTemplateLiteral(lit: TemplateLiteral): string {
+    const template = lit.parts
+      .map((p) => {
+        if (p.kind === "StringRawPart") return p.value.replace(/`/g, "\\`").replace(/\${/g, "\\${");
+        return `\${${this.emitExpression(p.expression)}}`;
+      })
+      .join("");
+    return `\`${template}\``;
+  }
+
+  private emitTaggedTemplateExpression(expr: TaggedTemplateExpression): string {
+    const tag = this.emitExpression(expr.tag);
+    let typeArgs = "";
+    if (expr.typeArguments && expr.typeArguments.length > 0) {
+      typeArgs = "<" + expr.typeArguments.map((t) => this.emitTypeNode(t)).join(", ") + ">";
+    }
+    return `${tag}${typeArgs}${this.emitTemplateLiteral(expr.template)}`;
   }
 
   private emitCallExpression(expr: CallExpression): string {
@@ -1370,6 +1395,10 @@ export class Emitter {
         return this.hasPlaceholder(expr.expression);
       case "SpreadElement":
         return this.hasPlaceholder(expr.argument);
+      case "TemplateLiteral":
+        return expr.parts.some((p) => p.kind === "StringInterpolationPart" && this.hasPlaceholder(p.expression));
+      case "TaggedTemplateExpression":
+        return this.hasPlaceholder(expr.tag) || expr.template.parts.some((p) => p.kind === "StringInterpolationPart" && this.hasPlaceholder(p.expression));
       default:
         return false;
     }

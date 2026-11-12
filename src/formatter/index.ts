@@ -75,6 +75,8 @@ import {
   Literal,
   NumberLiteral,
   StringLiteral,
+  TemplateLiteral,
+  TaggedTemplateExpression,
   BooleanLiteral,
   Identifier,
   UpperIdentifier,
@@ -974,6 +976,10 @@ export class Formatter {
         return expr.value ? "true" : "false";
       case "StringLiteral":
         return this.formatStringLiteral(expr);
+      case "TemplateLiteral":
+        return this.formatTemplateLiteral(expr);
+      case "TaggedTemplateExpression":
+        return this.formatTaggedTemplateExpression(expr, indent);
       case "Identifier":
       case "UpperIdentifier":
         return expr.name;
@@ -1007,6 +1013,28 @@ export class Formatter {
     }
     result += '"';
     return result;
+  }
+
+  private formatTemplateLiteral(tpl: TemplateLiteral): string {
+    let result = "`";
+    for (const part of tpl.parts) {
+      if (part.kind === "StringRawPart") {
+        result += part.value;
+      } else {
+        result += `\${${this.formatExpression(part.expression, 0)}}`;
+      }
+    }
+    result += "`";
+    return result;
+  }
+
+  private formatTaggedTemplateExpression(expr: TaggedTemplateExpression, indent: number): string {
+    const tag = this.formatExpression(expr.tag, indent);
+    let typeArgs = "";
+    if (expr.typeArguments && expr.typeArguments.length > 0) {
+      typeArgs = "<" + expr.typeArguments.map((t) => this.formatType(t)).join(", ") + ">";
+    }
+    return `${tag}${typeArgs}${this.formatTemplateLiteral(expr.template)}`;
   }
 
   private formatLiteral(lit: Literal): string {

@@ -24,6 +24,8 @@ import {
   Literal,
   NumberLiteral,
   StringLiteral,
+  TemplateLiteral,
+  TaggedTemplateExpression,
   StringPart,
   BooleanLiteral,
   Identifier,
@@ -1228,7 +1230,25 @@ export class Parser {
     let expr = this.parsePrimary();
 
     while (true) {
-      if (this.match(TokenType.LPAREN)) {
+      if (this.check(TokenType.TEMPLATE_STRING) || this.check(TokenType.TEMPLATE_PART)) {
+        const template = this.parseTemplateLiteral();
+        expr = {
+          kind: "TaggedTemplateExpression",
+          tag: expr,
+          template,
+          span: { start: expr.span.start, end: template.span.end },
+        };
+      } else if (this.check(TokenType.LT) && this.isTypeArgumentListBeforeTemplate()) {
+        const typeArgs = this.parseTypeArguments();
+        const template = this.parseTemplateLiteral();
+        expr = {
+          kind: "TaggedTemplateExpression",
+          tag: expr,
+          typeArguments: typeArgs,
+          template,
+          span: { start: expr.span.start, end: template.span.end },
+        };
+      } else if (this.match(TokenType.LPAREN)) {
         this.skipNewlines();
         while (this.match(TokenType.INDENT) || this.match(TokenType.DEDENT)) {}
         this.skipNewlines();
@@ -1343,6 +1363,12 @@ export class Parser {
       this.check(TokenType.INTERPOLATION_START)
     ) {
       return this.parseStringLiteral();
+    }
+    if (
+      this.check(TokenType.TEMPLATE_STRING) ||
+      this.check(TokenType.TEMPLATE_PART)
+    ) {
+      return this.parseTemplateLiteral();
     }
     if (this.match(TokenType.TRUE)) {
       return { kind: "BooleanLiteral", value: true, span: this.previous().span };
@@ -3092,6 +3118,69 @@ export class Parser {
       raw: "",
       span: { start, end: this.previous().span.end },
     };
+  }
+
+  private parseTemplateLiteral(): TemplateLiteral {
+    const start = this.peek().span.start;
+    const parts: StringPart[] = [];
+
+    if (this.match(TokenType.TEMPLATE_STRING)) {
+      return {
+        kind: "TemplateLiteral",
+        parts: [{ kind: "StringRawPart", value: this.previous().value }],
+        raw: `\`${this.previous().value}\``,
+        span: this.previous().span,
+      };
+    }
+
+    while (this.check(TokenType.TEMPLATE_PART) || this.check(TokenType.INTERPOLATION_START)) {
+      if (this.match(TokenType.TEMPLATE_PART)) {
+        parts.push({ kind: "StringRawPart", value: this.previous().value });
+      } else if (this.match(TokenType.INTERPOLATION_START)) {
+        const expr = this.parseExpression();
+        this.consume(TokenType.INTERPOLATION_END, "Expected '}' to close interpolation");
+        parts.push({ kind: "StringInterpolationPart", expression: expr });
+      }
+    }
+
+    return {
+      kind: "TemplateLiteral",
+      parts,
+      raw: "",
+      span: { start, end: this.previous().span.end },
+    };
+  }
+
+  private isTypeArgumentListBeforeTemplate(): boolean {
+    if (!this.check(TokenType.LT)) return false;
+    let angleDepth = 1;
+    for (let i = 1; i < 512; i++) {
+      const token = this.peekAhead(i);
+      if (token.type === TokenType.EOF || token.type === TokenType.NEWLINE) return false;
+      if (token.type === TokenType.LT) {
+        angleDepth++;
+      } else if (token.type === TokenType.GT) {
+        angleDepth--;
+        if (angleDepth === 0) {
+          const next = this.peekAhead(i + 1);
+          return (
+            next.type === TokenType.TEMPLATE_STRING ||
+            next.type === TokenType.TEMPLATE_PART
+          );
+        }
+      }
+    }
+    return false;
+  }
+
+  private parseTypeArguments(): TypeNode[] {
+    this.consume(TokenType.LT, "Expected '<'");
+    const args: TypeNode[] = [];
+    do {
+      args.push(this.parseTypeNode());
+    } while (this.match(TokenType.COMMA) && !this.check(TokenType.GT));
+    this.consume(TokenType.GT, "Expected '>'");
+    return args;
   }
 
   private skipNewlines(): void {
