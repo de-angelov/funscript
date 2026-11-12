@@ -12,7 +12,34 @@ import {
   ES_TOOLKIT_TIMING_DATA_LAST,
 } from "../emitter/emitter.js";
 import { type PipelineCompanionModule, PIPELINE_COMPANION_CATALOG, pipelineCompanionCandidates, EFFECT_PIPELINE_COMPATIBILITY_ALIASES } from "../emitter/pipeline-catalog.js";
-import { Program, type Expression, type PipelineExpression, type CallExpression } from "../ast/types.js";
+import { Program, type Expression, type PipelineExpression, type CallExpression, type BindingTarget, type Pattern } from "../ast/types.js";
+
+function addPatternNames(pat: Pattern, names: Set<string>): void {
+  if (pat.kind === "VariablePattern") names.add(pat.name.name);
+  else if (pat.kind === "RecordPattern") {
+    for (const f of pat.fields) {
+      if (f.pattern) addPatternNames(f.pattern, names);
+      else names.add(f.key.name);
+    }
+  } else if (pat.kind === "ArrayPattern") {
+    for (const el of pat.elements) addPatternNames(el, names);
+  } else if (pat.kind === "RestPattern") {
+    addPatternNames(pat.argument, names);
+  }
+}
+
+function addBindingNames(target: BindingTarget, names: Set<string>): void {
+  if (target.kind === "Identifier" || target.kind === "UpperIdentifier") {
+    names.add(target.name);
+  } else if (target.kind === "RecordPattern") {
+    for (const f of target.fields) {
+      if (f.pattern) addPatternNames(f.pattern, names);
+      else names.add(f.key.name);
+    }
+  } else if (target.kind === "ArrayPattern") {
+    for (const el of target.elements) addPatternNames(el, names);
+  }
+}
 import { TypeScriptCompilationContext } from "./typescript-context.js";
 import { FunScriptError } from "../errors.js";
 
@@ -121,9 +148,9 @@ export function inferPipelineCompanions(
     } else if (decl.kind === "ExportDeclaration" && decl.declaration.kind === "SchemaDeclaration") {
       schemaNames.add(decl.declaration.id.name);
     } else if (decl.kind === "BindingDeclaration") {
-      localBindings.add(decl.id.name);
+      addBindingNames(decl.id, localBindings);
     } else if (decl.kind === "ExportDeclaration" && decl.declaration.kind === "BindingDeclaration") {
-      localBindings.add(decl.declaration.id.name);
+      addBindingNames(decl.declaration.id, localBindings);
     } else if (decl.kind === "ImportDeclaration") {
       for (const spec of decl.specifiers) {
         localBindings.add(spec.local.name);
@@ -203,12 +230,7 @@ export function inferPipelineCompanions(
 
     const symbol = type.aliasSymbol ?? type.getSymbol();
     const symName = symbol?.getName();
-    if (symName) {
-      if (symName === "Option" || symName === "Result" || symName === "Chunk" || symName === "Effect" ||
-          symName === "Schedule" || symName === "Layer" || symName === "Stream" || symName === "Schema" ||
-          symName === "Duration" || symName === "String" || symName === "Number" || symName === "DateTime") {
-        return symName;
-      }
+    if (symName && !symName.startsWith("__")) {
       return symName;
     }
     return undefined;

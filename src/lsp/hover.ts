@@ -54,7 +54,7 @@ function symbolHover(source: string, uri: string, token: Token): Hover | null {
     // only when this name has one unambiguous top-level declaration.
     const declarations = result.ast.body.flatMap((entry) => {
       const decl = entry.kind === "ExportDeclaration" ? entry.declaration : entry;
-      return decl.kind === "BindingDeclaration" && decl.id.name === token.value ? [entry] : [];
+      return decl.kind === "BindingDeclaration" && "name" in decl.id && decl.id.name === token.value ? [entry] : [];
     });
     if (declarations.length === 1) {
       const before = source.slice(0, declarations[0].span.start.offset);

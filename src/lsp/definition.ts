@@ -5,6 +5,7 @@ import type {
   ImportDeclaration,
   ImportSpecifier,
   BindingDeclaration,
+  BindingTarget,
   SchemaDeclaration,
   VariantDeclaration,
   RecordFieldSchema,
@@ -140,6 +141,23 @@ export interface DefinitionMatch {
   targetIdentifierNode: NodeBase;
 }
 
+function definePatternInScope(pat: Pattern | BindingTarget, scope: Scope, declNode: NodeBase, kind: "variable" | "function" = "variable"): void {
+  if (pat.kind === "Identifier" || pat.kind === "UpperIdentifier") {
+    scope.define(pat.name, declNode, pat, kind);
+  } else if (pat.kind === "VariablePattern") {
+    scope.define(pat.name.name, declNode, pat.name, kind);
+  } else if (pat.kind === "RecordPattern") {
+    for (const f of pat.fields) {
+      if (f.pattern) definePatternInScope(f.pattern, scope, declNode, kind);
+      else scope.define(f.key.name, declNode, f.key, kind);
+    }
+  } else if (pat.kind === "ArrayPattern") {
+    for (const el of pat.elements) definePatternInScope(el, scope, declNode, kind);
+  } else if (pat.kind === "RestPattern") {
+    definePatternInScope(pat.argument, scope, declNode, kind);
+  }
+}
+
 export class DefinitionFinder {
   private found: DefinitionMatch | null = null;
   private members: Map<string, SymbolDefinition> = new Map();
@@ -219,7 +237,7 @@ export class DefinitionFinder {
       switch (decl.kind) {
         case "BindingDeclaration": {
           const kind = decl.init.kind === "FunctionExpression" ? "function" : "variable";
-          scope.define(decl.id.name, declNode, decl.id, kind);
+          definePatternInScope(decl.id, scope, declNode, kind);
           break;
         }
         case "SchemaDeclaration": {
@@ -668,7 +686,7 @@ export class DefinitionFinder {
               };
               return;
             }
-            effectScope.define(stmt.id.name, stmt, stmt.id, "variable");
+            definePatternInScope(stmt.id, effectScope, stmt, "variable");
           } else if (stmt.kind === "BindingDeclaration") {
             if (stmt.typeAnnotation) {
               this.visitTypeNode(stmt.typeAnnotation, effectScope);
@@ -682,7 +700,7 @@ export class DefinitionFinder {
               };
               return;
             }
-            effectScope.define(stmt.id.name, stmt, stmt.id, "variable");
+            definePatternInScope(stmt.id, effectScope, stmt, "variable");
           } else if (stmt.kind === "AssignmentStatement") {
             if (stmt.target.kind === "Identifier") {
               if (this.isCursorIn(stmt.target)) {
@@ -838,7 +856,7 @@ export class DefinitionFinder {
           };
           return;
         }
-        blockScope.define(stmt.id.name, stmt, stmt.id, "variable");
+        definePatternInScope(stmt.id, blockScope, stmt, "variable");
       } else if (stmt.kind === "AssignmentStatement") {
         if (stmt.target.kind === "Identifier") {
           if (this.isCursorIn(stmt.target)) {

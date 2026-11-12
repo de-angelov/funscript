@@ -65,11 +65,13 @@ export interface ExportDefaultDeclaration extends NodeBase {
   expression: Expression;
 }
 
+export type BindingTarget = Identifier | UpperIdentifier | RecordPattern | ArrayPattern;
+
 export interface BindingDeclaration extends NodeBase {
   kind: "BindingDeclaration";
   isMut: boolean;
   isJs?: boolean;
-  id: Identifier | UpperIdentifier;
+  id: BindingTarget;
   typeAnnotation?: TypeNode;
   init: Expression;
 }
@@ -375,6 +377,7 @@ export type Pattern =
   | ConstructorPattern
   | RecordPattern
   | ArrayPattern
+  | RestPattern
   | OrPattern;
 
 export interface WildcardPattern extends NodeBase {
@@ -406,11 +409,17 @@ export interface RecordPatternField extends NodeBase {
   kind: "RecordPatternField";
   key: Identifier;
   pattern?: Pattern;
+  isRest?: boolean;
 }
 
 export interface ArrayPattern extends NodeBase {
   kind: "ArrayPattern";
   elements: Pattern[];
+}
+
+export interface RestPattern extends NodeBase {
+  kind: "RestPattern";
+  argument: Pattern;
 }
 
 export interface OrPattern extends NodeBase {
@@ -434,7 +443,7 @@ export type EffectStatement =
 
 export interface EffectBindStatement extends NodeBase {
   kind: "EffectBindStatement";
-  id: Identifier;
+  id: Identifier | RecordPattern | ArrayPattern;
   effect: Expression;
 }
 

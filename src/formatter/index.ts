@@ -52,6 +52,7 @@ import {
   ConstructorPattern,
   RecordPattern,
   ArrayPattern,
+  RestPattern,
   OrPattern,
   EffectBlockExpression,
   EffectStatement,
@@ -520,7 +521,8 @@ export class Formatter {
     const js = decl.isJs ? "js " : "";
     const mut = decl.isMut ? "mut " : "";
     const typeAnn = decl.typeAnnotation ? `: ${this.formatType(decl.typeAnnotation)}` : "";
-    const prefix = `${js}${mut}${decl.id.name}${typeAnn} =`;
+    const idStr = decl.id.kind === "Identifier" || decl.id.kind === "UpperIdentifier" ? decl.id.name : this.formatPattern(decl.id);
+    const prefix = `${js}${mut}${idStr}${typeAnn} =`;
     const init = this.formatBindingInit(decl, indent);
     return `${prefix}${init}`;
   }
@@ -709,8 +711,10 @@ export class Formatter {
 
   private formatEffectStatement(stmt: EffectStatement, indent: number): string {
     switch (stmt.kind) {
-      case "EffectBindStatement":
-        return `${stmt.id.name} <- ${this.formatExpression(stmt.effect, indent)}`;
+      case "EffectBindStatement": {
+        const idStr = stmt.id.kind === "Identifier" ? stmt.id.name : this.formatPattern(stmt.id);
+        return `${idStr} <- ${this.formatExpression(stmt.effect, indent)}`;
+      }
       case "EffectDiscardStatement":
         return `_ <- ${this.formatExpression(stmt.effect, indent)}`;
       case "BindingDeclaration":
@@ -791,9 +795,11 @@ export class Formatter {
         return `${pat.constructorName.name}${args}`;
       }
       case "RecordPattern":
-        return `{ ${pat.fields.map(f => f.pattern ? `${f.key.name}: ${this.formatPattern(f.pattern)}` : f.key.name).join(", ")} }`;
+        return `{ ${pat.fields.map(f => f.isRest ? `...${f.key.name}` : f.pattern ? `${f.key.name}: ${this.formatPattern(f.pattern)}` : f.key.name).join(", ")} }`;
       case "ArrayPattern":
         return `[${pat.elements.map(e => this.formatPattern(e)).join(", ")}]`;
+      case "RestPattern":
+        return `...${this.formatPattern(pat.argument)}`;
       case "OrPattern":
         return pat.patterns.map(p => this.formatPattern(p)).join(" | ");
     }

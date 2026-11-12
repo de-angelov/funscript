@@ -6,6 +6,7 @@ import {
   ExportDeclaration,
   ExportDefaultDeclaration,
   BindingDeclaration,
+  BindingTarget,
   SchemaDeclaration,
   SchemaBody,
   RecordSchema,
@@ -60,6 +61,7 @@ import {
   RecordPattern,
   RecordPatternField,
   ArrayPattern,
+  RestPattern,
   OrPattern,
   EffectBlockExpression,
   EffectStatement,
@@ -674,12 +676,22 @@ export class Parser {
   private parseBindingDeclaration(isJs = false): BindingDeclaration {
     const start = this.peek().span.start;
     const isMut = this.match(TokenType.MUT);
-    const id = this.parseAnyIdentifier();
-    if (isMut) {
-      this.mutableVariables.add(id.name);
+    let id: BindingTarget;
+    if (this.check(TokenType.LBRACE) || this.check(TokenType.LBRACKET)) {
+      id = this.parsePattern() as RecordPattern | ArrayPattern;
+      if (isMut) {
+        for (const name of this.collectPatternVariables(id)) {
+          this.mutableVariables.add(name);
+        }
+      }
+    } else {
+      id = this.parseAnyIdentifier();
+      if (isMut) {
+        this.mutableVariables.add(id.name);
+      }
     }
     let typeParams: TypeParameter[] | undefined;
-    if (this.check(TokenType.LT)) {
+    if ((id.kind === "Identifier" || id.kind === "UpperIdentifier") && this.check(TokenType.LT)) {
       typeParams = this.parseTypeParameters();
     }
     let typeAnnotation: TypeNode | undefined;
@@ -1717,16 +1729,18 @@ export class Parser {
         this.skipNewlines();
         if (this.check(TokenType.RBRACE) || this.check(TokenType.DEDENT)) break;
 
+        const isRest = this.match(TokenType.DOTDOTDOT);
         const key = this.parseIdentifier();
         let pattern: Pattern | undefined;
-        if (this.match(TokenType.COLON)) {
+        if (!isRest && this.match(TokenType.COLON)) {
           pattern = this.parsePattern();
         }
         fields.push({
           kind: "RecordPatternField",
           key,
           pattern,
-          span: { start: key.span.start, end: pattern ? pattern.span.end : key.span.end },
+          isRest: isRest || undefined,
+          span: { start: isRest ? this.previous().span.start : key.span.start, end: pattern ? pattern.span.end : key.span.end },
         });
 
         this.match(TokenType.COMMA);
@@ -1751,7 +1765,21 @@ export class Parser {
       while (!this.check(TokenType.RBRACKET) && !this.isAtEnd()) {
         this.skipNewlines();
         if (this.check(TokenType.RBRACKET)) break;
-        elements.push(this.parsePattern());
+        if (this.match(TokenType.COMMA)) {
+          elements.push({ kind: "WildcardPattern", span: this.previous().span });
+          continue;
+        }
+        if (this.match(TokenType.DOTDOTDOT)) {
+          const restStart = this.previous().span.start;
+          const arg = this.parsePattern();
+          elements.push({
+            kind: "RestPattern",
+            argument: arg,
+            span: { start: restStart, end: arg.span.end },
+          });
+        } else {
+          elements.push(this.parsePattern());
+        }
         this.match(TokenType.COMMA);
         this.skipNewlines();
       }
@@ -1805,9 +1833,14 @@ export class Parser {
           effect: eff,
           span: { start: eff.span.start, end: eff.span.end },
         });
-      } else if (this.check(TokenType.IDENTIFIER) && this.peekAhead(1).type === TokenType.LARROW) {
-        const id = this.parseIdentifier();
-        this.advance(); // consume '<-'
+      } else if (
+        (this.check(TokenType.IDENTIFIER) && this.peekAhead(1).type === TokenType.LARROW) ||
+        this.isDestructuringEffectBindStart()
+      ) {
+        const id = (this.check(TokenType.LBRACE) || this.check(TokenType.LBRACKET))
+          ? (this.parsePattern() as RecordPattern | ArrayPattern)
+          : this.parseIdentifier();
+        this.consume(TokenType.LARROW, "Expected '<-' in effect bind");
         const eff = this.parseExpression();
         this.consumeNewlineOrEof("Expected newline after effect bind");
         body.push({
@@ -1832,7 +1865,8 @@ export class Parser {
       } else if (
         this.check(TokenType.MUT) ||
         (this.check(TokenType.IDENTIFIER) && (this.peekAhead(1).type === TokenType.EQ || this.peekAhead(1).type === TokenType.COLON)) ||
-        (this.check(TokenType.UNDERSCORE) && this.peekAhead(1).type === TokenType.EQ)
+        (this.check(TokenType.UNDERSCORE) && this.peekAhead(1).type === TokenType.EQ) ||
+        this.isDestructuringBindingStart()
       ) {
         if (this.check(TokenType.UNDERSCORE)) {
           this.advance(); // consume '_'
@@ -1985,6 +2019,92 @@ export class Parser {
     throw new ParseError("Invalid assignment target", expr.span);
   }
 
+  private collectPatternVariables(pat: Pattern | BindingTarget): string[] {
+    if (pat.kind === "Identifier" || pat.kind === "UpperIdentifier") {
+      return [pat.name];
+    }
+    if (pat.kind === "VariablePattern") {
+      return [pat.name.name];
+    }
+    if (pat.kind === "RecordPattern") {
+      const vars: string[] = [];
+      for (const f of pat.fields) {
+        if (!f.pattern) {
+          vars.push(f.key.name);
+        } else {
+          vars.push(...this.collectPatternVariables(f.pattern));
+        }
+      }
+      return vars;
+    }
+    if (pat.kind === "ArrayPattern") {
+      const vars: string[] = [];
+      for (const el of pat.elements) {
+        vars.push(...this.collectPatternVariables(el));
+      }
+      return vars;
+    }
+    if (pat.kind === "RestPattern") {
+      return this.collectPatternVariables(pat.argument);
+    }
+    return [];
+  }
+
+  private isDestructuringBindingStart(): boolean {
+    if (!this.check(TokenType.LBRACE) && !this.check(TokenType.LBRACKET)) return false;
+    const stack: TokenType[] = [];
+    for (let i = 0; i < 512; i++) {
+      const tok = this.peekAhead(i);
+      if (tok.type === TokenType.EOF) return false;
+      if (tok.type === TokenType.LBRACE) {
+        stack.push(TokenType.RBRACE);
+      } else if (tok.type === TokenType.LBRACKET) {
+        stack.push(TokenType.RBRACKET);
+      } else if (tok.type === TokenType.RBRACE || tok.type === TokenType.RBRACKET) {
+        if (stack.length === 0 || stack[stack.length - 1] !== tok.type) {
+          return false;
+        }
+        stack.pop();
+        if (stack.length === 0) {
+          let nextIdx = i + 1;
+          while (this.peekAhead(nextIdx).type === TokenType.NEWLINE) {
+            nextIdx++;
+          }
+          const next = this.peekAhead(nextIdx).type;
+          return next === TokenType.EQ || next === TokenType.COLON;
+        }
+      }
+    }
+    return false;
+  }
+
+  private isDestructuringEffectBindStart(): boolean {
+    if (!this.check(TokenType.LBRACE) && !this.check(TokenType.LBRACKET)) return false;
+    const stack: TokenType[] = [];
+    for (let i = 0; i < 512; i++) {
+      const tok = this.peekAhead(i);
+      if (tok.type === TokenType.EOF) return false;
+      if (tok.type === TokenType.LBRACE) {
+        stack.push(TokenType.RBRACE);
+      } else if (tok.type === TokenType.LBRACKET) {
+        stack.push(TokenType.RBRACKET);
+      } else if (tok.type === TokenType.RBRACE || tok.type === TokenType.RBRACKET) {
+        if (stack.length === 0 || stack[stack.length - 1] !== tok.type) {
+          return false;
+        }
+        stack.pop();
+        if (stack.length === 0) {
+          let nextIdx = i + 1;
+          while (this.peekAhead(nextIdx).type === TokenType.NEWLINE) {
+            nextIdx++;
+          }
+          return this.peekAhead(nextIdx).type === TokenType.LARROW;
+        }
+      }
+    }
+    return false;
+  }
+
   private parseFunctionBody(requireExplicitReturn = false): FunctionBody {
     this.functionDepth++;
     try {
@@ -2064,7 +2184,8 @@ export class Parser {
         if (
           this.check(TokenType.MUT) ||
           (this.check(TokenType.IDENTIFIER) && (this.peekAhead(1).type === TokenType.EQ || this.peekAhead(1).type === TokenType.COLON)) ||
-          (this.check(TokenType.UNDERSCORE) && this.peekAhead(1).type === TokenType.EQ)
+          (this.check(TokenType.UNDERSCORE) && this.peekAhead(1).type === TokenType.EQ) ||
+          this.isDestructuringBindingStart()
         ) {
           if (this.check(TokenType.UNDERSCORE)) {
             this.advance(); // consume '_'
@@ -2187,7 +2308,8 @@ export class Parser {
         if (
           this.check(TokenType.MUT) ||
           (this.check(TokenType.IDENTIFIER) && (this.peekAhead(1).type === TokenType.EQ || this.peekAhead(1).type === TokenType.COLON)) ||
-          (this.check(TokenType.UNDERSCORE) && this.peekAhead(1).type === TokenType.EQ)
+          (this.check(TokenType.UNDERSCORE) && this.peekAhead(1).type === TokenType.EQ) ||
+          this.isDestructuringBindingStart()
         ) {
           if (this.check(TokenType.UNDERSCORE)) {
             this.advance(); // consume '_'
@@ -2208,7 +2330,9 @@ export class Parser {
               if (requireExplicitReturn) throw new ParseError(FUNCTION_RETURN_DIAGNOSTIC, bind.span);
               (bind as any).isTrailingBinding = true;
               statements.push(bind);
-              finalExpression = bind.id;
+              if (bind.id.kind === "Identifier" || bind.id.kind === "UpperIdentifier") {
+                finalExpression = bind.id;
+              }
               break;
             } else {
               statements.push(bind);

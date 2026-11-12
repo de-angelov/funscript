@@ -40,7 +40,7 @@ function resolveImported(uri: string, name: string, docs: Doc[]): { doc: Doc; ex
     if (target) {
       const exported = parse(target.text, target.uri)?.body.some((entry) => {
         const declaration = entry.kind === "ExportDeclaration" ? entry.declaration : undefined;
-        return declaration && "id" in declaration && declaration.id.name === spec.imported.name;
+        return declaration && "id" in declaration && "name" in declaration.id && declaration.id.name === spec.imported.name;
       });
       if (exported) return { doc: target, exportedName: spec.imported.name };
     }
@@ -52,7 +52,7 @@ function identity(doc: Doc, occurrence: Occurrence, docs: Doc[]): string {
   const linked = resolveImported(doc.uri, occurrence.name, docs);
   if (linked) {
     const program = parse(linked.doc.text, linked.doc.uri);
-    const exported = program?.body.find((entry) => entry.kind === "ExportDeclaration" && "id" in entry.declaration && entry.declaration.id.name === linked.exportedName);
+    const exported = program?.body.find((entry) => entry.kind === "ExportDeclaration" && "id" in entry.declaration && "name" in entry.declaration.id && entry.declaration.id.name === linked.exportedName);
     if (exported?.kind === "ExportDeclaration" && "id" in exported.declaration) {
       const span = spanToRange(exported.declaration.id.span).start;
       return `${linked.doc.uri}:${span.line}:${span.character}`;
@@ -61,7 +61,7 @@ function identity(doc: Doc, occurrence: Occurrence, docs: Doc[]): string {
   const ast = parse(doc.text, doc.uri);
   const declared = ast?.body.some((item) => {
     const declaration = item.kind === "ExportDeclaration" ? item.declaration : item;
-    return "id" in declaration && declaration.id.name === occurrence.name && declaration.id.span.start.line - 1 === occurrence.line && declaration.id.span.start.column - 1 === occurrence.character;
+    return "id" in declaration && "name" in declaration.id && declaration.id.name === occurrence.name && declaration.id.span.start.line - 1 === occurrence.line && declaration.id.span.start.column - 1 === occurrence.character;
   });
   if (declared) return `${doc.uri}:${occurrence.line}:${occurrence.character}`;
   const definition = findDefinition(doc.text, doc.uri, { line: occurrence.line, character: occurrence.character });
@@ -117,7 +117,7 @@ export function documentSymbols(source: string, uri: string): DocumentSymbol[] {
   const symbols: DocumentSymbol[] = [];
   for (const top of ast.body) {
     const decl = top.kind === "ExportDeclaration" ? top.declaration : top;
-    if (!("id" in decl)) continue;
+    if (!("id" in decl) || !("name" in decl.id)) continue;
     const id = decl.id;
     const kind = decl.kind === "SchemaDeclaration" ? 5 : decl.kind === "ServiceDeclaration" ? 11 : decl.kind === "ErrorDeclaration" ? 5 : 12;
     symbols.push({ name:id.name, kind, range:spanToRange(top.span), selectionRange:spanToRange(id.span) });
@@ -139,7 +139,7 @@ export function findWorkspaceDefinition(source: string, uri: string, position: {
   const targetAst = parse(target.text, target.uri);
   const declaration = targetAst?.body.find((entry) => {
     if (entry.kind !== "ExportDeclaration") return false;
-    return "id" in entry.declaration && entry.declaration.id.name === imported.exportedName;
+    return "id" in entry.declaration && "name" in entry.declaration.id && entry.declaration.id.name === imported.exportedName;
   });
   if (!declaration || declaration.kind !== "ExportDeclaration" || !("id" in declaration.declaration)) return null;
   const range = spanToRange(declaration.span);

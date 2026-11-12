@@ -8,6 +8,7 @@ import {
   ExportDeclaration,
   ExportDefaultDeclaration,
   BindingDeclaration,
+  BindingTarget,
   SchemaDeclaration,
   RecordSchema,
   TaggedUnionSchema,
@@ -49,6 +50,7 @@ import {
   ConstructorPattern,
   RecordPattern,
   ArrayPattern,
+  RestPattern,
   OrPattern,
   EffectBlockExpression,
   EffectStatement,
@@ -312,6 +314,8 @@ export class Emitter {
   private needsJsInterop = false;
   private needsDecodeUnknown = false;
   private needsFromNullishOrElse = false;
+  private needsFromNullishOr = false;
+  private needsOr = false;
   private primitiveIdentifiers = new Set<string>();
   private currentPlaceholderParam: string | null = null;
   private bindings = new Map<string, BindingDeclaration>();
@@ -350,7 +354,7 @@ export class Emitter {
       ) {
         this.declaredTypeNames.add(decl.id.name);
       }
-      if (decl.kind === "BindingDeclaration") this.bindings.set(decl.id.name, decl);
+      if (decl.kind === "BindingDeclaration" && "name" in decl.id) this.bindings.set(decl.id.name, decl);
     }
 
     const staticTypeNames = new Set<string>();
@@ -439,6 +443,13 @@ export class Emitter {
       header += `function __funscriptOptionFromNullishOrElse<A, B>(value: A | null | undefined, onNone: B): NonNullable<A> | B;\n`;
       header += `function __funscriptOptionFromNullishOrElse<B>(onNone: B): <A>(value: A | null | undefined) => NonNullable<A> | B;\n`;
       header += `function __funscriptOptionFromNullishOrElse(...args: any[]): any {\n  if (args.length === 1) { const onNone = args[0]; return (value: any) => __funscriptOptionFromNullishOrElse(value, onNone); }\n  let [value, onNone] = args;\n  while (value !== null && value !== undefined && typeof value === "object" && "_tag" in value) {\n    if (value._tag === "Some") value = value.value;\n    else if (value._tag === "None") return onNone;\n    else break;\n  }\n  if (value !== null && value !== undefined) return value;\n  return onNone;\n}\n`;
+    }
+    if (this.needsFromNullishOr) {
+      this.effectImports.add("Option");
+      header += `function __funscriptOptionFromNullishOr<A>(value: A): A extends import("effect").Option.Option<any> ? A : import("effect").Option.Option<NonNullable<A>> {\n  if (Option.isOption(value)) return value as any;\n  return Option.fromNullishOr(value) as any;\n}\n`;
+    }
+    if (this.needsOr) {
+      header += `function __funscriptOr<A, B>(a: A, b: B): any {\n  if (a !== null && a !== undefined && typeof a === "object" && "_tag" in a) {\n    if (a._tag === "Some") return (a as any).value;\n    if (a._tag === "None") return b;\n  }\n  return a || b;\n}\n`;
     }
 
     if (header.length > 0) {
@@ -887,12 +898,16 @@ export class Emitter {
 
   private emitBindingDeclaration(decl: BindingDeclaration, isExport = false): string {
     const scope = this.parameterScopes.at(-1);
-    if (scope) scope.set(decl.id.name, this.isOptionalValue(decl.init));
-    const aliasedFields = !decl.isMut && decl.init.kind === "Identifier" ? this.recordFields(decl.init.name) : undefined;
-    this.recordScopes.at(-1)?.set(decl.id.name, aliasedFields);
-    if (this.isPrimitiveType(decl.typeAnnotation) || this.isPrimitive(decl.init)) {
-      this.primitiveIdentifiers.add(decl.id.name);
+    const idName = decl.id.kind === "Identifier" || decl.id.kind === "UpperIdentifier" ? decl.id.name : undefined;
+    if (idName) {
+      if (scope) scope.set(idName, this.isOptionalValue(decl.init));
+      const aliasedFields = !decl.isMut && decl.init.kind === "Identifier" ? this.recordFields(decl.init.name) : undefined;
+      this.recordScopes.at(-1)?.set(idName, aliasedFields);
+      if (this.isPrimitiveType(decl.typeAnnotation) || this.isPrimitive(decl.init)) {
+        this.primitiveIdentifiers.add(idName);
+      }
     }
+    const target = this.emitBindingTarget(decl.id);
     const exp = isExport ? "export " : "";
     const keyword = decl.isMut ? "let" : "const";
     const typeAnn = decl.typeAnnotation ? `: ${this.emitTypeNode(decl.typeAnnotation)}` : "";
@@ -923,17 +938,49 @@ export class Emitter {
         if (fn.body.kind === "BlockStatement") {
           const retExpr = fn.body.finalExpression ? this.emitExpression(fn.body.finalExpression) : "undefined";
           if (fn.body.statements.length === 0) {
-            return `${exp}${keyword} ${decl.id.name} = (${params}) => {\n${validations}\n  return Effect.runPromise(${retExpr});\n};`;
+            return `${exp}${keyword} ${target} = (${params}) => {\n${validations}\n  return Effect.runPromise(${retExpr});\n};`;
           }
           const stmts = fn.body.statements.map((s) => "    " + this.emitStatement(s)).join("\n");
-          return `${exp}${keyword} ${decl.id.name} = (${params}) => {\n${validations}\n  return Effect.runPromise(Effect.gen(function* () {\n${stmts}\n    return ${retExpr};\n  }));\n};`;
+          return `${exp}${keyword} ${target} = (${params}) => {\n${validations}\n  return Effect.runPromise(Effect.gen(function* () {\n${stmts}\n    return ${retExpr};\n  }));\n};`;
         }
-        return `${exp}${keyword} ${decl.id.name} = (${params}) => {\n${validations}\n  return Effect.runPromise(${this.emitExpression(fn.body)});\n};`;
+        return `${exp}${keyword} ${target} = (${params}) => {\n${validations}\n  return Effect.runPromise(${this.emitExpression(fn.body)});\n};`;
       }
-      return `${exp}${keyword} ${decl.id.name}${typeAnn} = Effect.runPromise(${this.emitExpression(decl.init)});`;
+      return `${exp}${keyword} ${target}${typeAnn} = Effect.runPromise(${this.emitExpression(decl.init)});`;
     }
 
-    return `${exp}${keyword} ${decl.id.name}${typeAnn} = ${this.emitExpression(decl.init)};`;
+    return `${exp}${keyword} ${target}${typeAnn} = ${this.emitExpression(decl.init)};`;
+  }
+
+  private emitBindingTarget(target: BindingTarget | Pattern): string {
+    if (target.kind === "Identifier" || target.kind === "UpperIdentifier") {
+      return target.name;
+    }
+    if (target.kind === "VariablePattern") {
+      return target.name.name;
+    }
+    if (target.kind === "WildcardPattern" || target.kind === "LiteralPattern") {
+      return "";
+    }
+    if (target.kind === "RestPattern") {
+      return `...${this.emitBindingTarget(target.argument)}`;
+    }
+    if (target.kind === "RecordPattern") {
+      const fields = target.fields.map((f) => {
+        if (f.isRest) {
+          return `...${f.key.name}`;
+        }
+        if (!f.pattern || (f.pattern.kind === "VariablePattern" && f.pattern.name.name === f.key.name)) {
+          return f.key.name;
+        }
+        return `${f.key.name}: ${this.emitBindingTarget(f.pattern)}`;
+      });
+      return `{ ${fields.join(", ")} }`;
+    }
+    if (target.kind === "ArrayPattern") {
+      const elements = target.elements.map((el) => this.emitBindingTarget(el));
+      return `[${elements.join(", ")}]`;
+    }
+    return "_";
   }
 
   // --- Expressions ---
@@ -973,7 +1020,12 @@ export class Emitter {
         return raw;
       }
       case "IndexExpression":
-        return `${this.emitExpression(expr.object)}[${this.emitExpression(expr.index)}]`;
+        if (expr.index.kind === "StringLiteral") {
+          return `${this.emitExpression(expr.object)}[${this.emitExpression(expr.index)}]`;
+        }
+        this.needsFromNullishOr = true;
+        this.effectImports.add("Option");
+        return `__funscriptOptionFromNullishOr(${this.emitExpression(expr.object)}[${this.emitExpression(expr.index)}])`;
       case "RecordExpression":
         return this.emitRecordExpression(expr);
       case "ArrayExpression":
@@ -1050,6 +1102,17 @@ export class Emitter {
     ) {
       this.needsFromNullishOrElse = true;
       return `__funscriptOptionFromNullishOrElse(${expr.args.map((a) => this.emitExpression(a)).join(", ")})`;
+    }
+
+    if (
+      expr.callee.kind === "MemberExpression" &&
+      (expr.callee.object.kind === "Identifier" || expr.callee.object.kind === "UpperIdentifier") &&
+      expr.callee.object.name === "Option" &&
+      expr.callee.property.name === "fromNullishOr"
+    ) {
+      this.needsFromNullishOr = true;
+      this.effectImports.add("Option");
+      return `__funscriptOptionFromNullishOr(${expr.args.map((a) => this.emitExpression(a)).join(", ")})`;
     }
 
     if (
@@ -1484,7 +1547,8 @@ export class Emitter {
       case "and":
         return `(${left} && ${right})`;
       case "or":
-        return `(${left} || ${right})`;
+        this.needsOr = true;
+        return `__funscriptOr(${left}, ${right})`;
       case "@=":
         if (this.isPrimitive(expr.left) || this.isPrimitive(expr.right)) {
           throw new Error(`Reference identity operator '@=' cannot be used with primitive values; use '#=' or '#!' for value equality`);
@@ -1580,7 +1644,8 @@ export class Emitter {
           const base = this.emitTypeNode(p.typeAnnotation);
           if (p.optional) {
             this.effectImports.add("Option");
-            typeAnn = `: ${base} | Option.Option<${base}>`;
+            const wrappedBase = p.typeAnnotation.kind === "FunctionTypeNode" ? `(${base})` : base;
+            typeAnn = `: ${wrappedBase} | Option.Option<${base}>`;
           } else {
             typeAnn = `: ${base}`;
           }
@@ -1642,7 +1707,7 @@ export class Emitter {
     const aliases = new Set<BindingDeclaration>();
     if (expr.body.kind === "BlockStatement") {
       for (const stmt of expr.body.statements) {
-        if (stmt.kind !== "BindingDeclaration" || stmt.isMut || stmt.isJs || stmt.init.kind !== "Identifier" || records.has(stmt.id.name)) continue;
+        if (stmt.kind !== "BindingDeclaration" || stmt.isMut || stmt.isJs || stmt.init.kind !== "Identifier" || !("name" in stmt.id) || records.has(stmt.id.name)) continue;
         const fields = records.get(stmt.init.name);
         if (!fields || [...fields.values()].some((field) => field.defaultBinding)) continue;
         records.set(stmt.id.name, fields);
@@ -1681,13 +1746,19 @@ export class Emitter {
     return expr.kind === "RecordExpression" ? `(${emitted})` : emitted;
   }
 
+  private emitIndexTarget(expr: IndexExpression): string {
+    return `${this.emitExpression(expr.object)}[${this.emitExpression(expr.index)}]`;
+  }
+
   private emitStatement(stmt: Statement): string {
     if (stmt.kind === "BindingDeclaration") {
       return this.emitBindingDeclaration(stmt);
     }
     if (stmt.kind === "AssignmentStatement") {
-      const target = stmt.target.kind === "Identifier" || stmt.target.kind === "IndexExpression"
-        ? this.emitExpression(stmt.target)
+      const target = stmt.target.kind === "Identifier"
+        ? stmt.target.name
+        : stmt.target.kind === "IndexExpression"
+        ? this.emitIndexTarget(stmt.target)
         : stmt.target.path.map((p) => p.name).join(".");
       return `${target} = ${this.emitExpression(stmt.value)};`;
     }
@@ -1889,8 +1960,17 @@ export class Emitter {
       return `{ ${fields} }`;
     }
     if (pat.kind === "ArrayPattern") {
-      const elements = pat.elements.map((e) => this.emitPattern(e)).join(", ");
-      return `[${elements}]`;
+      const elements: string[] = [];
+      for (const el of pat.elements) {
+        if (el.kind === "RestPattern") {
+          elements.push("...P.array()");
+        } else if (el.kind === "VariablePattern" || el.kind === "WildcardPattern") {
+          elements.push("P._");
+        } else {
+          elements.push(this.emitPattern(el));
+        }
+      }
+      return `[${elements.join(", ")}]`;
     }
     return "P._";
   }
@@ -1907,6 +1987,8 @@ export class Emitter {
         if (sub.length > 0) {
           parts.push(`${f.key.name}: { ${sub.join(", ")} }`);
         }
+      } else if (f.pattern.kind === "ArrayPattern") {
+        parts.push(`${f.key.name}: ${this.emitBindingTarget(f.pattern)}`);
       }
     }
     return parts;
@@ -1942,6 +2024,28 @@ export class Emitter {
       return `($matched) => ${this.emitArrowExpression(body)}`;
     }
 
+    if (pat?.kind === "ArrayPattern") {
+      const scrutineeName = scrutinee?.kind === "Identifier" ? scrutinee.name : undefined;
+      const bindingStr = this.emitBindingTarget(pat);
+      const lines: string[] = [];
+      if (scrutineeName) {
+        lines.push(`const ${scrutineeName} = $matched;`);
+      }
+      if (pat.elements.length > 0 && bindingStr !== "[]") {
+        lines.push(`const ${bindingStr} = $matched;`);
+      }
+      if (lines.length > 0) {
+        if (body.kind === "BlockStatement") {
+          return `($matched: any) => {\n    ${lines.join("\n    ")}\n${this.emitFunctionBody(body)}\n  }`;
+        }
+        return `($matched: any) => {\n    ${lines.join("\n    ")}\n    return ${this.emitExpression(body)};\n  }`;
+      }
+      if (body.kind === "BlockStatement") {
+        return `() => {\n${this.emitFunctionBody(body)}\n}`;
+      }
+      return `() => ${this.emitArrowExpression(body)}`;
+    }
+
     if (pat?.kind === "OrPattern" && pat.patterns.every((p) => p.kind === "RecordPattern")) {
       const scrutineeName = scrutinee?.kind === "Identifier" ? scrutinee.name : undefined;
       if (scrutineeName) {
@@ -1958,12 +2062,17 @@ export class Emitter {
 
     const vars = pat ? this.collectPatternVariables(pat) : [];
     const optionalParameter = scrutinee?.kind === "Identifier" && this.isOptionalParameter(scrutinee.name);
-    if (pat?.kind === "ConstructorPattern" && pat.constructorName.name === "Some" && pat.args.length === 1 && pat.args[0].kind === "VariablePattern" && vars.length === 1) {
-      const unpack = optionalParameter
-        ? `const { value: ${vars[0]} } = $matched;`
-        : `const { _tag: _, ...__fields } = $matched;\n    const [${vars[0]}] = Object.values(__fields) as [typeof $matched extends import("effect").Option.Some<infer V> ? V : any];`;
-      if (body.kind === "BlockStatement") return `($matched) => {\n    ${unpack}\n${this.emitFunctionBody(body)}\n  }`;
-      return `($matched) => {\n    ${unpack}\n    return ${this.emitExpression(body)};\n  }`;
+    if (pat?.kind === "ConstructorPattern" && pat.constructorName.name === "Some" && pat.args.length === 1) {
+      const bindingTarget = this.emitBindingTarget(pat.args[0]);
+      if (bindingTarget && bindingTarget !== "[]" && bindingTarget !== "{}") {
+        const unpack = optionalParameter
+          ? `const { value: ${bindingTarget} } = $matched;`
+          : `const { value: ${bindingTarget} } = $matched as any;`;
+        if (body.kind === "BlockStatement") return `($matched: any) => {\n    ${unpack}\n${this.emitFunctionBody(body)}\n  }`;
+        return `($matched: any) => {\n    ${unpack}\n    return ${this.emitExpression(body)};\n  }`;
+      }
+      if (body.kind === "BlockStatement") return `() => {\n${this.emitFunctionBody(body)}\n}`;
+      return `() => ${this.emitArrowExpression(body)}`;
     }
     if (vars.length > 0) {
       const unpack = `const { _tag: _, ...__fields } = $matched as any;\n    const [${vars.join(", ")}] = Object.values(__fields) as any[];`;
@@ -2009,6 +2118,9 @@ export class Emitter {
       }
       return vars;
     }
+    if (pat.kind === "RestPattern") {
+      return this.collectPatternVariables(pat.argument);
+    }
     return [];
   }
 
@@ -2017,7 +2129,7 @@ export class Emitter {
     const statements = expr.body
       .map((s) => {
         if (s.kind === "EffectBindStatement") {
-          return `    const ${s.id.name} = yield* ${this.emitEffectCall(s.effect)};`;
+          return `    const ${this.emitBindingTarget(s.id)} = yield* ${this.emitEffectCall(s.effect)};`;
         }
         if (s.kind === "EffectDiscardStatement") {
           return `    yield* ${this.emitEffectCall(s.effect)};`;
@@ -2026,8 +2138,10 @@ export class Emitter {
           return `    ${this.emitBindingDeclaration(s)}`;
         }
         if (s.kind === "AssignmentStatement") {
-          const target = s.target.kind === "Identifier" || s.target.kind === "IndexExpression"
-            ? this.emitExpression(s.target)
+          const target = s.target.kind === "Identifier"
+            ? s.target.name
+            : s.target.kind === "IndexExpression"
+            ? this.emitIndexTarget(s.target)
             : s.target.path.map((p) => p.name).join(".");
           return `    ${target} = ${this.emitExpression(s.value)};`;
         }

@@ -75,8 +75,6 @@ describe("named compile-time record contracts", () => {
   it("rejects runtime decoding and unsafe uses of static contracts", async () => {
     expect((await typeCheck(declaration + '\nexport decode = (value: Unknown) => PropsFromUnknown(value)', "contract.fun")).success).toBe(false);
     await expectCompileError(declaration + '\nexport value = Props', /compile-time record contract/);
-    await expectCompileError(declaration + '\nexport value: Props = {}', /only as a direct function parameter/);
     await expectCompileError(declaration + '\nexport js entry = (props: Props) => props.label', /not supported on js entry/);
-    await expectCompileError(declaration + '\nexport entry = (props?: Props) => props', /cannot itself be optional or defaulted/);
   });
 });

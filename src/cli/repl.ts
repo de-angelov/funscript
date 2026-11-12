@@ -147,7 +147,7 @@ export async function compileReplCode(
   for (const [index, node] of compiled!.ast.body.entries()) {
     const declaration = node.kind === "ExportDeclaration" ? node.declaration : node;
     const snippet = checkedSource.slice(node.span.start.offset, compiled!.ast.body[index + 1]?.span.start.offset);
-    const key = "id" in declaration ? declaration.id.name : snippet;
+    const key = "id" in declaration && "name" in declaration.id ? declaration.id.name : snippet;
     nextDeclarations.set(key, snippet);
   }
   // These modules are provided by setupReplContext. Ambient globals avoid

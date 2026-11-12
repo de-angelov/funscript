@@ -71,7 +71,7 @@ export function resolveImportedRecordFunctions(ast: Program, filename: string, v
     const bindings: BindingDeclaration[] = [];
     for (const item of program.body) {
       const declaration = item.kind === "ExportDeclaration" ? item.declaration : item;
-      if (declaration.kind === "BindingDeclaration" && declaration.id.name === name) bindings.push(declaration);
+      if (declaration.kind === "BindingDeclaration" && "name" in declaration.id && declaration.id.name === name) bindings.push(declaration);
     }
     if (bindings.length > 1) return undefined;
     const binding = bindings[0];
@@ -102,7 +102,7 @@ export function resolveImportedRecordFunctions(ast: Program, filename: string, v
       if (entry.expression.kind === "FunctionExpression") return positionsOf(entry.expression, program, file);
       return entry.expression.kind === "Identifier" ? resolveLocal(program, file, entry.expression.name, next) : undefined;
     }
-    const entry = program.body.find((item) => item.kind === "ExportDeclaration" && item.declaration.kind === "BindingDeclaration" && item.declaration.id.name === name);
+    const entry = program.body.find((item) => item.kind === "ExportDeclaration" && item.declaration.kind === "BindingDeclaration" && "name" in item.declaration.id && item.declaration.id.name === name);
     return entry ? resolveLocal(program, file, name, next) : undefined;
   };
 
@@ -126,7 +126,7 @@ export function resolveImportedRecordFunctions(ast: Program, filename: string, v
       const program = programAt(target);
       if (!program) continue;
       for (const entry of program.body) {
-        const name = entry.kind === "ExportDeclaration" && entry.declaration.kind === "BindingDeclaration" ? entry.declaration.id.name : entry.kind === "ExportDefaultDeclaration" ? "default" : undefined;
+        const name = entry.kind === "ExportDeclaration" && entry.declaration.kind === "BindingDeclaration" && "name" in entry.declaration.id ? entry.declaration.id.name : entry.kind === "ExportDefaultDeclaration" ? "default" : undefined;
         if (!name) continue;
         const positions = resolveExport(target, name, new Set());
         if (positions) result.set(`${item.namespaceBinding.name}.${name}`, positions);

@@ -593,7 +593,7 @@ function handleFunctionExpression(
     diagnostics.push({
       kind: "ambiguous-trailing-binding",
       severity: "warning",
-      message: `Function block ends with variable declaration '${bind.id?.name ?? ""}'. Safe automated migration cannot assume this was intended as the return value.`,
+      message: `Function block ends with variable declaration '${("name" in bind.id ? bind.id.name : "")}'. Safe automated migration cannot assume this was intended as the return value.`,
       span: bind.span,
       filename,
     });

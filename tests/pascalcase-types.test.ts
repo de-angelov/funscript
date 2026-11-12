@@ -11,13 +11,8 @@ function evaluate(typescript: string, expression: string) {
   const javascript = ts.transpileModule(typescript, {
     compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.ESNext },
   }).outputText.replace(/^import .*;\n/gm, "").replace(/\bexport /g, "");
- return new Function(
-    "Schema", "String", "Struct", "Duration", "pipe",
-    "check", "isGreaterThan",
-    `${javascript}\nreturn ${expression};`
-  )(
+  return new Function("Schema", "String", "Struct", "Duration", "pipe", `${javascript}\nreturn ${expression};`)(
     Schema, String, Struct, Duration, pipe,
-    Schema.check, Schema.isGreaterThan,
   );
 }
 
@@ -62,7 +57,7 @@ schema Payload = {
   delay: Duration
 }
 schema Impossible = { value: Never }
-schema Positive = Number |> check(isGreaterThan(0))
+schema Positive = Number |> Schema.check(Schema.isGreaterThan(0))
 `);
     const payload = { name: "Ada", count: 2, active: true, empty: undefined, anything: {}, tags: ["ok"], choice: Option.none(), flags: { ok: true }, delay: Duration.seconds(1) };
     const { Payload, Impossible, Positive } = evaluate(typescript, "({ Payload, Impossible, Positive })");
