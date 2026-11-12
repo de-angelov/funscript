@@ -365,22 +365,26 @@ export fn doNothing(): Unit =>
     expect(Effect.runSync(runEffect)).toBeUndefined();
   });
 
-  it("enforces safe division operator without NaN/Infinity leaks", () => {
+  it("emits standard numerical division and supports total division via Number.divide", () => {
     const src = `
 export fn divide(a: Number, b: Number): Number => a / b
 export fn half(a: Number): Number => a / 2
+export fn totalDivide(a: Number, b: Number) => Number.divide(a, b)
 `;
     const res = Effect.runSync(compileString(src));
-    expect(res.typescript).toContain("safeDivide(a, b)");
+    expect(res.typescript).toContain("(a / b)");
     expect(res.typescript).toContain("(a / 2)");
+    expect(res.typescript).toContain("Number.divide(a, b)");
 
     const divide = evaluateTsFunction(res.typescript, "divide");
     const half = evaluateTsFunction(res.typescript, "half");
+    const totalDivide = evaluateTsFunction(res.typescript, "totalDivide");
 
     expect(divide(10, 2)).toBe(5);
-    expect(divide(10, 0)).toBe(0);
-    expect(divide(0, 0)).toBe(0);
     expect(half(10)).toBe(5);
+    expect(Option.isSome(totalDivide(10, 2))).toBe(true);
+    expect(Option.getOrNull(totalDivide(10, 2))).toBe(5);
+    expect(Option.isNone(totalDivide(10, 0))).toBe(true);
   });
 
   it("bans native Array prototype methods under Effect style guide", () => {

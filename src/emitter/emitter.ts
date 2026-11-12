@@ -395,7 +395,6 @@ export class Emitter {
   private needsFromNullishOr = false;
   private needsOptionTry = false;
   private needsOr = false;
-  private needsSafeDivide = false;
   private primitiveIdentifiers = new Set<string>();
   private currentPlaceholderParam: string | null = null;
   private bindings = new Map<string, BindingDeclaration>();
@@ -535,9 +534,6 @@ export class Emitter {
     }
     if (this.needsOr) {
       header += `type Or<A, B> = A extends { readonly _tag: "Some"; readonly value: infer V } ? V | B : A extends { readonly _tag: "None" } ? B : Exclude<NonNullable<A>, false> | B;\nfunction or<A, B>(a: A, b: B): Or<A, B> {\n  if (a !== null && a !== undefined && typeof a === "object" && "_tag" in a) {\n    if (a._tag === "Some") return (a as any).value;\n    if (a._tag === "None") return b as any;\n  }\n  return (a || b) as any;\n}\n`;
-    }
-    if (this.needsSafeDivide) {
-      header += `function safeDivide(a: number, b: number): number {\n  const result = a / b;\n  return globalThis.Number.isFinite(result) ? result : 0;\n}\n`;
     }
 
     if (header.length > 0) {
@@ -1835,13 +1831,6 @@ export class Emitter {
         const mark = (operand: string, offset: number) =>
           `__funscriptNumericOperand(${offset}, ${JSON.stringify(expr.operator)}, ${operand})`;
         return `(${mark(left, expr.left.span.start.offset)} ${expr.operator} ${mark(right, expr.right.span.start.offset)})`;
-      }
-      case "/": {
-        if (expr.right.kind === "NumberLiteral" && expr.right.value !== 0) {
-          return `(${left} / ${right})`;
-        }
-        this.needsSafeDivide = true;
-        return `safeDivide(${left}, ${right})`;
       }
       default:
         return `(${left} ${expr.operator} ${right})`;

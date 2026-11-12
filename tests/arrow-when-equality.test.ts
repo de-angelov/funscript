@@ -125,7 +125,7 @@ export fn divide(a: Number, b: Number) => Number {
 
       const res = await Effect.runPromise(compileString(code));
       expect(res.typescript).toContain("if ((b === 0)) return 0;");
-      expect(res.typescript).toContain("safeDivide(a, b)");
+      expect(res.typescript).toContain("(a / b)");
     });
 
     it("Form 1 (Early return): compiler rejects outside function context", async () => {
