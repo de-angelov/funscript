@@ -346,6 +346,10 @@ export function inferPipelineCompanions(
       // its input is intentionally a Promise, not a companion operation.
       if (fnName === "js") continue;
 
+      // User scope wins: local bindings and explicit imports take precedence
+      // over type-directed companion dispatch.
+      if (localBindings.has(fnName)) continue;
+
       // 1. Comparison operations (lessThan, greaterThan, between, etc.)
       if (fnName in COMPARISON_METHOD_MAP) {
         const method = COMPARISON_METHOD_MAP[fnName];

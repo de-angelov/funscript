@@ -16,7 +16,7 @@ describe("TypeScript project diagnostics", () => {
       await symlink(path.resolve("node_modules"), path.join(root, "node_modules"), "dir");
       await writeFile(path.join(root, "package.json"), '{"type":"module"}');
       await writeFile(path.join(root, "tsconfig.json"), JSON.stringify({ compilerOptions: { noEmit: true, strict: true, skipLibCheck: true, types: [] }, include: ["app/**/*.ts", ".funscript/types/**/*.ts"] }));
-      await writeFile(path.join(root, "app/example.fun"), 'export check = (value: Number) =>\n  first = value.toUpperCase()\n  => value.toUpperCase()');
+      await writeFile(path.join(root, "app/example.fun"), 'export check = (value: Number) =>\n  first: String = value\n  second: String = value\n  => second');
       await writeFile(path.join(root, "app/plain.ts"), 'const value: number = "bad";');
       await new TypeView(root).generate();
       const cli = path.resolve("dist/cli/index.js");

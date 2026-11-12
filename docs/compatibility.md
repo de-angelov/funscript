@@ -137,7 +137,7 @@ isSame = (a: Number, b: Number) => a #= b
 ### How Pipeline Resolution Works
 FunScript pipelines (`value |> stage(...)`) allow bare stage names to resolve to companion module methods based on the inferred type of the receiver expression:
 1. **Type Inference Pass:** In `inferPipelineCompanions`, the compiler analyzes the pipeline input expression within the TypeScript compilation context.
-2. **Proven Receivers:** If the receiver expression has a proven type corresponding to an Effect companion module (`Array`, `Option`, `Result`, `Effect`, `Stream`, `Chunk`, `Layer`, `Schedule`, `Schema`), bare operations in [`PIPELINE_COMPANION_CATALOG`](../src/emitter/pipeline-catalog.ts) are automatically dispatched to that companion module.
+2. **Proven Receivers:** If the receiver expression has a proven type corresponding to an Effect companion module (`Array`, `Option`, `Result`, `Effect`, `Stream`, `Chunk`, `Layer`, `Schedule`, `Schema`, `Record`, `String`, `DateTime`, `HashMap`, `HashSet`), bare operations in [`PIPELINE_COMPANION_CATALOG`](../src/emitter/pipeline-catalog.ts) are automatically dispatched to that companion module.
 
 For example, when the receiver is a proven array:
 ```funscript

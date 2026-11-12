@@ -1778,6 +1778,7 @@ export class Emitter {
       ? stage.callee.name
       : undefined;
     if (!name || preferredCompanion) return;
+    if (this.bindings.has(name) || this.userEffectBindings.has(name) || this.userEsToolkitBindings.has(name)) return;
     const candidates = pipelineCompanionCandidates(name);
     if (candidates.length > 1 && !this.options.allowAmbiguousPipeline) {
       throw new PipelineResolutionError(

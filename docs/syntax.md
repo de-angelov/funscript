@@ -954,6 +954,11 @@ const topActive = pipe(
 | `Layer<ROut, E, RIn>`           | `effect/Layer`    | `provide`, `merge`, `fresh`, `launch`, `orDie`                         |
 | `Stream<A, E, R>`               | `effect/Stream`   | `map`, `filter`, `take`, `drop`, `timeout`                             |
 | `Schema<A, I, R>`               | `effect/Schema`   | `annotate`, `optional`, `mutable`, `brand`, `check`                    |
+| `Record<K, V>`                  | `effect/Record`   | `map`, `filter`, `keys`, `values`, `pop`, `has`                        |
+| `String`                        | `effect/String`   | `toLowerCase`, `toUpperCase`, `trim`, `split`, `includes`              |
+| `DateTime`                      | `effect/DateTime` | `format`, `setZone`, `addDuration`, `isAfter`, `isBefore`              |
+| `HashMap<K, V>`                 | `effect/HashMap`  | `get`, `set`, `has`, `remove`, `size`, `isEmpty`                       |
+| `HashSet<T>`                    | `effect/HashSet`  | `has`, `add`, `remove`, `size`, `difference`, `union`                  |
 
 #### Resolution and shadowing rules
 

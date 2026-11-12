@@ -284,8 +284,12 @@ export Button = (props: Props) => <button className="btn">{props.label}</button>
       }
     });
 
-    it("prevents server-only modules from being imported into client components", async () => {
-      const plugin = funscriptPlugin();
+    it("prevents server-only modules from being imported into client components when serverBoundary is enabled", async () => {
+      const plugin = funscriptPlugin({
+        serverBoundary: {
+          allowedImporters: [/\/routes\//],
+        },
+      });
       const resolveFn = plugin.resolveId as Function;
 
       // Importing a server module from a client component during client build throws
@@ -300,7 +304,7 @@ export Button = (props: Props) => <button className="btn">{props.label}</button>
         "[vite-plugin-funscript] Server module './database.server.js' cannot be imported into client module '/src/components/UserCard.funx'."
       );
 
-      // Route modules are permitted by default when router support is active
+      // Route modules explicitly permitted in allowedImporters resolve
       const routeResult = await resolveFn.call(
         { resolve: async () => null },
         "./home.server.js",
@@ -311,19 +315,19 @@ export Button = (props: Props) => <button className="btn">{props.label}</button>
     });
 
     it("supports configurable serverBoundary options", async () => {
-      // 1. Fully disabled serverBoundary
-      const disabledPlugin = funscriptPlugin({ serverBoundary: false });
-      const disabledResolve = disabledPlugin.resolveId as Function;
-      const disabledRes = await disabledResolve.call(
+      // 1. By default serverBoundary is not enabled, so standard resolution applies
+      const defaultPlugin = funscriptPlugin();
+      const defaultResolve = defaultPlugin.resolveId as Function;
+      const defaultRes = await defaultResolve.call(
         { resolve: async () => null },
         "./db.server.js",
         "/src/components/Button.funx",
         { ssr: false }
       );
-      expect(disabledRes).toBeNull();
+      expect(defaultRes).toBeNull();
 
-      // 2. Strict client app (no allowed bridge routes)
-      const strictPlugin = funscriptPlugin({ serverBoundary: { allowedImporters: [] } });
+      // 2. Strict client app (serverBoundary: true, no allowed bridge routes)
+      const strictPlugin = funscriptPlugin({ serverBoundary: true });
       const strictResolve = strictPlugin.resolveId as Function;
       await expect(
         strictResolve.call(

@@ -1240,6 +1240,20 @@ Embeds verbatim TypeScript in a balanced `ts { ... }` block without expanding Fu
 
 See also: `js`, `schema`.
 
+## `Unit`
+
+Unit type and value representing the absence of meaningful data.
+
+```funscript
+type Unit = void
+```
+
+Used as the canonical unit type and discard return value in FunScript (e.g. '=> Unit' or 'Effect<Unit>'). Compiles cleanly to TypeScript void.
+
+
+
+See also: `Void`, `void`, `effect`.
+
 ## `unknown`
 
 The type-safe counterpart of any; represents an uninspected value.
