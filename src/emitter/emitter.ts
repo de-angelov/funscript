@@ -413,8 +413,12 @@ export class Emitter {
     for (const item of allItems) {
       const decl = item.kind === "ExportDeclaration" ? item.declaration : item;
       if (item.kind === "ImportDeclaration") {
-        for (const spec of item.specifiers) this.userImportBindings.add(spec.local.name);
-        if (item.namespaceBinding) this.userImportBindings.add(item.namespaceBinding.name);
+        if (!item.isTypeOnly) {
+          for (const spec of item.specifiers) {
+            if (!spec.isTypeOnly) this.userImportBindings.add(spec.local.name);
+          }
+          if (item.namespaceBinding) this.userImportBindings.add(item.namespaceBinding.name);
+        }
       }
       if (item.kind === "ImportDeclaration" && item.source.raw === '"effect"') {
         for (const spec of item.specifiers) this.userEffectBindings.add(spec.local.name);
@@ -673,7 +677,7 @@ export class Emitter {
           targetType.name.name !== "Array" &&
           targetType.name.name !== "Record"
         ) {
-          schemaExpr = this.options.importedSchemas?.get(decl.id.name) ?? `(Schema.Unknown as unknown as Schema.Schema<${this.emitTypeNode(targetType)}>)`;
+          schemaExpr = this.options.importedSchemas?.get(decl.id.name) ?? `(Schema.Unknown as unknown as Schema.Codec<${this.emitTypeNode(targetType)}>)`;
         } else {
           schemaExpr = this.options.importedSchemas?.get(decl.id.name) ?? this.emitSchemaTypeField(targetType);
         }
@@ -681,7 +685,7 @@ export class Emitter {
       }
       case "ImportedTsSchema": {
         this.effectImports.add("Schema");
-        const schemaExpr = this.options.importedSchemas?.get(decl.id.name) ?? `(Schema.Unknown as unknown as Schema.Schema<${this.emitTypeNode(decl.body.typeNode)}>)`;
+        const schemaExpr = this.options.importedSchemas?.get(decl.id.name) ?? `(Schema.Unknown as unknown as Schema.Codec<${this.emitTypeNode(decl.body.typeNode)}>)`;
         return `${exp}const ${name} = ${schemaExpr};\n${exp}type ${name} = typeof ${name}.Type;\n${exp}const ${name}FromUnknown = (input: unknown): ${name} => Schema.decodeUnknownSync(${name})(input);`;
       }
     }
@@ -690,7 +694,7 @@ export class Emitter {
   private emitSchemaTypeField(typeNode: TypeNode): string {
     if (typeNode.kind === "QualifiedTypeReferenceNode" || typeNode.kind === "TypeQueryNode" || typeNode.kind === "IndexedAccessTypeNode") {
       this.effectImports.add("Schema");
-      return `(Schema.Unknown as unknown as Schema.Schema<${this.emitTypeNode(typeNode)}>)`;
+      return `(Schema.Unknown as unknown as Schema.Codec<${this.emitTypeNode(typeNode)}>)`;
     }
     if (typeNode.kind === "ParenthesizedTypeNode") {
       return this.emitSchemaTypeField(typeNode.typeNode);
@@ -733,10 +737,13 @@ export class Emitter {
       if (tName === "Record" && typeNode.typeArgs?.length === 2) {
         return `Schema.Record(${this.emitSchemaTypeField(typeNode.typeArgs[0])}, ${this.emitSchemaTypeField(typeNode.typeArgs[1])})`;
       }
-      if (!this.runtimeSchemaNames.has(tName)) {
-        return `(Schema.Unknown as unknown as Schema.Schema<${this.emitTypeNode(typeNode)}>)`;
+      if (this.runtimeSchemaNames.has(tName)) return tName;
+      if (this.options.importedSchemas?.has(tName)) return this.options.importedSchemas.get(tName)!;
+      if (this.userImportBindings.has(tName)) return tName;
+      if (this.recordContracts.has(tName)) {
+        throw new FunScriptError(`'${tName}' is a compile-time record contract, not a runtime schema; it cannot be used as a runtime schema field`, typeNode.span);
       }
-      return tName;
+      return `(Schema.Unknown as unknown as Schema.Codec<${this.emitTypeNode(typeNode)}>)`;
     }
     return this.emitTypeNode(typeNode);
   }

@@ -139,4 +139,11 @@ export test = getUserId(ProfileFromUnknown({ id: "u_1", accountId: "a_1" }))
     const checked = await typeCheck(source + '\nexport test = read(OrderIdFromUnknown("ord_1"))', "schema-brand-qualified.fun");
     expect(checked.success, checked.formattedOutput).toBe(true);
   });
+
+  it("composes imported schemas in record schemas without widening to Schema.Unknown", async () => {
+    const source = 'import { Country } from "./country.js"\nexport schema CardProps = {\n  country: Country\n  active: Boolean\n}';
+    const compiled = await compile(source);
+    expect(compiled.typescript).toContain("country: Country");
+    expect(compiled.typescript).not.toContain("Schema.Unknown as unknown");
+  });
 });
