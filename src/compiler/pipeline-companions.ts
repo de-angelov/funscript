@@ -375,7 +375,7 @@ export function inferPipelineCompanions(
       }
 
       // 2. String companion operations
-      if (currentCompanion === "String" && STRING_COMPANION_METHODS.has(fnName)) {
+      if (currentCompanion === "String" && STRING_COMPANION_METHODS.has(fnName) && !ES_TOOLKIT_STRING_METHODS.has(fnName)) {
         const method = fnName === "lines" ? "linesIterator" : fnName;
         stageResolutions.set(stage.span.start.offset, { module: "String", method });
         if (fnName === "lines" || fnName === "split") {
@@ -396,7 +396,10 @@ export function inferPipelineCompanions(
       // 4. Catalog module operations (Array, Option, Effect, etc.)
       if (currentCompanion && currentCompanion in PIPELINE_COMPANION_CATALOG) {
         const catalog = PIPELINE_COMPANION_CATALOG[currentCompanion as PipelineCompanionModule];
-        if (catalog.includes(fnName) || (currentCompanion === "Effect" && fnName in EFFECT_PIPELINE_COMPATIBILITY_ALIASES)) {
+        if (
+          !ES_TOOLKIT_STRING_METHODS.has(fnName) &&
+          (catalog.includes(fnName) || (currentCompanion === "Effect" && fnName in EFFECT_PIPELINE_COMPATIBILITY_ALIASES))
+        ) {
           const method = currentCompanion === "Effect" && fnName in EFFECT_PIPELINE_COMPATIBILITY_ALIASES
             ? EFFECT_PIPELINE_COMPATIBILITY_ALIASES[fnName]
             : fnName;

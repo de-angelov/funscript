@@ -307,8 +307,8 @@ export safeThrow = (invalidJson: String) =>
   it("compiles and executes template literals and tagged templates with type arguments", () => {
     const src = `
 export tagFn = (strings: Array<String>, id: Number) =>
-  s0 = strings[0] or ""
-  s1 = strings[1] or ""
+  s0 = match strings[0] | Some(v) => v | None => ""
+  s1 = match strings[1] | Some(v) => v | None => ""
   => s0 + id + s1
 
 export query = (id: Number) =>
@@ -525,7 +525,9 @@ export fn toNum(s: String) => Number.parseInt(s)
 
     const validNumberParse = `
 export fn parseTotal(s: String): Number =>
-  Number.parse(s) or 0
+  match Number.parse(s)
+    | Some(n) => n
+    | None => 0
 `;
     const res = Effect.runSync(compileString(validNumberParse));
     expect(res.typescript).toContain("Number.parse");

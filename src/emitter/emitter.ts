@@ -385,6 +385,7 @@ export class Emitter {
   private userEffectBindings = new Set<string>();
   private effectModuleBindings = new Set<string>();
   private userEsToolkitBindings = new Set<string>();
+  private userImportBindings = new Set<string>();
   private esToolkitImports = new Set<string>();
   private needsTsPattern = false;
   private needsMutative = false;
@@ -394,7 +395,6 @@ export class Emitter {
   private needsFromNullishOrElse = false;
   private needsFromNullishOr = false;
   private needsOptionTry = false;
-  private needsOr = false;
   private primitiveIdentifiers = new Set<string>();
   private currentPlaceholderParam: string | null = null;
   private bindings = new Map<string, BindingDeclaration>();
@@ -412,6 +412,10 @@ export class Emitter {
     const allItems = (contextProgram ?? program)?.body ?? [];
     for (const item of allItems) {
       const decl = item.kind === "ExportDeclaration" ? item.declaration : item;
+      if (item.kind === "ImportDeclaration") {
+        for (const spec of item.specifiers) this.userImportBindings.add(spec.local.name);
+        if (item.namespaceBinding) this.userImportBindings.add(item.namespaceBinding.name);
+      }
       if (item.kind === "ImportDeclaration" && item.source.raw === '"effect"') {
         for (const spec of item.specifiers) this.userEffectBindings.add(spec.local.name);
       }
@@ -531,9 +535,6 @@ export class Emitter {
     if (this.needsOptionTry) {
       this.effectImports.add("Option");
       header += `function optionTry<A>(thunk: () => A): import("effect").Option.Option<NonNullable<A>> {\n  try {\n    return Option.fromNullishOr(thunk()) as any;\n  } catch {\n    return Option.none();\n  }\n}\n`;
-    }
-    if (this.needsOr) {
-      header += `type Or<A, B> = A extends { readonly _tag: "Some"; readonly value: infer V } ? V | B : A extends { readonly _tag: "None" } ? B : Exclude<NonNullable<A>, false> | B;\nfunction or<A, B>(a: A, b: B): Or<A, B> {\n  if (a !== null && a !== undefined && typeof a === "object" && "_tag" in a) {\n    if (a._tag === "Some") return (a as any).value;\n    if (a._tag === "None") return b as any;\n  }\n  return (a || b) as any;\n}\n`;
     }
 
     if (header.length > 0) {
@@ -1606,33 +1607,48 @@ export class Emitter {
     // 1. Bare CallExpression: reduce(acc, f), map(f), lessThanOrEqualTo(0), orDie()
     if (stage.kind === "CallExpression" && stage.callee.kind === "Identifier") {
       const name = stage.callee.name;
-      const companion = this.getCompanionModule(name, preferredCompanion);
-      if (companion) {
-        this.effectImports.add(companion);
-        if (companion === "Schema" && name === "decode") {
-          this.needsDecodeUnknown = true;
+      if (!this.isUserBinding(name)) {
+        if ((!preferredCompanion || (preferredCompanion === "String" && ES_TOOLKIT_STRING_METHODS.has(name))) && ES_TOOLKIT_METHODS.has(name)) {
+          this.esToolkitImports.add(name);
+          if (stage.args.length === 0) {
+            return stage.callee;
+          }
+          if (ES_TOOLKIT_DATA_LAST_CALLS.has(name) && !this.hasPlaceholder(stage)) {
+            return {
+              ...stage,
+              args: [{ kind: "Placeholder", span: stage.span }, ...stage.args],
+            };
+          }
+          return stage;
         }
-        return {
-          ...stage,
-          args: companion === "Struct" && (name === "pick" || name === "omit")
-            ? [{ kind: "ArrayExpression", elements: stage.args, span: stage.span }]
-            : stage.args,
-          callee: {
-            kind: "MemberExpression",
-            object: { kind: "UpperIdentifier", name: companion, span: stage.callee.span },
-            property: {
-              ...stage.callee,
-              name: name === "lines"
-                ? "linesIterator"
-                : name === "decode"
-                ? "decodeUnknown"
-                : (companion === "Number" || companion === "DateTime") && name in COMPARISON_METHOD_MAP
-                ? COMPARISON_METHOD_MAP[name]
-                : name,
+        const companion = this.getCompanionModule(name, preferredCompanion);
+        if (companion) {
+          this.effectImports.add(companion);
+          if (companion === "Schema" && name === "decode") {
+            this.needsDecodeUnknown = true;
+          }
+          return {
+            ...stage,
+            args: companion === "Struct" && (name === "pick" || name === "omit")
+              ? [{ kind: "ArrayExpression", elements: stage.args, span: stage.span }]
+              : stage.args,
+            callee: {
+              kind: "MemberExpression",
+              object: { kind: "UpperIdentifier", name: companion, span: stage.callee.span },
+              property: {
+                ...stage.callee,
+                name: name === "lines"
+                  ? "linesIterator"
+                  : name === "decode"
+                  ? "decodeUnknown"
+                  : (companion === "Number" || companion === "DateTime") && name in COMPARISON_METHOD_MAP
+                  ? COMPARISON_METHOD_MAP[name]
+                  : name,
+              },
+              span: stage.callee.span,
             },
-            span: stage.callee.span,
-          },
-        };
+          };
+        }
       }
       if (!this.bindings.has(name) && ES_TOOLKIT_METHODS.has(name)) {
         this.esToolkitImports.add(name);
@@ -1702,15 +1718,21 @@ export class Emitter {
     // 2. Bare Identifier in pipeline: orDie, length, etc.
     if (stage.kind === "Identifier") {
       const name = stage.name;
-      const companion = this.getCompanionModule(name, preferredCompanion);
-      if (companion) {
-        this.effectImports.add(companion);
-        return {
-          kind: "MemberExpression",
-          object: { kind: "UpperIdentifier", name: companion, span: stage.span },
-          property: { ...stage, name: name === "lines" ? "linesIterator" : name },
-          span: stage.span,
-        };
+      if (!this.isUserBinding(name)) {
+        if ((!preferredCompanion || (preferredCompanion === "String" && ES_TOOLKIT_STRING_METHODS.has(name))) && ES_TOOLKIT_METHODS.has(name)) {
+          this.esToolkitImports.add(name);
+          return stage;
+        }
+        const companion = this.getCompanionModule(name, preferredCompanion);
+        if (companion) {
+          this.effectImports.add(companion);
+          return {
+            kind: "MemberExpression",
+            object: { kind: "UpperIdentifier", name: companion, span: stage.span },
+            property: { ...stage, name: name === "lines" ? "linesIterator" : name },
+            span: stage.span,
+          };
+        }
       }
       if (!this.bindings.has(name) && ES_TOOLKIT_METHODS.has(name)) {
         this.esToolkitImports.add(name);
@@ -1737,6 +1759,7 @@ export class Emitter {
   }
 
   private getCompanionModule(name: string, preferredCompanion?: CompanionModule): CompanionModule | undefined {
+    if (name === "pick" || name === "omit") return "Struct";
     if (preferredCompanion && this.isCompanionOperation(preferredCompanion, name)) return preferredCompanion;
     const candidates: CompanionModule[] = [];
     if (ARRAY_COMPANION_METHODS.has(name)) candidates.push("Array");
@@ -1763,8 +1786,18 @@ export class Emitter {
   private isCompanionOperation(module: CompanionModule, operation: string): boolean {
     if (module === "Number") return NUMBER_COMPANION_METHODS.has(operation);
     if (module === "Duration") return DURATION_COMPANION_METHODS.has(operation);
+    if (module === "Struct") return operation === "pick" || operation === "omit";
     return (PIPELINE_COMPANION_CATALOG[module as PipelineCompanionModule]?.includes(operation) ?? false) ||
       (module === "Effect" && operation in EFFECT_PIPELINE_COMPATIBILITY_ALIASES);
+  }
+
+  private isUserBinding(name: string): boolean {
+    return (
+      this.bindings.has(name) ||
+      this.userImportBindings.has(name) ||
+      this.userEffectBindings.has(name) ||
+      this.userEsToolkitBindings.has(name)
+    );
   }
 
   private assertPipelineStageIsNotAmbiguous(stage: Expression, preferredCompanion?: CompanionModule): void {
@@ -1774,7 +1807,7 @@ export class Emitter {
       ? stage.callee.name
       : undefined;
     if (!name || preferredCompanion) return;
-    if (this.bindings.has(name) || this.userEffectBindings.has(name) || this.userEsToolkitBindings.has(name)) return;
+    if (this.isUserBinding(name)) return;
     const candidates = pipelineCompanionCandidates(name);
     if (candidates.length > 1 && !this.options.allowAmbiguousPipeline) {
       throw new PipelineResolutionError(
@@ -1795,8 +1828,7 @@ export class Emitter {
       case "and":
         return `(${left} && ${right})`;
       case "or":
-        this.needsOr = true;
-        return `or(${left}, ${right})`;
+        return `(${left} || ${right})`;
       case "@=":
         if (this.isPrimitive(expr.left) || this.isPrimitive(expr.right)) {
           throw new Error(`Reference identity operator '@=' cannot be used with primitive values; use '#=' or '#!' for value equality`);
