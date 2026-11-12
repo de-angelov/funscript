@@ -24,3 +24,15 @@ Combine numeric comparisons with short-circuit conjunction.
 ```funscript
 export inRange = (value: Number) => value >= 0 and value < 10
 ```
+
+## Numeric AssemblyScript kernels
+
+Call an embedded numeric WebAssembly kernel from FunScript.
+
+```funscript
+as {
+  export function square(value: f64): f64 { return value * value; }
+}
+
+export squareNumber = (value: Number) => square(value)
+```

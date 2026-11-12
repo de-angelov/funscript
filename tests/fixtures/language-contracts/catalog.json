@@ -49,6 +49,33 @@
           }
         ]
       }
+    },
+    {
+      "id": "assemblyscript-numeric",
+      "title": "Numeric AssemblyScript kernels",
+      "description": "Call an embedded numeric WebAssembly kernel from FunScript.",
+      "file": "assemblyscript.fun",
+      "tokens": [
+        "as",
+        "AS_CODE"
+      ],
+      "behavior": {
+        "export": "squareNumber",
+        "cases": [
+          {
+            "args": [
+              3
+            ],
+            "expected": 9
+          },
+          {
+            "args": [
+              -2
+            ],
+            "expected": 4
+          }
+        ]
+      }
     }
   ],
   "legacyTokens": [
