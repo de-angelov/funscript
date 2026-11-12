@@ -81,9 +81,9 @@ export testFn = (raw: Unknown, opt: Option<String>) =>
   => [a, b]
 `;
     const res = Effect.runSync(compileString(src));
-    expect(res.typescript).toContain("__funscriptOptionFromNullishOrElse");
-    expect(res.typescript).toContain('__funscriptOptionFromNullishOrElse(raw, "default")');
-    expect(res.typescript).toContain('__funscriptOptionFromNullishOrElse(opt, "fallback")');
+    expect(res.typescript).toContain("fromNullishOrElse");
+    expect(res.typescript).toContain('fromNullishOrElse(raw, "default")');
+    expect(res.typescript).toContain('fromNullishOrElse(opt, "fallback")');
   });
 
   it("transparently forwards Option into optional parameters without double wrapping", () => {
@@ -202,8 +202,8 @@ export run = (arr: Array<Number>, i: Number) =>
   => [first, dyn]
 `;
     const res = Effect.runSync(compileString(src));
-    expect(res.typescript).toContain("__funscriptOptionFromNullishOr(arr[0])");
-    expect(res.typescript).toContain("__funscriptOptionFromNullishOr(arr[i])");
+    expect(res.typescript).toContain("fromNullishOr(arr[0])");
+    expect(res.typescript).toContain("fromNullishOr(arr[i])");
     expect(res.typescript).toContain("import { Option } from \"effect\";");
   });
 
@@ -295,8 +295,8 @@ export safeThrow = (invalidJson: String) =>
   => Option.try(() => JSON.parse(invalidJson))
 `;
     const res = Effect.runSync(compileString(src));
-    expect(res.typescript).toContain("__funscriptOptionTry(() => val)");
-    expect(res.typescript).toContain("__funscriptOptionTry");
+    expect(res.typescript).toContain("optionTry(() => val)");
+    expect(res.typescript).toContain("optionTry");
 
     const safeSuccess = evaluateTsFunction(res.typescript, "safeSuccess");
     const safeThrow = evaluateTsFunction(res.typescript, "safeThrow");

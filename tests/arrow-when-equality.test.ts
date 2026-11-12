@@ -240,9 +240,9 @@ export checkRefNeq = (a, b) => a @! b
 `.trim();
 
       const res = await Effect.runPromise(compileString(code));
-      expect(res.typescript).toContain("const __funscriptReferenceEquals");
-      expect(res.typescript).toContain("__funscriptReferenceEquals(a, b)");
-      expect(res.typescript).toContain("(!__funscriptReferenceEquals(a, b))");
+      expect(res.typescript).toContain("const referenceEquals");
+      expect(res.typescript).toContain("referenceEquals(a, b)");
+      expect(res.typescript).toContain("(!referenceEquals(a, b))");
     });
   });
 

@@ -84,9 +84,9 @@ export checkPointRefNeq = (p1: Point, p2: Point) => p1 @! p2
 export checkGeneric = (a, b) => a @= b
 `.trim();
       const res = await Effect.runPromise(compileString(code));
-      expect(res.typescript).toContain("__funscriptReferenceEquals(p1, p2)");
-      expect(res.typescript).toContain("(!__funscriptReferenceEquals(p1, p2))");
-      expect(res.typescript).toContain("__funscriptReferenceEquals(a, b)");
+      expect(res.typescript).toContain("referenceEquals(p1, p2)");
+      expect(res.typescript).toContain("(!referenceEquals(p1, p2))");
+      expect(res.typescript).toContain("referenceEquals(a, b)");
     });
   });
 

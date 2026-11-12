@@ -431,7 +431,7 @@ export class Emitter {
       header += `import { create } from "mutative";\n`;
     }
     if (this.needsReferenceEquality) {
-      header += `const __funscriptReferenceEquals = <T extends object>(left: T, right: T): boolean => left === right;\n`;
+      header += `const referenceEquals = <T extends object>(left: T, right: T): boolean => left === right;\n`;
     }
     if (this.needsJsInterop) {
       header += `class JsInteropError extends Error {\n  readonly _tag = "JsInteropError" as const;\n  readonly cause: unknown;\n  constructor(cause: unknown) {\n    super("Native JavaScript interop failed");\n    this.name = "JsInteropError";\n    this.cause = cause;\n  }\n}\n`;
@@ -444,20 +444,20 @@ export class Emitter {
       header += `declare module "effect" {\n  namespace Schema {\n    export const decodeUnknown: typeof Schema.decodeUnknownEffect;\n  }\n}\n`;
     }
     if (this.needsFromNullishOrElse) {
-      header += `function __funscriptOptionFromNullishOrElse<A, B>(value: A | null | undefined, onNone: B): NonNullable<A> | B;\n`;
-      header += `function __funscriptOptionFromNullishOrElse<B>(onNone: B): <A>(value: A | null | undefined) => NonNullable<A> | B;\n`;
-      header += `function __funscriptOptionFromNullishOrElse(...args: unknown[]): unknown {\n  if (args.length === 1) { const onNone = args[0]; return (value: unknown) => __funscriptOptionFromNullishOrElse(value, onNone); }\n  let [value, onNone] = args;\n  while (value !== null && value !== undefined && typeof value === "object" && "_tag" in value) {\n    const candidate = value as { readonly _tag: string; readonly value?: unknown };\n    if (candidate._tag === "Some") value = candidate.value;\n    else if (candidate._tag === "None") return onNone;\n    else break;\n  }\n  if (value !== null && value !== undefined) return value;\n  return onNone;\n}\n`;
+      header += `function fromNullishOrElse<A, B>(value: A | null | undefined, onNone: B): NonNullable<A> | B;\n`;
+      header += `function fromNullishOrElse<B>(onNone: B): <A>(value: A | null | undefined) => NonNullable<A> | B;\n`;
+      header += `function fromNullishOrElse(...args: unknown[]): unknown {\n  if (args.length === 1) { const onNone = args[0]; return (value: unknown) => fromNullishOrElse(value, onNone); }\n  let [value, onNone] = args;\n  while (value !== null && value !== undefined && typeof value === "object" && "_tag" in value) {\n    const candidate = value as { readonly _tag: string; readonly value?: unknown };\n    if (candidate._tag === "Some") value = candidate.value;\n    else if (candidate._tag === "None") return onNone;\n    else break;\n  }\n  if (value !== null && value !== undefined) return value;\n  return onNone;\n}\n`;
     }
     if (this.needsFromNullishOr) {
       this.effectImports.add("Option");
-      header += `function __funscriptOptionFromNullishOr<A>(value: A): A extends import("effect").Option.Option<any> ? A : import("effect").Option.Option<NonNullable<A>> {\n  if (Option.isOption(value)) return value as any;\n  return Option.fromNullishOr(value) as any;\n}\n`;
+      header += `function fromNullishOr<A>(value: A): A extends import("effect").Option.Option<any> ? A : import("effect").Option.Option<NonNullable<A>> {\n  if (Option.isOption(value)) return value as any;\n  return Option.fromNullishOr(value) as any;\n}\n`;
     }
     if (this.needsOptionTry) {
       this.effectImports.add("Option");
-      header += `function __funscriptOptionTry<A>(thunk: () => A): import("effect").Option.Option<NonNullable<A>> {\n  try {\n    return Option.fromNullishOr(thunk()) as any;\n  } catch {\n    return Option.none();\n  }\n}\n`;
+      header += `function optionTry<A>(thunk: () => A): import("effect").Option.Option<NonNullable<A>> {\n  try {\n    return Option.fromNullishOr(thunk()) as any;\n  } catch {\n    return Option.none();\n  }\n}\n`;
     }
     if (this.needsOr) {
-      header += `type __FunscriptOr<A, B> = A extends { readonly _tag: "Some"; readonly value: infer V } ? V | B : A extends { readonly _tag: "None" } ? B : NonNullable<A> | B;\nfunction __funscriptOr<A, B>(a: A, b: B): __FunscriptOr<A, B> {\n  if (a !== null && a !== undefined && typeof a === "object" && "_tag" in a) {\n    if (a._tag === "Some") return (a as any).value;\n    if (a._tag === "None") return b as any;\n  }\n  return (a || b) as any;\n}\n`;
+      header += `type Or<A, B> = A extends { readonly _tag: "Some"; readonly value: infer V } ? V | B : A extends { readonly _tag: "None" } ? B : NonNullable<A> | B;\nfunction or<A, B>(a: A, b: B): Or<A, B> {\n  if (a !== null && a !== undefined && typeof a === "object" && "_tag" in a) {\n    if (a._tag === "Some") return (a as any).value;\n    if (a._tag === "None") return b as any;\n  }\n  return (a || b) as any;\n}\n`;
     }
 
     if (header.length > 0) {
@@ -1054,7 +1054,7 @@ export class Emitter {
         }
         this.needsFromNullishOr = true;
         this.effectImports.add("Option");
-        return `__funscriptOptionFromNullishOr(${this.emitExpression(expr.object)}[${this.emitExpression(expr.index)}])`;
+        return `fromNullishOr(${this.emitExpression(expr.object)}[${this.emitExpression(expr.index)}])`;
       case "RecordExpression":
         return this.emitRecordExpression(expr);
       case "ArrayExpression":
@@ -1149,7 +1149,7 @@ export class Emitter {
       expr.callee.property.name === "fromNullishOrElse"
     ) {
       this.needsFromNullishOrElse = true;
-      return `__funscriptOptionFromNullishOrElse(${expr.args.map((a) => this.emitExpression(a)).join(", ")})`;
+      return `fromNullishOrElse(${expr.args.map((a) => this.emitExpression(a)).join(", ")})`;
     }
 
     if (
@@ -1160,7 +1160,7 @@ export class Emitter {
     ) {
       this.needsFromNullishOr = true;
       this.effectImports.add("Option");
-      return `__funscriptOptionFromNullishOr(${expr.args.map((a) => this.emitExpression(a)).join(", ")})`;
+      return `fromNullishOr(${expr.args.map((a) => this.emitExpression(a)).join(", ")})`;
     }
 
     if (
@@ -1171,7 +1171,7 @@ export class Emitter {
     ) {
       this.needsOptionTry = true;
       this.effectImports.add("Option");
-      return `__funscriptOptionTry(${expr.args.map((a) => this.emitExpression(a)).join(", ")})`;
+      return `optionTry(${expr.args.map((a) => this.emitExpression(a)).join(", ")})`;
     }
 
     if (
@@ -1611,19 +1611,19 @@ export class Emitter {
         return `(${left} && ${right})`;
       case "or":
         this.needsOr = true;
-        return `__funscriptOr(${left}, ${right})`;
+        return `or(${left}, ${right})`;
       case "@=":
         if (this.isPrimitive(expr.left) || this.isPrimitive(expr.right)) {
           throw new Error(`Reference identity operator '@=' cannot be used with primitive values; use '#=' or '#!' for value equality`);
         }
         this.needsReferenceEquality = true;
-        return `__funscriptReferenceEquals(${left}, ${right})`;
+        return `referenceEquals(${left}, ${right})`;
       case "@!":
         if (this.isPrimitive(expr.left) || this.isPrimitive(expr.right)) {
           throw new Error(`Reference identity operator '@!' cannot be used with primitive values; use '#=' or '#!' for value equality`);
         }
         this.needsReferenceEquality = true;
-        return `(!__funscriptReferenceEquals(${left}, ${right}))`;
+        return `(!referenceEquals(${left}, ${right}))`;
       case "#=":
         if (this.isPrimitive(expr.left) || this.isPrimitive(expr.right)) {
           return `(${left} === ${right})`;
