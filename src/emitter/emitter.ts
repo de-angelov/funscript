@@ -248,6 +248,7 @@ const PRIMITIVE_TYPES: Readonly<Record<string, string>> = {
   Number: "number",
   Boolean: "boolean",
   Void: "void",
+  Unit: "void",
   Unknown: "unknown",
   Any: "any",
   Null: "null",
@@ -445,7 +446,7 @@ export class Emitter {
     if (this.needsFromNullishOrElse) {
       header += `function __funscriptOptionFromNullishOrElse<A, B>(value: A | null | undefined, onNone: B): NonNullable<A> | B;\n`;
       header += `function __funscriptOptionFromNullishOrElse<B>(onNone: B): <A>(value: A | null | undefined) => NonNullable<A> | B;\n`;
-      header += `function __funscriptOptionFromNullishOrElse(...args: any[]): any {\n  if (args.length === 1) { const onNone = args[0]; return (value: any) => __funscriptOptionFromNullishOrElse(value, onNone); }\n  let [value, onNone] = args;\n  while (value !== null && value !== undefined && typeof value === "object" && "_tag" in value) {\n    if (value._tag === "Some") value = value.value;\n    else if (value._tag === "None") return onNone;\n    else break;\n  }\n  if (value !== null && value !== undefined) return value;\n  return onNone;\n}\n`;
+      header += `function __funscriptOptionFromNullishOrElse(...args: unknown[]): unknown {\n  if (args.length === 1) { const onNone = args[0]; return (value: unknown) => __funscriptOptionFromNullishOrElse(value, onNone); }\n  let [value, onNone] = args;\n  while (value !== null && value !== undefined && typeof value === "object" && "_tag" in value) {\n    const candidate = value as { readonly _tag: string; readonly value?: unknown };\n    if (candidate._tag === "Some") value = candidate.value;\n    else if (candidate._tag === "None") return onNone;\n    else break;\n  }\n  if (value !== null && value !== undefined) return value;\n  return onNone;\n}\n`;
     }
     if (this.needsFromNullishOr) {
       this.effectImports.add("Option");
@@ -1023,6 +1024,7 @@ export class Emitter {
       case "Identifier":
       case "UpperIdentifier":
         if (this.recordContracts.has(expr.name)) throw new FunScriptError(`${expr.name} is a compile-time record contract, not a runtime schema`, expr.span);
+        if (expr.name === "Unit") return "undefined";
         return expr.name;
       case "Placeholder":
         return this.currentPlaceholderParam ?? "__placeholder";
@@ -1803,12 +1805,19 @@ export class Emitter {
   private emitFunctionBody(body: FunctionBody): string {
     if (body.kind === "BlockStatement") {
       const stmts = body.statements.map((s) => "  " + this.emitStatement(s)).join("\n");
-      const ret = body.finalExpression ? `  return ${this.emitExpression(body.finalExpression)};` : "";
+      const isUnit = body.finalExpression && (body.finalExpression.kind === "Identifier" || body.finalExpression.kind === "UpperIdentifier") && body.finalExpression.name === "Unit";
+      const ret = isUnit
+        ? "  return;"
+        : body.finalExpression
+        ? `  return ${this.emitExpression(body.finalExpression)};`
+        : "";
       if (stmts && ret) return `${stmts}\n${ret}`;
       if (stmts) return stmts;
       if (ret) return ret;
       return "";
     }
+    const isUnit = (body.kind === "Identifier" || body.kind === "UpperIdentifier") && body.name === "Unit";
+    if (isUnit) return "  return;";
     return `  return ${this.emitExpression(body)};`;
   }
 
@@ -1834,6 +1843,9 @@ export class Emitter {
       return `${target} = ${this.emitExpression(stmt.value)};`;
     }
     if (stmt.kind === "ReturnStatement") {
+      if ((stmt.argument.kind === "Identifier" || stmt.argument.kind === "UpperIdentifier") && stmt.argument.name === "Unit") {
+        return "return;";
+      }
       const arg = this.emitExpression(stmt.argument);
       if (arg.startsWith("(") && arg.endsWith(")")) {
         return `return ${arg};`;
@@ -2223,7 +2235,10 @@ export class Emitter {
       })
       .join("\n");
 
-    const ret = `    return ${this.emitExpression(expr.finalExpression)};`;
+    const isUnit = (expr.finalExpression.kind === "Identifier" || expr.finalExpression.kind === "UpperIdentifier") && expr.finalExpression.name === "Unit";
+    const ret = isUnit
+      ? `    return;`
+      : `    return ${this.emitExpression(expr.finalExpression)};`;
     return `Effect.gen(function* () {\n${statements}\n${ret}\n  })`;
   }
 

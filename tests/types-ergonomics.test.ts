@@ -335,4 +335,33 @@ export typedQuery = (id: Number) =>
     const formatted = format(src);
     expect(formatted).toBe(src);
   });
+
+  it("compiles and evaluates Unit type and Unit discard expressions", () => {
+    const src = `
+export fn logMessage(msg: String): Unit =>
+  Console.log(msg)
+  => Unit
+
+export runEffect = effect {
+  _ <- Effect.succeed("started")
+  => Unit
+}
+
+export schema Task = Effect<Unit, Error>
+
+export fn doNothing(): Unit =>
+  Unit
+`;
+    const res = Effect.runSync(compileString(src));
+    expect(res.typescript).toContain("export const logMessage = (msg: string): void =>");
+    expect(res.typescript).toContain("export type Task = Effect.Effect<void, Error, never>;");
+    expect(res.typescript).toContain("export const doNothing = (): void =>");
+    expect(res.typescript).not.toContain("return Unit;");
+
+    const doNothing = evaluateTsFunction(res.typescript, "doNothing");
+    expect(doNothing()).toBeUndefined();
+
+    const runEffect = evaluateTsFunction(res.typescript, "runEffect");
+    expect(Effect.runSync(runEffect)).toBeUndefined();
+  });
 });
