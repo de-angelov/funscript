@@ -589,8 +589,7 @@ export boolToString = (flag: Boolean) =>
       expect(res.typescript).toContain(`.with(404, () => "not found")`);
       expect(res.typescript).toContain(`.otherwise(() => "error")`);
       expect(res.typescript).toContain(`.with(true, () => "yes")`);
-      expect(res.typescript).toContain(`.with(false, () => "no")`);
-      expect(res.typescript).toContain(`.exhaustive()`);
+      expect(res.typescript).toContain(`.otherwise(() => "no")`);
     });
 
     it("compiles subjectless boolean match expressions to ternary chains", async () => {
@@ -748,14 +747,14 @@ getUser = () =>
       const code = `
 export s = Set([1, 2, 3])
 export m = Map([["a", 1]])
-export u = URL("https://example.com")
+export u = Option.try(() => URL("https://example.com"))
 export schema ItemMap = Map<String, Number>
 export schema TagSet = Set<String>
 `.trim();
       const res = await Effect.runPromise(compileString(code));
       expect(res.typescript).toContain(`export const s = new Set([1, 2, 3]);`);
       expect(res.typescript).toContain(`export const m = new Map([["a", 1]] as any);`);
-      expect(res.typescript).toContain(`export const u = new URL("https://example.com");`);
+      expect(res.typescript).toContain(`export const u = optionTry(() => new URL("https://example.com"));`);
       expect(res.typescript).toContain(`export type ItemMap = ReadonlyMap<string, number>;`);
       expect(res.typescript).toContain(`export type TagSet = ReadonlySet<string>;`);
     });

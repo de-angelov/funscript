@@ -350,6 +350,9 @@ export function inferPipelineCompanions(
       // over type-directed companion dispatch.
       if (localBindings.has(fnName)) continue;
 
+      // 0. Universal 'dbg' stage: inspects value in place without altering companion or type
+      if (fnName === "dbg") continue;
+
       // 1. Comparison operations (lessThan, greaterThan, between, etc.)
       if (fnName in COMPARISON_METHOD_MAP) {
         const method = COMPARISON_METHOD_MAP[fnName];

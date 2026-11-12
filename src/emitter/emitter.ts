@@ -49,6 +49,7 @@ import {
   MatchExpression,
   MatchArm,
   Pattern,
+  LiteralPattern,
   ConstructorPattern,
   RecordPattern,
   ArrayPattern,
@@ -399,6 +400,7 @@ export class Emitter {
   private currentPlaceholderParam: string | null = null;
   private bindings = new Map<string, BindingDeclaration>();
   private tryContextDepth = 0;
+  private activeDraftParams = new Set<string>();
 
   private declaredTypeNames = new Set<string>();
   private runtimeSchemaNames = new Set<string>();
@@ -579,7 +581,12 @@ export class Emitter {
     const name = decl.id.name;
     const exp = isExport ? "export " : "";
 
-    if (decl.typeParams?.length && decl.body.kind !== "TypeSignatureSchema" && !(decl.body.kind === "RecordSchema" && this.recordContracts.has(name))) {
+    if (
+      decl.typeParams?.length &&
+      decl.body.kind !== "TypeSignatureSchema" &&
+      decl.body.kind !== "TaggedUnionSchema" &&
+      !(decl.body.kind === "RecordSchema" && this.recordContracts.has(name))
+    ) {
       throw new FunScriptError("Generic runtime schemas are not supported yet; use a TypeScript type alias", decl.span);
     }
 
@@ -605,6 +612,36 @@ export class Emitter {
       }
       case "TaggedUnionSchema": {
         this.effectImports.add("Data");
+        const typeParams = this.emitTypeParameters(decl.typeParams);
+        const hasTypeParams = Boolean(decl.typeParams && decl.typeParams.length > 0);
+        const anyArgs = hasTypeParams ? `<${decl.typeParams!.map(() => "any").join(", ")}>` : "";
+        const neverArgs = hasTypeParams ? `<${decl.typeParams!.map(() => "never").join(", ")}>` : "";
+        const typeArgs = hasTypeParams ? `<${decl.typeParams!.map((tp) => tp.name.name).join(", ")}>` : "";
+
+        const collectTypeParamNames = (type: TypeNode): Set<string> => {
+          const names = new Set<string>();
+          const walk = (t: TypeNode | undefined): void => {
+            if (!t) return;
+            if (t.kind === "TypeReferenceNode") {
+              names.add(t.name.name);
+              if (t.typeArgs) t.typeArgs.forEach(walk);
+            } else if (t.kind === "FunctionTypeNode") {
+              t.params.forEach((p) => walk(p.typeAnnotation));
+              walk(t.returnType);
+            } else if (t.kind === "EffectTypeNode") {
+              walk(t.success);
+              walk(t.error);
+              walk(t.requirements);
+            } else if (t.kind === "RecordTypeNode") {
+              t.fields.forEach((f) => walk(f.typeAnnotation));
+            } else if (t.kind === "IntersectionTypeNode") {
+              t.types.forEach(walk);
+            }
+          };
+          walk(type);
+          return names;
+        };
+
         const typeVariants = decl.body.variants
           .map((v) => {
             if (v.fields.length === 0) {
@@ -618,15 +655,33 @@ export class Emitter {
         const constructors = decl.body.variants
           .map((v) => {
             if (v.fields.length === 0) {
-              return `${exp}const ${v.name.name}: ${name} = $${name}.${v.name.name}();`;
+              const retType = hasTypeParams ? `${name}${neverArgs}` : name;
+              return `${exp}const ${v.name.name}: ${retType} = $${name}.${v.name.name}();`;
+            }
+            const usedParams = new Set<string>();
+            for (const f of v.fields) {
+              for (const pName of collectTypeParamNames(f.typeAnnotation)) {
+                usedParams.add(pName);
+              }
+            }
+            let constrTypeParams = "";
+            if (hasTypeParams) {
+              const requiredParams = decl.typeParams!.filter((tp) => usedParams.has(tp.name.name));
+              const optionalParams = decl.typeParams!.filter((tp) => !usedParams.has(tp.name.name));
+              const paramsList = [
+                ...requiredParams.map((tp) => tp.name.name),
+                ...optionalParams.map((tp) => `${tp.name.name} = never`),
+              ];
+              constrTypeParams = `<${paramsList.join(", ")}>`;
             }
             const params = v.fields.map((f) => `${f.name.name}: ${this.emitTypeNode(f.typeAnnotation)}`).join(", ");
             const args = v.fields.map((f) => f.name.name).join(", ");
-            return `${exp}const ${v.name.name} = (${params}): ${name} => $${name}.${v.name.name}({ ${args} });`;
+            const retType = hasTypeParams ? `${name}${typeArgs}` : name;
+            return `${exp}const ${v.name.name} = ${constrTypeParams}(${params}): ${retType} => $${name}.${v.name.name}({ ${args} });`;
           })
           .join("\n");
 
-        return `${exp}type ${name} = Data.TaggedEnum<{\n${typeVariants}\n}>;\nconst $${name} = Data.taggedEnum<${name}>();\n${constructors}`;
+        return `${exp}type ${name}${typeParams} = Data.TaggedEnum<{\n${typeVariants}\n}>;\nconst $${name} = Data.taggedEnum<${name}${anyArgs}>();\n${constructors}`;
       }
       case "StructuralUnionSchema": {
         this.effectImports.add("Schema");
@@ -958,6 +1013,7 @@ export class Emitter {
         if (allowMember && inJs && parent?.kind === "CallExpression" && key === "args") return;
         if (allowMember && parent && key === "args" && isSafeLocalForward(parent, index)) return;
         if (allowMember && parent?.kind === "JSXSpreadAttribute" && key === "argument" && (this.isDomOrExternalJsxTarget(jsxTarget) || isSafeLocalForward({ kind: "CallExpression", callee: jsxTarget }, 0))) return;
+        if (parent?.kind === "SpreadEntry" && key === "argument") return;
         if ((parent?.kind === "MemberExpression" && key === "property") || (parent?.kind === "FieldEntry" && key === "key") || (parent?.kind === "JSXAttribute" && key === "name")) return;
         throw new FunScriptError(`A record parameter with optional fields cannot be passed, returned, aliased, or indexed yet; access ${name}.field directly`, node.span as any);
       }
@@ -1109,6 +1165,9 @@ export class Emitter {
       case "UpperIdentifier":
         if (this.recordContracts.has(expr.name)) throw new FunScriptError(`${expr.name} is a compile-time record contract, not a runtime schema`, expr.span);
         if (expr.name === "Unit") return "undefined";
+        if (expr.name === "dbg" && !this.isUserBinding("dbg")) {
+          return `((__v: any) => { console.log(__v); return __v; })`;
+        }
         return expr.name;
       case "Placeholder":
         return this.currentPlaceholderParam ?? "__placeholder";
@@ -1185,12 +1244,17 @@ export class Emitter {
     // Mutative recipes mutate their draft in place and must return void.
     // A trailing draft expression is useful in FunScript's block syntax,
     // but returning that proxy selects the wrong create overload.
-    const recipeBody = expr.body.kind === "BlockStatement" &&
-      expr.body.finalExpression?.kind === "Identifier" &&
-      expr.body.finalExpression.name === expr.draftParam.name
-      ? this.emitFunctionBody({ ...expr.body, finalExpression: undefined })
-      : this.emitFunctionBody(expr.body);
-    return `(${expr.draftParam.name}) => {\n${recipeBody}\n}`;
+    this.activeDraftParams.add(expr.draftParam.name);
+    try {
+      const recipeBody = expr.body.kind === "BlockStatement" &&
+        expr.body.finalExpression?.kind === "Identifier" &&
+        expr.body.finalExpression.name === expr.draftParam.name
+        ? this.emitFunctionBody({ ...expr.body, finalExpression: undefined })
+        : this.emitFunctionBody(expr.body);
+      return `(${expr.draftParam.name}) => {\n${recipeBody}\n}`;
+    } finally {
+      this.activeDraftParams.delete(expr.draftParam.name);
+    }
   }
 
   private emitStringLiteral(lit: StringLiteral): string {
@@ -1226,6 +1290,19 @@ export class Emitter {
   }
 
   private emitCallExpression(expr: CallExpression): string {
+    if (!this.isUserBinding("dbg") && expr.callee.kind === "Identifier" && expr.callee.name === "dbg") {
+      if (expr.args.length === 1) {
+        const val = this.emitExpression(expr.args[0]);
+        return `((__v) => { console.log(__v); return __v; })(${val})`;
+      }
+      if (expr.args.length >= 2) {
+        const label = this.emitExpression(expr.args[0]);
+        const val = this.emitExpression(expr.args[1]);
+        return `((__v) => { console.log(${label}, __v); return __v; })(${val})`;
+      }
+      return `((__v: any) => { console.log(__v); return __v; })`;
+    }
+
     if (
       expr.callee.kind === "MemberExpression" &&
       (expr.callee.object.kind === "Identifier" || expr.callee.object.kind === "UpperIdentifier") &&
@@ -1345,7 +1422,7 @@ export class Emitter {
           EFFECT_MODULE_NAMES.has(root) ||
           EFFECT_BUILTIN_MODULES.has(root));
 
-      if (!isAllowed && BANNED_INSTANCE_METHODS.has(prop)) {
+      if (!isAllowed && !this.activeDraftParams.has(root ?? "") && BANNED_INSTANCE_METHODS.has(prop)) {
         const info = BANNED_INSTANCE_METHODS.get(prop)!;
         const isWebMutable =
           (prop === "set" || prop === "delete") &&
@@ -1462,6 +1539,17 @@ export class Emitter {
         if (s.kind === "MutBlockExpression") {
           this.needsMutative = true;
           return `(__mutInput) => create(__mutInput, ${this.emitMutativeRecipe(s)})`;
+        }
+
+        if (!this.isUserBinding("dbg")) {
+          if (s.kind === "Identifier" && s.name === "dbg") {
+            return `((__v) => { console.log(__v); return __v; })`;
+          }
+          if (s.kind === "CallExpression" && s.callee.kind === "Identifier" && s.callee.name === "dbg") {
+            const labelArg = s.args.length > 0 ? this.emitExpression(s.args[0]) : undefined;
+            const logCall = labelArg ? `console.log(${labelArg}, __v)` : `console.log(__v)`;
+            return `((__v) => { ${logCall}; return __v; })`;
+          }
         }
 
         // Check if stage was resolved by type-directed resolution
@@ -1905,10 +1993,22 @@ export class Emitter {
       return `create(${base}, (draft) => {\n${mutations}\n})`;
     }
 
+    const DISCRIMINANT_RECORD_KEYS = new Set(["_tag", "type", "kind", "status", "code", "tag", "ok", "state"]);
     const entries = expr.entries
       .map((e) => {
         if (e.kind === "SpreadEntry") return `...${this.emitExpression(e.argument)}`;
-        if (e.kind === "FieldEntry") return `${emitPropertyKey(e.key.name)}: ${this.emitExpression(e.value)}`;
+        if (e.kind === "FieldEntry") {
+          let val = this.emitExpression(e.value);
+          if (e.value.kind === "BooleanLiteral") {
+            val = `${val} as const`;
+          } else if (
+            (e.value.kind === "StringLiteral" || e.value.kind === "NumberLiteral") &&
+            DISCRIMINANT_RECORD_KEYS.has(e.key.name)
+          ) {
+            val = `${val} as const`;
+          }
+          return `${emitPropertyKey(e.key.name)}: ${val}`;
+        }
         if (e.kind === "ShorthandEntry") return e.key.name;
         return "";
       })
@@ -2134,7 +2234,26 @@ export class Emitter {
     const optionalRecord = expr.scrutinee ? this.recordField(expr.scrutinee) : undefined;
     const payloadFields = optionalRecord?.optional ? optionalRecord.fields : undefined;
 
-    for (const arm of expr.arms) {
+    const hasWildcard = expr.arms.some((a) => a.pattern.kind === "WildcardPattern");
+    const lastArm = expr.arms[expr.arms.length - 1];
+    const isBooleanLiteralPattern = (p: Pattern): p is LiteralPattern & { literal: BooleanLiteral } =>
+      p.kind === "LiteralPattern" && p.literal.kind === "BooleanLiteral";
+    const lastArmIsUnguardedBool = Boolean(
+      lastArm && !lastArm.guard && isBooleanLiteralPattern(lastArm.pattern)
+    );
+    const oppositeBoolValue = lastArmIsUnguardedBool
+      ? !(lastArm.pattern as any).literal.value
+      : undefined;
+    const hasOppositeUnguarded =
+      oppositeBoolValue !== undefined &&
+      expr.arms
+        .slice(0, -1)
+        .some((a) => !a.guard && isBooleanLiteralPattern(a.pattern) && a.pattern.literal.value === oppositeBoolValue);
+    const isExhaustiveBooleanMatch = !hasWildcard && lastArmIsUnguardedBool && hasOppositeUnguarded;
+
+    for (let i = 0; i < expr.arms.length; i++) {
+      const arm = expr.arms[i];
+      const isLastArm = i === expr.arms.length - 1;
       let payloadName: string | undefined;
       if (payloadFields) {
         const pat = arm.pattern;
@@ -2155,7 +2274,7 @@ export class Emitter {
         if (arm.guard) validateBody(arm.guard);
       }
       try {
-      if (arm.pattern.kind === "WildcardPattern") {
+      if (arm.pattern.kind === "WildcardPattern" || (isExhaustiveBooleanMatch && isLastArm)) {
         const body = this.emitArmHandler(arm.body, arm.pattern, expr.scrutinee);
         code += `\n  .otherwise(${body})`;
       } else {
@@ -2209,7 +2328,7 @@ export class Emitter {
       }
     }
 
-    if (!expr.arms.some((a) => a.pattern.kind === "WildcardPattern")) {
+    if (!hasWildcard && !isExhaustiveBooleanMatch) {
       code += `\n  .exhaustive()`;
     }
 
