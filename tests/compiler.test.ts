@@ -368,6 +368,34 @@ export untrusted = effect {
     expect(checked.success, checked.formattedOutput).toBe(true);
   });
 
+  it("preserves unions of native Promise return types", async () => {
+    const code = `
+ts {
+declare function nativeUnion(): Promise<{ status: 200 }> | Promise<{ status: 404 }>
+declare function nullableUnion(): Promise<string> | Promise<null>
+}
+export required = effect {
+  result <- js nativeUnion()
+  => result
+}
+export nullable = effect {
+  result <- js nullableUnion()
+  => result
+}
+ts {
+type EqualTypes<A, B> = (<T>() => T extends A ? 1 : 2) extends (<T>() => T extends B ? 1 : 2) ? true : false;
+type Assert<T extends true> = T;
+type RequiredResult = Assert<EqualTypes<Effect.Success<typeof required>, { status: 200 } | { status: 404 }>>;
+type NullableResult = Assert<EqualTypes<Effect.Success<typeof nullable>, Option.Option<string>>>;
+}
+`.trim();
+    const compiled = await Effect.runPromise(compileString(code, "promise-union.fun"));
+    expect(compiled.typescript).toContain("__funscriptJs(() => nativeUnion(), false)");
+    expect(compiled.typescript).toContain("__funscriptJs(() => nullableUnion(), true)");
+    const checked = await Effect.runPromise(typeCheckSource(code, "promise-union.fun"));
+    expect(checked.success, checked.formattedOutput).toBe(true);
+  });
+
   it("compiles 'ts' keyword for TypeScript escape hatches", async () => {
     const code = `
 ts { interface CustomBuffer { size: number } }

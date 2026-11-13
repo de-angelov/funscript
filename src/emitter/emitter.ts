@@ -1,3 +1,4 @@
+import { emitRuntimeHelpers } from "./runtime-helpers.js";
 import { emitAssemblyScript } from "./assemblyscript.js";
 import { FunScriptError } from "../errors.js";
 import { renderImport } from "./imports.js";
@@ -517,32 +518,14 @@ export class Emitter {
     if (this.needsMutative) {
       header += `import { create } from "mutative";\n`;
     }
-    if (this.needsReferenceEquality) {
-      header += `const referenceEquals = <T extends object>(left: T, right: T): boolean => left === right;\n`;
-    }
-    if (this.needsJsInterop) {
-      header += `class JsInteropError extends Error {\n  readonly _tag = "JsInteropError" as const;\n  readonly cause: unknown;\n  constructor(cause: unknown) {\n    super("Native JavaScript interop failed");\n    this.name = "JsInteropError";\n    this.cause = cause;\n  }\n}\n`;
-      header += `function __funscriptJs<A>(thunk: () => Promise<A>, nullable: true): Effect.Effect<Option.Option<NonNullable<A>>, JsInteropError>;\n`;
-      header += `function __funscriptJs<A>(thunk: () => Promise<A>, nullable: false): Effect.Effect<A, JsInteropError>;\n`;
-      header += `function __funscriptJs<A>(thunk: () => Promise<A>, nullable: "unknown"): Effect.Effect<Option.Option<unknown>, JsInteropError>;\n`;
-      header += `function __funscriptJs<A>(thunk: () => Promise<A>, nullable: boolean | "unknown"): Effect.Effect<A | Option.Option<NonNullable<A>> | Option.Option<unknown>, JsInteropError> {\n  const effect = Effect.tryPromise({ try: thunk, catch: (cause) => new JsInteropError(cause) });\n  return nullable === false ? effect : Effect.map(effect, Option.fromNullishOr);\n}\n`;
-    }
-    if (this.needsDecodeUnknown) {
-      header += `declare module "effect" {\n  namespace Schema {\n    export const decodeUnknown: typeof Schema.decodeUnknownEffect;\n  }\n}\n`;
-    }
-    if (this.needsFromNullishOrElse) {
-      header += `function fromNullishOrElse<A, B>(value: A | null | undefined, onNone: B): NonNullable<A> | B;\n`;
-      header += `function fromNullishOrElse<B>(onNone: B): <A>(value: A | null | undefined) => NonNullable<A> | B;\n`;
-      header += `function fromNullishOrElse(...args: unknown[]): unknown {\n  if (args.length === 1) { const onNone = args[0]; return (value: unknown) => fromNullishOrElse(value, onNone); }\n  let [value, onNone] = args;\n  while (value !== null && value !== undefined && typeof value === "object" && "_tag" in value) {\n    const candidate = value as { readonly _tag: string; readonly value?: unknown };\n    if (candidate._tag === "Some") value = candidate.value;\n    else if (candidate._tag === "None") return onNone;\n    else break;\n  }\n  if (value !== null && value !== undefined) return value;\n  return onNone;\n}\n`;
-    }
-    if (this.needsFromNullishOr) {
-      this.effectImports.add("Option");
-      header += `function fromNullishOr<A>(value: A): A extends import("effect").Option.Option<any> ? A : import("effect").Option.Option<NonNullable<A>> {\n  if (Option.isOption(value)) return value as any;\n  return Option.fromNullishOr(value) as any;\n}\n`;
-    }
-    if (this.needsOptionTry) {
-      this.effectImports.add("Option");
-      header += `function optionTry<A>(thunk: () => A): import("effect").Option.Option<NonNullable<A>> {\n  try {\n    return Option.fromNullishOr(thunk()) as any;\n  } catch {\n    return Option.none();\n  }\n}\n`;
-    }
+    header += emitRuntimeHelpers({
+      referenceEquality: this.needsReferenceEquality,
+      jsInterop: this.needsJsInterop,
+      decodeUnknown: this.needsDecodeUnknown,
+      fromNullishOrElse: this.needsFromNullishOrElse,
+      fromNullishOr: this.needsFromNullishOr,
+      optionTry: this.needsOptionTry,
+    });
 
     if (header.length > 0) {
       header += "\n";
