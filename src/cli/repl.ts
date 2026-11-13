@@ -110,13 +110,13 @@ export async function compileReplCode(
 
   if (isLikelyDecl) {
     try {
-      const res = await Effect.runPromise(compileString(trimmed, "repl.fun"));
+      const res = await Effect.runPromise(compileString(trimmed, "repl.fun", { sourcemap: false }));
       compiled = res;
       tsCode = res.typescript;
       isExpression = false;
     } catch (declErr: any) {
       try {
-        const res = await Effect.runPromise(compileString(wrapExpression(trimmed), "repl.fun"));
+        const res = await Effect.runPromise(compileString(wrapExpression(trimmed), "repl.fun", { sourcemap: false }));
         compiled = res;
         tsCode = res.typescript;
         isExpression = true;
@@ -126,13 +126,13 @@ export async function compileReplCode(
     }
   } else {
     try {
-      const res = await Effect.runPromise(compileString(wrapExpression(trimmed), "repl.fun"));
+      const res = await Effect.runPromise(compileString(wrapExpression(trimmed), "repl.fun", { sourcemap: false }));
       compiled = res;
       tsCode = res.typescript;
       isExpression = true;
     } catch (exprErr: any) {
       try {
-        const res = await Effect.runPromise(compileString(trimmed, "repl.fun"));
+        const res = await Effect.runPromise(compileString(trimmed, "repl.fun", { sourcemap: false }));
         compiled = res;
         tsCode = res.typescript;
         isExpression = false;

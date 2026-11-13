@@ -74,13 +74,10 @@ export const compileString = (
       : Effect.succeed(undefined),
     (preparedAst) => Effect.try({
     try: () => {
-      // 1. Tokenize
-      const lexer = new Lexer(source, filename);
-      const tokens = lexer.tokenize();
-
-      // 2. Parse AST
-      const parser = new Parser(tokens, filename, source);
-      const ast = preparedAst ?? parser.parse();
+      // Reuse the AST already parsed while preparing AssemblyScript blocks.
+      const ast = preparedAst ?? new Parser(
+        new Lexer(source, filename).tokenize(), filename, source,
+      ).parse();
 
       // 3. Emit TypeScript
       const context = options?.context ?? new TypeScriptCompilationContext(options?.sourcePath ?? filename);

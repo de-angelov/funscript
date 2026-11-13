@@ -10,7 +10,7 @@ export const checkCliFiles = (entryFiles: string[]) =>
     const files = new Set(entryFiles.map((file) => path.resolve(file)));
     for (const file of files) {
       const source = yield* Effect.tryPromise(() => fs.readFile(file, "utf8"));
-      const compiled = yield* compileString(source, file);
+      const compiled = yield* compileString(source, file, { sourcemap: false });
       for (const declaration of compiled.ast.body) {
         if (declaration.kind !== "ImportDeclaration") continue;
         const specifier = declaration.source.parts.map((part) => part.kind === "StringRawPart" ? part.value : "").join("");

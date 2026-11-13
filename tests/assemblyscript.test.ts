@@ -1,12 +1,26 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { readFile } from "node:fs/promises";
 import { Effect, Exit } from "effect";
 import { format } from "../src/formatter/index.js";
+import { Lexer } from "../src/lexer/lexer.js";
+import { compileString } from "../src/compiler.js";
 import { findHoverAsync } from "../src/lsp/hover.js";
 import { FunScriptLspServer, validateFunScript } from "../src/lsp/server.js";
 import { compile, execute, expectCompileError, expectNoDiagnostics, typeCheck } from "./helpers/index.js";
 
 describe("AssemblyScript blocks", () => {
+  it("tokenizes source only once when preparing AssemblyScript", async () => {
+    const tokenize = vi.spyOn(Lexer.prototype, "tokenize");
+    try {
+      const source = "as { export function value(): i32 { return 42; } }\nexport result = value()";
+      const result = await Effect.runPromise(compileString(source, "single-pass.fun", { sourcemap: false }));
+      expect(result.typescript).toContain("export const result");
+      expect(tokenize).toHaveBeenCalledTimes(1);
+    } finally {
+      tokenize.mockRestore();
+    }
+  });
+
   it("compiles numeric kernels and preserves unsigned results", async () => {
     const source = `as {
       // A brace } in a comment does not end the block.

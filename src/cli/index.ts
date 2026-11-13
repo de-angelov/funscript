@@ -304,7 +304,7 @@ const runCommand = (args: string[]) =>
     if (!args.includes("--no-check") && !(yield* checkCliFiles([filePath]))) return;
 
     const source = yield* readFile(filePath);
-    const result = yield* compileString(source, filePath);
+    const result = yield* compileString(source, filePath, { sourcemap: false });
 
     let tsCode = result.typescript;
     tsCode += `\nimport * as __effect from "effect";\nif (typeof main !== "undefined") {\n  if (__effect.Effect.isEffect(main)) {\n    await __effect.Effect.runPromise(main);\n  } else if (typeof main === "function") {\n    await main();\n  }\n}\n`;
