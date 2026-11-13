@@ -105,7 +105,7 @@ export logObject = () => logger.info({ country: "BG" }, "connected %s", "client"
     });
 
     it("resets JSON.parse to return unknown and rejects unvalidated property access", async () => {
-      const source = `export parsed = JSON.parse("[]")\nexport bad = parsed.foo`;
+      const source = `export parsed = ts { JSON.parse("[]") }\nexport bad = parsed.foo`;
       const checked = await typeCheck(source);
       expect(checked.success).toBe(false);
       expect(checked.formattedOutput).toContain("'parsed' is of type 'unknown'");

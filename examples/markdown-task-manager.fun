@@ -6,7 +6,7 @@
 // 4. Explicit return statements: '=> expr'
 // 5. Effect file system I/O via 'js' Promise interop
 
-import { Console } from "effect"
+import { Console, Option } from "effect"
 import { writeFile, readFile, unlink } from "node:fs/promises"
 
 // --- Domain Data Model & Schemas ---
@@ -77,7 +77,7 @@ export completeTask = (manager: TaskManager, targetId: Number) =>
     idx = draft.findIndex((t) => t.id #= targetId)
 
     when (idx #! -1) {
-      existing = draft[idx]
+      existing = Option.getOrThrow(draft[idx])
       updatedItem = { ...existing, completed: true }
       draft.splice(idx, 1, updatedItem)
     }

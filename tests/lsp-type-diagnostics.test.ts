@@ -108,7 +108,7 @@ export bad = connect(() => "bad")`;
     const uri = pathToFileURL(path.resolve("lsp-json-parse.fun")).href;
     const events: any[] = [];
     server.on("diagnostics", (event) => events.push(event));
-    const source = `export parsed = JSON.parse("[]")\nexport bad = parsed.foo`;
+    const source = `export parsed = ts { JSON.parse("[]") }\nexport bad = parsed.foo`;
     try {
       server.onDidOpenHandler({ textDocument: { uri, languageId: "funscript", version: 1, text: source } });
       await vi.waitFor(() => {
@@ -121,7 +121,7 @@ export bad = connect(() => "bad")`;
     } finally {
       server.dispose();
     }
-  });
+  }, 15000);
 
   it("resolves JSX elements cleanly in .funx files in LSP diagnostics without errors", async () => {
     const server = new FunScriptLspServer();

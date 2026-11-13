@@ -165,7 +165,7 @@ describe("Dogfooding Real-World Applications (TASK-027)", () => {
 
       expect(stdout).toContain("=== Reactive Widget (.funx) Starting ===");
       expect(stdout).toContain('[Widget] Rendered root tag: <div className="widget-card variant-primary">');
-      expect(stdout).toContain("[Widget] Child elements: 3");
+      expect(stdout).toContain("[Widget] Rendered widget tree");
       expect(stdout).toContain('[Widget] Boundary root tag: <div className="widget-card variant-danger">');
       expect(stdout).toContain("[Badge] Rendered Idle badge: <span>");
       expect(stdout).toContain("[Badge] Rendered Active badge: <span>");

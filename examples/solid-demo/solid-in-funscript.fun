@@ -3,9 +3,7 @@ import { createSignal, createMemo, createComputed, createRoot } from "solid-js"
 export main = () =>
   console.log("Starting SolidJS in FunScript test...")
   => createRoot((dispose) =>
-    countSig = createSignal(10)
-    count = countSig[0]
-    setCount = countSig[1]
+    [count, setCount] = createSignal(10)
 
     doubled = createMemo(() => count() * 2)
 
