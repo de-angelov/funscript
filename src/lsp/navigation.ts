@@ -1,114 +1,203 @@
-import { pathToFileURL, fileURLToPath } from "node:url";
-import { dirname, resolve, extname } from "node:path";
-import { findDefinition, spanToRange } from "./definition.js";
+import { fileURLToPath } from "node:url";
+import { dirname, resolve } from "node:path";
+import { DefinitionFinder, findDefinition, spanToRange } from "./definition.js";
 import { Lexer } from "../lexer/lexer.js";
 import { Parser } from "../parser/parser.js";
+import { TokenType } from "../lexer/tokens.js";
+import type { Program } from "../ast/types.js";
 import type { TextDocumentItem, Location, LocationLink, DocumentSymbol, SymbolInformation, PrepareRenameResult, WorkspaceEdit, TextEdit } from "vscode-languageserver/node";
 
 type Doc = Pick<TextDocumentItem, "uri" | "text">;
 type Occurrence = { name: string; start: number; end: number; line: number; character: number };
 
-function occurrences(source: string): Occurrence[] {
-  const out: Occurrence[] = [];
-  for (const match of source.matchAll(/[A-Za-z_$][\w$]*/g)) {
-    const start = match.index!;
-    const before = source.slice(0, start);
-    const line = (before.match(/\n/g) ?? []).length;
-    const character = start - (before.lastIndexOf("\n") + 1);
-    out.push({ name: match[0], start, end: start + match[0].length, line, character });
+type AnalyzedDocument = { doc: Doc; ast: Program | null; occurrences: Occurrence[] };
+
+function parse(source: string, uri: string): Program | null {
+  try { return new Parser(new Lexer(source, uri).tokenize(), uri, source).parse(); } catch { return null; }
+}
+
+/** A request-scoped snapshot: each open document is lexed and parsed at most once. */
+class NavigationAnalysis {
+  private readonly analyzed = new Map<string, AnalyzedDocument>();
+  private readonly identities = new Map<string, string>();
+  private readonly documents: Doc[];
+
+  constructor(source: string, uri: string, docs: Doc[]) {
+    this.documents = [...docs.filter((doc) => doc.uri !== uri), { uri, text: source }];
   }
-  return out;
-}
 
-function parse(source: string, uri: string) {
-  try { return new Parser(new Lexer(source, uri).tokenize(), uri).parse(); } catch { return null; }
-}
+  document(doc: Doc): AnalyzedDocument {
+    const existing = this.analyzed.get(doc.uri);
+    if (existing) return existing;
+    let ast: Program | null = null;
+    let occurrences: Occurrence[] = [];
+    try {
+      const tokens = new Lexer(doc.text, doc.uri).tokenize();
+      occurrences = tokens.filter((token) => token.type === TokenType.IDENTIFIER || token.type === TokenType.UPPER_IDENTIFIER)
+        .map((token) => ({ name: token.value, start: token.span.start.offset, end: token.span.end.offset, line: token.span.start.line - 1, character: token.span.start.column - 1 }));
+      ast = new Parser(tokens, doc.uri, doc.text).parse();
+    } catch { /* Invalid source cannot be resolved safely. */ }
+    const analyzed = { doc, ast, occurrences };
+    this.analyzed.set(doc.uri, analyzed);
+    return analyzed;
+  }
 
-function resolveImported(uri: string, name: string, docs: Doc[]): { doc: Doc; exportedName: string } | undefined {
-  const current = docs.find((doc) => doc.uri === uri);
-  if (!current) return undefined;
-  const ast = parse(current.text, uri);
-  for (const item of ast?.body ?? []) {
-    if (item.kind !== "ImportDeclaration") continue;
-    const spec = item.specifiers.find((s) => s.local.name === name);
-    const modulePath = item.source.parts.map((part) => part.kind === "StringRawPart" ? part.value : "").join("");
-    if (!spec || !modulePath.startsWith(".")) continue;
-    let base: string;
-    try { base = resolve(dirname(fileURLToPath(uri)), modulePath); } catch { continue; }
-    const candidates = [base, ...[".fun", ".funs", ".funx", ".ts"].map((ext) => base + ext), ...["index.fun", "index.funs"].map((file) => resolve(base, file))];
-    const target = docs.find((doc) => { try { return candidates.includes(fileURLToPath(doc.uri)); } catch { return false; } });
-    if (target) {
-      const exported = parse(target.text, target.uri)?.body.some((entry) => {
-        const declaration = entry.kind === "ExportDeclaration" ? entry.declaration : undefined;
-        return declaration && "id" in declaration && "name" in declaration.id && declaration.id.name === spec.imported.name;
-      });
-      if (exported) return { doc: target, exportedName: spec.imported.name };
+  selected(uri: string, position: { line: number; character: number }): Occurrence | undefined {
+    const doc = this.documents.find((item) => item.uri === uri);
+    return doc && this.document(doc).occurrences.find((occ) => occ.line === position.line && position.character >= occ.character && position.character <= occ.character + occ.name.length);
+  }
+
+  private importedTarget(doc: Doc, identifierOffset: number): { doc: Doc; exportedName: string } | undefined {
+    const ast = this.document(doc).ast;
+    for (const item of ast?.body ?? []) {
+      if (item.kind !== "ImportDeclaration") continue;
+      const spec = item.specifiers.find((specifier) => (specifier.local.span.start.offset === identifierOffset || specifier.imported.span.start.offset === identifierOffset));
+      const modulePath = item.source.parts.map((part) => part.kind === "StringRawPart" ? part.value : "").join("");
+      if (!spec || !modulePath.startsWith(".")) continue;
+      let base: string;
+      try { base = resolve(dirname(fileURLToPath(doc.uri)), modulePath); } catch { continue; }
+      const candidates = [base, ...[".fun", ".funs", ".funx", ".ts"].map((ext) => base + ext), ...["index.fun", "index.funs"].map((file) => resolve(base, file))];
+      const target = this.documents.find((candidate) => { try { return candidates.includes(fileURLToPath(candidate.uri)); } catch { return false; } });
+      if (target) return { doc: target, exportedName: spec.imported.name };
     }
+    return undefined;
   }
-  return undefined;
-}
 
-function identity(doc: Doc, occurrence: Occurrence, docs: Doc[]): string {
-  const linked = resolveImported(doc.uri, occurrence.name, docs);
-  if (linked) {
-    const program = parse(linked.doc.text, linked.doc.uri);
-    const exported = program?.body.find((entry) => entry.kind === "ExportDeclaration" && "id" in entry.declaration && "name" in entry.declaration.id && entry.declaration.id.name === linked.exportedName);
-    if (exported?.kind === "ExportDeclaration" && "id" in exported.declaration) {
-      const span = spanToRange(exported.declaration.id.span).start;
-      return `${linked.doc.uri}:${span.line}:${span.character}`;
-    }
+  importedForOccurrence(doc: Doc, occurrence: Occurrence): { doc: Doc; exportedName: string } | undefined {
+    const ast = this.document(doc).ast;
+    if (!ast) return undefined;
+    const match = new DefinitionFinder(occurrence.line + 1, occurrence.character + 1).find(ast);
+    return match ? this.importedTarget(doc, match.targetIdentifierNode.span.start.offset) : undefined;
   }
-  const ast = parse(doc.text, doc.uri);
-  const declared = ast?.body.some((item) => {
-    const declaration = item.kind === "ExportDeclaration" ? item.declaration : item;
-    return "id" in declaration && "name" in declaration.id && declaration.id.name === occurrence.name && declaration.id.span.start.line - 1 === occurrence.line && declaration.id.span.start.column - 1 === occurrence.character;
-  });
-  if (declared) return `${doc.uri}:${occurrence.line}:${occurrence.character}`;
-  const definition = findDefinition(doc.text, doc.uri, { line: occurrence.line, character: occurrence.character });
-  if (definition && !Array.isArray(definition)) return `${definition.uri}:${definition.range.start.line}:${definition.range.start.character}`;
-  return "";
+
+  identity(doc: Doc, occurrence: Occurrence): string {
+    const cacheKey = `${doc.uri}:${occurrence.start}`;
+    const cached = this.identities.get(cacheKey);
+    if (cached !== undefined) return cached;
+    const ast = this.document(doc).ast;
+    if (!ast) return "";
+    const match = new DefinitionFinder(occurrence.line + 1, occurrence.character + 1).find(ast);
+    if (!match) return "";
+    const identifier = match.targetIdentifierNode.span.start;
+    const linked = this.importedTarget(doc, identifier.offset);
+    if (linked) {
+      const exported = this.document(linked.doc).ast?.body.find((entry) => entry.kind === "ExportDeclaration" && "id" in entry.declaration && "name" in entry.declaration.id && entry.declaration.id.name === linked.exportedName);
+      if (exported?.kind === "ExportDeclaration" && "id" in exported.declaration) {
+        const start = exported.declaration.id.span.start;
+        const result = `${linked.doc.uri}:${start.line - 1}:${start.column - 1}`;
+        this.identities.set(cacheKey, result);
+        return result;
+      }
+    }
+    const result = `${doc.uri}:${identifier.line - 1}:${identifier.column - 1}`;
+    this.identities.set(cacheKey, result);
+    return result;
+  }
+
+  isUnresolvedImport(doc: Doc, occurrence: Occurrence): boolean {
+    const ast = this.document(doc).ast;
+    if (!ast) return false;
+    const match = new DefinitionFinder(occurrence.line + 1, occurrence.character + 1).find(ast);
+    if (!match) return false;
+    const identifier = match.targetIdentifierNode.span.start;
+    const isImport = ast.body.some((item) => item.kind === "ImportDeclaration" && item.specifiers.some((spec) =>
+      spec.local.span.start.offset === identifier.offset || spec.imported.span.start.offset === identifier.offset));
+    return isImport && this.identity(doc, occurrence) === `${doc.uri}:${identifier.line - 1}:${identifier.column - 1}`;
+  }
+
+  /** Return the local binding offset when an occurrence resolves to an import alias. */
+  localAlias(doc: Doc, occurrence: Occurrence): number | undefined {
+    const ast = this.document(doc).ast;
+    if (!ast) return undefined;
+    const match = new DefinitionFinder(occurrence.line + 1, occurrence.character + 1).find(ast);
+    if (!match) return undefined;
+    const offset = match.targetIdentifierNode.span.start.offset;
+    for (const item of ast.body) {
+      if (item.kind !== "ImportDeclaration") continue;
+      for (const spec of item.specifiers) {
+        if (spec.imported.name !== spec.local.name && spec.local.span.start.offset === offset) return offset;
+      }
+    }
+    return undefined;
+  }
+
+  references(uri: string, selected: Occurrence, includeDeclaration: boolean): Location[] {
+    const current = this.documents.find((doc) => doc.uri === uri);
+    if (!current) return [];
+    const key = this.identity(current, selected);
+    if (!key) return [];
+    const results: Location[] = [];
+    let declarationName: string | undefined;
+    for (const doc of this.documents) {
+      const declaration = this.document(doc).occurrences.find((occ) => `${doc.uri}:${occ.line}:${occ.character}` === key);
+      if (declaration) { declarationName = declaration.name; break; }
+    }
+    for (const doc of this.documents) {
+      const analysis = this.document(doc);
+      const names = new Set([selected.name, ...(declarationName ? [declarationName] : [])]);
+      for (const item of analysis.ast?.body ?? []) {
+        if (item.kind !== "ImportDeclaration") continue;
+        for (const spec of item.specifiers) {
+          const occurrence = analysis.occurrences.find((token) => token.start === spec.local.span.start.offset);
+          if (occurrence && this.identity(doc, occurrence) === key) {
+            names.add(spec.local.name);
+            names.add(spec.imported.name);
+          }
+        }
+      }
+      for (const occ of analysis.occurrences) {
+        if (!names.has(occ.name) || this.identity(doc, occ) !== key) continue;
+        if (!includeDeclaration && `${doc.uri}:${occ.line}:${occ.character}` === key) continue;
+        results.push({ uri: doc.uri, range: { start: { line: occ.line, character: occ.character }, end: { line: occ.line, character: occ.character + occ.name.length } } });
+      }
+    }
+    return results;
+  }
 }
 
 export function references(source: string, uri: string, position: {line:number; character:number}, docs: Doc[], includeDeclaration: boolean): Location[] {
-  const current = docs.find((d) => d.uri === uri) ?? { uri, text: source };
-  const selected = occurrences(source).find((o) => o.line === position.line && position.character >= o.character && position.character <= o.character + o.name.length);
-  if (!selected) return [];
-  const key = identity(current, selected, docs);
-  if (!key) return [];
-  const results: Location[] = [];
-  for (const doc of docs) for (const occ of occurrences(doc.text)) {
-    if (occ.name !== selected.name || identity(doc, occ, docs) !== key) continue;
-    if (!includeDeclaration && findDefinition(doc.text, doc.uri, {line:occ.line, character:occ.character}) && occ.name === selected.name) {
-      const def = findDefinition(doc.text, doc.uri, {line:occ.line, character:occ.character});
-      if (def && !Array.isArray(def) && def.uri === doc.uri && def.range.start.line === occ.line && def.range.start.character === occ.character) continue;
-    }
-    results.push({ uri: doc.uri, range: { start:{line:occ.line,character:occ.character}, end:{line:occ.line,character:occ.character+occ.name.length} } });
-  }
-  return results;
+  const analysis = new NavigationAnalysis(source, uri, docs);
+  const selected = analysis.selected(uri, position);
+  return selected ? analysis.references(uri, selected, includeDeclaration) : [];
 }
 
 const reserved = new Set("as async await break case catch class const continue debugger default delete do else export extends finally for from function if import in instanceof let new return switch this throw try typeof var void while with yield schema service error match when effect mut fn type number string boolean null undefined".split(" "));
 export function prepareRename(source: string, uri: string, position: {line:number; character:number}, docs: Doc[]): PrepareRenameResult | null {
-  const occ = occurrences(source).find((o) => o.line === position.line && position.character >= o.character && position.character <= o.character + o.name.length);
+  const analysis = new NavigationAnalysis(source, uri, docs);
+  const occ = analysis.selected(uri, position);
   if (!occ || reserved.has(occ.name) || occ.name.startsWith("__") || occ.name.startsWith("$")) return null;
-  if (!identity({ uri, text: source }, occ, docs)) return null;
+  if (!analysis.identity({ uri, text: source }, occ)) return null;
   return { range: { start:{line:occ.line,character:occ.character}, end:{line:occ.line,character:occ.character+occ.name.length} }, placeholder: occ.name };
 }
 
 export function rename(source: string, uri: string, position: {line:number; character:number}, newName: string, docs: Doc[]): WorkspaceEdit | null {
   if (!/^[A-Za-z_$][\w$]*$/.test(newName) || reserved.has(newName) || newName.startsWith("$") || newName.startsWith("__")) return null;
-  const prepared = prepareRename(source, uri, position, docs);
-  if (!prepared) return null;
-  if (!("placeholder" in prepared)) return null;
-  const oldName = prepared.placeholder;
-  const files = docs.filter((doc) => occurrences(doc.text).some((o) => o.name === oldName && identity(doc, o, docs) === identity({uri,text:source}, occurrences(source).find((o) => o.line === position.line && position.character >= o.character && position.character <= o.character+o.name.length)!, docs)));
-  for (const doc of files) if (occurrences(doc.text).some((o) => o.name === newName && o.name !== oldName && /(?:^|\n)\s*(?:export\s+)?(?:schema\s+|service\s+|error\s+)?/.test(doc.text.slice(Math.max(0,o.start-16),o.start)))) return null;
-  const changes: Record<string, TextEdit[]> = {};
+  const analysis = new NavigationAnalysis(source, uri, docs);
+  const selected = analysis.selected(uri, position);
+  if (!selected || reserved.has(selected.name) || selected.name.startsWith("__") || selected.name.startsWith("$")) return null;
+  const current = { uri, text: source };
+  const key = analysis.identity(current, selected);
+  if (!key) return null;
+  const selectedAlias = analysis.localAlias(current, selected);
+  if (selectedAlias === undefined && analysis.isUnresolvedImport(current, selected)) return null;
+  const allDocs = [...docs.filter((doc) => doc.uri !== uri), current];
+  const locations = analysis.references(uri, selected, true).filter((location) => {
+    const doc = allDocs.find((item) => item.uri === location.uri);
+    const occurrence = doc && analysis.document(doc).occurrences.find((item) => item.line === location.range.start.line && item.character === location.range.start.character);
+    if (!doc || !occurrence) return false;
+    const alias = analysis.localAlias(doc, occurrence);
+    return selectedAlias === undefined ? alias === undefined : doc.uri === uri && alias === selectedAlias;
+  });
+  if (!locations.length) return null;
+  // Conservatively reject a name already used in any affected document; this
+  // prevents captures even when the existing occurrence is in a nested scope.
+  const files = allDocs.filter((doc) => locations.some((location) => location.uri === doc.uri));
   for (const doc of files) {
-    const edits = references(source, uri, position, docs, true).filter((loc) => loc.uri === doc.uri).map((loc) => ({ range: loc.range, newText: newName }));
-    if (edits.length) changes[doc.uri] = edits;
+    if (newName !== selected.name && analysis.document(doc).occurrences.some((occ) => occ.name === newName)) return null;
   }
-  return Object.keys(changes).length ? { changes } : null;
+  const changes: Record<string, TextEdit[]> = {};
+  for (const loc of locations) (changes[loc.uri] ??= []).push({ range: loc.range, newText: newName });
+  return { changes };
 }
 
 export function documentSymbols(source: string, uri: string): DocumentSymbol[] {
@@ -131,12 +220,13 @@ export function workspaceSymbols(docs: Doc[], query: string): SymbolInformation[
 }
 
 export function findWorkspaceDefinition(source: string, uri: string, position: { line: number; character: number }, docs: Doc[], linkSupport = false): Location | LocationLink[] | null {
-  const occ = occurrences(source).find((item) => item.line === position.line && position.character >= item.character && position.character <= item.character + item.name.length);
+  const analysis = new NavigationAnalysis(source, uri, docs);
+  const occ = analysis.selected(uri, position);
   if (!occ) return null;
-  const imported = resolveImported(uri, occ.name, docs);
+  const imported = analysis.importedForOccurrence({ uri, text: source }, occ);
   if (!imported) return findDefinition(source, uri, position, linkSupport);
   const target = imported.doc;
-  const targetAst = parse(target.text, target.uri);
+  const targetAst = analysis.document(target).ast;
   const declaration = targetAst?.body.find((entry) => {
     if (entry.kind !== "ExportDeclaration") return false;
     return "id" in entry.declaration && "name" in entry.declaration.id && entry.declaration.id.name === imported.exportedName;
