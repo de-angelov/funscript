@@ -121,13 +121,10 @@ export function validateFunScript(
     const lexer = new Lexer(source, uri);
     const tokens = lexer.tokenize();
     const parser = new Parser(tokens, uri, source);
-    const ast = parser.parse();
-
-    if (Array.isArray((parser as any).diagnostics)) {
-      for (const diag of (parser as any).diagnostics) {
-        diagnostics.push(toDiagnostic(diag));
-      }
-    }
+    const ast = parser.parse({ throwOnError: false });
+    // Recovery can produce cascading errors inside a single malformed block.
+    const firstDiagnostic = parser.getDiagnostics()[0];
+    if (firstDiagnostic) diagnostics.push(toDiagnostic(firstDiagnostic));
 
     if (diagnostics.length === 0) {
       try {
