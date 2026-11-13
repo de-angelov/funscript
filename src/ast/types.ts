@@ -78,6 +78,8 @@ export type BindingTarget = Identifier | UpperIdentifier | RecordPattern | Array
 export interface BindingDeclaration extends NodeBase {
   kind: "BindingDeclaration";
   isMut: boolean;
+  /** Legacy parser metadata used by the migration tool. */
+  isTrailingBinding?: boolean;
   isJs?: boolean;
   id: BindingTarget;
   typeAnnotation?: TypeNode;
@@ -441,6 +443,8 @@ export interface EffectBlockExpression extends NodeBase {
   kind: "EffectBlockExpression";
   body: EffectStatement[];
   finalExpression: Expression;
+  /** Legacy return syntax that requires manual migration. */
+  legacyReturnKind?: "bare" | "missing";
 }
 
 export type EffectStatement =

@@ -50,7 +50,7 @@ jobs:
         run: npm test -- --reporter=basic 2>&1 | tee test.log
 
       - name: Verify npm package contents
-        run: npm pack --dry-run
+        run: npm run package:check
 
       - name: Upload failure diagnostics
         if: failure()

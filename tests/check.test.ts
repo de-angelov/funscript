@@ -172,9 +172,9 @@ export result = calculate("hello", 42)
     });
 
     it("reports repeated invalid members on their respective source lines", async () => {
-      const code = 'export check = (value: Number) =>\n  first = value.toUpperCase()\n  => value.toUpperCase()';
+      const code = 'export check = (value: Number) =>\n  first = value.missingMember()\n  => value.missingMember()';
       const result = await Effect.runPromise(typeCheckSource(code, "repeated.fun"));
-      const errors = result.diagnostics.filter((d) => d.message.includes("toUpperCase"));
+      const errors = result.diagnostics.filter((d) => d.message.includes("missingMember"));
       expect(errors.map((d) => d.line).sort()).toEqual([2, 3]);
     });
 

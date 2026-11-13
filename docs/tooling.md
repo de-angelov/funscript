@@ -114,7 +114,7 @@ proprietary project layout or package format.
 
 The repository's own scripts are defined in `package.json`: `build`, `check`, `benchmark`, `test`,
 `test:examples`, `test:watch`, `fmt`, `fmt:check`, `prettier:check`, `docs:generate`,
-`docs:check`, `check:idiomatic`, `verify`, and `pr:check`. They are repository scripts,
+`docs:check`, `check:idiomatic`, `package:check`, `verify`, and `pr:check`. They are repository scripts,
 not additional `funscript` CLI commands.
 
 ## Language compatibility policy

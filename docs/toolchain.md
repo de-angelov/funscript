@@ -5,6 +5,8 @@ After cloning the repository, run `sh scripts/toolchain.sh status` on macOS/Linu
 20+ and npm. It links this checkout's `funscript` executable globally for the current
 npm prefix; the project has no published CLI release channel yet. It does not install
 Node.js or npm. Install Node.js 20+ from [nodejs.org](https://nodejs.org/) first.
+Some example-only development dependencies require Node.js 22.19+; use that version
+for a strict-engine development install and for the HTTP example.
 
 Use `install`, `update`, or `uninstall` as the subcommand. Each displays the affected
 tool and command, then asks for an interactive confirmation. `--dry-run` (PowerShell:

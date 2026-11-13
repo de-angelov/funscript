@@ -1928,6 +1928,7 @@ export class Parser {
 
     const body: EffectStatement[] = [];
     let finalExpression: Expression | undefined;
+    let legacyReturnKind: "bare" | "missing" | undefined;
 
     const atEnd = () => braced ? this.check(TokenType.RBRACE) : this.check(TokenType.DEDENT);
     while (!atEnd() && !this.isAtEnd()) {
@@ -2013,7 +2014,7 @@ export class Parser {
         if (atEnd()) {
           if (this.options.allowLegacyReturns) {
             finalExpression = expr;
-            (finalExpression as any).isLegacyBareEffectReturn = true;
+            legacyReturnKind = "bare";
             break;
           }
           throw new ParseError(EFFECT_RETURN_DIAGNOSTIC, expr.span);
@@ -2040,7 +2041,7 @@ export class Parser {
           name: "_missingReturn",
           span: { start, end: this.previous().span.end },
         };
-        (finalExpression as any).isMissingEffectReturn = true;
+        legacyReturnKind = "missing";
       } else {
         throw new ParseError(EFFECT_RETURN_DIAGNOSTIC, { start, end: this.previous().span.end });
       }
@@ -2050,6 +2051,7 @@ export class Parser {
       kind: "EffectBlockExpression",
       body,
       finalExpression,
+      legacyReturnKind,
       span: { start, end: finalExpression.span.end },
     };
   }
@@ -2449,7 +2451,7 @@ export class Parser {
             this.skipNewlines();
             if (this.check(TokenType.DEDENT)) {
               if (requireExplicitReturn) throw new ParseError(FUNCTION_RETURN_DIAGNOSTIC, bind.span);
-              (bind as any).isTrailingBinding = true;
+              bind.isTrailingBinding = true;
               statements.push(bind);
               if (bind.id.kind === "Identifier" || bind.id.kind === "UpperIdentifier") {
                 finalExpression = bind.id;

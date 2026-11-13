@@ -40,7 +40,7 @@ connect = <Client extends RedisConnectableClient>(factory: () => Client) => fact
 
   it("compiles generic lambdas without widening", async () => {
     const result = await compile("export identity = <A>(value: A) => A { => value }");
-    expect(result.typescript).toContain("export const identity = <A>(value: A): A =>");
+    expect(result.typescript).toContain("export const identity = <A,>(value: A): A =>");
     const checked = await typeCheck("export identity = <A>(value: A) => A { => value }");
     expect(checked.success, checked.formattedOutput).toBe(true);
   });

@@ -26,11 +26,17 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: read
+    outputs:
+      commit: ${{ steps.release_commit.outputs.sha }}
     steps:
       - name: Checkout release commit
         uses: actions/checkout@v4
         with:
           ref: main
+
+      - name: Record verified commit
+        id: release_commit
+        run: echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -90,7 +96,8 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           RELEASE_VERSION: ${{ inputs.version }}
           PRERELEASE: ${{ inputs.prerelease }}
+          RELEASE_COMMIT: ${{ needs.verify.outputs.commit }}
         run: |
-          args=(--draft --target main --title "FunScript v${RELEASE_VERSION}" --generate-notes)
+          args=(--draft --target "$RELEASE_COMMIT" --title "FunScript v${RELEASE_VERSION}" --generate-notes)
           if [[ "$PRERELEASE" == "true" ]]; then args+=(--prerelease); fi
           gh release create "v${RELEASE_VERSION}" release-artifact/*.tgz "${args[@]}"

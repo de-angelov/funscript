@@ -582,7 +582,7 @@ function handleFunctionExpression(
 
   // 2. Ambiguous: Trailing binding declaration
   const isTrailingBinding =
-    (lastStmt as any)?.isTrailingBinding ||
+    (lastStmt?.kind === "BindingDeclaration" && lastStmt.isTrailingBinding) ||
     (!block.finalExpression && lastStmt?.kind === "BindingDeclaration") ||
     (block.finalExpression &&
       lastStmt?.kind === "BindingDeclaration" &&
@@ -650,11 +650,7 @@ function handleEffectBlockExpression(
   filename: string,
 ): void {
   // Check if this effect block ended with an ambiguous bare return
-  if (
-    (expr.finalExpression as any)?.isLegacyBareEffectReturn ||
-    (expr.finalExpression as any)?.isMissingEffectReturn ||
-    (expr.body as any)?.isMissingFinalExpression
-  ) {
+  if (expr.legacyReturnKind !== undefined) {
     diagnostics.push({
       kind: "ambiguous-effect-return",
       severity: "warning",
@@ -681,7 +677,7 @@ function handleEffectBlockExpression(
     }
   }
 
-  if (expr.finalExpression && !(expr.finalExpression as any)?.isMissingEffectReturn) {
+  if (expr.finalExpression && expr.legacyReturnKind !== "missing") {
     visitExpression(expr.finalExpression, source, options, changes, diagnostics, filename);
   }
 }
