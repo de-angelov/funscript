@@ -2,9 +2,9 @@
 
 After cloning the repository, run `sh scripts/toolchain.sh status` on macOS/Linux or
 `./scripts/toolchain.ps1 status` in PowerShell on Windows. The helper supports Node.js
-20+ and npm. It links this checkout's `funscript` executable globally for the current
+20+ and npm 10+. It links this checkout's `funscript` executable globally for the current
 npm prefix; the project has no published CLI release channel yet. It does not install
-Node.js or npm. Install Node.js 20+ from [nodejs.org](https://nodejs.org/) first.
+Node.js or npm. Install Node.js 20+ and npm 10+ from [nodejs.org](https://nodejs.org/) first.
 Some example-only development dependencies require Node.js 22.19+; use that version
 for a strict-engine development install and for the HTTP example.
 
@@ -16,7 +16,7 @@ configuration are never changed.
 
 The helper supports POSIX shells on macOS/Linux and PowerShell on Windows, provided
 `node` and `npm` are on PATH. Other package managers and unsupported environments
-should use the manual route: install Node.js 20+, run `npm install` in this checkout,
+should use the manual route: install Node.js 22.19+ for development, run `npm install` in this checkout,
 then `npm link`. To repair a link, run `npm unlink -g funscript` and `npm link` from
 the checkout. To roll back, run `npm unlink -g funscript`.
 

@@ -3,10 +3,10 @@
 ## Continuous integration
 
 The `CI` workflow runs for pull requests targeting `main` and pushes to `main`. It
-uses Node.js 20, installs from `package-lock.json` with `npm ci`, builds both the
+uses Node.js 22.19, installs from `package-lock.json` with `npm ci`, builds both the
 compiler and VS Code extension, checks formatting on supported `.fun` examples
 with the CLI and Prettier, checks a `.funx` JSX fixture, runs the Vitest
-suite with bounded worker concurrency, and installs the packed artifact in a clean consumer project. The formatter preserves JSX source; `.funx` files with embedded
+suite with bounded worker concurrency, and installs the packed artifact in a clean consumer project on Node.js 22.19 and the minimum supported Node.js 20. The formatter preserves JSX source; `.funx` files with embedded
 TypeScript blocks and several `.fun` examples with embedded TypeScript or
 multiline strings remain outside the formatting check until those formatter
 cases are supported. Superseded runs for the same pull request or branch are
@@ -18,7 +18,7 @@ maps) as a short-lived Actions artifact.
 ## Preparing a release
 
 CI verifies changes; it does not publish packages. The manual `Prepare npm
-Release` workflow verifies `main`, checks that the required version input exactly
+Release` workflow runs the PR checks, including the packed consumer smoke test, on `main`, checks that the required version input exactly
 matches `package.json`, packs the npm package, and uploads the tarball. Its final
 job waits on the `npm-release` GitHub environment, then creates a **draft** GitHub
 release with the tarball attached and its tag targeting the verified commit. A maintainer reviews the draft and release notes

@@ -25,6 +25,11 @@ export const CHECKS = [
     args: ["run", "prettier:check"],
   },
   {
+    name: "Packed Consumer Check",
+    cmd: "npm",
+    args: ["run", "package:check"],
+  },
+  {
     name: "Vitest Test Suite",
     cmd: "npm",
     args: ["test"],

@@ -25,7 +25,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 22.19.0
           cache: npm
 
       - name: Install dependencies
@@ -50,6 +50,14 @@ jobs:
         run: npm test -- --reporter=basic 2>&1 | tee test.log
 
       - name: Verify npm package contents
+        run: npm run package:check
+
+      - name: Use minimum supported Node.js for consumer smoke test
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Verify package on Node.js 20
         run: npm run package:check
 
       - name: Upload failure diagnostics

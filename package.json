@@ -47,7 +47,7 @@
     "compiler"
   ],
   "author": "",
-  "license": "MIT",
+  "license": "UNLICENSED",
   "dependencies": {
     "@babel/code-frame": "^7.29.7",
     "@jridgewell/trace-mapping": "^0.3.31",
@@ -85,6 +85,7 @@
     "README.md"
   ],
   "engines": {
-    "node": ">=20"
+    "node": ">=20",
+    "npm": ">=10"
   }
 }
