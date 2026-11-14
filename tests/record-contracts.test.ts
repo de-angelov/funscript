@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { Effect, Option } from "effect";
+import { Effect, Option, Schema } from "effect";
+import { checkedSync, checkedSyncVoid, checkedEffect, decodeCheckedRecord } from "../src/interop/callback.js";
 import { compile, execute, expectCompileError, typeCheck } from "./helpers/index.js";
 import { typeCheckVirtualFiles } from "../src/compiler/check.js";
 import { mkdtemp, mkdir, rm, symlink, writeFile } from "node:fs/promises";
@@ -30,6 +31,154 @@ describe("named compile-time record contracts", () => {
     expect(result.typescript).toContain("<Target {...props} />");
     expect(result.typescript).not.toContain("PropsFromUnknown");
   });
+
+  it("generates an explicit checked decoder for supported synchronous callbacks", async () => {
+    const source = 'export schema Action = { label: String, run: (value: String) => String }\nexport decode = (input: Unknown) => ActionDecodeChecked(input)';
+    const checked = await typeCheck(source, "action.fun");
+    expect(checked.success, checked.formattedOutput).toBe(true);
+    const { decode } = await execute(source, { filename: "action.fun", scope: { $funscriptCheckedSync: checkedSync, $funscriptDecodeCheckedRecord: decodeCheckedRecord } });
+    const fn = (value: string) => value.toUpperCase();
+    const action = decode({ label: "save", run: fn });
+    expect(action.label).toBe("save");
+    expect(action.run("ok")).toBe("OK");
+    expect(action.run).not.toBe(fn);
+    expect(() => decode({ label: 1, run: fn })).toThrow();
+    expect(() => decode({ label: "save", run: 12 })).toThrow();
+    expect(() => decode({ label: "save", run: () => 1 }).run("ok")).toThrow();
+  }, 60000);
+
+  it("decodes optional React-style callbacks without changing omission or requiring a void return", async () => {
+    const source = 'export schema Props = { label?: String, onClick?: () => Void, onVote?: (country: String) => Void }\nexport decode = (input: Unknown) => PropsDecodeChecked(input)';
+    const checked = await typeCheck(source, "props.funx");
+    expect(checked.success, checked.formattedOutput).toBe(true);
+    const { decode } = await execute(source, { filename: "props.funx", scope: { $funscriptCheckedSync: checkedSync, $funscriptCheckedSyncVoid: checkedSyncVoid, $funscriptCheckedEffect: checkedEffect, $funscriptDecodeCheckedRecord: decodeCheckedRecord } });
+    const missing = decode({});
+    expect(Object.hasOwn(missing, "label")).toBe(false);
+    expect(Object.hasOwn(missing, "onClick")).toBe(false);
+    const explicit = decode({ label: undefined, onClick: undefined });
+    expect(Object.hasOwn(explicit, "onClick")).toBe(true);
+    expect(explicit.onClick).toBeUndefined();
+    expect(Object.hasOwn(explicit, "label")).toBe(true);
+    expect(() => decode({ onVote: null })).toThrow();
+    expect(() => decode({ label: 1 })).toThrow();
+    let count = 0;
+    const props = decode({ onClick: () => { count++; return 123; }, onVote: (value: string) => { expect(value).toBe("BG"); return 9; } });
+    expect(props.onVote("BG")).toBeUndefined();
+    expect(() => props.onVote(42)).toThrow();
+    const target = new EventTarget();
+    const listener = props.onClick;
+    target.addEventListener("vote", listener);
+    target.dispatchEvent(new Event("vote"));
+    target.removeEventListener("vote", listener);
+    target.dispatchEvent(new Event("vote"));
+    expect(count).toBe(1);
+  }, 60000);
+
+  it("checks nullary tagged unions in optional data and callbacks without replacing values", async () => {
+    const source = `export schema RankingOrder =
+  | HighestFirst
+  | LowestFirst
+export schema RankingOrderControlsProps = {
+  order?: RankingOrder
+  currentOrder?: RankingOrder
+  onOrderChange?: (order: RankingOrder) => Void
+}
+export decode = (input: Unknown) => RankingOrderControlsPropsDecodeChecked(input)`;
+    const checked = await typeCheck(source, "ranking.funx");
+    expect(checked.success, checked.formattedOutput).toBe(true);
+    const compiled = await compile(source, "ranking.funx");
+    expect(compiled.typescript).toContain("checkedSyncVoid as $funscriptCheckedSyncVoid");
+    expect(compiled.typescript).not.toContain("checkedSync as $funscriptCheckedSync");
+    expect(compiled.typescript).not.toContain("checkedEffect as $funscriptCheckedEffect");
+    const { decode, LowestFirst } = await execute(source, { filename: "ranking.funx", scope: { $funscriptCheckedSync: checkedSync, $funscriptCheckedSyncVoid: checkedSyncVoid, $funscriptCheckedEffect: checkedEffect, $funscriptDecodeCheckedRecord: decodeCheckedRecord } });
+    let seen: unknown;
+    const props = decode({ order: LowestFirst, onOrderChange: (value: unknown) => { seen = value; } });
+    expect(props.order).toBe(LowestFirst);
+    props.onOrderChange(LowestFirst);
+    expect(seen).toBe(LowestFirst);
+    expect(() => decode({ order: { _tag: "Invalid" } })).toThrow();
+    expect(() => props.onOrderChange({ _tag: "Invalid" })).toThrow();
+    expect(() => decode({ onOrderChange: 42 })).toThrow();
+  }, 60000);
+
+  it("uses a directly imported value schema only when its encoding is verified", async () => {
+    const root = await mkdtemp(path.join(tmpdir(), "fun-import-codec-"));
+    try {
+      await mkdir(path.join(root, "node_modules"), { recursive: true });
+      await symlink(path.resolve("node_modules/effect"), path.join(root, "node_modules/effect"), "dir");
+      await symlink(process.cwd(), path.join(root, "node_modules/funscript"), "dir");
+      await writeFile(path.join(root, "country.fun"), 'export schema Country = { code: String, likes: Number }');
+      const source = 'import { Country as Nation } from "./country.js"\nexport schema Props = { onVote: (country: Nation) => Void }\nexport decode = (input: Unknown) => PropsDecodeChecked(input)';
+      const files = { "country.fun": 'export schema Country = { code: String, likes: Number }', "props.fun": source };
+      const checked = await Effect.runPromise(typeCheckVirtualFiles(files, { cwd: root, compilerOptions: { rootDir: root } }));
+      expect(checked.success, checked.formattedOutput).toBe(true);
+      const compiled = await compile(source, path.join(root, "props.fun"));
+      expect(compiled.typescript).toContain("PropsDecodeChecked");
+      expect(compiled.typescript).toContain("Schema.Tuple([Nation])");
+      const { decode } = await execute(source, { filename: path.join(root, "props.fun"), scope: { Nation: Schema.Struct({ code: Schema.String, likes: Schema.Number }), $funscriptCheckedSync: checkedSync, $funscriptCheckedSyncVoid: checkedSyncVoid, $funscriptCheckedEffect: checkedEffect, $funscriptDecodeCheckedRecord: decodeCheckedRecord } });
+      let seen: unknown;
+      const props = decode({ onVote: (value: unknown) => { seen = value; } });
+      props.onVote({ code: "BG", likes: 2 });
+      expect(seen).toEqual({ code: "BG", likes: 2 });
+      expect(() => props.onVote({ code: "BG", likes: "bad" })).toThrow();
+      const typeOnly = await compile('import type { Country } from "./country.js"\nexport schema Props = { onVote: (country: Country) => Void }', path.join(root, "props.fun"));
+      expect(typeOnly.typescript).not.toContain("PropsDecodeChecked");
+      await writeFile(path.join(root, "country.ts"), 'export type Country = { code: string }');
+      const ambiguous = await compile(source, path.join(root, "props.fun"));
+      expect(ambiguous.typescript).not.toContain("export const PropsDecodeChecked");
+    } finally { await rm(root, { recursive: true, force: true }); }
+  }, 60000);
+
+  it("does not replace user decoders or generate unsupported signatures", async () => {
+    const owned = await compile('schema Action = { run: (value: String) => String }\nexport ActionDecodeChecked = (value: String) => value', "action.fun");
+    expect(owned.typescript).not.toContain("$funscriptDecodeCheckedRecord");
+    const unsupported = await compile('schema Service = { run?: (value: String) => Effect<String, String> }', "service.fun");
+    expect(unsupported.typescript).not.toContain("ServiceDecodeChecked");
+    const failure = await typeCheck('schema Service = { run?: (value: String) => Effect<String, String> }\nexport decode = (input: Unknown) => ServiceDecodeChecked(input)', "service.fun");
+    expect(failure.formattedOutput).toContain("has no generated checked decoder for this signature");
+  });
+
+  it("generates a typed Effect boundary with a widened failure channel", async () => {
+    const source = `import { Effect } from "effect"
+export schema Request = { code: String }
+export schema Reply = { count: Number }
+export schema Failure = { code: String }
+export schema Handler = { submit: (request: Request) => Effect<Reply, Failure> }
+export decode = (input: Handler) => HandlerDecodeChecked(input)`;
+    const checked = await typeCheck(source, "handler.fun");
+    expect(checked.success, checked.formattedOutput).toBe(true);
+    const unsafe = await typeCheck(source + '\nexport unsafe = (input: Handler): Handler => HandlerDecodeChecked(input)', "handler.fun");
+    expect(unsafe.success).toBe(false);
+    const untrusted = await typeCheck(source + '\nexport decodeUnknown = (input: Unknown) => HandlerDecodeChecked(input)', "handler.fun");
+    expect(untrusted.success).toBe(false);
+    const { decode } = await execute(source, { filename: "handler.fun", scope: { $funscriptCheckedSync: checkedSync, $funscriptCheckedEffect: checkedEffect, $funscriptDecodeCheckedRecord: decodeCheckedRecord } });
+    let calls = 0;
+    const handler = decode({ submit: () => { calls++; return Effect.succeed({ count: 4 }); } });
+    const pending = handler.submit({ code: "BG" });
+    expect(calls).toBe(0);
+    expect(await Effect.runPromise(pending)).toEqual({ count: 4 });
+    expect(calls).toBe(1);
+    const invalid = decode({ submit: () => Effect.succeed({ count: "bad" }) });
+    const invalidResult = await Effect.runPromise(Effect.result(invalid.submit({ code: "BG" })));
+    expect(invalidResult).toMatchObject({ _tag: "Failure", failure: { _tag: "CallbackBoundaryError", stage: "result" } });
+    const domain = { code: "storage_failed" };
+    const fails = decode({ submit: () => Effect.fail(domain) });
+    expect(await Effect.runPromise(Effect.result(fails.submit({ code: "BG" })))).toMatchObject({ _tag: "Failure", failure: domain });
+  }, 60000);
+
+  it("preserves declared Effect service requirements in the checked type", async () => {
+    const output = await compile('export schema Worker = { run: (value: String) => Effect<String, String, Boolean> }', "worker.fun");
+    expect(output.typescript).toContain('string | $funscriptCallbackBoundaryError, boolean');
+  });
+
+  it("exports the checked decoder across FunScript modules", async () => {
+    const files = {
+      "action.fun": 'export schema Action = { label: String, run: (value: String) => String }',
+      "caller.fun": 'import { ActionDecodeChecked } from "./action.js"\nexport decode = (input: Unknown) => ActionDecodeChecked(input)',
+    };
+    const checked = await Effect.runPromise(typeCheckVirtualFiles(files, { compilerOptions: { rootDir: process.cwd() } }));
+    expect(checked.success, checked.formattedOutput).toBe(true);
+  }, 60000);
 
   it("checks callback signatures for TypeScript callers", async () => {
     const good = await typeCheck(declaration + '\nts { const props: Props = { onChange: (value: string) => {} }; }', "contract.fun");
@@ -73,7 +222,12 @@ describe("named compile-time record contracts", () => {
   });
 
   it("rejects runtime decoding and unsafe uses of static contracts", async () => {
-    expect((await typeCheck(declaration + '\nexport decode = (value: Unknown) => PropsFromUnknown(value)', "contract.fun")).success).toBe(false);
+    const missingDecoder = await typeCheck(declaration + '\nexport decode = (value: Unknown) => PropsFromUnknown(value)', "contract.fun");
+    expect(missingDecoder.success).toBe(false);
+    expect(missingDecoder.formattedOutput).toContain("compile-time record contract and has no generated FromUnknown decoder");
+    await expectCompileError(declaration + '\nexport read = (value: SchemaInput<Props>) => value', /no encoded schema input type/);
+    const shadowed = await typeCheck(declaration + '\nexport read = (PropsFromUnknown: (value: String) => String) => PropsFromUnknown("ok")', "contract.fun");
+    expect(shadowed.success, shadowed.formattedOutput).toBe(true);
     await expectCompileError(declaration + '\nexport value = Props', /compile-time record contract/);
     await expectCompileError(declaration + '\nexport js entry = (props: Props) => props.label', /not supported on js entry/);
   });

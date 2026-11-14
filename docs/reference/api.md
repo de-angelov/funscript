@@ -16,3 +16,4 @@ Package: `funscript` 0.1.0.
 | `funscript/interop/valibot` | `./dist/interop/valibot.js` |
 | `funscript/vite` | `./dist/plugins/vite.js` |
 | `funscript/plugins/vite` | `./dist/plugins/vite.js` |
+| `funscript/callback` | `./dist/interop/callback.js` |

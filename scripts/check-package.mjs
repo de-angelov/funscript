@@ -18,7 +18,7 @@ try {
     if (paths.some((path) => path.startsWith(prefix))) throw new Error(`Unexpected package contents: ${prefix}`);
   }
   writeFileSync(join(temp, "package.json"), JSON.stringify({ private: true, type: "module" }));
-  run(npm, ["install", "--ignore-scripts", "--no-audit", "--no-fund", "--engine-strict", join(temp, packed.filename)]);
+  run(npm, ["install", "--ignore-scripts", "--no-audit", "--no-fund", "--engine-strict", join(temp, packed.filename), "vite@^5.4.21"]);
   const imports = Object.keys(manifest.exports).map((key) => key === "." ? manifest.name : manifest.name + key.slice(1));
   run(process.execPath, ["--input-type=module", "-e", `for (const name of ${JSON.stringify(imports)}) await import(name);`]);
   run(process.execPath, [join(temp, "node_modules", manifest.name, "dist", "cli", "index.js"), "--help"]);

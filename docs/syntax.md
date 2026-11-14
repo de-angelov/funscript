@@ -623,8 +623,19 @@ Optional fields in structural members decode to `Option`, as in record schemas.
 Literal and structural members cannot be mixed with tagged constructors in one union.
 Record schemas containing a function or Effect type instead declare a **compile-time
 record contract**. They describe ordinary JavaScript objects and do not provide a
-runtime schema, decoder, or `SchemaInput` type. This distinction applies to the whole
+runtime schema, `FromUnknown` decoder, or `SchemaInput` type. Some contracts also
+provide an explicit checked decoder as described below. This distinction applies to the whole
 record: adding a function or Effect field to a data schema changes it into a contract.
+A contract has no `FromUnknown` decoder or `SchemaInput` type. For the narrow
+supported case of non-generic records with synchronous callback fields, the compiler
+generates `NameDecodeChecked(input)` for supported primitive, local data-schema,
+local nullary tagged-union, and directly imported simple data-schema types. Optional fields are supported for synchronous contracts. `Void` callbacks
+ignore the foreign return value and discard arguments beyond the declared signature. For
+Effect-returning callbacks it accepts a statically typed contract, and generates a
+`NameChecked` type that adds `CallbackBoundaryError` while preserving the declared
+error and service types. Foreign Effect failure types and service requirements are
+trusted, not runtime-validated. Other contract shapes have no generated checked decoder yet. See [checked foreign
+callbacks](callback-boundaries.md) for details and explicit adapters.
 
 ```funscript
 export schema ButtonProps = {

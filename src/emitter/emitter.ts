@@ -106,6 +106,8 @@ export interface EmitterOptions {
   /** Direct imported FunScript functions with verified optional-record parameters. */
   importedRecordFunctions?: ReadonlyMap<string, ReadonlySet<number>>;
   importedRecordContracts?: ReadonlyMap<string, import("../ast/types.js").RecordTypeNode>;
+  /** Direct imported data schemas verified to have an identity encoding. */
+  importedIdentitySchemas?: ReadonlySet<string>;
   /** Whether the output is `.tsx`; generic arrows need a comma there. */
   isJsx?: boolean;
 }
@@ -309,6 +311,10 @@ export class Emitter {
   private runtimeSchemaNames = new Set<string>();
   private inPipelineStage = false;
   private recordContracts = new Map<string, import("../ast/types.js").RecordTypeNode>();
+  private needsCheckedRecordDecoder = false;
+  private checkedCallbackKinds = new Set<"sync" | "void" | "effect">();
+  private identityRecordSchemas = new Set<string>();
+  private checkedTaggedSchemas = new Map<string, readonly string[]>();
 
   constructor(private program?: Program, contextProgram?: Program, private options: EmitterOptions = {}) {
     for (const [name, contract] of options.importedRecordContracts ?? []) this.recordContracts.set(name, contract);
@@ -350,12 +356,45 @@ export class Emitter {
       if (decl.kind === "BindingDeclaration" && "name" in decl.id) this.bindings.set(decl.id.name, decl);
     }
 
+    // Nullary local tagged unions can be validated by tag without reconstructing
+    // values, preserving the identity of Effect Data constructors.
+    for (const item of allItems) {
+      const decl = item.kind === "ExportDeclaration" ? item.declaration : item;
+      if (decl.kind === "SchemaDeclaration" && decl.body.kind === "TaggedUnionSchema" &&
+          !decl.typeParams?.length && decl.body.variants.length > 0 &&
+          decl.body.variants.every(variant => variant.fields.length === 0)) {
+        this.checkedTaggedSchemas.set(decl.id.name, decl.body.variants.map(variant => variant.name.name));
+      }
+    }
+
     const staticTypeNames = new Set<string>();
     for (const [name] of this.recordContracts) staticTypeNames.add(name);
     for (const item of allItems) {
       const decl = item.kind === "ExportDeclaration" ? item.declaration : item;
       if (decl.kind === "SchemaDeclaration" && decl.body.kind === "TypeSignatureSchema") {
         staticTypeNames.add(decl.id.name);
+      }
+    }
+    // Conservative whitelist: only local, non-transforming record codecs are used
+    // for generated Effect callback adapters. Optional/defaulted fields can change
+    // their encoded representation and are deliberately excluded.
+    const identityType = (type: TypeNode): boolean => {
+      if (type.kind === "LiteralTypeNode") return true;
+      if (type.kind === "UnionTypeNode") return type.types.every(identityType);
+      if (type.kind === "ParenthesizedTypeNode") return identityType(type.typeNode);
+      return type.kind === "TypeReferenceNode" && !type.typeArgs?.length &&
+        ((["String", "Number", "Boolean"].includes(type.name.name) && !this.declaredTypeNames.has(type.name.name)) || this.identityRecordSchemas.has(type.name.name));
+    };
+    let addedIdentity = true;
+    while (addedIdentity) {
+      addedIdentity = false;
+      for (const item of allItems) {
+        const decl = item.kind === "ExportDeclaration" ? item.declaration : item;
+        if (decl.kind !== "SchemaDeclaration" || decl.body.kind !== "RecordSchema" || decl.typeParams?.length || this.identityRecordSchemas.has(decl.id.name)) continue;
+        if (decl.body.fields.every(field => !field.optional && !field.defaultValue && identityType(field.typeAnnotation))) {
+          this.identityRecordSchemas.add(decl.id.name);
+          addedIdentity = true;
+        }
       }
     }
     let changed = true;
@@ -412,6 +451,13 @@ export class Emitter {
       .sort((a, b) => a.localeCompare(b));
     if (generatedEsToolkitImports.length > 0) {
       header += `import { ${generatedEsToolkitImports.join(", ")} } from "es-toolkit";\n`;
+    }
+    if (this.needsCheckedRecordDecoder) {
+      const helpers = ["decodeCheckedRecord as $funscriptDecodeCheckedRecord"];
+      if (this.checkedCallbackKinds.has("sync")) helpers.push("checkedSync as $funscriptCheckedSync");
+      if (this.checkedCallbackKinds.has("void")) helpers.push("checkedSyncVoid as $funscriptCheckedSyncVoid");
+      if (this.checkedCallbackKinds.has("effect")) helpers.push("checkedEffect as $funscriptCheckedEffect", "type CallbackBoundaryError as $funscriptCallbackBoundaryError");
+      header += `import { ${helpers.join(", ")} } from "funscript/callback";\n`;
     }
     if (this.needsTsPattern) {
       header += `import { match, P } from "ts-pattern";\n`;
@@ -483,7 +529,9 @@ export class Emitter {
         if (this.recordContracts.has(name)) {
           const brand = `${RECORD_CONTRACT_BRAND}$${name}`;
           const typeParamsStr = this.emitTypeParameters(decl.typeParams);
-          return `declare const ${brand}: unique symbol;\n${exp}type ${name}${typeParamsStr} = ${this.emitTypeNode(recordContractType(decl.body))} & { readonly [${brand}]?: never };`;
+          const contract = `declare const ${brand}: unique symbol;\n${exp}type ${name}${typeParamsStr} = ${this.emitTypeNode(recordContractType(decl.body))} & { readonly [${brand}]?: never };`;
+          return contract + this.emitCheckedRecordDecoder(decl, exp);
+
         }
         this.effectImports.add("Schema");
         const schemaFields = decl.body.fields
@@ -632,6 +680,86 @@ export class Emitter {
         return `${exp}const ${name} = ${schemaExpr};\n${exp}type ${name} = typeof ${name}.Type;\n${exp}const ${name}FromUnknown = (input: unknown): ${name} => Schema.decodeUnknownSync(${name})(input);`;
       }
     }
+  }
+
+  /** Generate only the subset for which every value has an unambiguous codec. */
+  private emitCheckedRecordDecoder(decl: SchemaDeclaration, exp: string): string {
+    if (decl.body.kind !== "RecordSchema" || decl.typeParams?.length) return "";
+    const primitive = (type: TypeNode | undefined): boolean =>
+      type?.kind === "TypeReferenceNode" && !type.typeArgs?.length &&
+      ["String", "Number", "Boolean"].includes(type.name.name) && !this.declaredTypeNames.has(type.name.name);
+    const codec = (type: TypeNode | undefined): type is TypeReferenceNode =>
+      !!type && type.kind === "TypeReferenceNode" && !type.typeArgs?.length && (primitive(type) || this.identityRecordSchemas.has(type.name.name) || this.checkedTaggedSchemas.has(type.name.name) || this.options.importedIdentitySchemas?.has(type.name.name) === true);
+    const fields = decl.body.fields;
+    const hasEffect = fields.some(field => field.typeAnnotation.kind === "FunctionTypeNode" && field.typeAnnotation.returnType.kind === "EffectTypeNode");
+    if (!fields.some(field => field.typeAnnotation.kind === "FunctionTypeNode")) return "";
+    for (const field of fields) {
+      if ((hasEffect && field.optional) || field.defaultValue || field.name.name === "__proto__") return "";
+      const type = field.typeAnnotation;
+      if (type.kind === "FunctionTypeNode") {
+        if (type.typeParams?.length || type.params.some(param => param.optional || param.isRest || !codec(param.typeAnnotation))) return "";
+        if (type.returnType.kind === "EffectTypeNode") {
+          if (!codec(type.returnType.success)) return "";
+        } else if (hasEffect || !(primitive(type.returnType) || (type.returnType.kind === "TypeReferenceNode" && type.returnType.name.name === "Void" && !type.returnType.typeArgs?.length && !this.declaredTypeNames.has("Void")))) return "";
+      } else if (!codec(type)) return "";
+    }
+    const name = `${decl.id.name}DecodeChecked`;
+    if (this.bindings.has(name) || this.declaredTypeNames.has(name) || this.userImportBindings.has(name)) {
+      // Do not shadow an existing user-defined boundary function.
+      return "";
+    }
+    if (hasEffect) {
+      const checkedName = `${decl.id.name}Checked`;
+      if (this.declaredTypeNames.has(checkedName) || this.bindings.has(checkedName) || this.userImportBindings.has(checkedName)) return "";
+    }
+    this.effectImports.add("Schema");
+    this.needsCheckedRecordDecoder = true;
+    const checkedCodec = (type: TypeNode): string => {
+      if (type.kind === "TypeReferenceNode") {
+        const tags = this.checkedTaggedSchemas.get(type.name.name);
+        if (tags) {
+          const checks = tags.map(tag => `($value as { readonly _tag?: unknown })._tag === ${JSON.stringify(tag)}`).join(" || ");
+          return `Schema.declare(($value: unknown): $value is ${this.emitTypeNode(type)} => typeof $value === "object" && $value !== null && !globalThis.Array.isArray($value) && (${checks}))`;
+        }
+        if (this.options.importedIdentitySchemas?.has(type.name.name)) return type.name.name;
+      }
+      return this.emitSchemaTypeField(type);
+    };
+    const data = fields.filter(field => field.typeAnnotation.kind !== "FunctionTypeNode")
+      .map(field => `${emitPropertyKey(field.name.name)}: ${field.optional ? `Schema.optional(${checkedCodec(field.typeAnnotation)})` : checkedCodec(field.typeAnnotation)}`).join(", ");
+    const callbacks = fields.filter(field => field.typeAnnotation.kind === "FunctionTypeNode")
+      .map(field => {
+        const type = field.typeAnnotation as FunctionTypeNode;
+        const args = type.params.map(param => checkedCodec(param.typeAnnotation!)).join(", ");
+        if (type.returnType.kind === "EffectTypeNode") {
+          this.checkedCallbackKinds.add("effect");
+          const callbackType = `${decl.id.name}[${JSON.stringify(field.name.name)}]`;
+          return `${emitPropertyKey(field.name.name)}: ($value: unknown) => $funscriptCheckedEffect($value as ${callbackType}, Schema.Tuple([${args}]), ${checkedCodec(type.returnType.success)})`;
+        }
+        if (type.returnType.kind === "TypeReferenceNode" && type.returnType.name.name === "Void") {
+          this.checkedCallbackKinds.add("void");
+          return `${emitPropertyKey(field.name.name)}: ($value: unknown) => $funscriptCheckedSyncVoid($value, Schema.Tuple([${args}]), ${type.params.length})`;
+        }
+        this.checkedCallbackKinds.add("sync");
+        return `${emitPropertyKey(field.name.name)}: ($value: unknown) => $funscriptCheckedSync($value, Schema.Tuple([${args}]), ${this.emitSchemaTypeField(type.returnType)})`;
+      }).join(", ");
+    if (hasEffect) {
+      const callbackFields = fields.filter(field => field.typeAnnotation.kind === "FunctionTypeNode");
+      const keys = callbackFields.map(field => JSON.stringify(field.name.name)).join(" | ");
+      const checkedFields = callbackFields.map(field => {
+        const type = field.typeAnnotation as FunctionTypeNode;
+        const output = type.returnType as EffectTypeNode;
+        const params = type.params.map(param => `${this.emitBindingTarget(param.name)}: ${this.emitTypeNode(param.typeAnnotation!)}`).join(", ");
+        const error = output.error ? this.emitTypeNode(output.error) : "never";
+        const requirements = output.requirements ? this.emitTypeNode(output.requirements) : "never";
+        this.effectImports.add("Effect");
+        return `${emitPropertyKey(field.name.name)}: (${params}) => Effect.Effect<${this.emitTypeNode(output.success)}, ${error} | $funscriptCallbackBoundaryError, ${requirements}>`;
+      }).join("; ");
+      const checkedName = `${decl.id.name}Checked`;
+      return `\n${exp}type ${checkedName} = Omit<${decl.id.name}, ${keys}> & { ${checkedFields} };\n${exp}const ${name} = ($input: ${decl.id.name}): ${checkedName} => $funscriptDecodeCheckedRecord($input, Schema.Struct({ ${data} }), { ${callbacks} });`;
+    }
+    const optionalCallbacks = fields.filter(field => field.optional && field.typeAnnotation.kind === "FunctionTypeNode").map(field => JSON.stringify(field.name.name)).join(", ");
+    return `\n${exp}const ${name} = ($input: unknown): ${decl.id.name} => $funscriptDecodeCheckedRecord($input, Schema.Struct({ ${data} }), { ${callbacks} }, [${optionalCallbacks}] as const);`;
   }
 
   private emitSchemaTypeField(typeNode: TypeNode): string {
@@ -1051,7 +1179,7 @@ export class Emitter {
         return expr.value ? "true" : "false";
       case "Identifier":
       case "UpperIdentifier":
-        if (this.recordContracts.has(expr.name)) throw new FunScriptError(`${expr.name} is a compile-time record contract, not a runtime schema`, expr.span);
+        if (this.recordContracts.has(expr.name)) throw new FunScriptError(`${expr.name} is a compile-time record contract, not a runtime schema. Validate data separately and use an explicit checked callback boundary for foreign functions.`, expr.span);
         if (expr.name === "Unit") return "undefined";
         if (expr.name === "dbg" && !this.isUserBinding("dbg")) {
           return `((__v: any) => { console.log(__v); return __v; })`;
@@ -1926,6 +2054,9 @@ export class Emitter {
           const arg = node.typeArgs?.[0];
           if (node.typeArgs?.length !== 1 || arg?.kind !== "TypeReferenceNode" || arg.typeArgs?.length) {
             throw new Error("SchemaInput requires one named schema, for example SchemaInput<User>");
+          }
+          if (this.recordContracts.has(arg.name.name)) {
+            throw new FunScriptError(`${arg.name.name} is a compile-time record contract and has no encoded schema input type. Use the contract type directly or validate data with a separate runtime schema.`, node.span);
           }
           return `typeof ${arg.name.name}.Encoded`;
         }

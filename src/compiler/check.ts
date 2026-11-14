@@ -515,6 +515,26 @@ export const typeCheckVirtualFiles = (
           let message = ts.flattenDiagnosticMessageText(diag.messageText, "\n");
           let code: number | string = diag.code;
 
+          // Only customize unresolved names: TypeScript has already accounted for
+          // local shadowing and imported bindings, so valid user functions are untouched.
+          if (diag.code === 2304 && diag.start !== undefined && diag.length !== undefined) {
+            const identifier = diag.file.text.slice(diag.start, diag.start + diag.length);
+            if (identifier.endsWith("DecodeChecked")) {
+              const contract = identifier.slice(0, -"DecodeChecked".length);
+              if (meta.tsCode.includes(`declare const $funscriptRecordContract$${contract}: unique symbol;`)) {
+                code = "FS_CHECKED_DECODER_UNSUPPORTED";
+                message = `${contract} has no generated checked decoder for this signature. Only required callbacks with supported primitive or local data-schema arguments and results are supported; use explicit callback adapters for other shapes.`;
+              }
+            }
+            if (identifier.endsWith("FromUnknown")) {
+              const contract = identifier.slice(0, -"FromUnknown".length);
+              if (meta.tsCode.includes(`declare const $funscriptRecordContract$${contract}: unique symbol;`)) {
+                code = "FS_CONTRACT_DECODER";
+                message = `${contract} is a compile-time record contract and has no generated FromUnknown decoder. Use its DecodeChecked function when supported, or validate data separately and use an explicit checked callback boundary.`;
+              }
+            }
+          }
+
           if (
             (diag.code === 2488 || diag.code === 2461) &&
             /Promise/.test(message)
@@ -551,8 +571,8 @@ export const typeCheckVirtualFiles = (
             endLine: loc.endLine,
             endColumn: loc.endColumn,
             message,
-            diagnosticCode: `TS${code}`,
-            explanation: `TypeScript reported diagnostic TS${code} for the generated source.`,
+            diagnosticCode: typeof code === "number" ? `TS${code}` : code,
+            explanation: typeof code === "number" ? `TypeScript reported diagnostic TS${code} for the generated source.` : message,
             category,
             code,
             frame,

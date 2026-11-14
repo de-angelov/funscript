@@ -83,7 +83,8 @@ export const compileString = (
       const context = options?.context ?? new TypeScriptCompilationContext(options?.sourcePath ?? filename);
       context.setFilename(options?.sourcePath ?? filename);
       const importedRecordContracts = new Map<string, RecordTypeNode>();
-      const importedRecordFunctions = resolveImportedRecordFunctions(ast, options?.sourcePath ?? filename, options?.virtualSources, importedRecordContracts);
+      const importedIdentitySchemas = new Set<string>();
+      const importedRecordFunctions = resolveImportedRecordFunctions(ast, options?.sourcePath ?? filename, options?.virtualSources, importedRecordContracts, importedIdentitySchemas);
       for (const [name, contract] of resolvePackageRecordContracts(ast, context, importedRecordContracts)) importedRecordContracts.set(name, contract);
       validateNumericComparisons(ast, source, context, importedRecordFunctions, importedRecordContracts);
       const { pipelineCompanions, stageResolutions, directCallResolutions } = inferPipelineCompanions(ast, context, importedRecordFunctions, importedRecordContracts);
@@ -95,6 +96,7 @@ export const compileString = (
         importedSchemas,
         importedRecordFunctions,
         importedRecordContracts,
+        importedIdentitySchemas,
         isJsx: filename.endsWith(".funx"),
       };
       const emitter = new Emitter(ast, undefined, emitterOptions);

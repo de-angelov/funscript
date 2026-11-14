@@ -6,7 +6,7 @@ import type { BindingDeclaration, FunctionExpression, ImportDeclaration, Program
 import { isRecordContract, recordContractType } from "./record-contracts.js";
 
 /** Resolve only unambiguous FunScript functions; unknown targets remain restricted. */
-export function resolveImportedRecordFunctions(ast: Program, filename: string, virtualSources?: ReadonlyMap<string, string>, importedContracts?: Map<string, RecordTypeNode>): Map<string, ReadonlySet<number>> {
+export function resolveImportedRecordFunctions(ast: Program, filename: string, virtualSources?: ReadonlyMap<string, string>, importedContracts?: Map<string, RecordTypeNode>, importedIdentitySchemas?: Set<string>): Map<string, ReadonlySet<number>> {
   const result = new Map<string, ReadonlySet<number>>();
   const programs = new Map<string, Program | undefined>();
   const read = (file: string): string | undefined => {
@@ -114,6 +114,20 @@ export function resolveImportedRecordFunctions(ast: Program, filename: string, v
       const imported = programAt(target);
       const entry = imported?.body.find((part) => part.kind === "ExportDeclaration" && part.declaration.kind === "SchemaDeclaration" && part.declaration.id.name === spec.imported.name);
       if (entry?.kind === "ExportDeclaration" && entry.declaration.kind === "SchemaDeclaration" && entry.declaration.body.kind === "RecordSchema" && isRecordContract(entry.declaration.body)) importedContracts?.set(spec.local.name, recordContractType(entry.declaration.body));
+      if (!item.isTypeOnly && !spec.isTypeOnly && entry?.kind === "ExportDeclaration" && entry.declaration.kind === "SchemaDeclaration" && entry.declaration.body.kind === "RecordSchema" && !entry.declaration.typeParams?.length && imported) {
+        const primitiveNames = new Set(["String", "Number", "Boolean"]);
+        const shadowed = new Set(imported.body.flatMap(part => {
+          const declaration = part.kind === "ExportDeclaration" ? part.declaration : part;
+          return declaration.kind === "SchemaDeclaration" && primitiveNames.has(declaration.id.name) ? [declaration.id.name] : [];
+        }));
+        const identity = (type: TypeNode): boolean => {
+          if (type.kind === "LiteralTypeNode") return true;
+          if (type.kind === "UnionTypeNode") return type.types.every(identity);
+          if (type.kind === "ParenthesizedTypeNode") return identity(type.typeNode);
+          return type.kind === "TypeReferenceNode" && !type.typeArgs?.length && primitiveNames.has(type.name.name) && !shadowed.has(type.name.name);
+        };
+        if (entry.declaration.body.fields.every(field => !field.optional && !field.defaultValue && identity(field.typeAnnotation))) importedIdentitySchemas?.add(spec.local.name);
+      }
       if (item.isTypeOnly || spec.isTypeOnly) continue;
       const positions = resolveExport(target, spec.imported.name, new Set());
       if (positions) result.set(spec.local.name, positions);

@@ -11,6 +11,7 @@ language rules.
 
 - [CLI reference](reference/cli.md) — generated from `src/cli/commands.ts`.
 - [Package API](reference/api.md) — generated from `package.json` exports.
+- [Checked foreign callbacks](callback-boundaries.md) — explicit runtime boundary adapters and their limits.
 - [Language syntax guide](syntax.md) — authoritative guide to implemented syntax, with clearly marked planned material.
 - [Numeric comparison contributor walkthrough](language-change-journey.md) — implementation guide for contributors; `syntax.md` remains the authoritative language reference.
 - [Language catalogue](reference/language.md) — generated from the LSP documentation source and used for editor hover help.
@@ -54,6 +55,7 @@ are useful context, but they are not the current implementation contract and the
 are not validated as runnable examples. When they disagree with the current documentation, the
 current verified documentation wins.
 
+- [Interop ergonomics design exercise](design-interop-ergonomics.md) — candidate language changes grounded in Country Rank 2.
 - `proposal.md`, `pit-of-success.md`, `rejected-syntax.md`
 - `DOGFOODING.md`, `llm-first-audit.md`, `design-effect-comparison-functions.md`, `ast-spec.md`
 - [TypeScript schema conversion decision survey](design-typescript-schema.md) — historical decision brief preceding the implemented imported TypeScript schemas in [syntax.md](syntax.md#84-imported-typescript-schemas-schema-name--from-tstype).
