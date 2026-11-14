@@ -629,7 +629,7 @@ record: adding a function or Effect field to a data schema changes it into a con
 A contract has no `FromUnknown` decoder or `SchemaInput` type. For the narrow
 supported case of non-generic records with synchronous callback fields, the compiler
 generates `NameDecodeChecked(input)` for supported primitive, local data-schema,
-local nullary tagged-union, and directly imported simple data-schema types. Optional fields are supported for synchronous contracts. `Void` callbacks
+local tagged-union with primitive or verified record payload, and directly imported simple data-schema types. Optional fields are supported for synchronous contracts. `Void` callbacks
 ignore the foreign return value and discard arguments beyond the declared signature. For
 Effect-returning callbacks it accepts a statically typed contract, and generates a
 `NameChecked` type that adds `CallbackBoundaryError` while preserving the declared

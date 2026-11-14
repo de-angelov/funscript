@@ -101,6 +101,93 @@ export decode = (input: Unknown) => RankingOrderControlsPropsDecodeChecked(input
     expect(() => decode({ onOrderChange: 42 })).toThrow();
   }, 60000);
 
+  it("validates primitive tagged-union payloads while retaining Data values", async () => {
+    const source = `export schema VoteEvent =
+  | Select(code: String)
+  | Resize(size: Number, active: Boolean)
+  | Clear
+export schema Props = { event?: VoteEvent, onEvent?: (event: VoteEvent) => Void }
+export decode = (input: Unknown) => PropsDecodeChecked(input)`;
+    const checked = await typeCheck(source, "payload.fun");
+    expect(checked.success, checked.formattedOutput).toBe(true);
+    const { decode, Select, Resize, Clear } = await execute(source, { filename: "payload.fun", scope: { $funscriptCheckedSyncVoid: checkedSyncVoid, $funscriptDecodeCheckedRecord: decodeCheckedRecord } });
+    const event = Select("BG");
+    let received: unknown;
+    const props = decode({ event, onEvent: (value: unknown) => { received = value; } });
+    expect(props.event).toBe(event);
+    props.onEvent(event);
+    expect(received).toBe(event);
+    expect(decode({ event: Clear }).event).toBe(Clear);
+    const sized = Resize(2, true);
+    expect(decode({ event: sized }).event).toBe(sized);
+    expect(() => decode({ event: { _tag: "Select", code: 42 } })).toThrow();
+    expect(() => decode({ event: { _tag: "Resize", size: 2 } })).toThrow();
+    expect(() => props.onEvent({ _tag: "Resize", size: 2, active: "yes" })).toThrow();
+    expect(() => props.onEvent({ _tag: "Unknown" })).toThrow();
+    const unsupported = await compile('schema Payload = { x?: String }\nschema Event = | Selected(value: Payload)\nschema Props = { onEvent: (value: Event) => Void }', "unsupported.fun");
+    expect(unsupported.typescript).not.toContain("PropsDecodeChecked");
+  }, 60000);
+
+  it("validates local record payloads without reconstructing nested Data", async () => {
+    const source = `export schema VoteEvent =
+  | Selected(country: Country)
+  | Cleared
+export schema Country = { code: String, likes: Number }
+export schema Props = { event?: VoteEvent, onEvent?: (event: VoteEvent) => Void }
+export decode = (input: Unknown) => PropsDecodeChecked(input)`;
+    const checked = await typeCheck(source, "nested.fun");
+    expect(checked.success, checked.formattedOutput).toBe(true);
+    const { decode, Selected } = await execute(source, { filename: "nested.fun", scope: { $funscriptCheckedSyncVoid: checkedSyncVoid, $funscriptDecodeCheckedRecord: decodeCheckedRecord } });
+    const country = { code: "BG", likes: 2 };
+    const event = Selected(country);
+    let seen: unknown;
+    const props = decode({ event, onEvent: (value: unknown) => { seen = value; } });
+    expect(props.event).toBe(event);
+    expect(props.event.country).toBe(country);
+    props.onEvent(event);
+    expect(seen).toBe(event);
+    expect(() => decode({ event: { _tag: "Selected", country: { code: "BG", likes: "bad" } } })).toThrow();
+    expect(() => props.onEvent({ _tag: "Selected", country: { code: 1, likes: 1 } })).toThrow();
+  }, 60000);
+
+  it("checks record payloads returned from Effect callbacks", async () => {
+    const source = `import { Effect } from "effect"
+export schema Country = { code: String }
+export schema VoteEvent =
+  | Selected(country: Country)
+  | Cleared
+export schema Handler = { run: (event: VoteEvent) => Effect<VoteEvent, String> }
+export decode = (input: Handler) => HandlerDecodeChecked(input)`;
+    const checked = await typeCheck(source, "nested-effect.fun");
+    expect(checked.success, checked.formattedOutput).toBe(true);
+    const { decode, Selected } = await execute(source, { filename: "nested-effect.fun", scope: { $funscriptCheckedEffect: checkedEffect, $funscriptDecodeCheckedRecord: decodeCheckedRecord } });
+    const country = { code: "BG" };
+    const event = Selected(country);
+    const handler = decode({ run: () => Effect.succeed(event) });
+    expect(await Effect.runPromise(handler.run(event))).toBe(event);
+    const invalid = decode({ run: () => Effect.succeed({ _tag: "Selected", country: { code: 1 } }) });
+    const outcome = await Effect.runPromise(Effect.result(invalid.run(event)));
+    expect(outcome).toMatchObject({ _tag: "Failure", failure: { _tag: "CallbackBoundaryError", stage: "result" } });
+  }, 60000);
+
+  it("validates tagged payloads on both sides of an Effect callback", async () => {
+    const source = `import { Effect } from "effect"
+export schema Event =
+  | Selected(code: String)
+  | Reset
+export schema Handler = { run: (event: Event) => Effect<Event, String> }
+export decode = (input: Handler) => HandlerDecodeChecked(input)`;
+    const checked = await typeCheck(source, "event-effect.fun");
+    expect(checked.success, checked.formattedOutput).toBe(true);
+    const { decode, Selected } = await execute(source, { filename: "event-effect.fun", scope: { $funscriptCheckedEffect: checkedEffect, $funscriptDecodeCheckedRecord: decodeCheckedRecord } });
+    const event = Selected("BG");
+    const handler = decode({ run: (value: unknown) => Effect.succeed(value) });
+    expect(await Effect.runPromise(handler.run(event))).toBe(event);
+    const invalid = decode({ run: () => Effect.succeed({ _tag: "Selected", code: 1 }) });
+    const outcome = await Effect.runPromise(Effect.result(invalid.run(event)));
+    expect(outcome).toMatchObject({ _tag: "Failure", failure: { _tag: "CallbackBoundaryError", stage: "result" } });
+  }, 60000);
+
   it("uses a directly imported value schema only when its encoding is verified", async () => {
     const root = await mkdtemp(path.join(tmpdir(), "fun-import-codec-"));
     try {
@@ -126,6 +213,40 @@ export decode = (input: Unknown) => RankingOrderControlsPropsDecodeChecked(input
       await writeFile(path.join(root, "country.ts"), 'export type Country = { code: string }');
       const ambiguous = await compile(source, path.join(root, "props.fun"));
       expect(ambiguous.typescript).not.toContain("export const PropsDecodeChecked");
+    } finally { await rm(root, { recursive: true, force: true }); }
+  }, 60000);
+
+  it("checks directly imported record payloads in tagged callbacks", async () => {
+    const root = await mkdtemp(path.join(tmpdir(), "fun-import-payload-"));
+    try {
+      await mkdir(path.join(root, "node_modules"), { recursive: true });
+      await symlink(path.resolve("node_modules/effect"), path.join(root, "node_modules/effect"), "dir");
+      await symlink(process.cwd(), path.join(root, "node_modules/funscript"), "dir");
+      const country = 'export schema Country = { code: String, likes: Number }';
+      await writeFile(path.join(root, "country.fun"), country);
+      const source = `import { Country as Nation } from "./country.js"
+export schema VoteEvent =
+  | Selected(country: Nation)
+  | Cleared
+export schema Props = { event?: VoteEvent, onEvent?: (event: VoteEvent) => Void }
+export decode = (input: Unknown) => PropsDecodeChecked(input)`;
+      const checked = await Effect.runPromise(typeCheckVirtualFiles({ "country.fun": country, "events.fun": source }, { cwd: root, compilerOptions: { rootDir: root } }));
+      expect(checked.success, checked.formattedOutput).toBe(true);
+      const { decode, Selected } = await execute(source, { filename: path.join(root, "events.fun"), scope: { Nation: Schema.Struct({ code: Schema.String, likes: Schema.Number }), $funscriptCheckedSyncVoid: checkedSyncVoid, $funscriptDecodeCheckedRecord: decodeCheckedRecord } });
+      const data = { code: "BG", likes: 2 };
+      const event = Selected(data);
+      let seen: unknown;
+      const props = decode({ event, onEvent: (value: unknown) => { seen = value; } });
+      props.onEvent(event);
+      expect(props.event).toBe(event);
+      expect(props.event.country).toBe(data);
+      expect(seen).toBe(event);
+      expect(() => props.onEvent({ _tag: "Selected", country: { code: "BG", likes: "bad" } })).toThrow();
+      expect(() => decode({ event: { _tag: "Selected", country: { code: 2, likes: 1 } } })).toThrow();
+      const typeOnly = source.replace('import { Country as Nation }', 'import type { Country as Nation }');
+      expect((await compile(typeOnly, path.join(root, "events.fun"))).typescript).not.toContain("export const PropsDecodeChecked");
+      await writeFile(path.join(root, "country.ts"), 'export type Country = { code: string }');
+      expect((await compile(source, path.join(root, "events.fun"))).typescript).not.toContain("export const PropsDecodeChecked");
     } finally { await rm(root, { recursive: true, force: true }); }
   }, 60000);
 

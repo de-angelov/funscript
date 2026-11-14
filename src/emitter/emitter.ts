@@ -314,7 +314,7 @@ export class Emitter {
   private needsCheckedRecordDecoder = false;
   private checkedCallbackKinds = new Set<"sync" | "void" | "effect">();
   private identityRecordSchemas = new Set<string>();
-  private checkedTaggedSchemas = new Map<string, readonly string[]>();
+  private checkedTaggedSchemas = new Map<string, TaggedUnionSchema>();
 
   constructor(private program?: Program, contextProgram?: Program, private options: EmitterOptions = {}) {
     for (const [name, contract] of options.importedRecordContracts ?? []) this.recordContracts.set(name, contract);
@@ -356,17 +356,6 @@ export class Emitter {
       if (decl.kind === "BindingDeclaration" && "name" in decl.id) this.bindings.set(decl.id.name, decl);
     }
 
-    // Nullary local tagged unions can be validated by tag without reconstructing
-    // values, preserving the identity of Effect Data constructors.
-    for (const item of allItems) {
-      const decl = item.kind === "ExportDeclaration" ? item.declaration : item;
-      if (decl.kind === "SchemaDeclaration" && decl.body.kind === "TaggedUnionSchema" &&
-          !decl.typeParams?.length && decl.body.variants.length > 0 &&
-          decl.body.variants.every(variant => variant.fields.length === 0)) {
-        this.checkedTaggedSchemas.set(decl.id.name, decl.body.variants.map(variant => variant.name.name));
-      }
-    }
-
     const staticTypeNames = new Set<string>();
     for (const [name] of this.recordContracts) staticTypeNames.add(name);
     for (const item of allItems) {
@@ -395,6 +384,21 @@ export class Emitter {
           this.identityRecordSchemas.add(decl.id.name);
           addedIdentity = true;
         }
+      }
+    }
+    // These codecs can be checked in place without transforming tagged payloads.
+    // Optional/defaulted, recursive, generic, and unverified imports stay excluded.
+    for (const item of allItems) {
+      const decl = item.kind === "ExportDeclaration" ? item.declaration : item;
+      if (decl.kind === "SchemaDeclaration" && decl.body.kind === "TaggedUnionSchema" &&
+          !decl.typeParams?.length && decl.body.variants.length > 0 &&
+          decl.body.variants.every(variant => variant.fields.every(field =>
+            field.name.name !== "_tag" && field.typeAnnotation.kind === "TypeReferenceNode" &&
+            !field.typeAnnotation.typeArgs?.length &&
+            ((["String", "Number", "Boolean"].includes(field.typeAnnotation.name.name) && !this.declaredTypeNames.has(field.typeAnnotation.name.name)) ||
+             this.identityRecordSchemas.has(field.typeAnnotation.name.name) ||
+             this.options.importedIdentitySchemas?.has(field.typeAnnotation.name.name) === true)))) {
+        this.checkedTaggedSchemas.set(decl.id.name, decl.body);
       }
     }
     let changed = true;
@@ -716,9 +720,21 @@ export class Emitter {
     this.needsCheckedRecordDecoder = true;
     const checkedCodec = (type: TypeNode): string => {
       if (type.kind === "TypeReferenceNode") {
-        const tags = this.checkedTaggedSchemas.get(type.name.name);
-        if (tags) {
-          const checks = tags.map(tag => `($value as { readonly _tag?: unknown })._tag === ${JSON.stringify(tag)}`).join(" || ");
+        const tagged = this.checkedTaggedSchemas.get(type.name.name);
+        if (tagged) {
+          const checks = tagged.variants.map(variant => {
+            const clauses = [`($value as { readonly _tag?: unknown })._tag === ${JSON.stringify(variant.name.name)}`];
+            for (const field of variant.fields) {
+              const fieldType = (field.typeAnnotation as TypeReferenceNode).name.name;
+              const access = `($value as { readonly [key: string]: unknown })[${JSON.stringify(field.name.name)}]`;
+              if (this.identityRecordSchemas.has(fieldType) || this.options.importedIdentitySchemas?.has(fieldType)) {
+                clauses.push(`Schema.is(${fieldType})(${access})`);
+              } else {
+                clauses.push(`typeof ${access} === ${JSON.stringify(fieldType.toLowerCase())}`);
+              }
+            }
+            return `(${clauses.join(" && ")})`;
+          }).join(" || ");
           return `Schema.declare(($value: unknown): $value is ${this.emitTypeNode(type)} => typeof $value === "object" && $value !== null && !globalThis.Array.isArray($value) && (${checks}))`;
         }
         if (this.options.importedIdentitySchemas?.has(type.name.name)) return type.name.name;

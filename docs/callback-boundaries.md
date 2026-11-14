@@ -88,7 +88,7 @@ not yet supported. This is an explicit building block, not `SchemaName.decodeChe
 
 For a non-generic schema whose data fields and synchronous callback arguments use
 `String`, `Number`, `Boolean`, supported local data schemas, directly imported simple
-data schemas, or local nullary tagged unions, and whose callback results use those
+data schemas, or local tagged unions with primitive or verified record payloads, and whose callback results use those
 primitives or `Void`, the compiler generates
 an explicit `NameDecodeChecked` function alongside the existing trusted type:
 
@@ -124,6 +124,13 @@ signature (for example, a React event passed to a zero-argument callback). Reuse
 same decoded wrapper to add and remove an event listener.
 
 Defaulted fields, optional fields in Effect callback contracts, generic schemas, Promise
-callbacks, mixed sync and Effect callbacks, rest or optional callback parameters, imported
-schemas, and transforming data schemas are not supported by this generated decoder yet. For those shapes use a separate data schema and explicit
-adapters. There is no `NameFromUnknown` decoder or `SchemaInput<Name>` for contracts.
+callbacks, mixed sync and Effect callbacks, rest or optional callback parameters,
+imported package schemas, re-exported or type-only schemas, transforming data schemas,
+and tagged unions with other payloads are not supported by this generated decoder yet. Direct imported data schemas must be unambiguous value imports from a FunScript file
+with only required primitive or literal-union fields. Local tagged unions with nullary
+variants, primitive payload fields, or required verified local or directly imported
+non-transforming record payloads are checked by tag and payload without reconstructing the value, so valid Effect Data
+values and their nested records retain their identity.
+Decoding does not freeze mutable JavaScript objects; subsequent external mutation can
+invalidate a previously checked value. There is no `NameFromUnknown` decoder or
+`SchemaInput<Name>` for contracts.
