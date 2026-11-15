@@ -7,7 +7,7 @@ import { fork } from "node:child_process";
 import { transformSync } from "esbuild";
 import { compileString, checkString } from "../compiler.js";
 import { typeCheckFiles } from "../compiler/check.js";
-import { checkCliFiles } from "./typecheck.js";
+import { checkCliFiles, collectCliFiles } from "./typecheck.js";
 import { runTsc } from "./tsc.js";
 import { startLspServer } from "../lsp/index.js";
 import { format } from "../formatter/index.js";
@@ -233,7 +233,8 @@ const checkCommand = (args: string[]) =>
       }
     }
 
-    const result = yield* typeCheckFiles(filesToCheck);
+    const allFiles = yield* collectCliFiles(filesToCheck);
+    const result = yield* typeCheckFiles(allFiles);
     if (!result.success || !idiomaticPassed) {
       process.exitCode = 1;
       if (!result.success) {

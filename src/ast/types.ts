@@ -26,6 +26,7 @@ export type TopLevelDeclaration =
   | ImportDeclaration
   | ExportDeclaration
   | ExportDefaultDeclaration
+  | ExportFromDeclaration
   | SchemaDeclaration
   | ErrorDeclaration
   | ServiceDeclaration
@@ -66,6 +67,13 @@ export interface ImportSpecifier extends NodeBase {
 export interface ExportDeclaration extends NodeBase {
   kind: "ExportDeclaration";
   declaration: SchemaDeclaration | ErrorDeclaration | ServiceDeclaration | BindingDeclaration;
+}
+
+export interface ExportFromDeclaration extends NodeBase {
+  kind: "ExportFromDeclaration";
+  isTypeOnly: boolean;
+  specifiers: ImportSpecifier[];
+  source: StringLiteral;
 }
 
 export interface ExportDefaultDeclaration extends NodeBase {

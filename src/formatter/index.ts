@@ -1,4 +1,4 @@
-import { renderImport } from "../emitter/imports.js";
+import { renderImport, renderExportFrom } from "../emitter/imports.js";
 import { Lexer } from "../lexer/lexer.js";
 import { Parser } from "../parser/parser.js";
 import { ASSOCIATIVITY, PRECEDENCE } from "./operator-precedence.js";
@@ -398,6 +398,11 @@ export class Formatter {
         return `export default ${this.formatExpression(decl.expression, 0)}`;
       case "ImportDeclaration":
         return this.formatImportDeclaration(decl);
+      case "ExportFromDeclaration": {
+        const part = decl.source.parts[0];
+        const value = part && part.kind === "StringRawPart" ? part.value : "";
+        return renderExportFrom(decl, `"${this.escapeStringPart(value)}"`).slice(0, -1);
+      }
       case "SchemaDeclaration":
         return this.formatSchemaDeclaration(decl, 0);
       case "ErrorDeclaration":

@@ -87,7 +87,7 @@ not yet supported. This is an explicit building block, not `SchemaName.decodeChe
 ## Generated checked decoder for simple contracts
 
 For a non-generic schema whose data fields and synchronous callback arguments use
-`String`, `Number`, `Boolean`, supported local data schemas, directly imported simple
+`String`, `Number`, `Boolean`, supported local data schemas, verified imported simple
 data schemas, or local tagged unions with primitive or verified record payloads, and whose callback results use those
 primitives or `Void`, the compiler generates
 an explicit `NameDecodeChecked` function alongside the existing trusted type:
@@ -110,7 +110,7 @@ schema or callback adapters are dropped. These are in-memory boundaries, not JSO
 
 A contract whose required callbacks all return Effects may also generate a decoder when
 its data fields, arguments and success values use supported primitives, local nullary
-tagged unions, or verified non-transforming local or directly imported data schemas. In this case `NameDecodeChecked` accepts an already
+tagged unions, or verified non-transforming local or imported data schemas. In this case `NameDecodeChecked` accepts an already
 statically typed `Name`, not `unknown`, and returns `NameChecked`. Each checked Effect
 adds `CallbackBoundaryError` to the declared failure type and preserves the declared
 service requirements. The callback's original failure values and service requirements
@@ -125,12 +125,13 @@ same decoded wrapper to add and remove an event listener.
 
 Defaulted fields, optional fields in Effect callback contracts, generic schemas, Promise
 callbacks, mixed sync and Effect callbacks, rest or optional callback parameters,
-imported package schemas, re-exported or type-only schemas, transforming data schemas,
-and tagged unions with other payloads are not supported by this generated decoder yet. Direct imported data schemas must be unambiguous value imports from a FunScript file
-with only required primitive or literal-union fields. Local tagged unions with nullary
-variants, primitive payload fields, or required verified local or directly imported
-non-transforming record payloads are checked by tag and payload without reconstructing the value, so valid Effect Data
-values and their nested records retain their identity.
+imported package schemas, type-only schemas, transforming data schemas, and tagged unions
+with other payloads are not supported by this generated decoder yet. Imported data schemas
+must resolve unambiguously through named value imports and re-exports to a FunScript record
+with only required primitive or literal-union fields. Cycles and ambiguous targets are
+rejected. Local tagged unions with nullary variants, primitive payload fields, or required
+verified local or imported record payloads are checked without reconstruction, so valid
+Effect Data values and their nested records retain their identity.
 Decoding does not freeze mutable JavaScript objects; subsequent external mutation can
 invalidate a previously checked value. There is no `NameFromUnknown` decoder or
 `SchemaInput<Name>` for contracts.

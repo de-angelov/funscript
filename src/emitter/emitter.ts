@@ -2,7 +2,7 @@ import { MatchEmitter, type RecordFieldInfo } from "./match.js";
 import { emitRuntimeHelpers } from "./runtime-helpers.js";
 import { emitAssemblyScript } from "./assemblyscript.js";
 import { FunScriptError } from "../errors.js";
-import { renderImport } from "./imports.js";
+import { renderImport, renderExportFrom } from "./imports.js";
 import { isRecordContract, recordContractType, RECORD_CONTRACT_BRAND } from "../compiler/record-contracts.js";
 import {
   Program,
@@ -489,6 +489,8 @@ export class Emitter {
     switch (decl.kind) {
       case "ImportDeclaration":
         return this.emitImportDeclaration(decl);
+      case "ExportFromDeclaration":
+        return renderExportFrom(decl);
       case "ExportDeclaration":
         return this.emitTopLevelDeclaration(decl.declaration, true);
       case "ExportDefaultDeclaration":

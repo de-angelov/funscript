@@ -5,6 +5,7 @@ import {
   ImportSpecifier,
   ExportDeclaration,
   ExportDefaultDeclaration,
+  ExportFromDeclaration,
   BindingDeclaration,
   BindingTarget,
   SchemaDeclaration,
@@ -221,6 +222,7 @@ export class Parser {
       if (this.match(TokenType.DEFAULT)) {
         return this.parseExportDefaultDeclaration(exportStart);
       }
+      if (this.isExportFrom()) return this.parseExportFrom(exportStart);
       const isJs = this.match(TokenType.JS);
       const isTs = !isJs && this.match(TokenType.TS);
       const decl = this.parseDeclaration(isJs, isTs);
@@ -231,6 +233,43 @@ export class Parser {
       };
     }
     return this.parseDeclaration();
+  }
+
+  private isExportFrom(): boolean {
+    let offset = this.check(TokenType.IDENTIFIER) && this.peek().value === "type" ? 1 : 0;
+    if (this.peekAhead(offset).type !== TokenType.LBRACE) return false;
+    while (this.peekAhead(offset).type !== TokenType.RBRACE &&
+           this.peekAhead(offset).type !== TokenType.NEWLINE &&
+           this.peekAhead(offset).type !== TokenType.EOF) offset++;
+    return this.peekAhead(offset).type === TokenType.RBRACE && this.peekAhead(offset + 1).type === TokenType.FROM;
+  }
+
+  private parseExportFrom(start: Position): ExportFromDeclaration {
+    const isTypeOnly = this.check(TokenType.IDENTIFIER) && this.peek().value === "type";
+    if (isTypeOnly) this.advance();
+    this.consume(TokenType.LBRACE, "Expected '{' in re-export");
+    const specifiers: ImportSpecifier[] = [];
+    if (!this.check(TokenType.RBRACE)) {
+      do {
+        let specTypeOnly = false;
+        if (!isTypeOnly && this.check(TokenType.IDENTIFIER) && this.peek().value === "type" && this.peekAhead(1).type !== TokenType.COMMA && this.peekAhead(1).type !== TokenType.RBRACE && this.peekAhead(1).value !== "as") {
+          this.advance();
+          specTypeOnly = true;
+        }
+        const imported = this.parseAnyIdentifier();
+        let local = imported;
+        if (this.check(TokenType.IDENTIFIER) && this.peek().value === "as") {
+          this.advance();
+          local = this.parseAnyIdentifier();
+        }
+        specifiers.push({ kind: "ImportSpecifier", imported, local, isTypeOnly: specTypeOnly, span: { start: imported.span.start, end: local.span.end } });
+      } while (this.match(TokenType.COMMA) && !this.check(TokenType.RBRACE));
+    }
+    this.consume(TokenType.RBRACE, "Expected '}' after re-export specifiers");
+    this.consume(TokenType.FROM, "Expected 'from' after re-export specifiers");
+    const source = this.parseImportSource();
+    this.consumeNewlineOrEof("Expected newline after re-export");
+    return { kind: "ExportFromDeclaration", isTypeOnly, specifiers, source, span: { start, end: source.span.end } };
   }
 
   private parseExportDefaultDeclaration(start: Position): ExportDefaultDeclaration {

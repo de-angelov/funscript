@@ -2,7 +2,7 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 import { Lexer } from "../lexer/lexer.js";
 import { Parser } from "../parser/parser.js";
-import type { BindingDeclaration, FunctionExpression, ImportDeclaration, Program, RecordTypeNode, TypeNode } from "../ast/types.js";
+import type { BindingDeclaration, FunctionExpression, ImportDeclaration, ExportFromDeclaration, Program, RecordTypeNode, TypeNode } from "../ast/types.js";
 import { isRecordContract, recordContractType } from "./record-contracts.js";
 
 /** Resolve only unambiguous FunScript functions; unknown targets remain restricted. */
@@ -15,8 +15,8 @@ export function resolveImportedRecordFunctions(ast: Program, filename: string, v
     try { return fs.readFileSync(normalized, "utf8"); } catch { return undefined; }
   };
   const exists = (file: string): boolean => virtualSources?.has(path.resolve(file)) === true || fs.existsSync(file);
-  const targetOf = (item: ImportDeclaration, from: string): string | undefined => {
-    if (item.isSideEffect || item.source.parts.length !== 1 || item.source.parts[0].kind !== "StringRawPart") return undefined;
+  const targetOf = (item: ImportDeclaration | ExportFromDeclaration, from: string): string | undefined => {
+    if ((item.kind === "ImportDeclaration" && item.isSideEffect) || item.source.parts.length !== 1 || item.source.parts[0].kind !== "StringRawPart") return undefined;
     const source = item.source.parts[0].value;
     if (!source.startsWith(".")) return undefined;
     const requested = path.resolve(path.dirname(from), source);
@@ -37,6 +37,46 @@ export function resolveImportedRecordFunctions(ast: Program, filename: string, v
     programs.set(file, program);
     return program;
   };
+  const isIdentityRecord = (program: Program, declaration: import("../ast/types.js").SchemaDeclaration): boolean => {
+    if (declaration.body.kind !== "RecordSchema" || declaration.typeParams?.length) return false;
+    const primitiveNames = new Set(["String", "Number", "Boolean"]);
+    const shadowed = new Set(program.body.flatMap(part => {
+      const item = part.kind === "ExportDeclaration" ? part.declaration : part;
+      return item.kind === "SchemaDeclaration" && primitiveNames.has(item.id.name) ? [item.id.name] : [];
+    }));
+    const identity = (type: TypeNode): boolean => {
+      if (type.kind === "LiteralTypeNode") return true;
+      if (type.kind === "UnionTypeNode") return type.types.every(identity);
+      if (type.kind === "ParenthesizedTypeNode") return identity(type.typeNode);
+      return type.kind === "TypeReferenceNode" && !type.typeArgs?.length && primitiveNames.has(type.name.name) && !shadowed.has(type.name.name);
+    };
+    return declaration.body.fields.every(field => !field.optional && !field.defaultValue && identity(field.typeAnnotation));
+  };
+  const resolveIdentityExport = (file: string, name: string, seen: Set<string>): boolean => {
+    const key = `${file}\0${name}`;
+    if (seen.has(key)) return false;
+    const program = programAt(file);
+    if (!program) return false;
+    const next = new Set(seen).add(key);
+    const candidates: Array<{ kind: "schema"; declaration: import("../ast/types.js").SchemaDeclaration } | { kind: "reexport"; declaration: ExportFromDeclaration; spec: import("../ast/types.js").ImportSpecifier } | { kind: "other" }> = [];
+    for (const item of program.body) {
+      if (item.kind === "ExportDeclaration" && item.declaration.kind === "SchemaDeclaration" && item.declaration.id.name === name) {
+        candidates.push({ kind: "schema", declaration: item.declaration });
+      } else if (item.kind === "ExportDeclaration" && item.declaration.kind === "BindingDeclaration" && "name" in item.declaration.id && item.declaration.id.name === name) {
+        candidates.push({ kind: "other" });
+      } else if (item.kind === "ExportFromDeclaration") {
+        for (const spec of item.specifiers) if (spec.local.name === name) candidates.push({ kind: "reexport", declaration: item, spec });
+      }
+    }
+    if (candidates.length !== 1) return false;
+    const candidate = candidates[0];
+    if (candidate.kind === "schema") return isIdentityRecord(program, candidate.declaration);
+    if (candidate.kind === "other") return false;
+    if (candidate.declaration.isTypeOnly || candidate.spec.isTypeOnly) return false;
+    const target = targetOf(candidate.declaration, file);
+    return target !== undefined && resolveIdentityExport(target, candidate.spec.imported.name, next);
+  };
+
   const hasOptional = (node: TypeNode | undefined): boolean => node?.kind === "RecordTypeNode" &&
     node.fields.some((field) => Boolean(field.optional || field.defaultValue) || hasOptional(field.typeAnnotation));
   const localContract = (program: Program, file: string, name: string): RecordTypeNode | undefined => {
@@ -114,20 +154,7 @@ export function resolveImportedRecordFunctions(ast: Program, filename: string, v
       const imported = programAt(target);
       const entry = imported?.body.find((part) => part.kind === "ExportDeclaration" && part.declaration.kind === "SchemaDeclaration" && part.declaration.id.name === spec.imported.name);
       if (entry?.kind === "ExportDeclaration" && entry.declaration.kind === "SchemaDeclaration" && entry.declaration.body.kind === "RecordSchema" && isRecordContract(entry.declaration.body)) importedContracts?.set(spec.local.name, recordContractType(entry.declaration.body));
-      if (!item.isTypeOnly && !spec.isTypeOnly && entry?.kind === "ExportDeclaration" && entry.declaration.kind === "SchemaDeclaration" && entry.declaration.body.kind === "RecordSchema" && !entry.declaration.typeParams?.length && imported) {
-        const primitiveNames = new Set(["String", "Number", "Boolean"]);
-        const shadowed = new Set(imported.body.flatMap(part => {
-          const declaration = part.kind === "ExportDeclaration" ? part.declaration : part;
-          return declaration.kind === "SchemaDeclaration" && primitiveNames.has(declaration.id.name) ? [declaration.id.name] : [];
-        }));
-        const identity = (type: TypeNode): boolean => {
-          if (type.kind === "LiteralTypeNode") return true;
-          if (type.kind === "UnionTypeNode") return type.types.every(identity);
-          if (type.kind === "ParenthesizedTypeNode") return identity(type.typeNode);
-          return type.kind === "TypeReferenceNode" && !type.typeArgs?.length && primitiveNames.has(type.name.name) && !shadowed.has(type.name.name);
-        };
-        if (entry.declaration.body.fields.every(field => !field.optional && !field.defaultValue && identity(field.typeAnnotation))) importedIdentitySchemas?.add(spec.local.name);
-      }
+      if (!item.isTypeOnly && !spec.isTypeOnly && resolveIdentityExport(target, spec.imported.name, new Set())) importedIdentitySchemas?.add(spec.local.name);
       if (item.isTypeOnly || spec.isTypeOnly) continue;
       const positions = resolveExport(target, spec.imported.name, new Set());
       if (positions) result.set(spec.local.name, positions);

@@ -772,6 +772,7 @@ export class Lexer {
       if (raw === "type" || raw === "data") {
         if (
           (lastToken && lastToken.type === TokenType.IMPORT) ||
+          (raw === "type" && lastToken?.type === TokenType.EXPORT && /^[ \t]*\{/.test(this.source.slice(this.offset))) ||
           this.braceStack.includes("record")
         ) {
           this.tokens.push({
