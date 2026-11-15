@@ -58,6 +58,7 @@ import type { Span } from "../ast/types.js";
 import { findHoverAsync } from "./hover.js";
 import { complete } from "./completion.js";
 import { documentSymbols, workspaceSymbols, references, prepareRename, rename, findWorkspaceDefinition } from "./navigation.js";
+import { renameInterop } from "./interop-rename.js";
 
 export function toDiagnostic(error: any): Diagnostic {
   const span: Span | undefined = error.span;
@@ -503,17 +504,31 @@ export class FunScriptLspServer extends EventEmitter {
     const docs = snapshot?.fun ?? this.getDocuments();
     const selected = prepareRename(doc.text, uri!, params.position, docs);
     if (!selected || !("placeholder" in selected)) return null;
-    // JavaScript and TypeScript have their own binding and module resolution rules.
-    // Refuse a potentially partial rename until those references can be resolved.
     const name = selected.placeholder;
     const identifier = new RegExp(`(^|[^\\w$])${name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}([^\\w$]|$)`);
-    if (snapshot?.interop.some(file => identifier.test(file.text))) return null;
     for (const file of docs) {
       if (!identifier.test(file.text)) continue;
       try { new Parser(new Lexer(file.text, file.uri).tokenize(), file.uri, file.text).parse(); }
       catch { return null; }
     }
-    const edit = rename(doc.text, uri!, params.position, params.newName, docs);
+    let edit = rename(doc.text, uri!, params.position, params.newName, docs);
+    if (this.isInitialized && edit?.changes && Object.keys(edit.changes).some(target => !this.inWorkspace(target))) return null;
+    if (edit?.changes) for (const file of docs) {
+      if (!edit.changes[file.uri]) continue;
+      let ast;
+      try { ast = new Parser(new Lexer(file.text, file.uri).tokenize(), file.uri, file.text).parse(); } catch { return null; }
+      for (const item of ast.body) {
+        if (item.kind !== "ExportDeclaration" || item.declaration.kind !== "SchemaDeclaration") continue;
+        const id = item.declaration.id;
+        if (!edit.changes[file.uri].some(change => change.range.start.line === id.span.start.line - 1 && change.range.start.character === id.span.start.column - 1)) continue;
+        const companion = new RegExp(`\\b${id.name}(?:FromUnknown|DecodeChecked|Checked)\\b`);
+        if ([...docs, ...(snapshot?.interop ?? [])].some(candidate => companion.test(candidate.text))) return null;
+      }
+    }
+    if (edit && snapshot) {
+      try { edit = renameInterop(docs, snapshot.interop, edit, name, params.newName, this.workspaceRoots); }
+      catch { return null; }
+    }
     if (this.isInitialized && edit?.changes && Object.keys(edit.changes).some(target => !this.inWorkspace(target))) return null;
     return edit;
   }

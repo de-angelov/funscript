@@ -22,11 +22,12 @@ Go to definition follows named re-exports, including aliases. Rename respects th
 boundaries between exported names and local aliases. The language server reads
 FunScript files in the editor's workspace, including unopened files, and uses unsaved
 editor contents when available. It excludes dependency, build and generated cache
-directories. Rename requires a local workspace and declines when it cannot inspect the
-workspace, when matching source cannot be parsed or an import cannot be resolved, or
-when matching JavaScript or TypeScript text might need an interop-aware rename.
-Review the proposed edits before applying them. References outside the workspace and
-module-resolution mechanisms other than supported relative imports are not indexed.
+directories. Rename follows supported JavaScript and TypeScript imports and re-exports
+using TypeScript's language service; an existing local alias or re-export name may be
+preserved. Rename requires a local workspace and declines when it cannot inspect source,
+resolve a potentially relevant import, avoid a binding collision, or account for an
+in-use generated schema companion or dynamic namespace access. Review the proposed edits before applying them.
+References outside the workspace and unsupported module resolution are not indexed.
 
 ## Hover information
 
