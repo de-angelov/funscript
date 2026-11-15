@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { findWorkspaceDefinition, references, rename } from "../src/lsp/navigation.js";
+import { findWorkspaceDefinition, prepareRename, references, rename } from "../src/lsp/navigation.js";
 
 const uri = "file:///project/main.fun";
 const position = (line: number, character: number) => ({ line, character });
@@ -50,6 +50,67 @@ describe("workspace navigation", () => {
     expect(Object.keys(alias?.changes ?? {})).toEqual([uri]);
     expect(alias?.changes?.[uri].map((edit) => [edit.range.start.line, edit.range.start.character])).toEqual([[0, 18], [1, 8]]);
     expect(rename(source, uri, position(0, 10), "amount", docs)?.changes).toEqual(exported?.changes);
+  });
+
+  it("follows named re-exports while renaming each alias independently", () => {
+    const library = "file:///project/country.fun";
+    const barrel = "file:///project/barrel.fun";
+    const outer = "file:///project/outer.fun";
+    const libSource = "export schema Country = { code: String }";
+    const barrelSource = 'export { Country as Place } from "./country.js"';
+    const outerSource = 'export { Place as Nation } from "./barrel.js"';
+    const source = 'import { Nation as Local } from "./outer.js"\nexport read = (value: Local) => value';
+    const docs = [{ uri: library, text: libSource }, { uri: barrel, text: barrelSource }, { uri: outer, text: outerSource }, { uri, text: source }];
+    expect(findWorkspaceDefinition(source, uri, position(1, source.split("\n")[1].indexOf("Local")), docs)).toMatchObject({ uri: library });
+    expect(findWorkspaceDefinition(barrelSource, barrel, position(0, barrelSource.indexOf("Place")), docs)).toMatchObject({ uri: library });
+    const original = rename(libSource, library, position(0, libSource.indexOf("Country")), "Region", docs);
+    expect(original?.changes?.[library]).toHaveLength(1);
+    expect(original?.changes?.[barrel]?.map(edit => edit.range.start.character)).toEqual([barrelSource.indexOf("Country")]);
+    expect(original?.changes?.[outer]).toBeUndefined();
+    expect(original?.changes?.[uri]).toBeUndefined();
+    const firstAlias = rename(barrelSource, barrel, position(0, barrelSource.indexOf("Place")), "Area", docs);
+    expect(firstAlias?.changes?.[barrel]?.map(edit => edit.range.start.character)).toEqual([barrelSource.indexOf("Place")]);
+    expect(firstAlias?.changes?.[outer]?.map(edit => edit.range.start.character)).toEqual([outerSource.indexOf("Place")]);
+    expect(firstAlias?.changes?.[uri]).toBeUndefined();
+    const secondAlias = rename(outerSource, outer, position(0, outerSource.indexOf("Nation")), "Region", docs);
+    expect(secondAlias?.changes?.[outer]?.map(edit => edit.range.start.character)).toEqual([outerSource.indexOf("Nation")]);
+    expect(secondAlias?.changes?.[uri]?.map(edit => edit.range.start.character)).toEqual([source.indexOf("Nation")]);
+    const localAlias = rename(source, uri, position(1, source.split("\n")[1].indexOf("Local")), "Area", docs);
+    expect(localAlias?.changes?.[uri]?.map(edit => [edit.range.start.line, edit.range.start.character])).toEqual([[0, source.indexOf("Local")], [1, source.split("\n")[1].indexOf("Local")]]);
+    expect(localAlias?.changes?.[outer]).toBeUndefined();
+  });
+
+  it("propagates renames through unaliased re-exports and rejects unresolved paths", () => {
+    const library = "file:///project/lib.fun";
+    const barrel = "file:///project/barrel.fun";
+    const libSource = "export schema Country = { code: String }";
+    const barrelSource = 'export { Country } from "./lib.js"';
+    const source = 'import { Country } from "./barrel.js"\nexport read = (value: Country) => value';
+    const docs = [{ uri: library, text: libSource }, { uri: barrel, text: barrelSource }, { uri, text: source }];
+    const edits = rename(libSource, library, position(0, libSource.indexOf("Country")), "Region", docs);
+    expect(edits?.changes?.[library]).toHaveLength(1);
+    expect(edits?.changes?.[barrel]).toHaveLength(1);
+    expect(edits?.changes?.[uri]).toHaveLength(2);
+    const missing = docs.filter(doc => doc.uri !== library);
+    expect(findWorkspaceDefinition(source, uri, position(1, source.split("\n")[1].indexOf("Country")), missing)).toBeNull();
+    expect(rename(source, uri, position(1, source.split("\n")[1].indexOf("Country")), "Region", missing)).toBeNull();
+    expect(prepareRename(source, uri, position(1, source.split("\n")[1].indexOf("Country")), missing)).toBeNull();
+    const cyclic = [{ uri: library, text: 'export { Country } from "./barrel.js"' }, { uri: barrel, text: barrelSource }, { uri, text: source }];
+    expect(rename(source, uri, position(1, source.split("\n")[1].indexOf("Country")), "Region", cyclic)).toBeNull();
+    const ambiguous = [...docs, { uri: "file:///project/lib.ts", text: "export const Country = {}" }];
+    expect(findWorkspaceDefinition(source, uri, position(1, source.split("\n")[1].indexOf("Country")), ambiguous)).toBeNull();
+    expect(rename(source, uri, position(1, source.split("\n")[1].indexOf("Country")), "Region", ambiguous)).toBeNull();
+  });
+
+  it("refuses unresolved or ambiguous imports at the first hop", () => {
+    const source = 'import { Country } from "./lib.js"\nexport read = (value: Country) => value';
+    const pos = position(1, source.split("\n")[1].indexOf("Country"));
+    const missing = [{ uri, text: source }];
+    expect(findWorkspaceDefinition(source, uri, pos, missing)).toMatchObject({ uri });
+    expect(prepareRename(source, uri, pos, missing)).toBeNull();
+    const ambiguous = [...missing, { uri: "file:///project/lib.fun", text: "export schema Country = { code: String }" }, { uri: "file:///project/lib.ts", text: "export const Country = {}" }];
+    expect(findWorkspaceDefinition(source, uri, pos, ambiguous)).toMatchObject({ uri });
+    expect(rename(source, uri, pos, "Region", ambiguous)).toBeNull();
   });
 
   it("refuses to rename an import when its declaration is not open", () => {

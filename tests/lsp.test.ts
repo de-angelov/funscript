@@ -1109,6 +1109,23 @@ export schema Config = {
   });
 
   describe("Go to Definition (textDocument/definition)", () => {
+    it("navigates and renames through named re-exports", () => {
+      const server = new FunScriptLspServer();
+      const library = "file:///project/country.fun";
+      const barrel = "file:///project/barrel.fun";
+      const app = "file:///project/app.fun";
+      server.onDidOpenHandler({ textDocument: { uri: library, languageId: "funscript", version: 1, text: "export value = 1\n" } });
+      server.onDidOpenHandler({ textDocument: { uri: barrel, languageId: "funscript", version: 1, text: 'export { value as amount } from "./country.js"\n' } });
+      server.onDidOpenHandler({ textDocument: { uri: app, languageId: "funscript", version: 1, text: 'import { amount } from "./barrel.js"\nresult = amount\n' } });
+
+      const position = { line: 1, character: 10 };
+      expect(server.onDefinitionHandler({ textDocument: { uri: app }, position })).toMatchObject({ uri: library });
+      const edits = server.onRenameHandler({ textDocument: { uri: app }, position, newName: "total" });
+      expect(Object.keys(edits?.changes ?? {}).sort()).toEqual([app, barrel].sort());
+      expect(edits?.changes?.[barrel]).toHaveLength(1);
+      expect(edits?.changes?.[app]).toHaveLength(2);
+    });
+
     it("resolves imported workspace exports and supports outline and rename requests", async () => {
       const server = new FunScriptLspServer();
       const libraryUri = "file:///project/math.fun";

@@ -16,6 +16,18 @@ using the relevant ecosystem tool. Use Vite for web development and builds, Vite
 JavaScript/TypeScript tests, and npm, pnpm, or Bun to manage dependencies. These tools do not
 automatically discover `.fun` tests or start through a FunScript wrapper.
 
+## Navigation and rename
+
+Go to definition follows named re-exports, including aliases. Rename respects the
+boundaries between exported names and local aliases. The language server reads
+FunScript files in the editor's workspace, including unopened files, and uses unsaved
+editor contents when available. It excludes dependency, build and generated cache
+directories. Rename requires a local workspace and declines when it cannot inspect the
+workspace, when matching source cannot be parsed or an import cannot be resolved, or
+when matching JavaScript or TypeScript text might need an interop-aware rename.
+Review the proposed edits before applying them. References outside the workspace and
+module-resolution mechanisms other than supported relative imports are not indexed.
+
 ## Hover information
 
 The language server provides type information for unambiguous symbols and

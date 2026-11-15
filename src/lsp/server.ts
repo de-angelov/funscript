@@ -1,6 +1,8 @@
 import { EventEmitter } from "node:events";
 import type { Readable, Writable } from "node:stream";
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
+import { readdirSync, readFileSync } from "node:fs";
+import { isAbsolute, join, relative, resolve } from "node:path";
 import { Effect } from "effect";
 import {
   createConnection,
@@ -162,6 +164,7 @@ export class FunScriptLspServer extends EventEmitter {
   private isInitialized = false;
   private isShutdown = false;
   private clientCapabilities: any = null;
+  private workspaceRoots: string[] = [];
   private connection: Connection | null = null;
   private diagnosticTimer: ReturnType<typeof setTimeout> | undefined;
   private diagnosticRevision = 0;
@@ -232,6 +235,10 @@ export class FunScriptLspServer extends EventEmitter {
   public onInitializeHandler(params: InitializeParams): InitializeResult {
     this.isInitialized = true;
     this.clientCapabilities = params?.capabilities;
+    const roots = params?.workspaceFolders?.map(folder => folder.uri) ?? (params?.rootUri ? [params.rootUri] : []);
+    this.workspaceRoots = roots.flatMap(uri => {
+      try { return [resolve(fileURLToPath(uri))]; } catch { return []; }
+    });
     return {
       capabilities: {
         textDocumentSync: TextDocumentSyncKind.Full,
@@ -430,7 +437,7 @@ export class FunScriptLspServer extends EventEmitter {
       this.clientCapabilities?.textDocument?.definition?.linkSupport,
     );
 
-    return findWorkspaceDefinition(doc.text, uri, params.position, this.getDocuments(), clientSupportsLink);
+    return findWorkspaceDefinition(doc.text, uri, params.position, this.workspaceSnapshot()?.fun ?? this.getDocuments(), clientSupportsLink);
   }
 
   public async onHoverHandler(params: HoverParams): Promise<Hover | null> {
@@ -463,19 +470,77 @@ export class FunScriptLspServer extends EventEmitter {
   public onReferencesHandler(params: ReferenceParams): Location[] {
     const uri = params?.textDocument?.uri;
     const doc = uri ? this.documents.get(uri) : undefined;
-    return doc ? references(doc.text, uri!, params.position, this.getDocuments(), params.context.includeDeclaration) : [];
+    return doc ? references(doc.text, uri!, params.position, this.workspaceSnapshot()?.fun ?? this.getDocuments(), params.context.includeDeclaration) : [];
   }
 
   public onPrepareRenameHandler(params: PrepareRenameParams): PrepareRenameResult | null {
     const uri = params?.textDocument?.uri;
     const doc = uri ? this.documents.get(uri) : undefined;
-    return doc ? prepareRename(doc.text, uri!, params.position, this.getDocuments()) : null;
+    const snapshot = this.workspaceSnapshot();
+    if (this.isInitialized && (!this.workspaceRoots.length || !snapshot)) return null;
+    if (!doc) return null;
+    const selected = prepareRename(doc.text, uri!, params.position, snapshot?.fun ?? this.getDocuments());
+    if (!selected || !("placeholder" in selected)) return null;
+    return this.onRenameHandler({ textDocument: params.textDocument, position: params.position, newName: selected.placeholder }) ? selected : null;
   }
 
   public onRenameHandler(params: RenameParams): WorkspaceEdit | null {
     const uri = params?.textDocument?.uri;
     const doc = uri ? this.documents.get(uri) : undefined;
-    return doc ? rename(doc.text, uri!, params.position, params.newName, this.getDocuments()) : null;
+    if (!doc) return null;
+    if (this.isInitialized && !this.inWorkspace(uri!)) return null;
+    const snapshot = this.workspaceSnapshot();
+    if (this.isInitialized && (!this.workspaceRoots.length || !snapshot)) return null;
+    const docs = snapshot?.fun ?? this.getDocuments();
+    const selected = prepareRename(doc.text, uri!, params.position, docs);
+    if (!selected || !("placeholder" in selected)) return null;
+    // JavaScript and TypeScript have their own binding and module resolution rules.
+    // Refuse a potentially partial rename until those references can be resolved.
+    const name = selected.placeholder;
+    const identifier = new RegExp(`(^|[^\\w$])${name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}([^\\w$]|$)`);
+    if (snapshot?.interop.some(file => identifier.test(file.text))) return null;
+    for (const file of docs) {
+      if (!identifier.test(file.text)) continue;
+      try { new Parser(new Lexer(file.text, file.uri).tokenize(), file.uri, file.text).parse(); }
+      catch { return null; }
+    }
+    const edit = rename(doc.text, uri!, params.position, params.newName, docs);
+    if (this.isInitialized && edit?.changes && Object.keys(edit.changes).some(target => !this.inWorkspace(target))) return null;
+    return edit;
+  }
+
+  private inWorkspace(uri: string): boolean {
+    let path: string;
+    try { path = fileURLToPath(uri); } catch { return false; }
+    return this.workspaceRoots.some(root => {
+      const child = relative(root, path);
+      return child !== ".." && !child.startsWith(`..${process.platform === "win32" ? "\\" : "/"}`) && !isAbsolute(child);
+    });
+  }
+
+  /** Read a fresh workspace view; unsaved open buffers always win over disk. */
+  private workspaceSnapshot(): { fun: TextDocumentItem[]; interop: TextDocumentItem[] } | null {
+    if (!this.workspaceRoots.length) return null;
+    const files = new Map<string, TextDocumentItem>();
+    const visited = new Set<string>();
+    const excluded = new Set(["node_modules", ".git", ".funscript", "dist", "build", "coverage"]);
+    const walk = (directory: string): void => {
+      if (visited.has(directory)) return;
+      visited.add(directory);
+      for (const entry of readdirSync(directory, { withFileTypes: true })) {
+        if (excluded.has(entry.name)) continue;
+        const path = join(directory, entry.name);
+        if (entry.isSymbolicLink()) throw new Error("Workspace contains an unindexed symbolic link");
+        if (entry.isDirectory()) { walk(path); continue; }
+        if (!entry.isFile() || !/\.(?:fun|funs|funx|[cm]?[jt]sx?)$/.test(entry.name)) continue;
+        const uri = pathToFileURL(path).href;
+        files.set(uri, { uri, languageId: "", version: 0, text: readFileSync(path, "utf8") });
+      }
+    };
+    try { for (const root of this.workspaceRoots) walk(root); } catch { return null; }
+    for (const doc of this.documents.values()) files.set(doc.uri, doc);
+    const all = [...files.values()];
+    return { fun: all.filter(doc => /\.(?:fun|funs|funx)$/.test(doc.uri)), interop: all.filter(doc => /\.[cm]?[jt]sx?$/.test(doc.uri)) };
   }
 
   public async handleMessage(msg: Message): Promise<ResponseMessage | void> {

@@ -434,6 +434,20 @@ export class DefinitionFinder {
         break;
       }
 
+      case "ExportFromDeclaration": {
+        for (const spec of decl.specifiers) {
+          if (this.isCursorIn(spec.imported)) {
+            this.found = { originNode: spec.imported, declarationNode: spec, targetIdentifierNode: spec.imported };
+            return;
+          }
+          if (this.isCursorIn(spec.local)) {
+            this.found = { originNode: spec.local, declarationNode: spec, targetIdentifierNode: spec.local };
+            return;
+          }
+        }
+        break;
+      }
+
       case "ImportDeclaration": {
         for (const binding of [decl.defaultBinding, decl.namespaceBinding]) {
           if (binding && this.isCursorIn(binding)) {

@@ -47,20 +47,73 @@ class NavigationAnalysis {
     return doc && this.document(doc).occurrences.find((occ) => occ.line === position.line && position.character >= occ.character && position.character <= occ.character + occ.name.length);
   }
 
+  private moduleDocument(doc: Doc, source: import("../ast/types.js").StringLiteral): Doc | undefined {
+    const modulePath = source.parts.map((part) => part.kind === "StringRawPart" ? part.value : "").join("");
+    if (!modulePath.startsWith(".")) return undefined;
+    let base: string;
+    try { base = resolve(dirname(fileURLToPath(doc.uri)), modulePath); } catch { return undefined; }
+    const stem = base.endsWith(".js") ? base.slice(0, -3) : base;
+    const candidates = new Set([base, ...[".fun", ".funs", ".funx", ".ts", ".tsx"].map(ext => stem + ext), ...["index.fun", "index.funs", "index.funx"].map(file => resolve(base, file))]);
+    const matches = this.documents.filter(candidate => { try { return candidates.has(fileURLToPath(candidate.uri)); } catch { return false; } });
+    return matches.length === 1 ? matches[0] : undefined;
+  }
+
   private importedTarget(doc: Doc, identifierOffset: number): { doc: Doc; exportedName: string } | undefined {
-    const ast = this.document(doc).ast;
-    for (const item of ast?.body ?? []) {
-      if (item.kind !== "ImportDeclaration") continue;
-      const spec = item.specifiers.find((specifier) => (specifier.local.span.start.offset === identifierOffset || specifier.imported.span.start.offset === identifierOffset));
-      const modulePath = item.source.parts.map((part) => part.kind === "StringRawPart" ? part.value : "").join("");
-      if (!spec || !modulePath.startsWith(".")) continue;
-      let base: string;
-      try { base = resolve(dirname(fileURLToPath(doc.uri)), modulePath); } catch { continue; }
-      const candidates = [base, ...[".fun", ".funs", ".funx", ".ts"].map((ext) => base + ext), ...["index.fun", "index.funs"].map((file) => resolve(base, file))];
-      const target = this.documents.find((candidate) => { try { return candidates.includes(fileURLToPath(candidate.uri)); } catch { return false; } });
-      if (target) return { doc: target, exportedName: spec.imported.name };
+    for (const item of this.document(doc).ast?.body ?? []) {
+      if (item.kind !== "ImportDeclaration" && item.kind !== "ExportFromDeclaration") continue;
+      const spec = item.specifiers.find(part => part.local.span.start.offset === identifierOffset || part.imported.span.start.offset === identifierOffset);
+      if (!spec) continue;
+      const target = this.moduleDocument(doc, item.source);
+      return target ? { doc: target, exportedName: spec.imported.name } : undefined;
     }
     return undefined;
+  }
+
+  /** Resolve named re-exports without guessing through missing, duplicate or cyclic paths. */
+  resolveExport(doc: Doc, name: string, seen = new Set<string>()): { doc: Doc; declaration: import("../ast/types.js").ExportDeclaration; surface: string } | undefined {
+    const key = `${doc.uri}:${name}`;
+    if (seen.has(key)) return undefined;
+    const next = new Set(seen).add(key);
+    const candidates: Array<{ kind: "declaration"; item: import("../ast/types.js").ExportDeclaration } | { kind: "reexport"; item: import("../ast/types.js").ExportFromDeclaration; spec: import("../ast/types.js").ImportSpecifier }> = [];
+    for (const item of this.document(doc).ast?.body ?? []) {
+      if (item.kind === "ExportDeclaration" && "id" in item.declaration && "name" in item.declaration.id && item.declaration.id.name === name) candidates.push({ kind: "declaration", item });
+      if (item.kind === "ExportFromDeclaration") for (const spec of item.specifiers) if (spec.local.name === name) candidates.push({ kind: "reexport", item, spec });
+    }
+    if (candidates.length !== 1) return undefined;
+    const candidate = candidates[0];
+    if (candidate.kind === "declaration") {
+      const id = candidate.item.declaration.id;
+      if (!("name" in id)) return undefined;
+      return { doc, declaration: candidate.item, surface: `${doc.uri}:${id.span.start.offset}` };
+    }
+    const target = this.moduleDocument(doc, candidate.item.source);
+    const resolved = target && this.resolveExport(target, candidate.spec.imported.name, next);
+    if (!resolved) return undefined;
+    const aliased = candidate.spec.local.name !== candidate.spec.imported.name;
+    return { ...resolved, surface: aliased ? `${doc.uri}:${candidate.spec.local.span.start.offset}` : resolved.surface };
+  }
+
+  /** Identity of a renameable binding, retaining each explicit alias boundary. */
+  renameIdentity(doc: Doc, occurrence: Occurrence): string {
+    const ast = this.document(doc).ast;
+    if (!ast) return "";
+    const match = new DefinitionFinder(occurrence.line + 1, occurrence.character + 1).find(ast);
+    if (!match) return "";
+    const targetOffset = match.targetIdentifierNode.span.start.offset;
+    for (const item of ast.body) {
+      if (item.kind !== "ImportDeclaration" && item.kind !== "ExportFromDeclaration") continue;
+      for (const spec of item.specifiers) {
+        const isImported = occurrence.start === spec.imported.span.start.offset;
+        const isLocal = occurrence.start === spec.local.span.start.offset || targetOffset === spec.local.span.start.offset;
+        if (!isImported && !isLocal) continue;
+        const target = this.moduleDocument(doc, item.source);
+        const resolved = target && this.resolveExport(target, spec.imported.name);
+        if (!resolved) return "";
+        if (!isImported && spec.local.name !== spec.imported.name) return `${doc.uri}:${spec.local.span.start.offset}`;
+        return resolved.surface;
+      }
+    }
+    return `${doc.uri}:${targetOffset}`;
   }
 
   importedForOccurrence(doc: Doc, occurrence: Occurrence): { doc: Doc; exportedName: string } | undefined {
@@ -81,10 +134,10 @@ class NavigationAnalysis {
     const identifier = match.targetIdentifierNode.span.start;
     const linked = this.importedTarget(doc, identifier.offset);
     if (linked) {
-      const exported = this.document(linked.doc).ast?.body.find((entry) => entry.kind === "ExportDeclaration" && "id" in entry.declaration && "name" in entry.declaration.id && entry.declaration.id.name === linked.exportedName);
-      if (exported?.kind === "ExportDeclaration" && "id" in exported.declaration) {
-        const start = exported.declaration.id.span.start;
-        const result = `${linked.doc.uri}:${start.line - 1}:${start.column - 1}`;
+      const exported = this.resolveExport(linked.doc, linked.exportedName);
+      if (exported && "id" in exported.declaration.declaration) {
+        const start = exported.declaration.declaration.id.span.start;
+        const result = `${exported.doc.uri}:${start.line - 1}:${start.column - 1}`;
         this.identities.set(cacheKey, result);
         return result;
       }
@@ -92,33 +145,6 @@ class NavigationAnalysis {
     const result = `${doc.uri}:${identifier.line - 1}:${identifier.column - 1}`;
     this.identities.set(cacheKey, result);
     return result;
-  }
-
-  isUnresolvedImport(doc: Doc, occurrence: Occurrence): boolean {
-    const ast = this.document(doc).ast;
-    if (!ast) return false;
-    const match = new DefinitionFinder(occurrence.line + 1, occurrence.character + 1).find(ast);
-    if (!match) return false;
-    const identifier = match.targetIdentifierNode.span.start;
-    const isImport = ast.body.some((item) => item.kind === "ImportDeclaration" && item.specifiers.some((spec) =>
-      spec.local.span.start.offset === identifier.offset || spec.imported.span.start.offset === identifier.offset));
-    return isImport && this.identity(doc, occurrence) === `${doc.uri}:${identifier.line - 1}:${identifier.column - 1}`;
-  }
-
-  /** Return the local binding offset when an occurrence resolves to an import alias. */
-  localAlias(doc: Doc, occurrence: Occurrence): number | undefined {
-    const ast = this.document(doc).ast;
-    if (!ast) return undefined;
-    const match = new DefinitionFinder(occurrence.line + 1, occurrence.character + 1).find(ast);
-    if (!match) return undefined;
-    const offset = match.targetIdentifierNode.span.start.offset;
-    for (const item of ast.body) {
-      if (item.kind !== "ImportDeclaration") continue;
-      for (const spec of item.specifiers) {
-        if (spec.imported.name !== spec.local.name && spec.local.span.start.offset === offset) return offset;
-      }
-    }
-    return undefined;
   }
 
   references(uri: string, selected: Occurrence, includeDeclaration: boolean): Location[] {
@@ -136,7 +162,7 @@ class NavigationAnalysis {
       const analysis = this.document(doc);
       const names = new Set([selected.name, ...(declarationName ? [declarationName] : [])]);
       for (const item of analysis.ast?.body ?? []) {
-        if (item.kind !== "ImportDeclaration") continue;
+        if (item.kind !== "ImportDeclaration" && item.kind !== "ExportFromDeclaration") continue;
         for (const spec of item.specifiers) {
           const occurrence = analysis.occurrences.find((token) => token.start === spec.local.span.start.offset);
           if (occurrence && this.identity(doc, occurrence) === key) {
@@ -166,7 +192,7 @@ export function prepareRename(source: string, uri: string, position: {line:numbe
   const analysis = new NavigationAnalysis(source, uri, docs);
   const occ = analysis.selected(uri, position);
   if (!occ || reserved.has(occ.name) || occ.name.startsWith("__") || occ.name.startsWith("$")) return null;
-  if (!analysis.identity({ uri, text: source }, occ)) return null;
+  if (!analysis.renameIdentity({ uri, text: source }, occ)) return null;
   return { range: { start:{line:occ.line,character:occ.character}, end:{line:occ.line,character:occ.character+occ.name.length} }, placeholder: occ.name };
 }
 
@@ -176,18 +202,25 @@ export function rename(source: string, uri: string, position: {line:number; char
   const selected = analysis.selected(uri, position);
   if (!selected || reserved.has(selected.name) || selected.name.startsWith("__") || selected.name.startsWith("$")) return null;
   const current = { uri, text: source };
-  const key = analysis.identity(current, selected);
+  const key = analysis.renameIdentity(current, selected);
   if (!key) return null;
-  const selectedAlias = analysis.localAlias(current, selected);
-  if (selectedAlias === undefined && analysis.isUnresolvedImport(current, selected)) return null;
   const allDocs = [...docs.filter((doc) => doc.uri !== uri), current];
-  const locations = analysis.references(uri, selected, true).filter((location) => {
-    const doc = allDocs.find((item) => item.uri === location.uri);
-    const occurrence = doc && analysis.document(doc).occurrences.find((item) => item.line === location.range.start.line && item.character === location.range.start.character);
-    if (!doc || !occurrence) return false;
-    const alias = analysis.localAlias(doc, occurrence);
-    return selectedAlias === undefined ? alias === undefined : doc.uri === uri && alias === selectedAlias;
-  });
+  const locations: Location[] = [];
+  for (const doc of allDocs) {
+    const analyzed = analysis.document(doc);
+    for (const item of analyzed.ast?.body ?? []) {
+      if (item.kind !== "ImportDeclaration" && item.kind !== "ExportFromDeclaration") continue;
+      for (const spec of item.specifiers) {
+        if (spec.imported.name !== selected.name) continue;
+        const occurrence = analyzed.occurrences.find(token => token.start === spec.imported.span.start.offset);
+        if (occurrence && !analysis.renameIdentity(doc, occurrence)) return null;
+      }
+    }
+    for (const occurrence of analyzed.occurrences) {
+      if (analysis.renameIdentity(doc, occurrence) !== key) continue;
+      locations.push({ uri: doc.uri, range: { start: { line: occurrence.line, character: occurrence.character }, end: { line: occurrence.line, character: occurrence.character + occurrence.name.length } } });
+    }
+  }
   if (!locations.length) return null;
   // Conservatively reject a name already used in any affected document; this
   // prevents captures even when the existing occurrence is in a nested scope.
@@ -225,13 +258,10 @@ export function findWorkspaceDefinition(source: string, uri: string, position: {
   if (!occ) return null;
   const imported = analysis.importedForOccurrence({ uri, text: source }, occ);
   if (!imported) return findDefinition(source, uri, position, linkSupport);
-  const target = imported.doc;
-  const targetAst = analysis.document(target).ast;
-  const declaration = targetAst?.body.find((entry) => {
-    if (entry.kind !== "ExportDeclaration") return false;
-    return "id" in entry.declaration && "name" in entry.declaration.id && entry.declaration.id.name === imported.exportedName;
-  });
-  if (!declaration || declaration.kind !== "ExportDeclaration" || !("id" in declaration.declaration)) return null;
+  const resolved = analysis.resolveExport(imported.doc, imported.exportedName);
+  if (!resolved) return null;
+  const target = resolved.doc;
+  const declaration = resolved.declaration;
   const range = spanToRange(declaration.span);
   const selectionRange = spanToRange(declaration.declaration.id.span);
   if (linkSupport) return [{ originSelectionRange: { start: { line: occ.line, character: occ.character }, end: { line: occ.line, character: occ.character + occ.name.length } }, targetUri: target.uri, targetRange: range, targetSelectionRange: selectionRange }];
