@@ -6,6 +6,7 @@ import { Effect } from "effect";
 import { TraceMap, originalPositionFor } from "@jridgewell/trace-mapping";
 import { codeFrameColumns } from "@babel/code-frame";
 import { compileString, CompilerError } from "../compiler.js";
+import { ImportedSchemaError } from "./imported-schemas.js";
 import {
   TS_RESET_DECLARATION,
   JSX_INTRINSICS_DECLARATION,
@@ -33,6 +34,7 @@ export interface TypeCheckDiagnostic {
   diagnosticCode?: string;
   explanation?: string;
   suggestedAction?: string;
+  related?: DiagnosticLocation;
   category: DiagnosticCategory;
   code?: number | string;
   frame?: string;
@@ -342,19 +344,24 @@ export const typeCheckVirtualFiles = (
               frame = undefined;
             }
 
+            const schemaError = compErr.error instanceof ImportedSchemaError ? compErr.error : undefined;
+            const suggestedAction = schemaError?.suggestedAction ?? "Fix the syntax at the highlighted location and run `funscript check` again.";
             const header = `${filePath}:${errLine}:${errCol} - error: ${compErr.message}`;
-            const formatted = `${frame ? `${header}\n${frame}` : header}\n  help: Fix the syntax at the highlighted location and run \`funscript check\` again.`;
+            const related = schemaError?.related;
+            const relatedText = related ? `\n  TypeScript declaration: ${related.file}:${related.line + 1}:${related.column + 1}` : "";
+            const formatted = `${frame ? `${header}\n${frame}` : header}${relatedText}\n  help: ${suggestedAction}`;
 
             earlyDiagnostics.push({
               file: filePath,
               line: errLine,
               column: errCol,
               message: compErr.message,
-              diagnosticCode: "FS_SYNTAX",
-              explanation: "The FunScript source could not be parsed.",
-              suggestedAction: "Fix the syntax at the highlighted location and run \`funscript check\` again.",
+              diagnosticCode: schemaError?.code ?? "FS_SYNTAX",
+              explanation: schemaError?.explanation ?? "The FunScript source could not be parsed.",
+              suggestedAction,
+              ...(related ? { related: { file: related.file, line: related.line + 1, column: related.column + 1, endLine: related.endLine + 1, endColumn: related.endColumn + 1 } } : {}),
               category: "error",
-              code: "SYNTAX",
+              code: schemaError ? "IMPORTED_SCHEMA" : "SYNTAX",
               frame,
               formatted,
             });

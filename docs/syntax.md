@@ -1725,6 +1725,7 @@ The compiler introspects the imported type using the TypeScript compiler API and
 | Arrays (`T[]`, `Array<T>`, `ReadonlyArray<T>`) | `Schema.Array(ElemSchema)` | Supports nested arrays (`T[][]`) |
 | Record index signatures (`Record<string, V>`) | `Schema.Record(Schema.String, ValSchema)` | Key must be string |
 | Object interfaces and type literals (`{ ... }`) | `Schema.Struct({ ... })` | Field names preserved; nested structs supported |
+| Recursive root record | `Schema.suspend(() => schemaRef)` | Supports finite data whose recursive references lead back to the imported root record, including through arrays and optional fields. Decoded arrays and records have readonly static types. |
 | Optional properties (`field?: T`) | `field: Schema.optional(FieldSchema)` | Accepts omitted properties and present `undefined` values. `Schema.Struct` decoding strips undeclared extra keys from decoded output. |
 | Nullable unions (`T \| null`) | `Schema.NullOr(InnerSchema)` | Explicit nullable wrapper |
 | Optional unions (`T \| undefined`) | `Schema.UndefinedOr(InnerSchema)` | Explicit undefined wrapper |
@@ -1734,6 +1735,11 @@ The compiler introspects the imported type using the TypeScript compiler API and
 #### Rejected types and strict diagnostics
 
 To preserve FunScript's runtime safety guarantees, the compiler strictly rejects types that cannot be safely converted to runtime data schemas without silent widening:
+
+The check command and language server report these failures as `FS_IMPORTED_SCHEMA`,
+point to the FunScript schema declaration, and include the unsupported field path and
+a suggested next step. When the TypeScript declaration is available on disk, diagnostics
+also link to the unsupported field in that file.
 
 - **`any`:** Strictly rejected. FunScript does not allow silent widening to `Schema.Unknown`.
   `Type 'any' [in 'Path'] is not supported for schema derivation. FunScript does not allow silent widening to Schema.Unknown.`
@@ -1747,8 +1753,7 @@ To preserve FunScript's runtime safety guarantees, the compiler strictly rejects
   `Class 'ClassName' is not supported for schema derivation.`
 - **Unsupported built-in objects:** JavaScript built-ins (`Date`, `RegExp`, `Map`, `Set`, `WeakMap`, `WeakSet`, `Promise`, `ArrayBuffer`, typed arrays, `Error`, etc.) are rejected with actionable diagnostics.
   `Type 'Date' is not supported for schema derivation.`
-- **Recursive / cyclical types:** Types that reference themselves directly or indirectly cannot be lowered to static Schema expressions.
-  `Recursive type 'Tree' at 'Tree.children' is not supported for schema derivation.`
+- **Other recursive types:** Cycles that do not lead back to the imported root record remain unsupported and produce a recursive type diagnostic. Cyclic JavaScript object values are not supported input.
 - **Unresolved types:** Non-existent or un-imported type names produce clear compiler diagnostics locating the missing identifier.
 
 #### Limits and constraints

@@ -51,6 +51,10 @@ export interface TypeWithAny {
   extra: any;
 }
 
+export interface NestedUnsupported {
+  items: Array<{ extra: any }>;
+}
+
 export interface TypeWithUnknown {
   id: string;
   data: unknown;
@@ -68,6 +72,24 @@ export class UserClass {
 export interface RecursiveTree {
   id: string;
   children: RecursiveTree[];
+}
+
+export interface OptionalRecursiveTree {
+  id: string;
+  next?: OptionalRecursiveTree;
+}
+
+export interface RecursiveWithFunction {
+  children: RecursiveWithFunction[];
+  callback: () => string;
+}
+
+export interface NestedRecursiveRoot {
+  node: NestedRecursiveNode;
+}
+
+export interface NestedRecursiveNode {
+  next?: NestedRecursiveNode;
 }
 
 export type StringTagged =

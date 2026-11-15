@@ -1,5 +1,10 @@
 # Survey: converting imported TypeScript types to Effect schemas
 
+This historical survey predates implementation. For current behavior, see
+[TypeScript schema derivation](syntax.md#1207-unified-schema-schema-structs-tagged-unions-and-aliases).
+Root-recursive records now use lazy schemas; cycles that do not return to the
+imported root record still produce a diagnostic.
+
 ## Purpose and boundary
 
 This is a decision brief for a possible feature that derives an Effect `Schema`

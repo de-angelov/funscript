@@ -51,7 +51,7 @@ import { Lexer } from "../lexer/lexer.js";
 import { Parser } from "../parser/parser.js";
 import { TypeScriptCompilationContext } from "../compiler/typescript-context.js";
 import { validateNumericComparisons } from "../compiler/numeric-comparisons.js";
-import { resolveImportedSchemas } from "../compiler/imported-schemas.js";
+import { ImportedSchemaError, resolveImportedSchemas } from "../compiler/imported-schemas.js";
 import { typeCheckVirtualFiles, createTypeCheckCache, type TypeCheckCache } from "../compiler/check.js";
 import { format } from "../formatter/index.js";
 import type { Span } from "../ast/types.js";
@@ -105,10 +105,19 @@ export function toDiagnostic(error: any): Diagnostic {
     source: "funscript",
     code: error?.code ?? (error?.constructor?.name === "LexerError" ? "FS_LEXER" : "FS_SYNTAX"),
     message: rawMessage,
+    ...(error instanceof ImportedSchemaError && error.related ? {
+      relatedInformation: [{
+        location: {
+          uri: pathToFileURL(error.related.file).href,
+          range: { start: { line: error.related.line, character: error.related.column }, end: { line: error.related.endLine, character: error.related.endColumn } },
+        },
+        message: "Unsupported TypeScript field declared here.",
+      }],
+    } : {}),
     data: {
       primaryMessage: rawMessage,
-      explanation: "The FunScript source could not be parsed.",
-      suggestedAction: "Fix the highlighted syntax and validate the file again.",
+      explanation: error instanceof ImportedSchemaError ? error.explanation : "The FunScript source could not be parsed.",
+      suggestedAction: error instanceof ImportedSchemaError ? error.suggestedAction : "Fix the highlighted syntax and validate the file again.",
     },
   };
 }

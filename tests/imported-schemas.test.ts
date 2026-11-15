@@ -6,6 +6,7 @@ import * as path from "node:path";
 import { compileString } from "../src/compiler.js";
 import { format } from "../src/formatter/index.js";
 import { typeCheckVirtualFiles } from "../src/compiler/check.js";
+import { validateFunScript } from "../src/lsp/server.js";
 
 function evaluateSchemaModule(tsCode: string): any {
   const cjs = ts.transpileModule(tsCode, {
@@ -458,6 +459,31 @@ export ts schema Nested = NestedUser
   });
 
   describe("Rejection of Unsupported Types", () => {
+    it("reports the nested path and actionable schema diagnostics in the editor and check command", async () => {
+      const source = `import type { NestedUnsupported } from "${fixturePath}.js"\nexport ts schema Bad = NestedUnsupported`;
+      const editorDiagnostic = validateFunScript(source, dummyFile)[0];
+      expect(editorDiagnostic).toMatchObject({
+        code: "FS_IMPORTED_SCHEMA",
+        range: { start: { line: 1 } },
+        data: { suggestedAction: expect.stringContaining("concrete data type") },
+      });
+      expect(editorDiagnostic.message).toContain("NestedUnsupported.items[].extra");
+      const related = editorDiagnostic.relatedInformation?.[0];
+      expect(related?.location.uri).toBe(new URL("./fixtures/imported-schemas/model.ts", import.meta.url).href);
+      const lines = (await fs.readFile(path.join(process.cwd(), "tests/fixtures/imported-schemas/model.ts"), "utf8")).split("\n");
+      expect(lines[related!.location.range.start.line].slice(related!.location.range.start.character)).toMatch(/^extra:/);
+      const result = await Effect.runPromise(typeCheckVirtualFiles({ [dummyFile]: source }, { cwd: process.cwd(), compilerOptions: { rootDir: process.cwd() } }));
+      expect(result.diagnostics[0]).toMatchObject({
+        diagnosticCode: "FS_IMPORTED_SCHEMA",
+        line: 2,
+        suggestedAction: expect.stringContaining("concrete data type"),
+      });
+      expect(result.formattedOutput).toContain("NestedUnsupported.items[].extra");
+      expect(result.diagnostics[0].related?.file).toMatch(/model\.ts$/);
+      expect(result.formattedOutput).toContain("TypeScript declaration:");
+      expect(result.formattedOutput).not.toContain("Fix the syntax");
+    });
+
     it("rejects function types with actionable diagnostic", async () => {
       const source = `
 import type { TypeWithFunction } from "${fixturePath}"
@@ -518,16 +544,41 @@ ts schema Bad = UserClass
       );
     });
 
-    it("rejects recursive types with cycle diagnostic", async () => {
+    it("derives recursive record schemas and validates nested values", async () => {
       const source = `
-import type { RecursiveTree } from "${fixturePath}"
+import type { RecursiveTree as TreeType } from "${fixturePath}.js"
 
-ts schema Bad = RecursiveTree
+export ts schema Tree = TreeType
 `.trim();
+      const result = await Effect.runPromise(compileString(source, dummyFile));
+      expect(result.typescript).toContain("Schema.suspend(");
+      const checked = await Effect.runPromise(typeCheckVirtualFiles({ [dummyFile]: source }, { cwd: process.cwd(), compilerOptions: { rootDir: process.cwd(), exactOptionalPropertyTypes: true } }));
+      expect(checked.diagnostics).toEqual([]);
+      const invalid = source + '\nexport bad = (tree: Tree): Number => tree.id';
+      const invalidChecked = await Effect.runPromise(typeCheckVirtualFiles({ [dummyFile]: invalid }, { cwd: process.cwd(), compilerOptions: { rootDir: process.cwd() } }));
+      expect(invalidChecked.diagnostics.map(diagnostic => diagnostic.message).join("\n")).toMatch(/not assignable/);
+      const mod = evaluateSchemaModule(result.typescript);
+      const value = { id: "root", children: [{ id: "child", children: [] }] };
+      expect(mod.TreeFromUnknown(value)).toEqual(value);
+      expect(() => mod.TreeFromUnknown({ id: "root", children: [{ id: 5, children: [] }] })).toThrow();
+    });
 
-      await expect(Effect.runPromise(compileString(source, dummyFile))).rejects.toThrow(
-        /Recursive type 'RecursiveTree'/,
-      );
+    it("supports optional recursive fields while rejecting invalid nested values", async () => {
+      const source = `import type { OptionalRecursiveTree as NodeType } from "${fixturePath}.js"\nexport schema Node = from ts<NodeType>`;
+      const result = await Effect.runPromise(compileString(source, dummyFile));
+      const checked = await Effect.runPromise(typeCheckVirtualFiles({ [dummyFile]: source }, { cwd: process.cwd(), compilerOptions: { rootDir: process.cwd(), exactOptionalPropertyTypes: true } }));
+      expect(checked.diagnostics).toEqual([]);
+      const mod = evaluateSchemaModule(result.typescript);
+      expect(mod.NodeFromUnknown({ id: "first", next: { id: "second" } })).toEqual({ id: "first", next: { id: "second" } });
+      expect(mod.NodeFromUnknown({ id: "first", next: undefined })).toEqual({ id: "first", next: undefined });
+      expect(() => mod.NodeFromUnknown({ id: "first", next: { id: 12 } })).toThrow();
+    });
+
+    it("continues rejecting functions and non-root recursive cycles", async () => {
+      const unsupported = `import type { RecursiveWithFunction } from "${fixturePath}"\nts schema Bad = RecursiveWithFunction`;
+      await expect(Effect.runPromise(compileString(unsupported, dummyFile))).rejects.toThrow(/Method 'RecursiveWithFunction.callback'/);
+      const nested = `import type { NestedRecursiveRoot } from "${fixturePath}"\nts schema Bad = NestedRecursiveRoot`;
+      await expect(Effect.runPromise(compileString(nested, dummyFile))).rejects.toThrow(/Recursive type 'NestedRecursiveNode'/);
     });
 
     it("rejects non-existent types with diagnostic", async () => {
