@@ -40,3 +40,62 @@ Profile command for the representative two-file typecheck: `node --cpu-prof --cp
 The profile contained 4478 samples. Among named TypeScript frames, `doJSDocScan` and `setParentRecursive` (TypeScript source scanning/tree setup) appeared repeatedly; garbage collection was also prominent (674 samples). The profiler includes module startup and does not assign exclusive cost to one compiler phase. The code path in `src/compiler/check.ts` still creates a TypeScript program and requests pre-emit diagnostics for the virtual roots on each check, while the existing cache reuses source files and passes `oldProgram`.
 
 The next investigation candidate is incremental editor typechecking across a representative project edit: determine whether program construction/pre-emit checking or allocation/GC dominates after the existing source-file and old-program reuse. Capture a profile focused on that path and verify invalidation across changed and imported files before proposing any optimization. No speedup is assumed by this baseline.
+
+## Follow-up profile: compiler analysis passes
+
+A follow-up on 2026-11-13 used Node v20.20.2 on this workspace. Five calls to
+`typeCheckFiles` for the two-file benchmark project produced a 5.46-second CPU
+profile with 5,049 samples. The largest sampled frame was garbage collection
+(0.863 seconds); TypeScript scanning and JSDoc scanning were also prominent.
+This includes process startup and is not an exclusive breakdown of the editor
+incremental path.
+
+A separate exploratory probe compiled `tests/fixtures/benchmarks/pipeline.fun`
+six times in one process, with sourcemaps disabled and a shared
+`TypeScriptCompilationContext`. It wrapped `context.check` to measure its calls:
+
+| Run | Full compile | First check | Second check |
+| --- | ---: | ---: | ---: |
+| First | 1,206 ms | 1,122 ms | 41 ms |
+| Warm 1 | 84 ms | 34 ms | 33 ms |
+| Warm 2 | 73 ms | 32 ms | 29 ms |
+| Warm 3 | 71 ms | 32 ms | 28 ms |
+| Warm 4 | 65 ms | 29 ms | 26 ms |
+| Warm 5 | 59 ms | 24 ms | 25 ms |
+
+These are single-run observations, not regression thresholds; timings depend on
+machine load and the `check` wrapper excludes type queries performed after it
+returns. The fixture contains both a numeric comparison and pipelines. The
+numeric-comparison pass emits one marked program, and the pipeline pass emits
+another, so each calls `context.check` independently. A shared probe is worth
+investigating, but it must preserve type resolution and diagnostic locations:
+the two programs currently have different imports and marker declarations.
+Before adopting it, compare cold and warm benchmarks and run numeric-comparison,
+pipeline, imported-schema, optional-record, JSX, and source-map tests, including
+cases where declarations or imports shadow built-in names.
+
+Reproduce the pass timing probe after `npm run build`:
+
+```sh
+node --input-type=module -e '
+import { Effect } from "effect";
+import { readFileSync } from "node:fs";
+import { performance } from "node:perf_hooks";
+import { compileString, TypeScriptCompilationContext } from "./dist/index.js";
+const file = "tests/fixtures/benchmarks/pipeline.fun";
+const source = readFileSync(file, "utf8");
+const original = TypeScriptCompilationContext.prototype.check;
+const checks = [];
+TypeScriptCompilationContext.prototype.check = function (text) {
+  const start = performance.now();
+  try { return original.call(this, text); }
+  finally { checks.push(performance.now() - start); }
+};
+const context = new TypeScriptCompilationContext(file);
+for (let i = 0; i < 6; i++) {
+  const start = performance.now();
+  const firstCheck = checks.length;
+  await Effect.runPromise(compileString(source, file, { context, sourcemap: false }));
+  console.log({ total: performance.now() - start, checks: checks.slice(firstCheck) });
+}'
+```

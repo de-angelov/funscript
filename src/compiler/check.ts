@@ -279,6 +279,40 @@ export function formatDiagnostics(diagnostics: TypeCheckDiagnostic[]): string {
   return blocks.join("\n\n") + summary;
 }
 
+export function isEntryModule(funPath: string, ast?: any, cwd: string = process.cwd()): boolean {
+  const normPath = path.normalize(funPath);
+  const baseName = path.basename(normPath);
+  if (baseName === "main.fun" || baseName === "main.funx") return true;
+
+  if (ast?.body && Array.isArray(ast.body)) {
+    for (const stmt of ast.body) {
+      if (stmt.kind === "ExportDeclaration" && stmt.declaration?.id?.name === "main") {
+        return true;
+      }
+      if (stmt.kind === "BindingDeclaration" && stmt.id?.name === "main" && stmt.isExported) {
+        return true;
+      }
+    }
+  }
+
+  try {
+    const configPath = path.join(cwd, "funscript.json");
+    if (syncFs.existsSync(configPath)) {
+      const config = JSON.parse(syncFs.readFileSync(configPath, "utf8"));
+      if (Array.isArray(config.entry)) {
+        for (const entry of config.entry) {
+          const resolvedEntry = path.normalize(path.resolve(cwd, entry));
+          if (normPath === resolvedEntry || normPath.endsWith(path.normalize(entry))) {
+            return true;
+          }
+        }
+      }
+    }
+  } catch {}
+
+  return false;
+}
+
 export const typeCheckVirtualFiles = (
   virtualInputFiles: Record<string, string>,
   options?: CheckOptions,
@@ -690,6 +724,228 @@ export const typeCheckVirtualFiles = (
               formatted: frame ? `${header}\n${frame}` : header,
             });
           };
+
+          const reportedSpans = new Set<string>();
+          const addAstDiag = (
+            span: { start: { line: number; column: number }; end: { line: number; column: number } },
+            code: string,
+            customMsg: string,
+            category: DiagnosticCategory = "error",
+            explanation?: string,
+            suggestedAction?: string,
+          ) => {
+            const key = `${span.start.line}:${span.start.column}:${code}`;
+            if (reportedSpans.has(key)) return;
+            reportedSpans.add(key);
+
+            let frame: string | undefined;
+            try {
+              frame = codeFrameColumns(
+                meta.funSource,
+                {
+                  start: { line: span.start.line, column: span.start.column },
+                  end: { line: span.end.line, column: span.end.column },
+                },
+                {
+                  message: customMsg,
+                  highlightCode: options?.highlightCode ?? false,
+                },
+              );
+            } catch {
+              frame = undefined;
+            }
+            const header = `${meta.funPath}:${span.start.line}:${span.start.column} - ${category} ${code}: ${customMsg}`;
+            tsDiagnostics.push({
+              file: meta.funPath,
+              line: span.start.line,
+              column: span.start.column,
+              endLine: span.end.line,
+              endColumn: span.end.column,
+              message: customMsg,
+              diagnosticCode: `FS_${code}`,
+              explanation,
+              suggestedAction,
+              category,
+              code,
+              frame,
+              formatted: frame ? `${header}\n${frame}` : header,
+            });
+          };
+
+          if (meta.ast) {
+            const isEntry = isEntryModule(meta.funPath, meta.ast, cwd);
+            const walkAst = (node: any, parent?: any) => {
+              if (!node || typeof node !== "object") return;
+              if (node.kind === "TsEscapeDeclaration" || node.kind === "TsEscapeExpression") return;
+
+              if (node.kind === "CallExpression") {
+                const callee = node.callee;
+                if (callee?.kind === "UpperIdentifier" && callee.name === "Date") {
+                  addAstDiag(
+                    node.span,
+                    "HIDDEN_INPUT",
+                    "`Date()` is a hidden input. Time is an Effect service; use 'Clock.currentTimeMillis' or 'DateTime.now' to make code testable.",
+                    "error",
+                    "Time and randomness are Effect services; reading global non-deterministic constructors creates flaky tests.",
+                    "Replace `Date()` with `now <- Clock.currentTimeMillis` or `DateTime.now`.",
+                  );
+                } else if (callee?.kind === "MemberExpression") {
+                  const o = callee.object?.name;
+                  const p = callee.property?.name;
+                  if (o === "Date" && p === "now") {
+                    addAstDiag(
+                      node.span,
+                      "HIDDEN_INPUT",
+                      "`Date.now()` is a hidden input. Time is an Effect service; use 'Clock.currentTimeMillis' or 'DateTime.now' to make code testable.",
+                      "error",
+                      "Time and randomness are Effect services; reading global non-deterministic APIs creates flaky tests.",
+                      "Replace `Date.now()` with `now <- Clock.currentTimeMillis` or `DateTime.now`.",
+                    );
+                  } else if (o === "Math" && p === "random") {
+                    addAstDiag(
+                      node.span,
+                      "HIDDEN_INPUT",
+                      "`Math.random()` is a hidden input. Randomness is an Effect service; use 'Random.nextInt', 'Random.next', or 'Random.nextIntBetween' to make code testable.",
+                      "error",
+                      "Randomness is an Effect service; reading global non-deterministic Math.random creates non-reproducible bugs.",
+                      "Replace `Math.random()` with `Random.nextInt` or `Random.next` from the Effect Random service.",
+                    );
+                  } else if (o === "performance" && p === "now") {
+                    addAstDiag(
+                      node.span,
+                      "HIDDEN_INPUT",
+                      "`performance.now()` is a hidden input. Time is an Effect service; use 'Clock.currentTimeNanos' or 'Clock.currentTimeMillis' to make code testable.",
+                      "error",
+                      "Time is an Effect service; use Clock to measure duration deterministically.",
+                      "Replace `performance.now()` with `Clock.currentTimeNanos`.",
+                    );
+                  } else if (o === "crypto" && p === "randomUUID") {
+                    addAstDiag(
+                      node.span,
+                      "HIDDEN_INPUT",
+                      "`crypto.randomUUID()` is a hidden input. Randomness is an Effect service; use 'Random' or 'UUID' schemas to make code testable.",
+                      "error",
+                      "Randomness is an Effect service; reading crypto directly creates non-reproducible states in tests.",
+                      "Use Effect's Random service or validated UUID schemas.",
+                    );
+                  } else if (o === "crypto" && p === "getRandomValues") {
+                    addAstDiag(
+                      node.span,
+                      "HIDDEN_INPUT",
+                      "`crypto.getRandomValues()` is a hidden input. Randomness is an Effect service; use 'Random' to make code testable.",
+                      "error",
+                      "Randomness is an Effect service; reading crypto directly creates non-reproducible states in tests.",
+                      "Use Effect's Random service.",
+                    );
+                  }
+                }
+              } else if (node.kind === "MemberExpression" && parent?.kind !== "CallExpression") {
+                const o = node.object?.name;
+                const p = node.property?.name;
+                if (o === "Date" && p === "now") {
+                  addAstDiag(
+                    node.span,
+                    "HIDDEN_INPUT",
+                    "`Date.now` is a hidden input. Time is an Effect service; use 'Clock.currentTimeMillis' or 'DateTime.now' to make code testable.",
+                    "error",
+                  );
+                } else if (o === "Math" && p === "random") {
+                  addAstDiag(
+                    node.span,
+                    "HIDDEN_INPUT",
+                    "`Math.random` is a hidden input. Randomness is an Effect service; use 'Random.nextInt', 'Random.next', or 'Random.nextIntBetween' to make code testable.",
+                    "error",
+                  );
+                } else if (o === "performance" && p === "now") {
+                  addAstDiag(
+                    node.span,
+                    "HIDDEN_INPUT",
+                    "`performance.now` is a hidden input. Time is an Effect service; use 'Clock.currentTimeNanos' or 'Clock.currentTimeMillis' to make code testable.",
+                    "error",
+                  );
+                }
+              }
+
+              if (!isEntry) {
+                if (node.kind === "CallExpression") {
+                  const c = node.callee;
+                  if (
+                    (c?.kind === "MemberExpression" && c.object?.name === "Effect" && c.property?.name === "forkDetach") ||
+                    (c?.kind === "Identifier" && c.name === "forkDetach")
+                  ) {
+                    addAstDiag(
+                      c.span || node.span,
+                      "DETACHED_FIBER",
+                      "`Effect.forkDetach` creates a detached fiber nobody owns. It keeps running after its caller is interrupted. Use 'Effect.forkScoped' (tied to Scope) or 'Effect.forkChild' (tied to parent fiber) to ensure structured concurrency.",
+                      "error",
+                      "Detached fibers leak beyond the lifetime of the caller with no owner.",
+                      "Use `Effect.forkScoped` (tied to Scope) or `Effect.forkChild` (tied to parent fiber), or long-lived background work in `Layer.effectDiscard(Effect.forkScoped(...))`.",
+                    );
+                  }
+                } else if (node.kind === "PipelineExpression") {
+                  const r = node.right;
+                  if (
+                    (r?.kind === "MemberExpression" && r.object?.name === "Effect" && r.property?.name === "forkDetach") ||
+                    (r?.kind === "Identifier" && r.name === "forkDetach")
+                  ) {
+                    addAstDiag(
+                      r.span || node.span,
+                      "DETACHED_FIBER",
+                      "`Effect.forkDetach` creates a detached fiber nobody owns. It keeps running after its caller is interrupted. Use 'Effect.forkScoped' (tied to Scope) or 'Effect.forkChild' (tied to parent fiber) to ensure structured concurrency.",
+                      "error",
+                      "Detached fibers leak beyond the lifetime of the caller with no owner.",
+                      "Use `Effect.forkScoped` (tied to Scope) or `Effect.forkChild` (tied to parent fiber), or long-lived background work in `Layer.effectDiscard(Effect.forkScoped(...))`.",
+                    );
+                  } else if (r?.kind === "CallExpression") {
+                    const c = r.callee;
+                    if (
+                      (c?.kind === "MemberExpression" && c.object?.name === "Effect" && c.property?.name === "forkDetach") ||
+                      (c?.kind === "Identifier" && c.name === "forkDetach")
+                    ) {
+                      addAstDiag(
+                        c.span || r.span,
+                        "DETACHED_FIBER",
+                        "`Effect.forkDetach` creates a detached fiber nobody owns. It keeps running after its caller is interrupted. Use 'Effect.forkScoped' (tied to Scope) or 'Effect.forkChild' (tied to parent fiber) to ensure structured concurrency.",
+                        "error",
+                        "Detached fibers leak beyond the lifetime of the caller with no owner.",
+                        "Use `Effect.forkScoped` (tied to Scope) or `Effect.forkChild` (tied to parent fiber), or long-lived background work in `Layer.effectDiscard(Effect.forkScoped(...))`.",
+                      );
+                    }
+                  }
+                }
+              }
+
+              if (node.kind === "RecordExpression" && Array.isArray(node.entries)) {
+                for (const entry of node.entries) {
+                  if (entry.kind === "FieldEntry") {
+                    const key = entry.key?.name;
+                    const val = entry.value?.raw || entry.value?.parts?.[0]?.value;
+                    if (key === "concurrency" && (val === "\"unbounded\"" || val === "unbounded")) {
+                      addAstDiag(
+                        entry.span || node.span,
+                        "UNBOUNDED_CONCURRENCY",
+                        "`concurrency: \"unbounded\"` can overwhelm system resources. Specify an explicit concurrency limit (e.g. `{ concurrency: 10 }`).",
+                        "warning",
+                        "Unbounded concurrency can exhaust sockets, file handles, or memory under burst traffic.",
+                        "Specify a bounded concurrency number, e.g. `{ concurrency: 10 }`.",
+                      );
+                    }
+                  }
+                }
+              }
+
+              for (const k of Object.keys(node)) {
+                if (k === "span") continue;
+                const child = node[k];
+                if (Array.isArray(child)) {
+                  for (const c of child) walkAst(c, node);
+                } else if (child && typeof child === "object") {
+                  walkAst(child, node);
+                }
+              }
+            };
+            walkAst(meta.ast);
+          }
 
           const visit = (node: ts.Node): void => {
             if (ts.isYieldExpression(node) && node.asteriskToken && node.expression) {

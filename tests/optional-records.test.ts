@@ -4,8 +4,52 @@ import { compile, execute, expectCompileError, typeCheck } from "./helpers/index
 import { format } from "../src/formatter/index.js";
 import { typeCheckVirtualFiles } from "../src/compiler/check.js";
 import path from "node:path";
+import ts from "typescript";
 
 describe("optional fields in inline parameter records", () => {
+  it("forwards Options into known optional record fields without creating absent properties", async () => {
+    const source = 'ts { declare function observe(value: { label?: string }): { label?: string } }\nexport forward = (name?: String) => observe({ label: name })';
+    const checked = await typeCheck(source, "optional-record-forward.fun");
+    expect(checked.success, checked.formattedOutput).toBe(true);
+    const { forward } = await execute(source, { scope: { observe: (value: unknown) => value } });
+    expect(Object.hasOwn(forward(), "label")).toBe(false);
+    expect(forward("Ada")).toEqual({ label: "Ada" });
+  });
+
+  it("forwards Options to known JSX optional props", async () => {
+    const source = 'export View = (props: { label?: String }) => <div />\nexport Wrapper = (name?: String) => <View label={name} />';
+    const checked = await typeCheck(source, "optional-jsx-forward.funx");
+    expect(checked.success, checked.formattedOutput).toBe(true);
+    expect((await compile(source, "optional-jsx-forward.funx")).typescript).toContain('Option.isSome(__value)');
+    const generated = (await compile(source, "optional-jsx-forward.funx")).typescript;
+    const js = ts.transpileModule(generated, { fileName: "component.tsx", compilerOptions: { module: ts.ModuleKind.ESNext, jsx: ts.JsxEmit.ReactJSX } }).outputText
+      .replace(/import\s+[^;]+;\s*/g, "").replace(/\bexport\s+/g, "");
+    const wrapper = new Function("Option", "_jsx", `${js}\nreturn Wrapper;`)(Option, (_type: unknown, props: unknown) => props);
+    expect(Object.hasOwn(wrapper(), "label")).toBe(false);
+    expect(wrapper("Ada")).toEqual({ label: "Ada" });
+  });
+
+  it("preserves Some(undefined) and evaluates an optional field expression once", async () => {
+    const source = 'ts { type Input = string | undefined; declare function observe(value: { label?: string | undefined }): { label?: string | undefined }; declare function next(): import("effect").Option.Option<Input>; }\nexport forward = () => observe({ label: next() })';
+    const checked = await typeCheck(source, "optional-undefined.fun");
+    expect(checked.success, checked.formattedOutput).toBe(true);
+    let calls = 0;
+    const { forward } = await execute(source, { scope: { observe: (value: unknown) => value, next: () => { calls++; return Option.some(undefined); } } });
+    const result = forward();
+    expect(Object.hasOwn(result, "label")).toBe(true);
+    expect(result.label).toBeUndefined();
+    expect(calls).toBe(1);
+  });
+
+  it("rejects ambiguous optional Unknown record fields and JSX props", async () => {
+    const record = 'read = (props: { value?: Unknown }) => props.value\nexport forward = (value: Option<String>) => read({ value: value })';
+    await expectCompileError(record, /Ambiguous optional property/);
+    const explicit = 'import { Option } from "effect"\nread = (props: { value?: Unknown }) => props.value\nexport forward = (value: Option<String>) => read({ value: Option.some(value) })';
+    const { forward } = await execute(explicit);
+    expect(forward(Option.none())).toEqual(Option.some(Option.none()));
+    const jsx = 'export View = (props: { value?: Unknown }) => <div />\nexport Wrapper = (value: Option<String>) => <View value={value} />';
+    await expectCompileError(jsx, /Ambiguous optional property/, "ambiguous-prop.funx");
+  });
   it("supports error fields in record literals and member access", async () => {
     const source = 'export response = { error: "bad" }\nexport read = () => response.error';
     const checked = await typeCheck(source, "record-error-value.fun");

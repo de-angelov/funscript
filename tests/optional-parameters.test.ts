@@ -29,9 +29,9 @@ describe("optional and defaulted parameters", () => {
 export inspect = (value?: Option<String>) => value
 export forward = (value?: Option<String>) => inspect(Option.getOrUndefined(value))
 export absent = inspect()
-export suppliedNone = inspect(Option.none())
-export suppliedSome = inspect(Option.some("Ada"))
-export forwardedNone = forward(Option.none())`;
+export suppliedNone = inspect(Option.some(Option.none()))
+export suppliedSome = inspect(Option.some(Option.some("Ada")))
+export forwardedNone = forward(Option.some(Option.none()))`;
     const checked = await typeCheck(source, "optional-option.fun");
     expect(checked.success, checked.formattedOutput).toBe(true);
     const { inspect, forward, absent, suppliedNone, suppliedSome, forwardedNone } = await execute(source);
@@ -44,10 +44,8 @@ export forwardedNone = forward(Option.none())`;
     expect(forward(Option.some("Ada"))).toEqual(Option.some(Option.some("Ada")));
   });
 
-  it("requires explicit conversion when forwarding an Option into an optional parameter", async () => {
-    const invalid = await typeCheck('read = (value?: String) => value\nexport forward = (value?: String) => read(value)', "optional-forward.fun");
-    expect(invalid.success).toBe(false);
-    const source = 'import { Option } from "effect"\nread = (value?: String) => value\nexport forward = (value?: String) => read(Option.getOrUndefined(value))';
+  it("forwards an Option into an optional parameter", async () => {
+    const source = 'read = (value?: String) => value\nexport forward = (value?: String) => read(value)';
     const checked = await typeCheck(source, "optional-forward.fun");
     expect(checked.success, checked.formattedOutput).toBe(true);
     const { forward } = await execute(source);
@@ -66,9 +64,39 @@ export forwardedNone = forward(Option.none())`;
   it("preserves optional Option values across module boundaries", async () => {
     const files = {
       "optional-reader.fun": 'export read = (value?: Option<String>) => value',
-      "optional-caller.fun": 'import { Option } from "effect"\nimport { read } from "./optional-reader.js"\nexport forward = (value?: Option<String>) => read(Option.getOrUndefined(value))\nexport result = read(Option.none())',
+      "optional-caller.fun": 'import { Option } from "effect"\nimport { read } from "./optional-reader.js"\nexport forward = (value?: Option<String>) => read(Option.getOrUndefined(value))\nexport result = read(Option.some(Option.none()))',
     };
     const checked = await Effect.runPromise(typeCheckVirtualFiles(files, { compilerOptions: { rootDir: process.cwd() } }));
+    expect(checked.success, checked.formattedOutput).toBe(true);
+  });
+
+  it("rejects ambiguous Options and supports explicit choices", async () => {
+    const prefix = 'import { Option } from "effect"\nread = (value?: Unknown) => value\n';
+    await expectCompileError(prefix + 'export f = (value: Option<String>) => read(value)', /Ambiguous optional argument/);
+    const ambiguous = await typeCheck(prefix + 'export f = (value: Option<String>) => read(value)', "ambiguous-option.fun");
+    expect(ambiguous.success).toBe(false);
+    expect(ambiguous.diagnostics[0].line).toBe(3);
+    expect(ambiguous.diagnostics[0].column).toBe(44);
+    const source = prefix + 'export pass = (value: Option<String>) => read(Option.some(value))\nexport forward = (value: Option<String>) => read(Option.getOrUndefined(value))';
+    const checked = await typeCheck(source, "optional-choices.fun");
+    expect(checked.success, checked.formattedOutput).toBe(true);
+    const { pass, forward } = await execute(source);
+    expect(pass(Option.none())).toEqual(Option.some(Option.none()));
+    expect(forward(Option.none())).toEqual(Option.none());
+    expect(forward(Option.some("Ada"))).toEqual(Option.some("Ada"));
+  });
+
+  it("forwards optional values across FunScript modules", async () => {
+    const files = { "reader.fun": 'export read = (value?: String) => value', "caller.fun": 'import { read } from "./reader.js"\nexport forward = (value?: String) => read(value)' };
+    const checked = await Effect.runPromise(typeCheckVirtualFiles(files, { compilerOptions: { rootDir: process.cwd() } }));
+    expect(checked.success, checked.formattedOutput).toBe(true);
+  });
+
+  it("does not silently erase a present undefined when forwarding", async () => {
+    const source = 'ts { type MaybeText = string | undefined }\nread = (value?: String) => value\nexport forward = (value: Option<MaybeText>) => read(value)';
+    await expectCompileError(source, /may contain undefined/);
+    const normalized = 'import { Option } from "effect"\n' + source.replace('read(value)', 'read(Option.getOrUndefined(Option.flatMap(value, Option.fromUndefinedOr)))');
+    const checked = await typeCheck(normalized, "normalize-forward.fun");
     expect(checked.success, checked.formattedOutput).toBe(true);
   });
 

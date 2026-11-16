@@ -547,11 +547,12 @@ const answer = () => 42;
   `undefined` JavaScript argument. Inside the function it is a real Effect
   `Option<String>`; handle `Some` and `None` explicitly. `null` is not treated as
   absent. This conversion does not validate values supplied by JavaScript.
-  A supplied `Option` is a value, not a signal to bypass this conversion: for
-  `(value?: Option<String>)`, omission is `None`, while `Option.none()` is
-  `Some(None)`. To forward an optional parameter to another optional parameter,
-  explicitly convert its outer `Option` using `Option.getOrUndefined(value)`.
-  This is a change from older versions that accepted an `Option` directly.
+  An `Option<T>` argument is forwarded to an optional `T` parameter when its
+  meaning is unambiguous. If it can also be the payload (for example `Unknown`
+  or `Option<T>`), the compiler rejects the call: use `Option.getOrUndefined(x)`
+  to forward explicitly or `Option.some(x)` to pass the Option as the value.
+  For `(value?: Option<String>)`, `Option.some(Option.none())` supplies `None`
+  as the value, so the function receives `Some(None)`.
 - A defaulted parameter, such as `(count: Number = 5)`, accepts omission or
   `undefined` and is a plain `Number` inside the function. Its default is evaluated
   only when needed, and does not replace `false`, `0`, empty strings, or `null`.
@@ -1526,9 +1527,10 @@ Rules:
    `schema`/`error` declarations) compile to a runtime `Schema` value **and**
    `type Name = typeof Name.Type`.
 2. **Absence and default fields in record `schema` declarations:**
-   - `field?: Type` uses `Schema.OptionFromOptional(Type)`. After explicit schema decoding,
-     an omitted or `undefined` field is a real `Option.none()` and a present, valid value
-     is `Option.some(value)`. Encoding `None` omits the field; encoding `Some(value)`
+   - `field?: Type` uses `Schema.OptionFromOptionalKey(Schema.UndefinedOr(Type))`.
+     After explicit schema decoding, an omitted field is `Option.none()` and a
+     present field is `Option.some(value)`, including `Some(undefined)`. Encoding
+     `None` omits the field; encoding `Some(value)`
      produces the ordinary JavaScript value. `null` is accepted only when the field's
      schema accepts it. This works inside nested schema records as well.
    - A field declared `Option<Type>` contains an actual Effect `Option`; it does not

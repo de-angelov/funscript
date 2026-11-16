@@ -14,6 +14,7 @@ import { applyJsInteropNullability } from "./compiler/js-interop-nullability.js"
 import { resolveImportedSchemas } from "./compiler/imported-schemas.js";
 import { resolveImportedRecordFunctions } from "./compiler/imported-record-functions.js";
 import { resolvePackageRecordContracts } from "./compiler/package-record-contracts.js";
+import { resolveOptionalArguments } from "./compiler/optional-arguments.js";
 
 export {
   TypeScriptCompilationContext,
@@ -103,6 +104,9 @@ export const compileString = (
         importedDataSchemas,
         isJsx: filename.endsWith(".funx"),
       };
+      const optionalResolutions = resolveOptionalArguments(ast, context, emitterOptions, options?.sourcePath ?? filename, options?.virtualSources);
+      emitterOptions.forwardOptionalArguments = optionalResolutions.arguments;
+      emitterOptions.forwardOptionalProperties = optionalResolutions.properties;
       const emitter = new Emitter(ast, undefined, emitterOptions);
       const typescript = applyJsInteropNullability(emitter.emit(), context);
       const targetExtension = filename.endsWith(".funx") ? ".tsx" : ".ts";

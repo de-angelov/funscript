@@ -1,9 +1,59 @@
 import { describe, expect, it } from "vitest";
 import path from "node:path";
-import { omit } from "funscript/record";
+import { omit, optionalProperty, propertyPresence } from "funscript/record";
+import { Option } from "effect";
 import { compile, typeCheck } from "./helpers/index.js";
 
 describe("TypeScript interop and record algebra", () => {
+  it("round-trips missing, undefined, null, and values without guessing", () => {
+    type Props = { value?: string | null | undefined };
+    const inputs: Props[] = [{}, { value: undefined }, { value: null }, { value: "Ada" }];
+    for (const input of inputs) {
+      const result = optionalProperty("value", propertyPresence(input, "value"));
+      expect(Object.hasOwn(result, "value")).toBe(Object.hasOwn(input, "value"));
+      expect(result.value).toBe(input.value);
+    }
+    expect(propertyPresence(inputs[0], "value")).toEqual(Option.none());
+    expect(propertyPresence(inputs[1], "value")).toEqual(Option.some(undefined));
+    expect(propertyPresence(inputs[2], "value")).toEqual(Option.some(null));
+    let reads = 0;
+    const object = { get value() { reads++; return undefined; } };
+    expect(propertyPresence(object, "value")).toEqual(Option.some(undefined));
+    expect(reads).toBe(1);
+    expect(propertyPresence(Object.create({ value: "inherited" }) as Props, "value")).toEqual(Option.none());
+  });
+  it("preserves optional property presence, values, callbacks and order", () => {
+    const callback = () => "called";
+    const none = { first: 1, ...optionalProperty("label", Option.none()), last: 2 };
+    expect(Object.hasOwn(none, "label")).toBe(false);
+    const someUndefined = { first: 1, ...optionalProperty("label", Option.some(undefined)), last: 2 };
+    expect(Object.hasOwn(someUndefined, "label")).toBe(true);
+    expect(someUndefined.label).toBeUndefined();
+    expect(Object.keys(someUndefined)).toEqual(["first", "label", "last"]);
+    const props = { ...optionalProperty("onClick", Option.some(callback)) };
+    expect(props.onClick).toBe(callback);
+    expect(props.onClick?.()).toBe("called");
+    const key = Symbol("flag");
+    expect({ ...optionalProperty(key, Option.some(false)) }[key]).toBe(false);
+  });
+
+  it("can explicitly adapt an Option into a JavaScript-shaped JSX prop", async () => {
+    const source = `import { optionalProperty } from "funscript/record"
+ts { declare const Target: (props: { label?: string }) => any }
+export View = (label?: String) => <Target {...optionalProperty("label", label)} />`;
+    const checked = await typeCheck(source, "optional-prop.funx", { compilerOptions: { rootDir: process.cwd() } });
+    expect(checked.success, checked.formattedOutput).toBe(true);
+  });
+
+  it("exposes the presence-aware reader to FunScript with the imported property type", async () => {
+    const source = `import { propertyPresence } from "funscript/record"
+ts { type ForeignProps = { label?: string | null | undefined } }
+export read = (props: ForeignProps) => propertyPresence(props, "label")`;
+    const checked = await typeCheck(source, "presence.fun", { compilerOptions: { rootDir: process.cwd() } });
+    expect(checked.success, checked.formattedOutput).toBe(true);
+    const invalid = await typeCheck(source.replace('"label")', '"missing")'), "presence.fun", { compilerOptions: { rootDir: process.cwd() } });
+    expect(invalid.success).toBe(false);
+  });
   it("omits own enumerable keys without mutating the original", () => {
     const symbol = Symbol("data");
     const original = { internal: true, label: "Save", [symbol]: 1 };

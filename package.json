@@ -25,6 +25,8 @@
     "build": "tsc && tsc -p editors/vscode",
     "check": "tsc --noEmit",
     "benchmark": "node scripts/benchmark.mjs",
+    "prototype:optional": "node scripts/optional-prototype.mjs",
+    "spike:optional-compiler": "node scripts/optional-compiler-spike.mjs",
     "test": "vitest run --maxWorkers=2 --minWorkers=1",
     "test:examples": "vitest run tests/example-apps-build.test.ts",
     "test:watch": "vitest",

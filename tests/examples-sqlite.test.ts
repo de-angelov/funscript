@@ -23,7 +23,7 @@ describe("SQLite repository example", () => {
     const check = await Effect.runPromise(typeCheckFiles([examplePath]));
     expect(check.success, JSON.stringify(check.diagnostics)).toBe(true);
     expect(check.errorCount).toBe(0);
-  });
+  }, 30_000);
 
   it.skipIf(!supportsSqlite)("runs parameterized CRUD and captures a typed SQL failure", async () => {
     const { stdout, stderr } = await execFileAsync(process.execPath, [

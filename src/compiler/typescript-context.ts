@@ -46,6 +46,7 @@ export class TypeScriptCompilationContext {
   private isJsx = false;
   private readonly host: ts.CompilerHost;
   private source = "";
+  private auxiliarySources = new Map<string, string>();
   private program?: ts.Program;
 
   constructor(filename: string) {
@@ -63,6 +64,7 @@ export class TypeScriptCompilationContext {
     const resolveVirtualContent = (name: string): string | undefined => {
       const norm = ts.sys.resolvePath(name);
       if (norm === this.normalized || name === this.virtualFile) return this.source;
+      if (this.auxiliarySources.has(norm)) return this.auxiliarySources.get(norm);
       if (norm === this.normalizedReset || name === this.resetFile || path.basename(name) === "__funscript_ts_reset__.d.ts") return TS_RESET_DECLARATION;
       if (norm === this.normalizedTypeFest || name === this.typeFestFile || path.basename(name) === "__funscript_type_fest__.d.ts") return TYPE_FEST_DECLARATION;
       if (norm === this.normalizedJsx || name === this.jsxFile || path.basename(name) === "__funscript_jsx_intrinsics__.d.ts") return JSX_INTRINSICS_DECLARATION;
@@ -77,6 +79,8 @@ export class TypeScriptCompilationContext {
     host.getSourceFile = (name, version, onError, shouldCreateNewSourceFile) => {
       const norm = ts.sys.resolvePath(name);
       if (norm === this.normalized || name === this.virtualFile) return ts.createSourceFile(name, this.source, version, true);
+      const auxiliary = this.auxiliarySources.get(norm);
+      if (auxiliary !== undefined) return ts.createSourceFile(name, auxiliary, version, true);
       const content = resolveVirtualContent(name);
       if (content !== undefined) {
         const cached = sourceFiles.get(norm);
@@ -115,6 +119,11 @@ export class TypeScriptCompilationContext {
     this.virtualFile = nextFile;
     this.normalized = ts.sys.resolvePath(this.virtualFile);
     this.isJsx = this.virtualFile.endsWith(".tsx") || filename.endsWith(".funx");
+  }
+
+  setAuxiliarySources(sources: ReadonlyMap<string, string>): void {
+    this.auxiliarySources = new Map([...sources].map(([file, source]) => [ts.sys.resolvePath(file), source]));
+    this.program = undefined;
   }
 
   check(source: string): { sourceFile: ts.SourceFile; checker: ts.TypeChecker; program: ts.Program } | undefined {

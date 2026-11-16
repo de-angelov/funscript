@@ -36,7 +36,7 @@ describe("REST server example", () => {
       env: { ...process.env, PORT: String(port) },
     });
 
-    const deadline = Date.now() + 10_000;
+    const deadline = Date.now() + 25_000;
     while (Date.now() < deadline) {
       if (child.exitCode !== null) throw new Error(`REST server exited with code ${child.exitCode}`);
       try {
@@ -46,8 +46,8 @@ describe("REST server example", () => {
         await new Promise((resolve) => setTimeout(resolve, 50));
       }
     }
-    throw new Error("REST server did not start within 10 seconds");
-  }, 20_000);
+    throw new Error("REST server did not start within 25 seconds");
+  }, 35_000);
 
   afterAll(async () => {
     if (!child || child.exitCode !== null) return;

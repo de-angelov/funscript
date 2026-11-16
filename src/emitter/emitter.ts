@@ -101,6 +101,10 @@ export interface EmitterOptions {
   markPipelineSources?: boolean;
   /** Wrap native comparison operands so the checker can enforce number-only use. */
   markNumericComparisonOperands?: boolean;
+  /** Preserve source locations of ordinary call arguments during checker analysis. */
+  markCallArguments?: boolean;
+  forwardOptionalArguments?: ReadonlySet<number>;
+  forwardOptionalProperties?: ReadonlySet<number>;
   /** Pre-resolved Effect schema expressions for imported data types keyed by schema name. */
   importedSchemas?: ReadonlyMap<string, string>;
   /** Direct imported FunScript functions with verified optional-record parameters. */
@@ -564,7 +568,7 @@ export class Emitter {
           .map((f) => {
             const fieldKey = emitPropertyKey(f.name.name);
             const schema = this.emitSchemaTypeField(f.typeAnnotation);
-            if (f.optional) return `  ${fieldKey}: Schema.OptionFromOptional(${schema})`;
+            if (f.optional) return `  ${fieldKey}: Schema.OptionFromOptionalKey(Schema.UndefinedOr(${schema}))`;
             if (!f.defaultValue) return `  ${fieldKey}: ${schema}`;
             this.effectImports.add("Effect");
             return `  ${fieldKey}: ${schema}.pipe(Schema.withDecodingDefaultType(Effect.sync(() => ${this.emitExpression(f.defaultValue!)})))`;
@@ -900,7 +904,7 @@ export class Emitter {
         .map((f) => {
           if (f.defaultValue) throw new FunScriptError("Nested schema field defaults are not supported yet", f.span);
           const schema = this.emitSchemaTypeField(f.typeAnnotation);
-          return `  ${f.name.name}: ${f.optional ? `Schema.OptionFromOptional(${schema})` : schema}`;
+          return `  ${f.name.name}: ${f.optional ? `Schema.OptionFromOptionalKey(Schema.UndefinedOr(${schema}))` : schema}`;
         })
         .join(",\n");
       return `Schema.Struct({\n${inner}\n})`;
@@ -1668,7 +1672,14 @@ export class Emitter {
       this.esToolkitImports.add(expr.callee.name);
     }
 
-    return `${this.emitExpression(expr.callee)}(${expr.args.map((a) => this.emitExpression(a)).join(", ")})`;
+    return `${this.emitExpression(expr.callee)}(${expr.args.map((a) => {
+      const emitted = this.emitExpression(a);
+      if (this.options.forwardOptionalArguments?.has(a.span.start.offset)) {
+        this.effectImports.add("Option");
+        return `Option.getOrUndefined(${emitted})`;
+      }
+      return this.options.markCallArguments ? `__funscriptCallArgument(${a.span.start.offset}, ${emitted})` : emitted;
+    }).join(", ")})`;
   }
 
   private emitPipelineExpression(expr: PipelineExpression): string {
@@ -1882,6 +1893,11 @@ export class Emitter {
         if (e.kind === "SpreadEntry") return `...${this.emitExpression(e.argument)}`;
         if (e.kind === "FieldEntry") {
           let val = this.emitExpression(e.value);
+          if (this.options.forwardOptionalProperties?.has(e.value.span.start.offset)) {
+            this.effectImports.add("Option");
+            return `...((__value: import("effect").Option.Option<any>) => Option.isSome(__value) ? { [${JSON.stringify(e.key.name)}]: __value.value } : {})(${val})`;
+          }
+          if (this.options.markCallArguments) val = `__funscriptCallArgument(${e.value.span.start.offset}, ${val})`;
           if (e.value.kind === "BooleanLiteral") {
             val = `${val} as const`;
           } else if (
@@ -2311,7 +2327,13 @@ export class Emitter {
       return `${name}={${this.emitStringLiteral(attr.value)}}`;
     }
     if (attr.value.kind === "JSXExpressionContainer") {
-      return `${name}={${this.emitExpression(attr.value.expression)}}`;
+      const expression = attr.value.expression;
+      const value = this.emitExpression(expression);
+      if (this.options.forwardOptionalProperties?.has(expression.span.start.offset)) {
+        this.effectImports.add("Option");
+        return `{...((__value: import("effect").Option.Option<any>) => Option.isSome(__value) ? { [${JSON.stringify(name)}]: __value.value } : {})(${value})}`;
+      }
+      return `${name}={${this.options.markCallArguments ? `__funscriptCallArgument(${expression.span.start.offset}, ${value})` : value}}`;
     }
     return `${name}={${this.emitExpression(attr.value)}}`;
   }

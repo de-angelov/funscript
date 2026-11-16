@@ -466,4 +466,121 @@ export res = greet(12345)
       expect(stdout).toContain("✓ Checked 2 files successfully (0 errors)");
     });
   });
+
+  describe("Pit of Success enforcements: Hidden inputs & Structured Concurrency", () => {
+    it("rejects hidden non-deterministic inputs (Date.now, Date, performance.now, crypto.randomUUID)", async () => {
+      const result = await Effect.runPromise(
+        typeCheckSource(
+          `
+export checkTime = () => Date.now()
+export checkDate = () => Date()
+export checkPerf = () => performance.now()
+export checkUuid = () => crypto.randomUUID()
+`.trim(),
+          "time.fun",
+        ),
+      );
+
+      expect(result.success).toBe(false);
+      expect(result.errorCount).toBe(4);
+      const codes = result.diagnostics.map((d) => d.code);
+      expect(codes).toContain("HIDDEN_INPUT");
+      expect(result.formattedOutput).toContain("Date.now()");
+      expect(result.formattedOutput).toContain("Date()");
+      expect(result.formattedOutput).toContain("performance.now()");
+      expect(result.formattedOutput).toContain("crypto.randomUUID()");
+      expect(result.formattedOutput).toContain("Time is an Effect service");
+    });
+
+    it("allows Date.now inside raw ts escape hatches", async () => {
+      const result = await Effect.runPromise(
+        typeCheckSource(
+          `
+ts {
+  export const getNow = () => Date.now();
+  export const getRand = () => Math.random();
+}
+export value = 42
+`.trim(),
+          "escape.fun",
+        ),
+      );
+
+      expect(result.success).toBe(true);
+      expect(result.errorCount).toBe(0);
+    });
+
+    it("rejects Effect.forkDetach outside entry modules", async () => {
+      const result = await Effect.runPromise(
+        typeCheckSource(
+          `
+import { Effect } from "effect"
+
+export task = Effect.succeed(42)
+export leakCall = Effect.forkDetach(task)
+export leakPipe = task |> Effect.forkDetach
+`.trim(),
+          "worker.fun",
+        ),
+      );
+
+      expect(result.success).toBe(false);
+      const codes = result.diagnostics.map((d) => d.code);
+      expect(codes).toContain("DETACHED_FIBER");
+      expect(result.formattedOutput).toContain("Effect.forkDetach");
+      expect(result.formattedOutput).toContain("Effect.forkScoped");
+    });
+
+    it("permits Effect.forkDetach in entry modules (main.fun or export main)", async () => {
+      const resultMain = await Effect.runPromise(
+        typeCheckSource(
+          `
+import { Effect } from "effect"
+
+task = Effect.succeed(42)
+export main = Effect.forkDetach(task)
+`.trim(),
+          "src/main.fun",
+        ),
+      );
+
+      expect(resultMain.success).toBe(true);
+      expect(resultMain.errorCount).toBe(0);
+
+      const resultExportMain = await Effect.runPromise(
+        typeCheckSource(
+          `
+import { Effect } from "effect"
+
+task = Effect.succeed(42)
+export main = Effect.forkDetach(task)
+`.trim(),
+          "server.fun",
+        ),
+      );
+
+      expect(resultExportMain.success).toBe(true);
+      expect(resultExportMain.errorCount).toBe(0);
+    });
+
+    it("warns on unbounded concurrency options in Effect calls", async () => {
+      const result = await Effect.runPromise(
+        typeCheckSource(
+          `
+import { Effect } from "effect"
+
+task = Effect.succeed(42)
+export run = Effect.all([task], { concurrency: "unbounded" })
+`.trim(),
+          "tasks.fun",
+        ),
+      );
+
+      expect(result.warningCount).toBe(1);
+      const warn = result.diagnostics.find((d) => d.code === "UNBOUNDED_CONCURRENCY");
+      expect(warn).toBeDefined();
+      expect(warn?.category).toBe("warning");
+      expect(warn?.message).toContain('concurrency: "unbounded"');
+    });
+  });
 });

@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { Effect } from "effect";
+import { Effect, Schema } from "effect";
 import ts from "typescript";
 import * as fs from "node:fs/promises";
 import * as path from "node:path";
@@ -97,6 +97,10 @@ export ts schema User = UserType
       expect(valid1.id).toBe("usr_1");
       expect(valid1.bio).toBeNull();
       expect(valid1.age).toBeUndefined();
+      expect(Object.hasOwn(valid1, "age")).toBe(false);
+      const withUndefined = mod.UserFromUnknown({ ...valid1, age: undefined });
+      expect(Object.hasOwn(withUndefined, "age")).toBe(true);
+      expect(Object.hasOwn(Schema.encodeSync(mod.User)(withUndefined), "age")).toBe(true);
 
       // Valid decode with optional age, nickname, and numeric status
       const valid2 = mod.UserFromUnknown({

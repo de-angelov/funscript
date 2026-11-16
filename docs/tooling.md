@@ -134,7 +134,8 @@ proprietary project layout or package format.
 
 ## Package scripts in this repository
 
-The repository's own scripts are defined in `package.json`: `build`, `check`, `benchmark`, `test`,
+The repository's own scripts are defined in `package.json`: `build`, `check`, `benchmark`,
+`prototype:optional`, `spike:optional-compiler`, `test`,
 `test:examples`, `test:watch`, `fmt`, `fmt:check`, `prettier:check`, `docs:generate`,
 `docs:check`, `check:idiomatic`, `package:check`, `verify`, and `pr:check`. They are repository scripts,
 not additional `funscript` CLI commands.

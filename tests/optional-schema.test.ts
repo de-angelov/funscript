@@ -10,12 +10,14 @@ describe("named schemas with optional fields", () => {
   it("decodes and encodes ordinary JavaScript optional properties explicitly", async () => {
     const { Props, PropsFromUnknown } = await execute(source);
     expect(PropsFromUnknown({})).toEqual({ label: Option.none(), nested: Option.none() });
-    expect(PropsFromUnknown({ label: undefined, nested: { enabled: false } })).toEqual({ label: Option.none(), nested: Option.some({ enabled: Option.some(false) }) });
+    const presentUndefined = PropsFromUnknown({ label: undefined, nested: { enabled: false } });
+    expect(presentUndefined).toEqual({ label: Option.some(undefined), nested: Option.some({ enabled: Option.some(false) }) });
+    expect(Object.hasOwn(Schema.encodeSync(Props)(presentUndefined), "label")).toBe(true);
     const value = PropsFromUnknown({ label: "Ada", nested: {} });
     expect(value).toEqual({ label: Option.some("Ada"), nested: Option.some({ enabled: Option.none() }) });
     expect(Schema.encodeSync(Props)(value)).toEqual({ label: "Ada", nested: {} });
     expect(() => PropsFromUnknown({ label: null })).toThrow();
-    expect((await compile(source)).typescript).toContain("Schema.OptionFromOptional");
+    expect((await compile(source)).typescript).toContain("Schema.OptionFromOptionalKey(Schema.UndefinedOr");
     expect(format(format(source))).toBe(format(source));
   });
 
@@ -26,6 +28,16 @@ describe("named schemas with optional fields", () => {
     expect(bad.success).toBe(false);
     const raw = await typeCheck(source + '\nread = (props: Props) => props.label\nexport forward = (props: SchemaInput<Props>) => read(props)', "optional-schema.fun");
     expect(raw.success).toBe(false);
+  });
+
+  it("allows explicit normalization of a present undefined field", async () => {
+    const code = 'import { Option } from "effect"\nexport schema Props = { label?: String }\nexport normalize = (props: Props) => Option.flatMap(props.label, Option.fromUndefinedOr)';
+    const checked = await typeCheck(code, "normalize-optional.fun");
+    expect(checked.success, checked.formattedOutput).toBe(true);
+    const { PropsFromUnknown, normalize } = await execute(code);
+    expect(normalize(PropsFromUnknown({}))).toEqual(Option.none());
+    expect(normalize(PropsFromUnknown({ label: undefined }))).toEqual(Option.none());
+    expect(normalize(PropsFromUnknown({ label: "Ada" }))).toEqual(Option.some("Ada"));
   });
 
   it("decodes optional fields within arrays of records", async () => {
