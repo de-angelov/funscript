@@ -109,6 +109,7 @@ export interface EmitterOptions {
   /** Direct imported data schemas verified to have an identity encoding. */
   importedIdentitySchemas?: ReadonlySet<string>;
   importedGenericDataSchemas?: ReadonlyMap<string, number>;
+  importedDataSchemas?: ReadonlySet<string>;
   /** Whether the output is `.tsx`; generic arrows need a comma there. */
   isJsx?: boolean;
 }
@@ -747,7 +748,7 @@ export class Emitter {
       if (name === "Array") return type.typeArgs?.length === 1 && supportsArgument(type.typeArgs[0]);
       const arity = this.genericDataSchemas.get(name) ?? this.options.importedGenericDataSchemas?.get(name);
       if (arity !== undefined) return type.typeArgs?.length === arity && type.typeArgs.every(supportsArgument);
-      return !type.typeArgs?.length && ((this.runtimeSchemaNames.has(name) && !this.genericDataSchemas.has(name)) || this.options.importedIdentitySchemas?.has(name) === true);
+      return !type.typeArgs?.length && ((this.runtimeSchemaNames.has(name) && !this.genericDataSchemas.has(name)) || this.options.importedDataSchemas?.has(name) === true);
     };
     const supports = (type: TypeNode): boolean => {
       if (type.kind === "ParenthesizedTypeNode") return supports(type.typeNode);
@@ -762,7 +763,7 @@ export class Emitter {
       if (name === "Array") return type.typeArgs?.length === 1 && supports(type.typeArgs[0]);
       const arity = this.genericDataSchemas.get(name) ?? this.options.importedGenericDataSchemas?.get(name);
       if (arity !== undefined) return type.typeArgs?.length === arity && type.typeArgs.every(supportsArgument);
-      return !type.typeArgs?.length && this.runtimeSchemaNames.has(name) && !this.genericDataSchemas.has(name);
+      return !type.typeArgs?.length && ((this.runtimeSchemaNames.has(name) && !this.genericDataSchemas.has(name)) || this.options.importedDataSchemas?.has(name) === true);
     };
     for (const field of decl.body.fields) {
       if (field.name.name === "__proto__" || field.defaultValue || !supports(field.typeAnnotation)) {
@@ -957,7 +958,7 @@ export class Emitter {
       if (name === "Array" && type.typeArgs?.length === 1) return `Schema.Array(${this.emitGenericSchemaArgument(type.typeArgs[0], verifyImports)})`;
       const arity = this.genericDataSchemas.get(name) ?? this.options.importedGenericDataSchemas?.get(name);
       if (arity !== undefined && type.typeArgs?.length === arity) return `${name}(${type.typeArgs.map(arg => this.emitGenericSchemaArgument(arg, verifyImports || this.options.importedGenericDataSchemas?.has(name) === true)).join(", ")})`;
-      if (!type.typeArgs?.length && (this.runtimeSchemaNames.has(name) || (this.userImportBindings.has(name) && (!verifyImports || this.options.importedIdentitySchemas?.has(name))))) return this.emitSchemaTypeField(type);
+      if (!type.typeArgs?.length && (this.runtimeSchemaNames.has(name) || (this.userImportBindings.has(name) && (!verifyImports || this.options.importedDataSchemas?.has(name))))) return this.emitSchemaTypeField(type);
     }
     throw new FunScriptError("Generic data schema arguments must name a runtime data schema or supported primitive; compile-time contracts and unknown types cannot validate data.", type.span);
   }

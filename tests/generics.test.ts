@@ -244,6 +244,43 @@ export names = (page: Page<Country>) => page.items |> Array.map((country) => cou
     expect(Schema.decodeUnknownSync(local.number)({ page: { value: "42" } })).toEqual({ page: { value: 42 } });
   }, 60000);
 
+  it("verifies named data dependencies across generic factories and imports", async () => {
+    const files = {
+      "metadata.fun": 'export schema Metadata = { requestId: String, cursor?: String }',
+      "metadata-barrel.fun": 'export { Metadata as Info } from "./metadata.js"',
+      "named-page.fun": 'import { Info as Metadata } from "./metadata-barrel.js"\nschema Trace = { info: Metadata }\nexport schema Page<A> = { items: Array<A>, trace: Trace }',
+      "named-app.fun": 'import { Page } from "./named-page.js"\nimport { Metadata } from "./metadata.js"\nexport schema Response = { page: Page<Metadata> }',
+    };
+    const checked = await Effect.runPromise(typeCheckVirtualFiles(files, { compilerOptions: { rootDir: process.cwd() } }));
+    expect(checked.success, checked.formattedOutput).toBe(true);
+    const virtualSources = new Map(Object.entries(files).map(([name, source]) => [path.resolve(name), source]));
+    const metadata = await execute(files["metadata.fun"]);
+    const page = await execute(files["named-page.fun"], { filename: path.resolve("named-page.fun"), compileOptions: { virtualSources }, scope: { Metadata: metadata.Metadata, $funscriptSchemaAST: SchemaAST } });
+    const app = await execute(files["named-app.fun"], { filename: path.resolve("named-app.fun"), compileOptions: { virtualSources }, scope: { Page: page.Page, Metadata: metadata.Metadata } });
+    const decoded = app.ResponseFromUnknown({ page: { items: [{ requestId: "a" }], trace: { info: { requestId: "b" } } } });
+    expect(decoded).toEqual({ page: { items: [{ requestId: "a", cursor: Option.none() }], trace: { info: { requestId: "b", cursor: Option.none() } } } });
+    expect(() => app.ResponseFromUnknown({ page: { items: [{ requestId: 1 }], trace: { info: { requestId: "b" } } } })).toThrow();
+    expect(Schema.encodeSync(app.Response)(decoded)).toEqual({ page: { items: [{ requestId: "a" }], trace: { info: { requestId: "b" } } } });
+  }, 60000);
+
+  it("rejects unverified named schema dependency graphs", async () => {
+    const filename = path.resolve("consumer.fun");
+    const consumer = 'import { Page } from "./named-page.js"\nexport schema Response = { page: Page<String> }';
+    const page = (dependency: string) => `schema Metadata = ${dependency}\nexport schema Page<A> = { item: A, meta: Metadata }`;
+    const virtualSources = new Map([[path.resolve("named-page.fun"), page("{ value: Unknown }")]]);
+    await expectCompileError(consumer, /Cannot derive a runtime schema/, filename, { virtualSources });
+    virtualSources.set(path.resolve("named-page.fun"), page("{ call: (value: String) => Void }"));
+    await expectCompileError(consumer, /Cannot derive a runtime schema/, filename, { virtualSources });
+    virtualSources.set(path.resolve("named-page.fun"), 'schema Metadata = { next: Other }\nschema Other = { next: Metadata }\nexport schema Page<A> = { item: A, meta: Metadata }');
+    await expectCompileError(consumer, /Cannot derive a runtime schema/, filename, { virtualSources });
+    virtualSources.set(path.resolve("named-page.fun"), 'import type { Metadata } from "./metadata.js"\nexport schema Page<A> = { item: A, meta: Metadata }');
+    virtualSources.set(path.resolve("metadata.fun"), 'export schema Metadata = { value: String }');
+    await expectCompileError(consumer, /Cannot derive a runtime schema/, filename, { virtualSources });
+    virtualSources.set(path.resolve("named-page.fun"), 'import { Metadata } from "./metadata.js"\nexport schema Page<A> = { item: A, meta: Metadata }');
+    virtualSources.set(path.resolve("metadata.fun"), 'export schema Metadata = { value: String = "x" }');
+    await expectCompileError(consumer, /Cannot derive a runtime schema/, filename, { virtualSources });
+  });
+
   it("rejects recursive and unverified nested generic factories", async () => {
     await expectCompileError('export schema Box<A> = { value: Box<A> }', /recursive generic schema factories/);
     await expectCompileError('export schema First<A> = { value: Second<A> }\nexport schema Second<A> = { value: First<A> }', /recursive generic schema factories/);

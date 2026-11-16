@@ -76,7 +76,7 @@ function checkDirectParameters(generated: string, source: string): boolean {
  * JavaScript: both operands must be proven numbers. This keeps string,
  * locale, and domain ordering explicit through Effect's Order API.
  */
-export function validateNumericComparisons(ast: Program, source: string, context: TypeScriptCompilationContext, importedRecordFunctions?: ReadonlyMap<string, ReadonlySet<number>>, importedRecordContracts?: ReadonlyMap<string, RecordTypeNode>, importedGenericDataSchemas?: ReadonlyMap<string, number>, importedIdentitySchemas?: ReadonlySet<string>): void {
+export function validateNumericComparisons(ast: Program, source: string, context: TypeScriptCompilationContext, importedRecordFunctions?: ReadonlyMap<string, ReadonlySet<number>>, importedRecordContracts?: ReadonlyMap<string, RecordTypeNode>, importedGenericDataSchemas?: ReadonlyMap<string, number>, importedIdentitySchemas?: ReadonlySet<string>, importedDataSchemas?: ReadonlySet<string>): void {
   const marked = new Emitter(ast, undefined, {
     allowAmbiguousPipeline: true,
     markNumericComparisonOperands: true,
@@ -84,6 +84,7 @@ export function validateNumericComparisons(ast: Program, source: string, context
     importedRecordContracts,
     importedGenericDataSchemas,
     importedIdentitySchemas,
+    importedDataSchemas,
   }).emit();
   if (!marked.includes("__funscriptNumericOperand(")) return;
 

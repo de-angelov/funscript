@@ -6,7 +6,7 @@ import type { BindingDeclaration, FunctionExpression, ImportDeclaration, ExportF
 import { isRecordContract, recordContractType } from "./record-contracts.js";
 
 /** Resolve only unambiguous FunScript functions; unknown targets remain restricted. */
-export function resolveImportedRecordFunctions(ast: Program, filename: string, virtualSources?: ReadonlyMap<string, string>, importedContracts?: Map<string, RecordTypeNode>, importedIdentitySchemas?: Set<string>, importedGenericDataSchemas?: Map<string, number>): Map<string, ReadonlySet<number>> {
+export function resolveImportedRecordFunctions(ast: Program, filename: string, virtualSources?: ReadonlyMap<string, string>, importedContracts?: Map<string, RecordTypeNode>, importedIdentitySchemas?: Set<string>, importedGenericDataSchemas?: Map<string, number>, importedDataSchemas?: Set<string>): Map<string, ReadonlySet<number>> {
   const result = new Map<string, ReadonlySet<number>>();
   const programs = new Map<string, Program | undefined>();
   const read = (file: string): string | undefined => {
@@ -77,6 +77,65 @@ export function resolveImportedRecordFunctions(ast: Program, filename: string, v
     return target !== undefined && resolveIdentityExport(target, candidate.spec.imported.name, next);
   };
 
+  // Concrete codecs are verified independently of the stricter identity-codec
+  // check used for callback adapters: optional fields can transform safely here.
+  const dataDeclaration = (program: Program, file: string, decl: import("../ast/types.js").SchemaDeclaration, seen: Set<string>): boolean => {
+    if (decl.body.kind !== "RecordSchema" || decl.typeParams?.length) return false;
+    const declarations = program.body.map(item => item.kind === "ExportDeclaration" ? item.declaration : item);
+    const shadowed = new Set(declarations.flatMap(item => item.kind === "SchemaDeclaration" || item.kind === "ErrorDeclaration" || item.kind === "ServiceDeclaration" ? [item.id.name] : []));
+    if (shadowed.has("Schema") || declarations.some(item => (item.kind === "BindingDeclaration" && "name" in item.id && item.id.name === "Schema") || (item.kind === "ImportDeclaration" && (item.specifiers.some(spec => spec.local.name === "Schema") || item.defaultBinding?.name === "Schema" || item.namespaceBinding?.name === "Schema")))) return false;
+    const supports = (type: TypeNode): boolean => {
+      if (type.kind === "ParenthesizedTypeNode") return supports(type.typeNode);
+      if (type.kind === "LiteralTypeNode") return true;
+      if (type.kind === "ArrayTypeNode") return supports(type.elementType);
+      if (type.kind === "UnionTypeNode") return type.types.every(supports);
+      if (type.kind === "RecordTypeNode") return type.fields.every(field => field.name.name !== "__proto__" && !field.defaultValue && supports(field.typeAnnotation));
+      if (type.kind !== "TypeReferenceNode") return false;
+      const name = type.name.name;
+      if (["String", "Number", "Boolean"].includes(name)) return !type.typeArgs?.length && !shadowed.has(name);
+      if (name === "Array") return type.typeArgs?.length === 1 && supports(type.typeArgs[0]);
+      return !type.typeArgs?.length && resolveDataLocal(program, file, name, seen, decl);
+    };
+    return decl.body.fields.every(field => field.name.name !== "__proto__" && !field.defaultValue && supports(field.typeAnnotation));
+  };
+  const resolveDataLocal = (program: Program, file: string, name: string, seen: Set<string>, eagerOwner?: import("../ast/types.js").SchemaDeclaration): boolean => {
+    const declarations = program.body.map(item => item.kind === "ExportDeclaration" ? item.declaration : item);
+    const locals = declarations.filter(item => item.kind === "SchemaDeclaration" && item.id.name === name);
+    const imports = program.body.flatMap(item => item.kind === "ImportDeclaration" && !item.isTypeOnly ? item.specifiers.filter(spec => !spec.isTypeOnly && spec.local.name === name).map(spec => ({ item, spec })) : []);
+    if (locals.length + imports.length !== 1) return false;
+    if (locals.length) {
+      const local = locals[0];
+      if (local.kind !== "SchemaDeclaration") return false;
+      // Concrete records are initialized eagerly, so forward local references
+      // would hit the JavaScript temporal dead zone.
+      if (eagerOwner && declarations.indexOf(local) >= declarations.indexOf(eagerOwner)) return false;
+      const key = `${file}\0data-local\0${name}`;
+      if (seen.has(key)) return false;
+      return dataDeclaration(program, file, local, new Set(seen).add(key));
+    }
+    const target = targetOf(imports[0].item, file);
+    return target !== undefined && resolveDataExport(target, imports[0].spec.imported.name, seen);
+  };
+  const resolveDataExport = (file: string, name: string, seen: Set<string>): boolean => {
+    const key = `${file}\0data-export\0${name}`;
+    if (seen.has(key)) return false;
+    const program = programAt(file);
+    if (!program) return false;
+    const candidates: Array<{ kind: "schema"; declaration: import("../ast/types.js").SchemaDeclaration } | { kind: "reexport"; declaration: ExportFromDeclaration; spec: import("../ast/types.js").ImportSpecifier } | { kind: "other" }> = [];
+    for (const item of program.body) {
+      if (item.kind === "ExportDeclaration" && item.declaration.kind === "SchemaDeclaration" && item.declaration.id.name === name) candidates.push({ kind: "schema", declaration: item.declaration });
+      else if (item.kind === "ExportDeclaration" && item.declaration.kind === "BindingDeclaration" && "name" in item.declaration.id && item.declaration.id.name === name) candidates.push({ kind: "other" });
+      else if (item.kind === "ExportFromDeclaration") for (const spec of item.specifiers) if (spec.local.name === name) candidates.push({ kind: "reexport", declaration: item, spec });
+    }
+    if (candidates.length !== 1) return false;
+    const candidate = candidates[0];
+    const next = new Set(seen).add(key);
+    if (candidate.kind === "schema") return dataDeclaration(program, file, candidate.declaration, next);
+    if (candidate.kind === "other" || candidate.declaration.isTypeOnly || candidate.spec.isTypeOnly) return false;
+    const target = targetOf(candidate.declaration, file);
+    return target !== undefined && resolveDataExport(target, candidate.spec.imported.name, next);
+  };
+
   // Follow only verifiable generic factories and reject cycles and ambiguous exports.
   const genericArity = (program: Program, file: string, decl: import("../ast/types.js").SchemaDeclaration, seen: Set<string>): number | undefined => {
     if (decl.body.kind !== "RecordSchema" || !decl.typeParams?.length) return undefined;
@@ -106,8 +165,9 @@ export function resolveImportedRecordFunctions(ast: Program, filename: string, v
       if (names.has(name)) return !type.typeArgs?.length;
       if (["String", "Number", "Boolean"].includes(name)) return !type.typeArgs?.length && !shadowed.has(name);
       if (name === "Array") return type.typeArgs?.length === 1 && supportsArgument(type.typeArgs[0]);
+      if (!type.typeArgs?.length) return resolveDataLocal(program, file, name, seen);
       const arity = factoryArity(name);
-      return arity !== undefined && type.typeArgs?.length === arity && type.typeArgs.every(supportsArgument);
+      return arity !== undefined && type.typeArgs.length === arity && type.typeArgs.every(supportsArgument);
     };
     const supports = (type: TypeNode): boolean => {
       if (type.kind === "ParenthesizedTypeNode") return supports(type.typeNode);
@@ -120,8 +180,9 @@ export function resolveImportedRecordFunctions(ast: Program, filename: string, v
       if (names.has(name)) return !type.typeArgs?.length;
       if (["String", "Number", "Boolean"].includes(name)) return !type.typeArgs?.length && !shadowed.has(name);
       if (name === "Array") return type.typeArgs?.length === 1 && supports(type.typeArgs[0]);
+      if (!type.typeArgs?.length) return resolveDataLocal(program, file, name, seen);
       const arity = factoryArity(name);
-      return arity !== undefined && type.typeArgs?.length === arity && type.typeArgs.every(supportsArgument);
+      return arity !== undefined && type.typeArgs.length === arity && type.typeArgs.every(supportsArgument);
     };
     return decl.body.fields.every(field => field.name.name !== "__proto__" && !field.defaultValue && supports(field.typeAnnotation)) ? decl.typeParams.length : undefined;
   };
@@ -223,6 +284,7 @@ export function resolveImportedRecordFunctions(ast: Program, filename: string, v
       if (entry?.kind === "ExportDeclaration" && entry.declaration.kind === "SchemaDeclaration" && entry.declaration.body.kind === "RecordSchema" && isRecordContract(entry.declaration.body)) importedContracts?.set(spec.local.name, recordContractType(entry.declaration.body));
       if (!item.isTypeOnly && !spec.isTypeOnly && resolveIdentityExport(target, spec.imported.name, new Set())) importedIdentitySchemas?.add(spec.local.name);
       if (item.isTypeOnly || spec.isTypeOnly) continue;
+      if (resolveDataExport(target, spec.imported.name, new Set())) importedDataSchemas?.add(spec.local.name);
       const arity = resolveGenericExport(target, spec.imported.name, new Set());
       if (arity !== undefined) importedGenericDataSchemas?.set(spec.local.name, arity);
       const positions = resolveExport(target, spec.imported.name, new Set());
