@@ -2402,7 +2402,7 @@ export schema Config = {
 
       const uri = "file:///types.fun";
       const text =
-        "fn = (name: String, count: Number, flag: Boolean) => Option<Array<String>>\n";
+        "f2 = (name: String, count: Number, flag: Boolean) => Option<Array<String>>\n";
 
       await server.handleMessage({
         jsonrpc: "2.0",

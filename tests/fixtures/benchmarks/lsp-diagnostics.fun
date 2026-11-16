@@ -3,7 +3,7 @@ schema User = {
   name: String
 }
 
-export fn formatUser(u: User) =>
+export formatUser = (u: User) =>
   => "User #" + u.id + ": " + u.name
 
 let legacy = true

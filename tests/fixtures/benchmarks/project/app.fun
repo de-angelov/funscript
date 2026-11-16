@@ -5,5 +5,5 @@ export config: CalculationConfig = {
   offset: 10
 }
 
-export fn transform(value: Number) =>
+export transform = (value: Number) =>
   => compute(config, value)

@@ -127,6 +127,7 @@ export const KEYWORDS: Record<string, TokenType> = {
 };
 
 export const BANNED_KEYWORDS: Record<string, string> = {
+  fn: "FunScript functions use the arrow syntax: 'name = (args) => body'.",
   extern: "FunScript has retired 'extern service'. Declare interfaces using 'service Name' and implement them in a Layer using 'js' for foreign calls.",
   let: "FunScript has no 'let'; use 'name = value' for immutable bindings, or 'mut name = value' for local mutable drafts.",
   var: "FunScript has no 'var'; use 'name = value' for immutable bindings, or 'mut name = value' for local mutable drafts.",

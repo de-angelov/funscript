@@ -7,9 +7,9 @@ import { typeCheckSource } from "../src/compiler/check.js";
 describe("Rest parameters and spread elements", () => {
   it("compiles and executes a function with rest parameters", async () => {
     const code = `
-export fn sum(...numbers: Array<Int>): Int => numbers |> Array.reduce(0, (acc, n) => acc + n)
+export sum = (...numbers: Array<Int>): Int => numbers |> Array.reduce(0, (acc, n) => acc + n)
 
-export fn joinAll(prefix: String, ...items: Array<String>): String =>
+export joinAll = (prefix: String, ...items: Array<String>): String =>
   => prefix + ": " + Array.join(items, ", ")
 
 export result = sum(1, 2, 3, 4)
@@ -38,7 +38,7 @@ export add = (first: Int, ...rest: Array<Int>): Int => first
 
   it("compiles and executes call argument spread and array spread", async () => {
     const code = `
-export fn sum(...numbers: Array<Int>): Int => numbers |> Array.reduce(0, (acc, n) => acc + n)
+export sum = (...numbers: Array<Int>): Int => numbers |> Array.reduce(0, (acc, n) => acc + n)
 
 list = [2, 3, 4]
 fullList = [1, ...list, 5]
@@ -56,7 +56,7 @@ export res = sum(...fullList)
   it("compiles function signatures with rest parameters", async () => {
     const code = `
 schema Logger = (...messages: Array<String>) => Unit
-export fn logAll(logger: Logger, ...msgs: Array<String>): Unit =>
+export logAll = (logger: Logger, ...msgs: Array<String>): Unit =>
   => logger(...msgs)
 `.trim();
 
@@ -67,7 +67,7 @@ export fn logAll(logger: Logger, ...msgs: Array<String>): Unit =>
 
   it("rejects rest parameters that are not the final parameter", async () => {
     const code = `
-fn invalid(...rest: Array<Int>, last: Int) => 0
+invalid = (...rest: Array<Int>, last: Int) => 0
 `.trim();
 
     await expect(compile(code)).rejects.toThrow("A rest parameter must be the last parameter in a parameter list");
@@ -75,7 +75,7 @@ fn invalid(...rest: Array<Int>, last: Int) => 0
 
   it("rejects optional rest parameters", async () => {
     const code = `
-fn invalid(...rest?: Array<Int>) => 0
+invalid = (...rest?: Array<Int>) => 0
 `.trim();
 
     await expect(compile(code)).rejects.toThrow("A rest parameter cannot be optional");
@@ -83,7 +83,7 @@ fn invalid(...rest?: Array<Int>) => 0
 
   it("rejects rest parameters with default values", async () => {
     const code = `
-fn invalid(...rest: Array<Int> = []) => 0
+invalid = (...rest: Array<Int> = []) => 0
 `.trim();
 
     await expect(compile(code)).rejects.toThrow("A rest parameter cannot have a default value");
@@ -109,7 +109,7 @@ export log = (prefix: String, ...rest: Array<String>): Unit =>
 
   it("statically type checks rest parameters and reports type errors", async () => {
     const validCode = `
-export fn sum(...numbers: Array<Number>): Number => numbers |> Array.reduce(0, (acc, n) => acc + n)
+export sum = (...numbers: Array<Number>): Number => numbers |> Array.reduce(0, (acc, n) => acc + n)
 export val: Number = sum(1, 2, 3)
 `.trim();
 
@@ -118,7 +118,7 @@ export val: Number = sum(1, 2, 3)
     expect(validResult.diagnostics).toHaveLength(0);
 
     const invalidCode = `
-export fn sum(...numbers: Array<Number>): Number => numbers |> Array.reduce(0, (acc, n) => acc + n)
+export sum = (...numbers: Array<Number>): Number => numbers |> Array.reduce(0, (acc, n) => acc + n)
 export val: Number = sum(1, "not-a-number", 3)
 `.trim();
 

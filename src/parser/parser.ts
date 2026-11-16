@@ -330,9 +330,6 @@ export class Parser {
       };
     }
     if (this.match(TokenType.JS)) {
-      if (this.check(TokenType.IDENTIFIER) && this.peek().value === "fn") {
-        return this.parseFunctionDeclaration(true);
-      }
       return this.parseBindingDeclaration(true);
     }
     if (this.check(TokenType.SCHEMA)) {
@@ -346,9 +343,6 @@ export class Parser {
     }
     if (this.check(TokenType.WHEN)) {
       return this.parseWhenStatement();
-    }
-    if (this.check(TokenType.IDENTIFIER) && this.peek().value === "fn") {
-      return this.parseFunctionDeclaration(isJs);
     }
     return this.parseBindingDeclaration(isJs);
   }
@@ -906,97 +900,6 @@ export class Parser {
     }
   }
 
-  private parseFunctionDeclaration(isJs = false): BindingDeclaration {
-    const start = this.peek().span.start;
-    this.advance(); // consume 'fn'
-
-    const id = this.parseIdentifier();
-    let typeParams: TypeParameter[] | undefined;
-    if (this.check(TokenType.LT)) {
-      typeParams = this.parseTypeParameters();
-    }
-
-    this.consume(TokenType.LPAREN, "Expected '(' after function name");
-    const params: Parameter[] = [];
-    if (!this.check(TokenType.RPAREN)) {
-      do {
-        let isRest = false;
-        let dotSpan: Span | undefined;
-        if (this.match(TokenType.DOTDOTDOT)) {
-          isRest = true;
-          dotSpan = this.previous().span;
-        }
-        let target: BindingTarget;
-        if (this.check(TokenType.LBRACE) || this.check(TokenType.LBRACKET)) {
-          target = this.parsePattern() as RecordPattern | ArrayPattern;
-        } else {
-          target = this.parseIdentifier();
-        }
-        const p = this.parseValueParameter(target, false, isRest);
-        if (dotSpan) {
-          p.span = { start: dotSpan.start, end: p.span.end };
-        }
-        params.push(p);
-      } while (this.match(TokenType.COMMA) && !this.check(TokenType.RPAREN));
-    }
-    this.consume(TokenType.RPAREN, "Expected ')' after parameters");
-    this.validateValueParameters(params);
-    if (isJs && params.some((p) => p.optional || p.defaultValue || (p.typeAnnotation?.kind === "RecordTypeNode" && p.typeAnnotation.fields.some((field) => field.optional || field.defaultValue)))) {
-      throw new ParseError("Optional and defaulted parameters are not yet supported on js entry bindings", params[0].span);
-    }
-
-    let returnType: TypeNode | undefined;
-    if (this.match(TokenType.COLON)) {
-      returnType = this.parseTypeNode();
-    }
-
-    let body: FunctionBody;
-    const requireExplicitReturn = !this.options.allowLegacyReturns;
-    if (this.match(TokenType.ARROW)) {
-      if (
-        !returnType &&
-        (this.check(TokenType.UPPER_IDENTIFIER) || this.check(TokenType.IDENTIFIER)) &&
-        (this.peekAhead(1).type === TokenType.LBRACE ||
-          this.peekAhead(1).type === TokenType.NEWLINE ||
-          this.peekAhead(1).type === TokenType.ARROW)
-      ) {
-        returnType = this.parseTypeNode();
-        if (this.match(TokenType.ARROW)) {
-          // consumed arrow before expression body
-        }
-        body = this.parseFunctionBody(requireExplicitReturn);
-      } else {
-        body = this.parseFunctionBody(requireExplicitReturn);
-      }
-    } else if (this.check(TokenType.LBRACE)) {
-      this.consume(TokenType.LBRACE, "Expected '{'");
-      body = this.parseBraceBlock(requireExplicitReturn);
-    } else if (this.match(TokenType.NEWLINE)) {
-      this.consume(TokenType.INDENT, "Expected indent for function body block");
-      body = this.parseIndentedBlock(requireExplicitReturn);
-    } else {
-      throw new ParseError("Expected '=>', '{', or newline for function body", this.peek().span);
-    }
-
-    this.skipNewlines();
-
-    return {
-      kind: "BindingDeclaration",
-      isMut: false,
-      isJs,
-      id,
-      init: {
-        kind: "FunctionExpression",
-        typeParams,
-        params,
-        returnType,
-        body,
-        span: { start, end: body.span.end },
-      },
-      span: { start, end: body.span.end },
-    };
-  }
-
   private parseWhenStatement(): WhenStatement {
     const start = this.consume(TokenType.WHEN, "Expected 'when'").span.start;
     let condition: Expression;
@@ -1443,12 +1346,28 @@ export class Parser {
     if (this.match(TokenType.LPAREN)) {
       const start = this.previous().span.start;
       if (this.match(TokenType.RPAREN)) {
-        // Zero-argument lambda: () => ...
-        if (this.match(TokenType.ARROW)) {
+        let returnType: TypeNode | undefined;
+        let arrowConsumed = false;
+        if (this.match(TokenType.COLON)) {
+          returnType = this.parseTypeNode();
+        } else if (
+          this.check(TokenType.ARROW) &&
+          this.peekAhead(1).type === TokenType.UPPER_IDENTIFIER &&
+          (this.peekAhead(2).type === TokenType.ARROW ||
+            this.peekAhead(2).type === TokenType.LBRACE ||
+            this.peekAhead(2).type === TokenType.NEWLINE)
+        ) {
+          this.advance();
+          arrowConsumed = true;
+          returnType = this.parseTypeNode();
+          this.match(TokenType.ARROW);
+        }
+        if (arrowConsumed || this.match(TokenType.ARROW)) {
           const body = this.parseFunctionBody(!this.options.allowLegacyReturns);
           return {
             kind: "FunctionExpression",
             params: [],
+            returnType,
             body,
             span: { start, end: body.span.end },
           };
@@ -2243,7 +2162,6 @@ export class Parser {
     if (firstTok.type === TokenType.DOTDOTDOT) return false;
     if (firstTok.type === TokenType.RBRACE) return false;
     if (firstTok.type === TokenType.WHEN || firstTok.type === TokenType.MUT || firstTok.type === TokenType.ARROW) return true;
-    if (firstTok.type === TokenType.IDENTIFIER && firstTok.value === "fn") return true;
     if (this.current + i + 1 < this.tokens.length && this.tokens[this.current + i + 1].type === TokenType.EQ) return true;
 
     while (this.current + i < this.tokens.length) {
@@ -2454,12 +2372,6 @@ export class Parser {
           continue;
         }
 
-        if (this.check(TokenType.IDENTIFIER) && this.peek().value === "fn") {
-          statements.push(this.parseFunctionDeclaration(false));
-          this.skipNewlines();
-          continue;
-        }
-
         if (this.isAssignmentStart()) {
           const target = this.parseAssignmentTarget();
           this.consume(TokenType.EQ, "Expected '=' in assignment");
@@ -2575,11 +2487,6 @@ export class Parser {
             argument: retExpr,
             span: { start: retStart, end: retExpr.span.end },
           });
-          this.skipNewlines();
-          continue;
-        }
-        if (this.check(TokenType.IDENTIFIER) && this.peek().value === "fn") {
-          statements.push(this.parseFunctionDeclaration(false));
           this.skipNewlines();
           continue;
         }

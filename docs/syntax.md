@@ -698,7 +698,7 @@ export Message = () =>
     <p>Hello, World!</p>
   </div>
 
-export fn cn(...inputs: ts { Parameters<typeof cx> }): String =>
+export cn = (...inputs: ts { Parameters<typeof cx> }): String =>
   twMerge(cx(...inputs))
 ```
 

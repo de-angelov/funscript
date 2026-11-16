@@ -210,9 +210,9 @@ export getValue = () =>
       expect(res.typescript).toContain("return 42;");
     });
 
-    it("compiles fn declaration with single expression indented return in .fun file", async () => {
+    it("compiles function declaration with single expression indented return in .fun file", async () => {
       const code = `
-export fn cn(...inputs: Array<String>): String =>
+export cn = (...inputs: Array<String>): String =>
   inputs.join(" ")
 `.trim();
 

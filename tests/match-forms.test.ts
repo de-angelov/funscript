@@ -67,7 +67,7 @@ describe("Equality Type Constraints & Match Forms Test Suite Matrix (TASK-026)",
 
     it("rejects reference equality on typed primitive variables", async () => {
       const code = `
-export fn checkNums(a: Number, b: Number) => Boolean {
+export checkNums = (a: Number, b: Number): Boolean => {
   => a @= b
 }
 `.trim();

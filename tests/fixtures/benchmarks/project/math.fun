@@ -3,5 +3,5 @@ export schema CalculationConfig = {
   offset: Number
 }
 
-export fn compute(config: CalculationConfig, input: Number) =>
+export compute = (config: CalculationConfig, input: Number) =>
   => config.multiplier * input + config.offset

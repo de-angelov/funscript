@@ -52,7 +52,7 @@ describe("Unified '=>' Arrow, 'when' Keyword Forms & Equality Operators", () => 
   describe("2. Unified '=>' Arrow Semantics", () => {
     it("supports '=>' for function return types and block bodies", async () => {
       const code = `
-export fn add(a: Number, b: Number) => Number {
+export add = (a: Number, b: Number) => Number {
   => a + b
 }
 `.trim();
@@ -64,7 +64,7 @@ export fn add(a: Number, b: Number) => Number {
 
     it("supports '=>' for function return types with expression body", async () => {
       const code = `
-export fn multiply(a: Number, b: Number) => Number => a * b
+export multiply = (a: Number, b: Number) => Number => a * b
 `.trim();
 
       const res = await Effect.runPromise(compileString(code));
@@ -103,7 +103,7 @@ export label = (s: Status) =>
 
     it("supports explicit return statement '=> expr' emitted as 'return (expr);'", async () => {
       const code = `
-export fn compute(x: Number) => Number {
+export compute = (x: Number) => Number {
   when (x #= 0) => 0
   => x * 10
 }
@@ -117,7 +117,7 @@ export fn compute(x: Number) => Number {
   describe("3. The 'when' Keyword (Three Forms)", () => {
     it("Form 1 (Early return): emits 'if (cond) return expr;' inside functions", async () => {
       const code = `
-export fn divide(a: Number, b: Number) => Number {
+export divide = (a: Number, b: Number) => Number {
   when (b #= 0) => 0
   => a / b
 }
@@ -141,7 +141,7 @@ x = 10
 
     it("Form 2 (Conditional block): emits 'if (cond) { stmts }' with curly braces", async () => {
       const code = `
-export fn test(x: Number) => Number {
+export test = (x: Number) => Number {
   mut result = 0
   when (x #= 10) {
     result = x * 2
@@ -158,7 +158,7 @@ export fn test(x: Number) => Number {
 
     it("Form 2 (Conditional block): supports indented block", async () => {
       const code = `
-export fn testIndented(x: Number) => Number {
+export testIndented = (x: Number) => Number {
   mut result = 0
   when (x #= 5)
     result = 100
@@ -270,7 +270,7 @@ export checkRefNeq = (a, b) => a @! b
 
     it("executes early return 'when' branching logic", async () => {
       const code = `
-export fn safeDiv(num, den) => {
+export safeDiv = (num, den) => {
   when (den #= 0) => -1
   => num / den
 }
@@ -289,7 +289,7 @@ export fn safeDiv(num, den) => {
 
     it("executes conditional block 'when' logic", async () => {
       const code = `
-export fn threshold(x) => {
+export threshold = (x) => {
   mut bonus = 0
   when (x #= 100) {
     bonus = 50
@@ -308,7 +308,7 @@ export fn threshold(x) => {
   describe("5. Pipeline Placeholder Expression Wrapping", () => {
     it("wraps placeholder binary expressions in generated arrow lambdas and evaluates", async () => {
       const code = `
-export fn compute(x) => {
+export compute = (x) => {
   res = x |> (_ + 1)
   => res
 }
@@ -325,7 +325,7 @@ export fn compute(x) => {
 
     it("wraps placeholder member expressions in generated arrow lambdas and evaluates", async () => {
       const code = `
-export fn getName(user) => {
+export getName = (user) => {
   res = user |> _.profile.name
   => res
 }
@@ -340,10 +340,10 @@ export fn getName(user) => {
 
     it("handles placeholder in unary, logical and equality expressions", async () => {
       const code = `
-export fn isNotZero(x) => {
+export isNotZero = (x) => {
   => x |> not (_ #= 0)
 }
-export fn checkInRange(x) => {
+export checkInRange = (x) => {
   => x |> (_ #! 0 and _ #! 100)
 }
 `.trim();

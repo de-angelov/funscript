@@ -30,7 +30,7 @@ describe("Type Ergonomics & Non-Escaping Types", () => {
     const src = `
 export buttonVariants = { variant: "default" }
 export schema ButtonProps = VariantProps<typeof buttonVariants>
-export fn cn(...inputs: Parameters<typeof cx>): String => ""
+export cn = (...inputs: Parameters<typeof cx>): String => ""
 `;
     const res = Effect.runSync(compileString(src));
     expect(res.typescript).toContain("typeof buttonVariants");
@@ -338,7 +338,7 @@ export typedQuery = (id: Number) =>
 
   it("compiles and evaluates Unit type and Unit discard expressions", () => {
     const src = `
-export fn logMessage(msg: String): Unit =>
+export logMessage = (msg: String): Unit =>
   Console.log(msg)
   => Unit
 
@@ -349,7 +349,7 @@ export runEffect = effect {
 
 export schema Task = Effect<Unit, Error>
 
-export fn doNothing(): Unit =>
+export doNothing = (): Unit =>
   Unit
 `;
     const res = Effect.runSync(compileString(src));
@@ -367,9 +367,9 @@ export fn doNothing(): Unit =>
 
   it("emits standard numerical division and supports total division via Number.divide", () => {
     const src = `
-export fn divide(a: Number, b: Number): Number => a / b
-export fn half(a: Number): Number => a / 2
-export fn totalDivide(a: Number, b: Number) => Number.divide(a, b)
+export divide = (a: Number, b: Number): Number => a / b
+export half = (a: Number): Number => a / 2
+export totalDivide = (a: Number, b: Number) => Number.divide(a, b)
 `;
     const res = Effect.runSync(compileString(src));
     expect(res.typescript).toContain("(a / b)");
@@ -389,21 +389,21 @@ export fn totalDivide(a: Number, b: Number) => Number.divide(a, b)
 
   it("bans native Array prototype methods under Effect style guide", () => {
     const invalidMap = `
-export fn doubleAll(items: Array<Number>) => items.map((x) => x * 2)
+export doubleAll = (items: Array<Number>) => items.map((x) => x * 2)
 `;
     expect(() => Effect.runSync(compileString(invalidMap))).toThrow(
       "Native array method '.map()' is banned by the Effect style guide. Use 'Array.map(...)' or pipeline '|> Array.map(...)' instead."
     );
 
     const invalidFilter = `
-export fn positive(items: Array<Number>) => items.filter((x) => x > 0)
+export positive = (items: Array<Number>) => items.filter((x) => x > 0)
 `;
     expect(() => Effect.runSync(compileString(invalidFilter))).toThrow(
       "Native array method '.filter()' is banned by the Effect style guide. Use 'Array.filter(...)' or pipeline '|> Array.filter(...)' instead."
     );
 
     const invalidSort = `
-export fn sortItems(items: Array<Number>) => items.sort((a, b) => a - b)
+export sortItems = (items: Array<Number>) => items.sort((a, b) => a - b)
 `;
     expect(() => Effect.runSync(compileString(invalidSort))).toThrow(
       "Native array method '.sort()' is banned by the Effect style guide. Use 'Array.sort(...)' or pipeline '|> Array.sort(...)' instead."
@@ -412,10 +412,10 @@ export fn sortItems(items: Array<Number>) => items.sort((a, b) => a - b)
 
   it("allows companion calls like Array.map and pipeline companions cleanly", () => {
     const valid = `
-export fn doubleArray(items: Array<Number>): Array<Number> =>
+export doubleArray = (items: Array<Number>): Array<Number> =>
   items |> Array.map((x) => x * 2)
 
-export fn doubleArrayDirect(items: Array<Number>): Array<Number> =>
+export doubleArrayDirect = (items: Array<Number>): Array<Number> =>
   Array.map(items, (x) => x * 2)
 `;
     const res = Effect.runSync(compileString(valid));
@@ -430,21 +430,21 @@ export fn doubleArrayDirect(items: Array<Number>): Array<Number> =>
 
   it("bans native String prototype methods under Effect style guide", () => {
     const invalidTrim = `
-export fn clean(s: String) => s.trim()
+export clean = (s: String) => s.trim()
 `;
     expect(() => Effect.runSync(compileString(invalidTrim))).toThrow(
       "Native string method '.trim()' is banned by the Effect style guide. Use 'String.trim(...)' or pipeline '|> String.trim' instead."
     );
 
     const invalidLower = `
-export fn lower(s: String) => s.toLowerCase()
+export lower = (s: String) => s.toLowerCase()
 `;
     expect(() => Effect.runSync(compileString(invalidLower))).toThrow(
       "Native string method '.toLowerCase()' is banned by the Effect style guide. Use 'String.toLowerCase(...)' or pipeline '|> String.toLowerCase' instead."
     );
 
     const invalidSplit = `
-export fn parts(s: String) => s.split(",")
+export parts = (s: String) => s.split(",")
 `;
     expect(() => Effect.runSync(compileString(invalidSplit))).toThrow(
       "Native string method '.split()' is banned by the Effect style guide. Use 'String.split(...)' or pipeline '|> String.split(...)' instead."
@@ -453,28 +453,28 @@ export fn parts(s: String) => s.split(",")
 
   it("bans Object static methods under Effect style guide", () => {
     const invalidKeys = `
-export fn getKeys(o: Object) => Object.keys(o)
+export getKeys = (o: Object) => Object.keys(o)
 `;
     expect(() => Effect.runSync(compileString(invalidKeys))).toThrow(
       "'Object.keys()' is banned by the Effect style guide. Use Record.keys(...) instead."
     );
 
     const invalidValues = `
-export fn getValues(o: Object) => Object.values(o)
+export getValues = (o: Object) => Object.values(o)
 `;
     expect(() => Effect.runSync(compileString(invalidValues))).toThrow(
       "'Object.values()' is banned by the Effect style guide. Use Record.values(...) instead."
     );
 
     const invalidAssign = `
-export fn merge(a: Object, b: Object) => Object.assign({}, a, b)
+export merge = (a: Object, b: Object) => Object.assign({}, a, b)
 `;
     expect(() => Effect.runSync(compileString(invalidAssign))).toThrow(
       "'Object.assign()' is banned by the Effect style guide. Use Record.union(...) or object spread '{ ...a, ...b }' instead."
     );
 
     const invalidFreeze = `
-export fn freezeObj(o: Object) => Object.freeze(o)
+export freezeObj = (o: Object) => Object.freeze(o)
 `;
     expect(() => Effect.runSync(compileString(invalidFreeze))).toThrow(
       "'Object.freeze()' is banned by the Effect style guide. Use plain record literals '{ ... }' (FunScript records are already immutable) instead."
@@ -483,10 +483,10 @@ export fn freezeObj(o: Object) => Object.freeze(o)
 
   it("allows String and Record companion modules cleanly", () => {
     const valid = `
-export fn cleanString(s: String): String =>
+export cleanString = (s: String): String =>
   s |> String.trim |> String.toUpperCase
 
-export fn recordKeys(r: Object): Array<String> =>
+export recordKeys = (r: Object): Array<String> =>
   Record.keys(r)
 `;
     const res = Effect.runSync(compileString(valid));
@@ -503,28 +503,28 @@ export fn recordKeys(r: Object): Array<String> =>
 
   it("bans parseInt and parseFloat in favor of total Number.parse", () => {
     const invalidParseInt = `
-export fn toNum(s: String) => parseInt(s)
+export toNum = (s: String) => parseInt(s)
 `;
     expect(() => Effect.runSync(compileString(invalidParseInt))).toThrow(
       "'parseInt()' is banned by the Effect style guide because it produces NaN on invalid input. Use 'Number.parse(s)' instead for total parsing returning Option<number>."
     );
 
     const invalidParseFloat = `
-export fn toFloat(s: String) => parseFloat(s)
+export toFloat = (s: String) => parseFloat(s)
 `;
     expect(() => Effect.runSync(compileString(invalidParseFloat))).toThrow(
       "'parseFloat()' is banned by the Effect style guide because it produces NaN on invalid input. Use 'Number.parse(s)' instead for total parsing returning Option<number>."
     );
 
     const invalidNumberParseInt = `
-export fn toNum(s: String) => Number.parseInt(s)
+export toNum = (s: String) => Number.parseInt(s)
 `;
     expect(() => Effect.runSync(compileString(invalidNumberParseInt))).toThrow(
       "'Number.parseInt()' is banned by the Effect style guide because it produces NaN on invalid input. Use 'Number.parse(s)' instead for total parsing returning Option<number>."
     );
 
     const validNumberParse = `
-export fn parseTotal(s: String): Number =>
+export parseTotal = (s: String): Number =>
   match Number.parse(s)
     | Some(n) => n
     | None => 0
@@ -538,21 +538,21 @@ export fn parseTotal(s: String): Number =>
 
   it("guards synchronous throwing globals (JSON.parse, URL)", () => {
     const directJson = `
-export fn parsePayload(raw: String) => JSON.parse(raw)
+export parsePayload = (raw: String) => JSON.parse(raw)
 `;
     expect(() => Effect.runSync(compileString(directJson))).toThrow(
       "'JSON.parse()' is unsafe because it throws on malformed input. Guard it with 'Result.try(() => JSON.parse(...))' or use 'Schema.decodeUnknown'."
     );
 
     const directUrl = `
-export fn makeUrl(raw: String) => URL(raw)
+export makeUrl = (raw: String) => URL(raw)
 `;
     expect(() => Effect.runSync(compileString(directUrl))).toThrow(
       "'URL(...)' is unsafe because URL constructors throw on malformed input. Guard it with 'Result.try(() => URL(...))' or 'Option.try(() => URL(...))'."
     );
 
     const guardedJson = `
-export fn safeJson(raw: String) =>
+export safeJson = (raw: String) =>
   Result.try(() => JSON.parse(raw))
 `;
     const res = Effect.runSync(compileString(guardedJson));
@@ -561,28 +561,28 @@ export fn safeJson(raw: String) =>
 
   it("bans mutating collection methods on Map and Set while allowing web params", () => {
     const invalidSetAdd = `
-export fn addItem(items: Object, item: String) => items.add(item)
+export addItem = (items: Object, item: String) => items.add(item)
 `;
     expect(() => Effect.runSync(compileString(invalidSetAdd))).toThrow(
       "Native collection method '.add()' is banned by the Effect style guide"
     );
 
     const invalidCollectionClear = `
-export fn reset(c: Object) => c.clear()
+export reset = (c: Object) => c.clear()
 `;
     expect(() => Effect.runSync(compileString(invalidCollectionClear))).toThrow(
       "Native collection method '.clear()' is banned by the Effect style guide"
     );
 
     const invalidMapSet = `
-export fn updateMap(map: Object, k: String, v: String) => map.set(k, v)
+export updateMap = (map: Object, k: String, v: String) => map.set(k, v)
 `;
     expect(() => Effect.runSync(compileString(invalidMapSet))).toThrow(
       "Native collection method '.set()' is banned by the Effect style guide"
     );
 
     const validWebParams = `
-export fn updateQuery(searchParams: Object, q: String) =>
+export updateQuery = (searchParams: Object, q: String) =>
   searchParams.set("q", q)
 `;
     const res = Effect.runSync(compileString(validWebParams));
@@ -591,7 +591,7 @@ export fn updateQuery(searchParams: Object, q: String) =>
 
   it("resolves bare pipeline combinators for String and Record", () => {
     const stringPipeline = `
-export fn formatSlug(name: String): String =>
+export formatSlug = (name: String): String =>
   name |> trim |> toLowerCase
 `;
     const res = Effect.runSync(compileString(stringPipeline));
@@ -604,7 +604,7 @@ export fn formatSlug(name: String): String =>
 
   it("bans Math.random in favor of Effect.Random", () => {
     const invalidMathRandom = `
-export fn roll() => Math.random()
+export roll = () => Math.random()
 `;
     expect(() => Effect.runSync(compileString(invalidMathRandom))).toThrow(
       "'Math.random()' is banned by the Effect style guide because it is unmanaged and non-deterministic. Use 'Random.next' or 'Random.nextIntBetween' instead."
@@ -613,7 +613,7 @@ export fn roll() => Math.random()
 
   it("bans mutating Date prototype methods in favor of DateTime", () => {
     const invalidDateMutation = `
-export fn updateYear(d: Object) => d.setFullYear(2026)
+export updateYear = (d: Object) => d.setFullYear(2026)
 `;
     expect(() => Effect.runSync(compileString(invalidDateMutation))).toThrow(
       "Native date method '.setFullYear()' is banned by the Effect style guide"
@@ -622,7 +622,7 @@ export fn updateYear(d: Object) => d.setFullYear(2026)
 
   it("supports HashMap, HashSet, and DateTime companion modules and auto-imports", () => {
     const valid = `
-export fn manageCollections(map: Object, set: Object) =>
+export manageCollections = (map: Object, set: Object) =>
   m2 = map |> HashMap.set("key", "val")
   s2 = set |> HashSet.add("item")
   => [m2, s2]

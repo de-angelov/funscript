@@ -793,11 +793,11 @@ JavaScript and npm interop keyword for typed async interop.
 
 ```funscript
 res <- js promiseFn()
-export js fn = (...) => ...
+export js handler = (...) => ...
 eff |> js
 ```
 
-Lifts JS Promises into Effects inside effect blocks (`res <- js promiseFn()`). Native throws and rejections become the typed `JsInteropError` channel. When TypeScript declares the resolved value as `A | null | undefined`, js converts it to `Option<A>` with `Option.fromNullishOr`; non-nullable values remain `A`. An `any`, `unknown`, or unresolved native result becomes `Option<Unknown>`, requiring both absence handling and schema validation. It also compiles exported functions to Promise-returning JS functions (`export js fn`) and pipes Effects to JS Promises (`eff |> js`).
+Lifts JS Promises into Effects inside effect blocks (`res <- js promiseFn()`). Native throws and rejections become the typed `JsInteropError` channel. When TypeScript declares the resolved value as `A | null | undefined`, js converts it to `Option<A>` with `Option.fromNullishOr`; non-nullable values remain `A`. An `any`, `unknown`, or unresolved native result becomes `Option<Unknown>`, requiring both absence handling and schema validation. It also compiles exported functions to Promise-returning JS functions (`export js handler`) and pipes Effects to JS Promises (`eff |> js`).
 
 ### Syntax-checked example
 

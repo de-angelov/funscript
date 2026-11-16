@@ -792,6 +792,10 @@ export unfinished = () => ??? "implement later"
       const failure = await Effect.runPromise(Effect.flip(compileString(`let x = 10`)));
       expect(failure).toBeInstanceOf(CompilerError);
       expect(failure.message).toContain("FunScript has no 'let'");
+
+      const failureFn = await Effect.runPromise(Effect.flip(compileString(`fn add(a, b) => a + b`)));
+      expect(failureFn).toBeInstanceOf(CompilerError);
+      expect(failureFn.message).toContain("FunScript functions use the arrow syntax: 'name = (args) => body'");
     });
 
     it("fails with CompilerError diagnostic when encountering banned symbols", async () => {

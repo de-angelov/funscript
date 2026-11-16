@@ -45,7 +45,7 @@ export result: Effect<Number> = effect {
       const code = `
 export name: String = "Ada"
 export age: Number = 36
-export fn greet(n: String) => "Hello, " + n
+export greet = (n: String) => "Hello, " + n
 export message = greet(name)
 `.trim();
 
@@ -153,7 +153,7 @@ export count: Number = "not-a-number"
 
     it("detects function argument type mismatch with exact line and column", async () => {
       const code = `
-fn calculate(a: Number, b: Number) => a + b
+calculate = (a: Number, b: Number) => a + b
 export result = calculate("hello", 42)
 `.trim();
 
@@ -180,7 +180,7 @@ export result = calculate("hello", 42)
 
     it("detects function return type mismatch", async () => {
       const code = `
-fn getAnswer(): Number {
+getAnswer = (): Number => {
   => "forty-two"
 }
 `.trim();
@@ -241,7 +241,7 @@ export eff: Effect<Number, Never, Never> = Effect.succeed("string-value")
 
     it("handles FunScript syntax errors gracefully as diagnostics with code frames", async () => {
       const code = `
-fn broken(
+x = (
 `.trim();
 
       const result = await Effect.runPromise(typeCheckSource(code, "syntax-err.fun"));
@@ -303,7 +303,7 @@ ts {
     it("resolves and type checks imports between virtual modules", async () => {
       const files = {
         "src/utils.fun": `
-export fn multiply(a: Number, b: Number) => a * b
+export multiply = (a: Number, b: Number) => a * b
 `.trim(),
         "src/main.fun": `
 import { multiply } from "./utils.js"
@@ -334,7 +334,7 @@ export config: Config = { port: 8080, host: "localhost" }
 `.trim(),
         "src/server.fun": `
 import { config } from "./types.js"
-export fn getUrl() => "http://" + config.host + ":" + config.port
+export getUrl = () => "http://" + config.host + ":" + config.port
 `.trim(),
       };
 
@@ -419,7 +419,7 @@ export Button = (props: Props) =>
       await fs.writeFile(
         testFile,
         `
-export fn square(x: Number) => x * x
+export square = (x: Number) => x * x
 export res = square(5)
 `.trim(),
         "utf-8"
@@ -435,7 +435,7 @@ export res = square(5)
       await fs.writeFile(
         testFile,
         `
-fn greet(name: String) => "Hello, " + name
+greet = (name: String) => "Hello, " + name
 export res = greet(12345)
 `.trim(),
         "utf-8"

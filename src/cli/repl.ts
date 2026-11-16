@@ -100,7 +100,7 @@ export async function compileReplCode(
   }
 
   const isLikelyDecl =
-    /^\s*(export\s+|schema\s+|error\s+|service\s+|import\s+|mut\s+|fn\s+|[a-z_][a-zA-Z0-9_]*\s*(\:[^=]+)?=(?!=))/.test(trimmed) &&
+    /^\s*(export\s+|schema\s+|error\s+|service\s+|import\s+|mut\s+|[a-z_][a-zA-Z0-9_]*\s*(\:[^=]+)?=(?!=))/.test(trimmed) &&
     !/^\s*(match\b|effect\b)/.test(trimmed);
 
   let compiled: CompileResult;

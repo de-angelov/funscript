@@ -150,7 +150,7 @@
         },
         {
           "name": "invalid.illegal.funscript",
-          "match": "\\b(let|var|const|function|class|return|throw|try|catch|finally|async|await|switch|case|break|continue|for|while|do|yield|void|typeof|instanceof|new|delete|debugger)\\b"
+          "match": "\\b(fn|let|var|const|function|class|return|throw|try|catch|finally|async|await|switch|case|break|continue|for|while|do|yield|void|typeof|instanceof|new|delete|debugger)\\b"
         }
       ]
     },

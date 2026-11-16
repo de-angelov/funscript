@@ -285,7 +285,7 @@ describe("VS Code Extension Package (TASK-018)", () => {
       );
       expect(illegalPattern).toBeDefined();
       const regex = new RegExp(illegalPattern.match);
-      for (const banned of ["let", "var", "const", "function", "class", "return", "try", "catch"]) {
+      for (const banned of ["fn", "let", "var", "const", "function", "class", "return", "try", "catch"]) {
         expect(regex.test(banned)).toBe(true);
       }
     });
