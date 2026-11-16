@@ -1530,12 +1530,11 @@ Rules:
    `schema`/`error` declarations) compile to a runtime `Schema` value **and**
    `type Name = typeof Name.Type`.
 2. **Absence and default fields in record `schema` declarations:**
-   - `field?: Type` uses `Schema.OptionFromOptionalKey(Schema.UndefinedOr(Type))`.
-     After explicit schema decoding, an omitted field is `Option.none()` and a
-     present field is `Option.some(value)`, including `Some(undefined)`. Encoding
-     `None` omits the field; encoding `Some(value)`
-     produces the ordinary JavaScript value. `null` is accepted only when the field's
-     schema accepts it. This works inside nested schema records as well.
+   - `field?: Type` uses `Schema.OptionFromOptionalNullOr(Type, { onNoneEncoding: "omit" })`.
+     After explicit schema decoding, an omitted field, `undefined`, or `null` is decoded to `Option.none()`,
+     and a present value is `Option.some(value)`. This provides a true Pit of Success for real-world REST
+     and SQL APIs that serialize absent fields as `null`. Encoding `None` omits the field; encoding
+     `Some(value)` produces the ordinary JavaScript value. This works inside nested schema records as well.
    - A field declared `Option<Type>` contains an actual Effect `Option`; it does not
      automatically decode missing, `undefined`, or `null` values.
    - `field: Type = defaultExpr` uses Effect's `Schema.withDecodingDefaultType`.

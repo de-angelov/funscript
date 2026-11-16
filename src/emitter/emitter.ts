@@ -618,7 +618,7 @@ export class Emitter {
           .map((f) => {
             const fieldKey = emitPropertyKey(f.name.name);
             const schema = this.emitSchemaTypeField(f.typeAnnotation);
-            if (f.optional) return `  ${fieldKey}: Schema.OptionFromOptionalKey(Schema.UndefinedOr(${schema}))`;
+            if (f.optional) return `  ${fieldKey}: Schema.OptionFromOptionalNullOr(${schema}, { onNoneEncoding: "omit" })`;
             if (!f.defaultValue) return `  ${fieldKey}: ${schema}`;
             this.effectImports.add("Effect");
             return `  ${fieldKey}: ${schema}.pipe(Schema.withDecodingDefaultType(Effect.sync(() => ${this.emitExpression(f.defaultValue!)})))`;
@@ -831,7 +831,7 @@ export class Emitter {
     try {
       const fields = decl.body.fields.map(field => {
         const schema = this.emitSchemaTypeField(field.typeAnnotation);
-        return `  ${emitPropertyKey(field.name.name)}: ${field.optional ? `Schema.OptionFromOptional(${schema})` : schema}`;
+        return `  ${emitPropertyKey(field.name.name)}: ${field.optional ? `Schema.OptionFromOptionalNullOr(${schema}, { onNoneEncoding: "omit" })` : schema}`;
       }).join(",\n");
       const args = parameters.map(param => `${param} extends Schema.Constraint & { readonly "~type.optionality": "required"; readonly "~type.mutability": "readonly" }`).join(", ");
       const values = parameters.map(param => `${param}: ${param}`).join(", ");
@@ -954,7 +954,7 @@ export class Emitter {
         .map((f) => {
           if (f.defaultValue) throw new FunScriptError("Nested schema field defaults are not supported yet", f.span);
           const schema = this.emitSchemaTypeField(f.typeAnnotation);
-          return `  ${f.name.name}: ${f.optional ? `Schema.OptionFromOptionalKey(Schema.UndefinedOr(${schema}))` : schema}`;
+          return `  ${f.name.name}: ${f.optional ? `Schema.OptionFromOptionalNullOr(${schema}, { onNoneEncoding: "omit" })` : schema}`;
         })
         .join(",\n");
       return `Schema.Struct({\n${inner}\n})`;
@@ -1423,7 +1423,7 @@ export class Emitter {
         if (field?.defaultBinding) return field.defaultBinding;
         if (field?.optional) {
           this.effectImports.add("Option");
-          return `Option.fromUndefinedOr(${raw})`;
+          return `Option.fromNullishOr(${raw})`;
         }
         return raw;
       }

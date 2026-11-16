@@ -11,13 +11,13 @@ describe("named schemas with optional fields", () => {
     const { Props, PropsFromUnknown } = await execute(source);
     expect(PropsFromUnknown({})).toEqual({ label: Option.none(), nested: Option.none() });
     const presentUndefined = PropsFromUnknown({ label: undefined, nested: { enabled: false } });
-    expect(presentUndefined).toEqual({ label: Option.some(undefined), nested: Option.some({ enabled: Option.some(false) }) });
-    expect(Object.hasOwn(Schema.encodeSync(Props)(presentUndefined), "label")).toBe(true);
+    expect(presentUndefined).toEqual({ label: Option.none(), nested: Option.some({ enabled: Option.some(false) }) });
+    const presentNull = PropsFromUnknown({ label: null, nested: { enabled: false } });
+    expect(presentNull).toEqual({ label: Option.none(), nested: Option.some({ enabled: Option.some(false) }) });
     const value = PropsFromUnknown({ label: "Ada", nested: {} });
     expect(value).toEqual({ label: Option.some("Ada"), nested: Option.some({ enabled: Option.none() }) });
     expect(Schema.encodeSync(Props)(value)).toEqual({ label: "Ada", nested: {} });
-    expect(() => PropsFromUnknown({ label: null })).toThrow();
-    expect((await compile(source)).typescript).toContain("Schema.OptionFromOptionalKey(Schema.UndefinedOr");
+    expect((await compile(source)).typescript).toContain("Schema.OptionFromOptionalNullOr");
     expect(format(format(source))).toBe(format(source));
   });
 
@@ -63,5 +63,44 @@ describe("named schemas with optional fields", () => {
   it("rejects an optional field with a default and unsupported nested defaults", async () => {
     await expectCompileError('schema Bad = { label?: String = "x" }', /both optional and defaulted/);
     await expectCompileError('schema Bad = { nested: { label: String = "x" } }', /Nested schema field defaults/);
+  });
+
+  it("safely decodes Country schema with rank?: Number from real-world JSON/SQL null payloads", async () => {
+    const code = `
+export schema Country = {
+  name: String
+  rank?: Number
+}
+`;
+    const { Country, CountryFromUnknown } = await execute(code);
+    // 1. With rank
+    expect(CountryFromUnknown({ name: "Bulgaria", rank: 1 })).toEqual({
+      name: "Bulgaria",
+      rank: Option.some(1),
+    });
+    // 2. With null (real JSON API / SQL nullable response)
+    expect(CountryFromUnknown({ name: "Bulgaria", rank: null })).toEqual({
+      name: "Bulgaria",
+      rank: Option.none(),
+    });
+    // 3. With undefined
+    expect(CountryFromUnknown({ name: "Bulgaria", rank: undefined })).toEqual({
+      name: "Bulgaria",
+      rank: Option.none(),
+    });
+    // 4. Missing key
+    expect(CountryFromUnknown({ name: "Bulgaria" })).toEqual({
+      name: "Bulgaria",
+      rank: Option.none(),
+    });
+    // 5. Encoding None omits rank
+    expect(Schema.encodeSync(Country)({ name: "Bulgaria", rank: Option.none() })).toEqual({
+      name: "Bulgaria",
+    });
+    // 6. Encoding Some(1) produces rank: 1
+    expect(Schema.encodeSync(Country)({ name: "Bulgaria", rank: Option.some(1) })).toEqual({
+      name: "Bulgaria",
+      rank: 1,
+    });
   });
 });
