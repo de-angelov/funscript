@@ -3,7 +3,9 @@ import { Lexer } from "../src/lexer/lexer.js";
 import { Parser } from "../src/parser/parser.js";
 import type { BindingDeclaration, FunctionExpression, SchemaDeclaration, TypeSignatureSchema } from "../src/ast/types.js";
 import { format } from "../src/formatter/index.js";
-import { compile, expectCompileError, expectDiagnostic, typeCheck } from "./helpers/index.js";
+import { compile, execute, expectCompileError, expectDiagnostic, typeCheck } from "./helpers/index.js";
+import { Effect, Option, Schema, SchemaAST } from "effect";
+import { typeCheckVirtualFiles } from "../src/compiler/check.js";
 import path from "node:path";
 
 function parseAst(source: string, filename = "generics.fun") {
@@ -129,8 +131,88 @@ ts {
     expect(checked.success, checked.formattedOutput).toBe(true);
   });
 
-  it("rejects unsupported generic runtime schemas", async () => {
-    await expectCompileError("export schema Box<A> = { value: A }", /Generic runtime schemas are not supported/);
+  it("derives generic data schemas from explicit element schemas", async () => {
+    const source = `
+export schema Box<A> = { value: A }
+export schema Country = { name: String }
+export schema Envelope = { payload: Box<Number> }
+export countryBox = Box(Country)
+export numberBox = Box(Schema.NumberFromString)
+export read = (box: Box<Number>): Number => box.value
+`;
+    const result = await compile(source);
+    expect(result.typescript).toContain("SchemaAST as $funscriptSchemaAST");
+    expect(result.typescript).toContain('export const Box = <A extends Schema.Constraint & { readonly "~type.optionality": "required";');
+    expect(result.typescript).toContain("export type Box<A> = { readonly value: A };");
+    const checked = await typeCheck(source);
+    expect(checked.success, checked.formattedOutput).toBe(true);
+    const mod = await execute(source, { scope: { $funscriptSchemaAST: SchemaAST } });
+    expect(Schema.decodeUnknownSync(mod.countryBox)({ value: { name: "Bulgaria" } })).toEqual({ value: { name: "Bulgaria" } });
+    expect(() => Schema.decodeUnknownSync(mod.countryBox)({ value: { name: 42 } })).toThrow();
+    expect(Schema.decodeUnknownSync(mod.numberBox)({ value: "42" })).toEqual({ value: 42 });
+    expect(Schema.encodeSync(mod.numberBox)({ value: 42 })).toEqual({ value: "42" });
+    expect(mod.EnvelopeFromUnknown({ payload: { value: 5 } })).toEqual({ payload: { value: 5 } });
+    expect(() => mod.EnvelopeFromUnknown({ payload: { value: "bad" } })).toThrow();
+    expect(() => mod.Box(Schema.optional(Schema.String))).toThrow(/without optional-key or mutable-key modifiers/);
+    expect(() => mod.Box(Schema.mutableKey(Schema.String))).toThrow(/without optional-key or mutable-key modifiers/);
+    expect(() => mod.Box({})).toThrow(/without optional-key or mutable-key modifiers/);
+    expect(Schema.decodeUnknownSync(mod.Box(Schema.OptionFromOptional(Schema.String)))({})).toEqual({ value: Option.none() });
+    const invalid = await typeCheck(source + "\nexport invalid = Box(Schema.optional(Schema.String))");
+    expect(invalid.success).toBe(false);
+  }, 60000);
+
+  it("keeps callback-bearing generic contracts compile-time only", async () => {
+    const source = "export schema Handler<A> = { value: A, handle: (value: A) => Void }";
+    const result = await compile(source);
+    expect(result.typescript).toContain("export type Handler<A>");
+    expect(result.typescript).not.toContain("export const Handler");
+    await expectCompileError(source + "\nexport bad = Handler", /compile-time record contract/);
+  });
+
+  it("lets a generic parameter shadow a same-named contract type", async () => {
+    const result = await compile('schema A = (value: String) => Void\nexport schema Box<A> = { value: A }');
+    expect(result.typescript).toContain("export const Box = <A extends Schema.Constraint &");
+  });
+
+  it("preserves optional data decoding and encoding in generic schemas", async () => {
+    const source = `
+export schema Page<A> = { items: Array<A>, next?: String }
+export schema OptionalBox<A> = { value?: A }
+export schema Country = { name: String }
+export countryPage = Page(Country)
+export optionalNumber = OptionalBox(Schema.NumberFromString)
+export read = (page: Page<Country>): Option<String> => page.next
+export names = (page: Page<Country>) => page.items |> Array.map((country) => country.name)
+`;
+    const checked = await typeCheck(source);
+    expect(checked.success, checked.formattedOutput).toBe(true);
+    const mod = await execute(source, { scope: { $funscriptSchemaAST: SchemaAST } });
+    const decoded = Schema.decodeUnknownSync(mod.countryPage)({ items: [{ name: "Bulgaria" }] });
+    expect(decoded).toEqual({ items: [{ name: "Bulgaria" }], next: Option.none() });
+    expect(Schema.encodeSync(mod.countryPage)(decoded)).toEqual({ items: [{ name: "Bulgaria" }] });
+    expect(Schema.decodeUnknownSync(mod.countryPage)({ items: [], next: "cursor" })).toEqual({ items: [], next: Option.some("cursor") });
+    const value = Schema.decodeUnknownSync(mod.optionalNumber)({ value: "42" });
+    expect(value).toEqual({ value: Option.some(42) });
+    expect(Schema.encodeSync(mod.optionalNumber)(value)).toEqual({ value: "42" });
+  }, 60000);
+
+  it("uses a generic data-schema factory across modules", async () => {
+    const files = {
+      "generic-box.fun": "export schema Box<A> = { value: A }",
+      "generic-app.fun": 'import { Box } from "./generic-box.js"\nexport schema Country = { name: String }\nexport countryBox = Box(Country)\nexport read = (box: Box<Country>): String => box.value.name',
+    };
+    const checked = await Effect.runPromise(typeCheckVirtualFiles(files, { compilerOptions: { rootDir: process.cwd() } }));
+    expect(checked.success, checked.formattedOutput).toBe(true);
+  }, 60000);
+
+  it("rejects unsupported generic data shapes without widening", async () => {
+    await expectCompileError('export schema Box<A> = { value: A, label: String = "x" }', /Generic data schema 'Box' currently supports required or optional fields/);
+    await expectCompileError("export schema Box<A> = { value: Unknown }", /Generic data schema 'Box' currently supports required or optional fields/);
+    await expectCompileError("export schema Box<A> = { value: A }\nexport schema Bad = { item: Box<Unknown> }", /must name a runtime data schema/);
+    await expectCompileError("export schema Box<A> = { __proto__: A }");
+    await expectCompileError('import { Effect as Schema } from "effect"\nexport schema Box<A> = { value: A }', /require 'Schema' to refer to Effect Schema/);
+    await expectCompileError('import type { ExternalBox } from "./types.js"\nexport schema Bad = { value: ExternalBox<Number> }', /Cannot derive a runtime schema for generic 'ExternalBox'/);
+    await expectCompileError('import { Box } from "./generic-box.js"\nexport schema Bad = { value: Box<Number> }', /Cannot derive a runtime schema for imported generic 'Box'/);
   });
 
   it("keeps generic arrows valid in funx output", async () => {

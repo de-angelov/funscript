@@ -1146,7 +1146,7 @@ schema Name = | CaseA | CaseB(v: Type)
 
 Declares data models backed by Effect Schema and `Data.TaggedEnum`.
 
-Data schema fields declared with `?` decode missing or undefined input to a real Effect `Option`; encoding `None` omits the field. Decoding is explicit. `SchemaInput<Name>` describes the encoded JavaScript input type without decoding it. A record containing a function or Effect type is instead a compile-time contract with no runtime decoder.
+Data schema fields declared with `?` decode missing or undefined input to a real Effect `Option`; encoding `None` omits the field. Decoding is explicit. `SchemaInput<Name>` describes the encoded JavaScript input type without decoding it. A generic data record produces a schema factory: pass one runtime schema per type parameter. A record containing a function or Effect type is instead a compile-time contract with no runtime decoder.
 
 
 

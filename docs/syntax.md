@@ -1414,7 +1414,7 @@ declarations:
    static TypeScript `type`.
 2. **Tagged-union `schema` declarations** (`| Variant(...)` arms) → `Data.TaggedEnum` +
    positional constructors + Effect `Schema.Union` + static TypeScript `type`.
-3. **Compile-time `schema` aliases** (functions `=>`, `Effect<...>`, generics) → pure
+3. **Compile-time `schema` aliases and contracts** (functions `=>`, `Effect<...>`, and callback-bearing records) → pure
    TypeScript `type`.
 4. **Imported TypeScript schemas** (`schema Name = from ts<Type>`) → compile-time derived
    Effect `Schema` + static TypeScript `type` + `NameFromUnknown` decoder.
@@ -1510,7 +1510,8 @@ Rules:
   input (`unknown`, request bodies, files), use `Schema.decodeUnknown(Name)`, which keeps
   the failure as a typed `ParseError`; `funscript check` suggests it when a constructor is
   applied to an `unknown`-derived value.
-- Compile-time-only `schema` aliases (functions, `Effect`, generics) have no constructor.
+- Compile-time-only `schema` aliases and contracts have no constructor. Generic data
+  declarations produce schema factories rather than constructors for raw values.
 - Tagged-union variants (`Circle(...)`) and `error` declarations (`NotFound(...)`) already
   have positional constructors (§8.2, §8.3); the rule "uppercase name called like a
   function = validated construction" holds everywhere.
@@ -1546,7 +1547,7 @@ Rules:
    pipeline (`Schema.trimmed`, `Schema.nonEmptyString`) may be written with or without
    `()`.
 5. **Compile-time-only `schema` declarations:** When a `schema` contains non-serializable
-   constructs — function arrows `=>`, generic type parameters (`schema Box<A> = ...`),
+   constructs — function arrows `=>`,
    `Effect<...>`, `Layer<...>`, `Stream<...>`, services, or `unknown` — the compiler emits
    a pure TypeScript `type` alias only:
 
@@ -1559,8 +1560,41 @@ export type Lookup = (id: string) => Effect.Effect<User, NotFound>;
 ```
 
 Using a compile-time-only `schema` in value position (for example passing `Lookup` to
-`Schema.decodeUnknown`) is reported as a clear compiler error. Generic runtime schemas
-are not supported yet; use a TypeScript `type` alias for generic data shapes.
+`Schema.decodeUnknown`) is reported as a clear compiler error. Generic callback-bearing
+records are contracts too: their type parameters do not turn callbacks into validated data.
+
+### Generic data schemas
+
+A generic data record is a **schema factory**. Pass a runtime schema for each type
+parameter to create the concrete decoder; the corresponding generic type describes
+decoded values:
+
+```funscript
+export schema Page<A> = { items: Array<A>, next?: String }
+export schema Country = { name: String }
+
+export countryPageSchema = Page(Country)
+export names = (page: Page<Country>) => page.items |> Array.map((country) => country.name)
+```
+
+Decode untrusted values with an Effect Schema decoder applied to `countryPageSchema`.
+Omitted `next` decodes to `Option.none()` and encodes back as an omitted field, as in
+non-generic data schemas. Generic schema arguments retain their own encoded types and
+validation behavior. A callback-bearing declaration such as
+`schema Handler<A> = { handle: (value: A) => Void }` is a static contract, not a decoder.
+
+This first slice supports unconstrained type parameters and required or optional fields
+made from primitives, type parameters, arrays, unions, local data schemas, and nested
+records with required fields. Defaults, recursive or nested generic declarations, and
+generic tagged-union decoders are not supported. A local generic data schema can be used
+in another data schema as `Page<Country>`; across modules, import the factory and call
+`Page(Country)` explicitly. `SchemaInput` does not yet accept generic applications.
+Factory arguments must have required, readonly **field modifiers**; passing an
+optional-key or mutable-key wrapper is rejected by type checking and at the factory
+boundary. Declare optional fields on the generic data record itself. Nested values keep
+the mutability and validation semantics of the schema supplied by the caller.
+Unsupported shapes and runtime arguments are rejected rather than widened to
+`Schema.Unknown`.
 
 ### 8.2 Tagged-union `schema` (`| Variant(...)`)
 

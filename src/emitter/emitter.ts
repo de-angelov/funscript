@@ -309,6 +309,9 @@ export class Emitter {
 
   private declaredTypeNames = new Set<string>();
   private runtimeSchemaNames = new Set<string>();
+  private genericDataSchemas = new Map<string, number>();
+  private activeSchemaParameters?: Set<string>;
+  private unsafeSchemaBinding = false;
   private inPipelineStage = false;
   private recordContracts = new Map<string, import("../ast/types.js").RecordTypeNode>();
   private needsCheckedRecordDecoder = false;
@@ -324,6 +327,10 @@ export class Emitter {
     for (const item of allItems) {
       const decl = item.kind === "ExportDeclaration" ? item.declaration : item;
       if (item.kind === "ImportDeclaration") {
+        for (const spec of item.specifiers) {
+          if (spec.local.name === "Schema" && (item.isTypeOnly || spec.isTypeOnly || item.source.raw !== '"effect"' || spec.imported.name !== "Schema")) this.unsafeSchemaBinding = true;
+        }
+        if (item.namespaceBinding?.name === "Schema" && (item.isTypeOnly || item.source.raw !== '"effect/Schema"')) this.unsafeSchemaBinding = true;
         if (!item.isTypeOnly) {
           for (const spec of item.specifiers) {
             if (!spec.isTypeOnly) this.userImportBindings.add(spec.local.name);
@@ -407,7 +414,9 @@ export class Emitter {
       for (const item of allItems) {
         const decl = item.kind === "ExportDeclaration" ? item.declaration : item;
         if (decl.kind === "SchemaDeclaration" && decl.body.kind === "RecordSchema" && !staticTypeNames.has(decl.id.name)) {
-          if (isRecordContract(decl.body, staticTypeNames)) {
+          const visibleStatics = new Set(staticTypeNames);
+          for (const param of decl.typeParams ?? []) visibleStatics.delete(param.name.name);
+          if (isRecordContract(decl.body, visibleStatics)) {
             staticTypeNames.add(decl.id.name);
             changed = true;
           }
@@ -429,6 +438,12 @@ export class Emitter {
         ) {
           this.runtimeSchemaNames.add(decl.id.name);
         }
+      }
+    }
+    for (const item of allItems) {
+      const decl = item.kind === "ExportDeclaration" ? item.declaration : item;
+      if (decl.kind === "SchemaDeclaration" && decl.body.kind === "RecordSchema" && decl.typeParams?.length && !this.recordContracts.has(decl.id.name)) {
+        this.genericDataSchemas.set(decl.id.name, decl.typeParams.length);
       }
     }
   }
@@ -525,7 +540,7 @@ export class Emitter {
       decl.typeParams?.length &&
       decl.body.kind !== "TypeSignatureSchema" &&
       decl.body.kind !== "TaggedUnionSchema" &&
-      !(decl.body.kind === "RecordSchema" && this.recordContracts.has(name))
+      !(decl.body.kind === "RecordSchema")
     ) {
       throw new FunScriptError("Generic runtime schemas are not supported yet; use a TypeScript type alias", decl.span);
     }
@@ -539,6 +554,7 @@ export class Emitter {
           return contract + this.emitCheckedRecordDecoder(decl, exp);
 
         }
+        if (decl.typeParams?.length) return this.emitGenericDataSchema(decl, exp);
         this.effectImports.add("Schema");
         const schemaFields = decl.body.fields
           .map((f) => {
@@ -688,6 +704,54 @@ export class Emitter {
     }
   }
 
+  private emitGenericDataSchema(decl: SchemaDeclaration, exp: string): string {
+    if (decl.body.kind !== "RecordSchema" || !decl.typeParams?.length) throw new Error("Expected a generic record schema");
+    const parameters = decl.typeParams.map(param => param.name.name);
+    const names = new Set(parameters);
+    if (this.unsafeSchemaBinding || this.declaredTypeNames.has("Schema") || this.bindings.has("Schema")) {
+      throw new FunScriptError("Generic data schemas require 'Schema' to refer to Effect Schema; rename the conflicting declaration or import.", decl.span);
+    }
+    if (names.size !== parameters.length || decl.typeParams.some(param => param.constraint || ["Schema", "String", "Number", "Boolean", "Array", "Option", "Record", decl.id.name].includes(param.name.name))) {
+      throw new FunScriptError("Generic data schemas require distinct, unconstrained type parameters that do not shadow built-in schema names.", decl.span);
+    }
+    const supports = (type: TypeNode): boolean => {
+      if (type.kind === "ParenthesizedTypeNode") return supports(type.typeNode);
+      if (type.kind === "LiteralTypeNode") return true;
+      if (type.kind === "ArrayTypeNode") return supports(type.elementType);
+      if (type.kind === "UnionTypeNode") return type.types.every(supports);
+      if (type.kind === "RecordTypeNode") return type.fields.every(field => field.name.name !== "__proto__" && !field.optional && !field.defaultValue && supports(field.typeAnnotation));
+      if (type.kind !== "TypeReferenceNode") return false;
+      const name = type.name.name;
+      if (names.has(name)) return !type.typeArgs?.length;
+      if (["String", "Number", "Boolean"].includes(name)) return !type.typeArgs?.length && !this.declaredTypeNames.has(name);
+      if (name === "Array") return type.typeArgs?.length === 1 && supports(type.typeArgs[0]);
+      return !type.typeArgs?.length && this.runtimeSchemaNames.has(name) && !this.genericDataSchemas.has(name);
+    };
+    for (const field of decl.body.fields) {
+      if (field.name.name === "__proto__" || field.defaultValue || !supports(field.typeAnnotation)) {
+        throw new FunScriptError(`Generic data schema '${decl.id.name}' currently supports required or optional fields with primitive, local data-schema, type-parameter, array, union, or nested required-record types. Field '${field.name.name}' needs an explicit non-generic schema or contract.`, field.span);
+      }
+    }
+    this.effectImports.add("Schema");
+    this.effectImports.add("SchemaAST as $funscriptSchemaAST");
+    const previous = this.activeSchemaParameters;
+    this.activeSchemaParameters = names;
+    try {
+      const fields = decl.body.fields.map(field => {
+        const schema = this.emitSchemaTypeField(field.typeAnnotation);
+        return `  ${emitPropertyKey(field.name.name)}: ${field.optional ? `Schema.OptionFromOptional(${schema})` : schema}`;
+      }).join(",\n");
+      const args = parameters.map(param => `${param} extends Schema.Constraint & { readonly "~type.optionality": "required"; readonly "~type.mutability": "readonly" }`).join(", ");
+      const values = parameters.map(param => `${param}: ${param}`).join(", ");
+      const checks = parameters.map(param => `  if (!Schema.isSchema(${param}) || $funscriptSchemaAST.isOptional($funscriptSchemaAST.toType(${param}.ast)) || $funscriptSchemaAST.toType(${param}.ast).context?.isMutable) throw new TypeError(${JSON.stringify(`${decl.id.name} requires a schema without optional-key or mutable-key modifiers for ${param}`)});`).join("\n");
+      const dataType = `{ ${decl.body.fields.map(field => {
+        const type = this.emitTypeNode(field.typeAnnotation);
+        return `readonly ${emitPropertyKey(field.name.name)}: ${field.optional ? `import("effect").Option.Option<${type}>` : type}`;
+      }).join("; ")} }`;
+      return `${exp}const ${decl.id.name} = <${args}>(${values}) => {\n${checks}\n  return Schema.Struct({\n${fields}\n  });\n};\n${exp}type ${decl.id.name}<${parameters.join(", ")}> = ${dataType};`;
+    } finally { this.activeSchemaParameters = previous; }
+  }
+
   /** Generate only the subset for which every value has an unambiguous codec. */
   private emitCheckedRecordDecoder(decl: SchemaDeclaration, exp: string): string {
     if (decl.body.kind !== "RecordSchema" || decl.typeParams?.length) return "";
@@ -811,6 +875,7 @@ export class Emitter {
     }
     if (typeNode.kind === "TypeReferenceNode") {
       const tName = typeNode.name.name;
+      if (this.activeSchemaParameters?.has(tName)) return tName;
       if (tName === "SchemaInput" && !this.declaredTypeNames.has(tName)) {
         throw new Error("SchemaInput is a static input type, not a runtime schema; use the schema itself for validation");
       }
@@ -826,15 +891,38 @@ export class Emitter {
       if (tName === "Record" && typeNode.typeArgs?.length === 2) {
         return `Schema.Record(${this.emitSchemaTypeField(typeNode.typeArgs[0])}, ${this.emitSchemaTypeField(typeNode.typeArgs[1])})`;
       }
+      const genericArity = this.genericDataSchemas.get(tName);
+      if (genericArity !== undefined) {
+        if (typeNode.typeArgs?.length !== genericArity) throw new FunScriptError(`Generic data schema '${tName}' requires ${genericArity} schema argument(s).`, typeNode.span);
+        return `${tName}(${typeNode.typeArgs.map(arg => this.emitGenericSchemaArgument(arg)).join(", ")})`;
+      }
       if (this.runtimeSchemaNames.has(tName)) return tName;
       if (this.options.importedSchemas?.has(tName)) return this.options.importedSchemas.get(tName)!;
-      if (this.userImportBindings.has(tName)) return tName;
+      if (this.userImportBindings.has(tName)) {
+        if (typeNode.typeArgs?.length) throw new FunScriptError(`Cannot derive a runtime schema for imported generic '${tName}' here. Instantiate its schema factory explicitly.`, typeNode.span);
+        return tName;
+      }
       if (this.recordContracts.has(tName)) {
         throw new FunScriptError(`'${tName}' is a compile-time record contract, not a runtime schema; it cannot be used as a runtime schema field`, typeNode.span);
       }
+      if (typeNode.typeArgs?.length) throw new FunScriptError(`Cannot derive a runtime schema for generic '${tName}' here. Provide a concrete runtime schema explicitly.`, typeNode.span);
       return `(Schema.Unknown as unknown as Schema.Codec<${this.emitTypeNode(typeNode)}>)`;
     }
     return this.emitTypeNode(typeNode);
+  }
+
+  private emitGenericSchemaArgument(type: TypeNode): string {
+    if (type.kind === "ParenthesizedTypeNode") return this.emitGenericSchemaArgument(type.typeNode);
+    if (type.kind === "TypeReferenceNode") {
+      const name = type.name.name;
+      if (this.activeSchemaParameters?.has(name) && !type.typeArgs?.length) return name;
+      if (["String", "Number", "Boolean"].includes(name) && !type.typeArgs?.length && !this.declaredTypeNames.has(name)) return this.emitSchemaTypeField(type);
+      if (name === "Array" && type.typeArgs?.length === 1) return `Schema.Array(${this.emitGenericSchemaArgument(type.typeArgs[0])})`;
+      const arity = this.genericDataSchemas.get(name);
+      if (arity !== undefined && type.typeArgs?.length === arity) return `${name}(${type.typeArgs.map(arg => this.emitGenericSchemaArgument(arg)).join(", ")})`;
+      if (!type.typeArgs?.length && (this.runtimeSchemaNames.has(name) || this.userImportBindings.has(name))) return this.emitSchemaTypeField(type);
+    }
+    throw new FunScriptError("Generic data schema arguments must name a runtime data schema or supported primitive; compile-time contracts and unknown types cannot validate data.", type.span);
   }
 
   private flattenPipelineStages(expr: Expression): Expression[] {
