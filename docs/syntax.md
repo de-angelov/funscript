@@ -123,6 +123,9 @@ generated output, but not in idiomatic FunScript:
 - **Running effects mid-program:** `Effect.runPromise`, `runSync`, `runFork`,
   `runCallback`, `run*Exit`, `Runtime.run*`, and `ManagedRuntime` outside modules listed
   as `entry` in `funscript.json` (see §9.7).
+- **Detached fibers and unbounded concurrency:** `Effect.forkDetach` / `forkDetach`
+  outside entry modules (use `Effect.forkScoped` or `Effect.forkChild`), and
+  `concurrency: "unbounded"` options in `Effect.all` / `Effect.forEach` (see §9.8 and §12.3.1).
 - **Equality:** `#=` / `#!` compare values; `@=` / `@!` compare reference identity on reference-like values.
 - **Symbol booleans:** `&&`, `||`, `!` (use `and`, `or`, `not`).
 - **Competing control flow:** `if`, `else`, `then`, `switch`, ternary `? :`, `return`
@@ -2527,6 +2530,21 @@ payloads at runtime. Keep the runtime validator and static type derived from the
 same schema. Use `Option<T>` for absence, and `ts { ... }` for complex TypeScript
 types; a type escape hatch does not replace boundary decoding. Neither a cast
 nor `Unknown` itself proves that an external value satisfies a schema.
+
+### 12.3.1 Pit of Success guardrails and architectural boundaries
+
+`funscript check` enforces architectural boundaries to eliminate non-determinism, goroutine leaks, and ambient state coupling at compile time:
+
+| Diagnostic Code | Category | Enforced Rule | Safe Replacement |
+|---|---|---|---|
+| `FS_HIDDEN_INPUT` | Error | Non-deterministic global APIs (`Date.now()`, `Date()`, `Math.random()`, `performance.now()`, `crypto.randomUUID()`, `crypto.getRandomValues()`) are quarantined. | Effect `Clock` (`Clock.currentTimeMillis`), `DateTime.now`, or `Random` (`Random.nextIntBetween`). Makes logic deterministic and testable with `TestClock`. |
+| `FS_EFFECT_RUN` | Error | Effect runners (`Effect.runPromise`, `Effect.runSync`, `Effect.runFork`, `Runtime.run*`, `NodeRuntime.runMain`, etc.) are forbidden outside entry modules. | Return the composed `Effect` and execute it once at the application boundary (`main.fun`, `main.funx`, or modules exporting `main`). |
+| `FS_ENV_GLOBAL` | Error | Ambient environment variables (`process.env`, `Deno.env`, `Bun.env`) are forbidden outside entry modules. | Declare configuration using Effect's `Config` service (e.g. `Config.string("PORT")`) or pass configuration as explicit parameters. |
+| `FS_DETACHED_FIBER` | Error | `Effect.forkDetach` is forbidden outside entry modules because detached fibers outlive their caller with no owner. | Use `Effect.forkScoped` (tied to an enclosing `Scope`) or `Effect.forkChild` (tied to parent fiber). Long-lived background tasks belong in a `Layer` (`Layer.effectDiscard(Effect.forkScoped(...))`). |
+| `FS_UNBOUNDED_CONCURRENCY` | Warning | `{ concurrency: "unbounded" }` is flagged to prevent resource exhaustion (socket, descriptor, or memory starvation under burst load). | Specify an explicit concurrency limit (e.g. `{ concurrency: 10 }`). |
+
+#### Escape hatches
+When interacting with third-party JavaScript libraries that require `Date`, raw `process.env`, or detached promises, isolate the foreign interop inside an explicit `ts { ... }` block. Raw TypeScript blocks bypass these static AST guardrails and remain visible in code review.
 
 ### 12.4 Typed holes (`???`)
 

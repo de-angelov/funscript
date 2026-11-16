@@ -530,7 +530,7 @@ Synchronously executes an Effect that cannot fail and has no requirements.
 Effect.runSync<A>(effect: Effect<A, never, never>): A
 ```
 
-Executes an Effect synchronously. Throws if the Effect contains asynchronous fibers or unresolved failures.
+Executes an Effect synchronously. Throws if the Effect contains asynchronous fibers or unresolved failures. Only permitted in application entrypoints (`main`).
 
 
 
