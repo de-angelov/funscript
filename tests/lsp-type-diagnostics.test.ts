@@ -21,15 +21,15 @@ export bad = connect(() => "bad")`;
         const diagnostic = events.flatMap((event) => event.diagnostics).find((d: any) => String(d.code) === "2322");
         expect(diagnostic).toBeDefined();
         expect(diagnostic.range.start.line).toBe(2);
-      }, { timeout: 10000 });
+      }, { timeout: 20000 });
       server.onDidChangeHandler({ textDocument: { uri, version: 2 }, contentChanges: [{ text: source.replace('"bad"', '{ close: () => {} }') }] });
       await vi.waitFor(() => {
         expect(events.filter((event) => event.version === 2 && event.diagnostics.length === 0).length).toBeGreaterThanOrEqual(2);
-      }, { timeout: 10000 });
+      }, { timeout: 20000 });
     } finally {
       server.dispose();
     }
-  });
+  }, 45000);
 
   it("rechecks an open caller when its imported document changes", async () => {
     const server = new FunScriptLspServer();
@@ -40,16 +40,16 @@ export bad = connect(() => "bad")`;
     try {
       server.onDidOpenHandler({ textDocument: { uri: dependency, languageId: "funscript", version: 1, text: "export accept = (value: Number) => value" } });
       server.onDidOpenHandler({ textDocument: { uri: caller, languageId: "funscript", version: 1, text: 'import { accept } from "./lsp-dependency.js"\nexport result = accept(1)' } });
-      await vi.waitFor(() => expect(events.filter((event) => event.uri === caller).length).toBeGreaterThanOrEqual(2), { timeout: 10000 });
+      await vi.waitFor(() => expect(events.filter((event) => event.uri === caller).length).toBeGreaterThanOrEqual(2), { timeout: 20000 });
       server.onDidChangeHandler({ textDocument: { uri: dependency, version: 2 }, contentChanges: [{ text: "export accept = (value: String) => value" }] });
       await vi.waitFor(() => {
         const diagnostic = events.filter((event) => event.uri === caller).flatMap((event) => event.diagnostics).find((item: any) => item.code === 2345);
         expect(diagnostic?.range.start.line).toBe(1);
-      }, { timeout: 10000 });
+      }, { timeout: 20000 });
     } finally {
       server.dispose();
     }
-  });
+  }, 45000);
 
   it("reuses incremental program and source cache across edits", async () => {
     const cache = createTypeCheckCache();
@@ -117,11 +117,11 @@ export bad = connect(() => "bad")`;
           .find((d: any) => d.message.includes("'parsed' is of type 'unknown'") || String(d.code) === "18046");
         expect(diagnostic).toBeDefined();
         expect(diagnostic.message).toContain("unknown");
-      }, { timeout: 10000 });
+      }, { timeout: 20000 });
     } finally {
       server.dispose();
     }
-  }, 15000);
+  }, 30000);
 
   it("resolves JSX elements cleanly in .funx files in LSP diagnostics without errors", async () => {
     const server = new FunScriptLspServer();

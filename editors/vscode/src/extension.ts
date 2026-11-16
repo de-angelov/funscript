@@ -107,6 +107,24 @@ function isFunScriptDocument(doc: vscode.TextDocument): boolean {
   return /\.funx?$/.test(doc.fileName);
 }
 
+function isInteropDocument(doc: vscode.TextDocument): boolean {
+  return doc.uri.scheme === "file" && /\.[cm]?[jt]sx?$/.test(doc.fileName) &&
+    !/(?:^|[\\/])(?:node_modules|\.git|\.funscript|dist|build|coverage)(?:[\\/]|$)/.test(doc.fileName) &&
+    Boolean(vscode.workspace.getWorkspaceFolder(doc.uri));
+}
+
+function syncInteropDocument(target: LanguageClient, doc: vscode.TextDocument): void {
+  if (!isInteropDocument(doc)) return;
+  void target.sendNotification("funscript/interopDocument", {
+    kind: "upsert",
+    textDocument: { uri: doc.uri.toString(), languageId: doc.languageId, version: doc.version, text: doc.getText() },
+  }).catch(() => { /* A restart will send the latest open buffers. */ });
+}
+
+function syncOpenInteropDocuments(target: LanguageClient): void {
+  for (const doc of vscode.workspace.textDocuments) syncInteropDocument(target, doc);
+}
+
 function handleOpenSettings(selection: string | undefined): void {
   if (selection === "Open Settings") {
     vscode.commands.executeCommand("workbench.action.openSettings", "funscript");
@@ -148,6 +166,7 @@ export async function restartServer(): Promise<void> {
 
   client.onDidChangeState((e) => {
     if (e.newState === State.Running) {
+      if (client) syncOpenInteropDocuments(client);
       updateStatusBar(ServerStatus.Ready);
     } else if (e.newState === State.Stopped) {
       updateStatusBar(ServerStatus.Stopped);
@@ -163,6 +182,7 @@ export async function restartServer(): Promise<void> {
 
   try {
     await client.start();
+    syncOpenInteropDocuments(client);
     updateStatusBar(ServerStatus.Ready);
     vscode.window.showInformationMessage("FunScript Language Server restarted successfully.");
   } catch (error: any) {
@@ -314,6 +334,13 @@ export function activate(context: vscode.ExtensionContext): void {
   );
 
   context.subscriptions.push(
+    vscode.workspace.onDidOpenTextDocument(doc => { if (client?.state === State.Running) syncInteropDocument(client, doc); }),
+    vscode.workspace.onDidChangeTextDocument(event => { if (client?.state === State.Running) syncInteropDocument(client, event.document); }),
+    vscode.workspace.onDidCloseTextDocument(doc => {
+      if (client?.state === State.Running && isInteropDocument(doc)) {
+        void client.sendNotification("funscript/interopDocument", { kind: "close", uri: doc.uri.toString() }).catch(() => {});
+      }
+    }),
     vscode.workspace.onDidChangeConfiguration(async (event) => {
       if (event.affectsConfiguration("funscript.serverPath")) {
         const answer = await vscode.window.showInformationMessage(
@@ -350,6 +377,7 @@ export function activate(context: vscode.ExtensionContext): void {
 
   client.onDidChangeState((e) => {
     if (e.newState === State.Running) {
+      if (client) syncOpenInteropDocuments(client);
       updateStatusBar(ServerStatus.Ready);
     } else if (e.newState === State.Stopped) {
       updateStatusBar(ServerStatus.Stopped);
@@ -365,6 +393,7 @@ export function activate(context: vscode.ExtensionContext): void {
 
   client.start().then(
     () => {
+      if (client) syncOpenInteropDocuments(client);
       updateStatusBar(ServerStatus.Ready);
     },
     (error: any) => {

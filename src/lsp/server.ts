@@ -1,9 +1,9 @@
 import { EventEmitter } from "node:events";
+import { Worker } from "node:worker_threads";
 import type { Readable, Writable } from "node:stream";
 import { fileURLToPath, pathToFileURL } from "node:url";
-import { readdirSync, readFileSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { isAbsolute, join, relative, resolve } from "node:path";
-import { Effect } from "effect";
 import {
   createConnection,
   type Connection,
@@ -52,13 +52,15 @@ import { Parser } from "../parser/parser.js";
 import { TypeScriptCompilationContext } from "../compiler/typescript-context.js";
 import { validateNumericComparisons } from "../compiler/numeric-comparisons.js";
 import { ImportedSchemaError, resolveImportedSchemas } from "../compiler/imported-schemas.js";
-import { typeCheckVirtualFiles, createTypeCheckCache, type TypeCheckCache } from "../compiler/check.js";
 import { format } from "../formatter/index.js";
 import type { Span } from "../ast/types.js";
 import { findHoverAsync } from "./hover.js";
 import { complete } from "./completion.js";
 import { documentSymbols, workspaceSymbols, references, prepareRename, rename, findWorkspaceDefinition } from "./navigation.js";
-import { renameInterop } from "./interop-rename.js";
+import { InteropRenameSession, renameInterop } from "./interop-rename.js";
+import { ParsedDocumentCache } from "./parsed-documents.js";
+
+type InteropDocumentNotification = { kind: "upsert"; textDocument: TextDocumentItem } | { kind: "close"; uri: string };
 
 export function toDiagnostic(error: any): Diagnostic {
   const span: Span | undefined = error.span;
@@ -123,12 +125,8 @@ export function toDiagnostic(error: any): Diagnostic {
   };
 }
 
-export function validateFunScript(
-  source: string,
-  uri: string = "<anonymous>",
-): Diagnostic[] {
+function validateSyntax(source: string, uri: string): { diagnostics: Diagnostic[]; ast?: import("../ast/types.js").Program } {
   const diagnostics: Diagnostic[] = [];
-
   try {
     const lexer = new Lexer(source, uri);
     const tokens = lexer.tokenize();
@@ -137,23 +135,24 @@ export function validateFunScript(
     // Recovery can produce cascading errors inside a single malformed block.
     const firstDiagnostic = parser.getDiagnostics()[0];
     if (firstDiagnostic) diagnostics.push(toDiagnostic(firstDiagnostic));
-
-    if (diagnostics.length === 0) {
-      try {
-        const context = new TypeScriptCompilationContext(uri);
-        // AssemblyScript kernels are prepared asynchronously by type checking.
-        if (!ast.body.some(decl => decl.kind === "AsDeclaration")) {
-          validateNumericComparisons(ast, source, context);
-        }
-        resolveImportedSchemas(ast, source, context);
-      } catch (error: any) {
-        diagnostics.push(toDiagnostic(error));
-      }
-    }
+    return { diagnostics, ast };
   } catch (error: any) {
     diagnostics.push(toDiagnostic(error));
+    return { diagnostics };
   }
+}
 
+export function validateFunScript(source: string, uri: string = "<anonymous>"): Diagnostic[] {
+  const { diagnostics, ast } = validateSyntax(source, uri);
+  if (!diagnostics.length && ast) {
+    try {
+      const context = new TypeScriptCompilationContext(uri);
+      if (!ast.body.some(decl => decl.kind === "AsDeclaration")) validateNumericComparisons(ast, source, context);
+      resolveImportedSchemas(ast, source, context);
+    } catch (error: any) {
+      diagnostics.push(toDiagnostic(error));
+    }
+  }
   return diagnostics;
 }
 
@@ -171,15 +170,24 @@ class NormalizingMessageReader extends StreamMessageReader {
 
 export class FunScriptLspServer extends EventEmitter {
   private documents: Map<string, TextDocumentItem> = new Map();
+  private interopDocuments: Map<string, TextDocumentItem> = new Map();
   private isInitialized = false;
   private isShutdown = false;
   private clientCapabilities: any = null;
   private workspaceRoots: string[] = [];
+  private readonly interopRenameSession = new InteropRenameSession();
+  private readonly parsedDocuments = new ParsedDocumentCache();
+  private renameWorker?: Worker;
+  private renameWorkerId = 0;
+  private documentRevision = 0;
+  private readonly pendingRenames = new Map<number, { revision: number; resolve: (result: any) => void }>();
   private connection: Connection | null = null;
   private diagnosticTimer: ReturnType<typeof setTimeout> | undefined;
   private diagnosticRevision = 0;
-  private syntaxErrors = new Set<string>();
-  private typeCheckCache: TypeCheckCache = createTypeCheckCache();
+  private diagnosticWorker?: Worker;
+  private diagnosticBusy = false;
+  private queuedDiagnostics?: { revision: number; documents: TextDocumentItem[] };
+  private readonly syntaxErrors = new Set<string>();
 
   constructor() {
     super();
@@ -225,6 +233,7 @@ export class FunScriptLspServer extends EventEmitter {
     connection.onDidCloseTextDocument((params) => {
       this.onDidCloseHandler(params);
     });
+    connection.onNotification("funscript/interopDocument", params => this.onInteropDocument(params as InteropDocumentNotification));
 
     connection.onDocumentFormatting((params) =>
       this.onFormattingHandler(params),
@@ -238,13 +247,19 @@ export class FunScriptLspServer extends EventEmitter {
     connection.onDocumentSymbol((params) => this.onDocumentSymbolHandler(params));
     connection.onWorkspaceSymbol((params) => this.onWorkspaceSymbolHandler(params));
     connection.onReferences((params) => this.onReferencesHandler(params));
-    connection.onPrepareRename((params) => this.onPrepareRenameHandler(params));
-    connection.onRenameRequest((params) => this.onRenameHandler(params));
+    connection.onPrepareRename((params) => this.renameInWorker("prepare", params));
+    connection.onRenameRequest((params) => this.renameInWorker("rename", params));
   }
 
   public onInitializeHandler(params: InitializeParams): InitializeResult {
     this.isInitialized = true;
     this.clientCapabilities = params?.capabilities;
+    this.stopRenameWorker();
+    this.stopDiagnosticWorker();
+    this.documentRevision++;
+    this.interopDocuments.clear();
+    this.interopRenameSession.dispose();
+    this.parsedDocuments.clear();
     const roots = params?.workspaceFolders?.map(folder => folder.uri) ?? (params?.rootUri ? [params.rootUri] : []);
     this.workspaceRoots = roots.flatMap(uri => {
       try { return [resolve(fileURLToPath(uri))]; } catch { return []; }
@@ -275,6 +290,8 @@ export class FunScriptLspServer extends EventEmitter {
 
   public onShutdownHandler(): null {
     this.isShutdown = true;
+    this.stopRenameWorker();
+    this.stopDiagnosticWorker();
     return null;
   }
 
@@ -285,22 +302,26 @@ export class FunScriptLspServer extends EventEmitter {
 
   public onDidOpenHandler(params: DidOpenTextDocumentParams): void {
     if (params?.textDocument) {
+      this.documentRevision++;
       this.documents.set(params.textDocument.uri, params.textDocument);
-      const diagnostics = this.validateSource(
+      const diagnostics = validateSyntax(
         params.textDocument.text,
         params.textDocument.uri,
-      );
+      ).diagnostics;
+      if (diagnostics.length) this.syntaxErrors.add(params.textDocument.uri);
+      else this.syntaxErrors.delete(params.textDocument.uri);
       this.publishDiagnostics(
         params.textDocument.uri,
         params.textDocument.version,
         diagnostics,
       );
-      this.scheduleTypeDiagnostics(params.textDocument.uri, diagnostics);
+      this.scheduleTypeDiagnostics();
     }
   }
 
   public onDidChangeHandler(params: DidChangeTextDocumentParams): void {
     if (params?.textDocument && Array.isArray(params.contentChanges)) {
+      this.documentRevision++;
       const doc = this.documents.get(params.textDocument.uri);
       const lastChange =
         params.contentChanges[params.contentChanges.length - 1];
@@ -314,28 +335,23 @@ export class FunScriptLspServer extends EventEmitter {
         text: newText,
       };
       this.documents.set(params.textDocument.uri, updatedDoc);
-      const diagnostics = this.validateSource(newText, params.textDocument.uri);
+      const diagnostics = validateSyntax(newText, params.textDocument.uri).diagnostics;
+      if (diagnostics.length) this.syntaxErrors.add(updatedDoc.uri);
+      else this.syntaxErrors.delete(updatedDoc.uri);
       this.publishDiagnostics(
         params.textDocument.uri,
         updatedVersion,
         diagnostics,
       );
-      this.scheduleTypeDiagnostics(updatedDoc.uri, diagnostics);
+      this.scheduleTypeDiagnostics();
     }
   }
 
   public onDidCloseHandler(params: DidCloseTextDocumentParams): void {
     if (params?.textDocument) {
+      this.documentRevision++;
       this.documents.delete(params.textDocument.uri);
       this.syntaxErrors.delete(params.textDocument.uri);
-      try {
-        const filename = fileURLToPath(params.textDocument.uri);
-        this.typeCheckCache.compiledFiles.delete(filename);
-        const ext = filename.endsWith(".funx") ? ".tsx" : ".ts";
-        this.typeCheckCache.sourceFiles.delete(filename.replace(/\.(fun|funx)$/, ext));
-      } catch {
-        // ignore non-file documents
-      }
       this.scheduleTypeDiagnostics();
       this.publishDiagnostics(params.textDocument.uri, undefined, []);
     }
@@ -489,9 +505,67 @@ export class FunScriptLspServer extends EventEmitter {
     const snapshot = this.workspaceSnapshot();
     if (this.isInitialized && (!this.workspaceRoots.length || !snapshot)) return null;
     if (!doc) return null;
-    const selected = prepareRename(doc.text, uri!, params.position, snapshot?.fun ?? this.getDocuments());
+    const selected = prepareRename(doc.text, uri!, params.position, snapshot?.fun ?? this.getDocuments(), this.parsedDocuments);
     if (!selected || !("placeholder" in selected)) return null;
     return this.onRenameHandler({ textDocument: params.textDocument, position: params.position, newName: selected.placeholder }) ? selected : null;
+  }
+
+  /** Synchronize an immutable editor snapshot inside the dedicated rename worker. */
+  public setRenameWorkerDocuments(docs: TextDocumentItem[]): void {
+    this.documents = new Map(docs.map(doc => [doc.uri, doc]));
+  }
+
+  private onInteropDocument(params: InteropDocumentNotification): void {
+    if (params?.kind === "upsert" && params.textDocument && /\.[cm]?[jt]sx?$/.test(params.textDocument.uri)) {
+      const current = this.interopDocuments.get(params.textDocument.uri);
+      if (current && current.version === params.textDocument.version && current.text === params.textDocument.text && current.languageId === params.textDocument.languageId) return;
+      this.documentRevision++;
+      this.interopDocuments.set(params.textDocument.uri, params.textDocument);
+    } else if (params?.kind === "close" && this.interopDocuments.delete(params.uri)) {
+      this.documentRevision++;
+    }
+  }
+
+  private renameInWorker(method: "prepare" | "rename", params: PrepareRenameParams | RenameParams): Promise<any> {
+    if (!this.renameWorker) {
+      try {
+        const worker = new Worker(new URL("./rename-worker.js", import.meta.url), { execArgv: [] });
+        worker.unref();
+        this.renameWorker = worker;
+        worker.on("message", (message: { id: number; result: unknown }) => {
+          const pending = this.pendingRenames.get(message.id);
+          if (!pending) return;
+          this.pendingRenames.delete(message.id);
+          pending.resolve(pending.revision === this.documentRevision ? message.result : null);
+        });
+        const failed = () => {
+          if (this.renameWorker !== worker) return;
+          this.renameWorker = undefined;
+          for (const pending of this.pendingRenames.values()) pending.resolve(null);
+          this.pendingRenames.clear();
+        };
+        worker.on("error", failed);
+        worker.on("exit", failed);
+      } catch { return Promise.resolve(null); }
+    }
+    const id = ++this.renameWorkerId;
+    return new Promise(resolve => {
+      this.pendingRenames.set(id, { revision: this.documentRevision, resolve });
+      try {
+        this.renameWorker!.postMessage({ id, method, params, roots: this.workspaceRoots.map(root => pathToFileURL(root).href), documents: [...this.documents.values(), ...this.interopDocuments.values()] });
+      } catch {
+        this.pendingRenames.delete(id);
+        resolve(null);
+      }
+    });
+  }
+
+  private stopRenameWorker(): void {
+    const worker = this.renameWorker;
+    this.renameWorker = undefined;
+    for (const pending of this.pendingRenames.values()) pending.resolve(null);
+    this.pendingRenames.clear();
+    if (worker) void worker.terminate();
   }
 
   public onRenameHandler(params: RenameParams): WorkspaceEdit | null {
@@ -502,21 +576,21 @@ export class FunScriptLspServer extends EventEmitter {
     const snapshot = this.workspaceSnapshot();
     if (this.isInitialized && (!this.workspaceRoots.length || !snapshot)) return null;
     const docs = snapshot?.fun ?? this.getDocuments();
-    const selected = prepareRename(doc.text, uri!, params.position, docs);
+    this.parsedDocuments.retain(docs);
+    const selected = prepareRename(doc.text, uri!, params.position, docs, this.parsedDocuments);
     if (!selected || !("placeholder" in selected)) return null;
     const name = selected.placeholder;
     const identifier = new RegExp(`(^|[^\\w$])${name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}([^\\w$]|$)`);
     for (const file of docs) {
       if (!identifier.test(file.text)) continue;
-      try { new Parser(new Lexer(file.text, file.uri).tokenize(), file.uri, file.text).parse(); }
-      catch { return null; }
+      if (!this.parsedDocuments.get(file).ast) return null;
     }
-    let edit = rename(doc.text, uri!, params.position, params.newName, docs);
+    let edit = rename(doc.text, uri!, params.position, params.newName, docs, this.parsedDocuments);
     if (this.isInitialized && edit?.changes && Object.keys(edit.changes).some(target => !this.inWorkspace(target))) return null;
     if (edit?.changes) for (const file of docs) {
       if (!edit.changes[file.uri]) continue;
-      let ast;
-      try { ast = new Parser(new Lexer(file.text, file.uri).tokenize(), file.uri, file.text).parse(); } catch { return null; }
+      const ast = this.parsedDocuments.get(file).ast;
+      if (!ast) return null;
       for (const item of ast.body) {
         if (item.kind !== "ExportDeclaration" || item.declaration.kind !== "SchemaDeclaration") continue;
         const id = item.declaration.id;
@@ -526,7 +600,7 @@ export class FunScriptLspServer extends EventEmitter {
       }
     }
     if (edit && snapshot) {
-      try { edit = renameInterop(docs, snapshot.interop, edit, name, params.newName, this.workspaceRoots); }
+      try { edit = renameInterop(docs, snapshot.interop, edit, name, params.newName, this.workspaceRoots, this.interopRenameSession, this.parsedDocuments); }
       catch { return null; }
     }
     if (this.isInitialized && edit?.changes && Object.keys(edit.changes).some(target => !this.inWorkspace(target))) return null;
@@ -562,7 +636,7 @@ export class FunScriptLspServer extends EventEmitter {
       }
     };
     try { for (const root of this.workspaceRoots) walk(root); } catch { return null; }
-    for (const doc of this.documents.values()) files.set(doc.uri, doc);
+    for (const doc of [...this.documents.values(), ...this.interopDocuments.values()]) files.set(doc.uri, doc);
     const all = [...files.values()];
     return { fun: all.filter(doc => /\.(?:fun|funs|funx)$/.test(doc.uri)), interop: all.filter(doc => /\.[cm]?[jt]sx?$/.test(doc.uri)) };
   }
@@ -662,8 +736,8 @@ export class FunScriptLspServer extends EventEmitter {
     if (req.method === "textDocument/documentSymbol") return { jsonrpc: "2.0", id: req.id, result: this.onDocumentSymbolHandler(req.params as DocumentSymbolParams) };
     if (req.method === "workspace/symbol") return { jsonrpc: "2.0", id: req.id, result: this.onWorkspaceSymbolHandler(req.params as WorkspaceSymbolParams) };
     if (req.method === "textDocument/references") return { jsonrpc: "2.0", id: req.id, result: this.onReferencesHandler(req.params as ReferenceParams) };
-    if (req.method === "textDocument/prepareRename") return { jsonrpc: "2.0", id: req.id, result: this.onPrepareRenameHandler(req.params as PrepareRenameParams) };
-    if (req.method === "textDocument/rename") return { jsonrpc: "2.0", id: req.id, result: this.onRenameHandler(req.params as RenameParams) };
+    if (req.method === "textDocument/prepareRename") return { jsonrpc: "2.0", id: req.id, result: await this.renameInWorker("prepare", req.params as PrepareRenameParams) };
+    if (req.method === "textDocument/rename") return { jsonrpc: "2.0", id: req.id, result: await this.renameInWorker("rename", req.params as RenameParams) };
 
     return {
       jsonrpc: "2.0",
@@ -676,6 +750,10 @@ export class FunScriptLspServer extends EventEmitter {
   }
 
   private handleNotification(notif: NotificationMessage): void {
+    if (notif.method === "funscript/interopDocument") {
+      this.onInteropDocument(notif.params as InteropDocumentNotification);
+      return;
+    }
     if (notif.method === "initialized") {
       this.emit("initialized");
       return;
@@ -706,47 +784,71 @@ export class FunScriptLspServer extends EventEmitter {
     return validateFunScript(source, uri);
   }
 
-  private scheduleTypeDiagnostics(uri?: string, syntaxDiagnostics?: Diagnostic[]): void {
-    if (uri && syntaxDiagnostics) {
-      if (syntaxDiagnostics.length) this.syntaxErrors.add(uri);
-      else this.syntaxErrors.delete(uri);
-    }
+  private scheduleTypeDiagnostics(): void {
     const revision = ++this.diagnosticRevision;
     if (this.diagnosticTimer) clearTimeout(this.diagnosticTimer);
     this.diagnosticTimer = setTimeout(() => {
       this.diagnosticTimer = undefined;
-      const files: Record<string, string> = {};
-      const documents = new Map<string, TextDocumentItem>();
-      for (const openDoc of this.documents.values()) {
-        if (!openDoc.uri.startsWith("file:")) continue;
-        try {
-          const filename = fileURLToPath(openDoc.uri);
-          files[filename] = openDoc.text;
-          documents.set(filename, openDoc);
-        } catch { /* Ignore non-file documents. */ }
-      }
-      if (!documents.size) return;
-      void Effect.runPromise(typeCheckVirtualFiles(files, { cache: this.typeCheckCache })).then((result) => {
-        if (this.diagnosticRevision !== revision) return;
-        for (const [filename, doc] of documents) {
-          if (this.syntaxErrors.has(doc.uri)) continue;
-          const diagnostics: Diagnostic[] = result.diagnostics.filter((item) => item.file === filename).map((item) => ({
-            range: {
-              start: { line: Math.max(0, item.line - 1), character: Math.max(0, item.column - 1) },
-              end: { line: Math.max(0, (item.endLine ?? item.line) - 1), character: Math.max(0, (item.endColumn ?? item.column + 1) - 1) },
-            },
-            severity: item.category === "error" ? DiagnosticSeverity.Error : item.category === "warning" ? DiagnosticSeverity.Warning : DiagnosticSeverity.Information,
-            source: "funscript",
-            code: item.code,
-            message: item.message,
-          }));
-          this.publishDiagnostics(doc.uri, doc.version, diagnostics);
-        }
-      }).catch((error) => {
-        console.error("FunScript type checking failed:", error);
-      });
+      const request = { revision, documents: this.getDocuments() };
+      if (!request.documents.length && !this.diagnosticWorker) return;
+      if (this.diagnosticBusy) this.queuedDiagnostics = request;
+      else this.dispatchDiagnostics(request);
     }, 250);
     this.diagnosticTimer.unref();
+  }
+
+  private dispatchDiagnostics(request: { revision: number; documents: TextDocumentItem[] }): void {
+    if (!this.diagnosticWorker) {
+      try {
+        let workerUrl = new URL("./diagnostics-worker.js", import.meta.url);
+        // Source-level tests and development load the compiled worker from dist.
+        if (!existsSync(fileURLToPath(workerUrl))) workerUrl = new URL("../../dist/lsp/diagnostics-worker.js", import.meta.url);
+        const worker = new Worker(workerUrl, { execArgv: [] });
+        worker.unref();
+        this.diagnosticWorker = worker;
+        worker.on("message", (response: { revision: number; complete?: boolean; diagnostics?: PublishDiagnosticsParams[]; error?: string }) => {
+          if (this.diagnosticWorker !== worker) return;
+          if (response.error) console.error("FunScript type checking failed:", response.error);
+          if (!response.error && response.revision === this.diagnosticRevision) {
+            for (const result of response.diagnostics ?? []) if (!this.syntaxErrors.has(result.uri)) this.publishDiagnostics(result.uri, result.version, result.diagnostics);
+          }
+          if (response.complete === false) return;
+          this.diagnosticBusy = false;
+          const queued = this.queuedDiagnostics;
+          this.queuedDiagnostics = undefined;
+          if (queued && queued.revision === this.diagnosticRevision) this.dispatchDiagnostics(queued);
+        });
+        const failed = (error?: Error) => {
+          if (this.diagnosticWorker !== worker) return;
+          this.diagnosticWorker = undefined;
+          this.diagnosticBusy = false;
+          this.queuedDiagnostics = undefined;
+          if (error) console.error("FunScript diagnostic worker failed:", error.message);
+        };
+        worker.on("error", failed);
+        worker.on("exit", () => failed());
+      } catch (error) {
+        console.error("FunScript diagnostic worker failed:", error);
+        return;
+      }
+    }
+    this.diagnosticBusy = true;
+    try { this.diagnosticWorker.postMessage(request); }
+    catch (error) {
+      this.diagnosticBusy = false;
+      console.error("FunScript diagnostic worker failed:", error);
+    }
+  }
+
+  private stopDiagnosticWorker(): void {
+    if (this.diagnosticTimer) clearTimeout(this.diagnosticTimer);
+    this.diagnosticTimer = undefined;
+    this.diagnosticRevision++;
+    this.diagnosticBusy = false;
+    this.queuedDiagnostics = undefined;
+    const worker = this.diagnosticWorker;
+    this.diagnosticWorker = undefined;
+    if (worker) void worker.terminate();
   }
 
   public publishDiagnostics(
@@ -785,15 +887,17 @@ export class FunScriptLspServer extends EventEmitter {
   }
 
   public dispose(): void {
-    if (this.diagnosticTimer) clearTimeout(this.diagnosticTimer);
-    this.diagnosticTimer = undefined;
-    this.diagnosticRevision++;
-    this.typeCheckCache.clear();
+    this.stopDiagnosticWorker();
+    this.interopRenameSession.dispose();
+    this.parsedDocuments.clear();
+    this.stopRenameWorker();
     if (this.connection) {
       this.connection.dispose();
       this.connection = null;
     }
     this.documents.clear();
+    this.syntaxErrors.clear();
+    this.interopDocuments.clear();
     this.removeAllListeners();
   }
 }

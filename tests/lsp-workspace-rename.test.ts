@@ -1,4 +1,4 @@
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, rmSync, unlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
@@ -155,6 +155,55 @@ describe("workspace rename", () => {
     server.onDidOpenHandler({ textDocument: { uri: uri("lib.fun"), languageId: "funscript", version: 1, text: "export schema Country = { name: String }\n" } });
     const result = server.onRenameHandler({ textDocument: { uri: uri("lib.fun") }, position: { line: 0, character: 16 }, newName: "Nation" });
     expect(result?.changes?.[uri("app.ts")]).toBeDefined();
+    server.dispose();
+  });
+
+  it("refreshes reused TypeScript analysis after disk and unsaved buffer changes", () => {
+    const { server, uri, write } = project();
+    write("lib.fun", "export value = 1\n");
+    write("app.ts", 'import { value } from "./lib.js";\nconsole.log(value);\n');
+    server.onDidOpenHandler({ textDocument: { uri: uri("lib.fun"), languageId: "funscript", version: 1, text: "export value = 1\n" } });
+    const request = { textDocument: { uri: uri("lib.fun") }, position: { line: 0, character: 8 }, newName: "amount" };
+    expect(server.onRenameHandler(request)?.changes?.[uri("app.ts")]).toBeDefined();
+    write("app.ts", "export const unrelated = 1;\n");
+    expect(server.onRenameHandler(request)?.changes?.[uri("app.ts")]).toBeUndefined();
+    write("new.ts", 'import { value } from "./lib.js";\n');
+    expect(server.onRenameHandler(request)?.changes?.[uri("new.ts")]).toBeDefined();
+    server.onDidOpenHandler({ textDocument: { uri: uri("new.ts"), languageId: "typescript", version: 1, text: "export const unrelated = 1;\n" } });
+    expect(server.onRenameHandler(request)?.changes?.[uri("new.ts")]).toBeUndefined();
+    server.onDidCloseHandler({ textDocument: { uri: uri("new.ts") } });
+    expect(server.onRenameHandler(request)?.changes?.[uri("new.ts")]).toBeDefined();
+    unlinkSync(new URL(uri("new.ts")));
+    expect(server.onRenameHandler(request)?.changes?.[uri("new.ts")]).toBeUndefined();
+    server.dispose();
+  });
+
+  it("refreshes module resolution after tsconfig changes", () => {
+    const { server, uri, write } = project();
+    write("lib.fun", "export value = 1\n");
+    write("app.ts", 'import { value } from "@/lib.fun";\n');
+    write("tsconfig.json", JSON.stringify({ compilerOptions: { baseUrl: ".", paths: { "@/*": ["./*"] } } }));
+    server.onDidOpenHandler({ textDocument: { uri: uri("lib.fun"), languageId: "funscript", version: 1, text: "export value = 1\n" } });
+    const request = { textDocument: { uri: uri("lib.fun") }, position: { line: 0, character: 8 }, newName: "amount" };
+    expect(server.onRenameHandler(request)?.changes?.[uri("app.ts")]).toBeDefined();
+    write("tsconfig.json", JSON.stringify({ compilerOptions: { baseUrl: ".", paths: { "@/*": ["missing/*"] } } }));
+    expect(server.onRenameHandler(request)).toBeNull();
+    write("tsconfig.json", JSON.stringify({ compilerOptions: { baseUrl: ".", paths: { "@/*": ["./*"] } } }));
+    expect(server.onRenameHandler(request)?.changes?.[uri("app.ts")]).toBeDefined();
+    server.dispose();
+  });
+
+  it("refreshes resolution when a TypeScript module starts or stops shadowing FunScript", () => {
+    const { server, uri, write } = project();
+    write("lib.fun", "export value = 1\n");
+    write("app.ts", 'import { value } from "./lib.js";\nconsole.log(value);\n');
+    server.onDidOpenHandler({ textDocument: { uri: uri("lib.fun"), languageId: "funscript", version: 1, text: "export value = 1\n" } });
+    const request = { textDocument: { uri: uri("lib.fun") }, position: { line: 0, character: 8 }, newName: "amount" };
+    expect(server.onRenameHandler(request)?.changes?.[uri("app.ts")]).toBeDefined();
+    write("lib.ts", "export const value = 2;\n");
+    expect(server.onRenameHandler(request)?.changes?.[uri("app.ts")]).toBeUndefined();
+    unlinkSync(new URL(uri("lib.ts")));
+    expect(server.onRenameHandler(request)?.changes?.[uri("app.ts")]).toBeDefined();
     server.dispose();
   });
 });

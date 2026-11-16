@@ -3,14 +3,12 @@ import { dirname, resolve } from "node:path";
 import { DefinitionFinder, findDefinition, spanToRange } from "./definition.js";
 import { Lexer } from "../lexer/lexer.js";
 import { Parser } from "../parser/parser.js";
-import { TokenType } from "../lexer/tokens.js";
+import { ParsedDocumentCache, type Occurrence, type ParsedDocument } from "./parsed-documents.js";
 import type { Program } from "../ast/types.js";
 import type { TextDocumentItem, Location, LocationLink, DocumentSymbol, SymbolInformation, PrepareRenameResult, WorkspaceEdit, TextEdit } from "vscode-languageserver/node";
 
 type Doc = Pick<TextDocumentItem, "uri" | "text">;
-type Occurrence = { name: string; start: number; end: number; line: number; character: number };
-
-type AnalyzedDocument = { doc: Doc; ast: Program | null; occurrences: Occurrence[] };
+type AnalyzedDocument = ParsedDocument;
 
 function parse(source: string, uri: string): Program | null {
   try { return new Parser(new Lexer(source, uri).tokenize(), uri, source).parse(); } catch { return null; }
@@ -22,22 +20,14 @@ class NavigationAnalysis {
   private readonly identities = new Map<string, string>();
   private readonly documents: Doc[];
 
-  constructor(source: string, uri: string, docs: Doc[]) {
+  constructor(source: string, uri: string, docs: Doc[], private readonly cache = new ParsedDocumentCache()) {
     this.documents = [...docs.filter((doc) => doc.uri !== uri), { uri, text: source }];
   }
 
   document(doc: Doc): AnalyzedDocument {
     const existing = this.analyzed.get(doc.uri);
     if (existing) return existing;
-    let ast: Program | null = null;
-    let occurrences: Occurrence[] = [];
-    try {
-      const tokens = new Lexer(doc.text, doc.uri).tokenize();
-      occurrences = tokens.filter((token) => token.type === TokenType.IDENTIFIER || token.type === TokenType.UPPER_IDENTIFIER)
-        .map((token) => ({ name: token.value, start: token.span.start.offset, end: token.span.end.offset, line: token.span.start.line - 1, character: token.span.start.column - 1 }));
-      ast = new Parser(tokens, doc.uri, doc.text).parse();
-    } catch { /* Invalid source cannot be resolved safely. */ }
-    const analyzed = { doc, ast, occurrences };
+    const analyzed = this.cache.get(doc);
     this.analyzed.set(doc.uri, analyzed);
     return analyzed;
   }
@@ -188,17 +178,17 @@ export function references(source: string, uri: string, position: {line:number; 
 }
 
 const reserved = new Set("as async await break case catch class const continue debugger default delete do else export extends finally for from function if import in instanceof let new return switch this throw try typeof var void while with yield schema service error match when effect mut fn type number string boolean null undefined".split(" "));
-export function prepareRename(source: string, uri: string, position: {line:number; character:number}, docs: Doc[]): PrepareRenameResult | null {
-  const analysis = new NavigationAnalysis(source, uri, docs);
+export function prepareRename(source: string, uri: string, position: {line:number; character:number}, docs: Doc[], cache?: ParsedDocumentCache): PrepareRenameResult | null {
+  const analysis = new NavigationAnalysis(source, uri, docs, cache);
   const occ = analysis.selected(uri, position);
   if (!occ || reserved.has(occ.name) || occ.name.startsWith("__") || occ.name.startsWith("$")) return null;
   if (!analysis.renameIdentity({ uri, text: source }, occ)) return null;
   return { range: { start:{line:occ.line,character:occ.character}, end:{line:occ.line,character:occ.character+occ.name.length} }, placeholder: occ.name };
 }
 
-export function rename(source: string, uri: string, position: {line:number; character:number}, newName: string, docs: Doc[]): WorkspaceEdit | null {
+export function rename(source: string, uri: string, position: {line:number; character:number}, newName: string, docs: Doc[], cache?: ParsedDocumentCache): WorkspaceEdit | null {
   if (!/^[A-Za-z_$][\w$]*$/.test(newName) || reserved.has(newName) || newName.startsWith("$") || newName.startsWith("__")) return null;
-  const analysis = new NavigationAnalysis(source, uri, docs);
+  const analysis = new NavigationAnalysis(source, uri, docs, cache);
   const selected = analysis.selected(uri, position);
   if (!selected || reserved.has(selected.name) || selected.name.startsWith("__") || selected.name.startsWith("$")) return null;
   const current = { uri, text: source };

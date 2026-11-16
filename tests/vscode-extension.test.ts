@@ -23,6 +23,8 @@ const mockOutputChannel = {
 };
 
 const registeredCommands = new Map<string, Function>();
+const workspaceEvents = new Map<string, Function>();
+const openDocuments: any[] = [];
 
 vi.mock("vscode", () => {
   return {
@@ -46,6 +48,8 @@ vi.mock("vscode", () => {
       executeCommand: vi.fn().mockResolvedValue(undefined),
     },
     workspace: {
+      textDocuments: openDocuments,
+      getWorkspaceFolder: vi.fn(() => ({})),
       getConfiguration: vi.fn(() => ({
         get: vi.fn((key: string, defaultValue?: any) => defaultValue ?? "funscript"),
       })),
@@ -54,6 +58,9 @@ vi.mock("vscode", () => {
         dispose: vi.fn(),
       })),
       onDidChangeConfiguration: vi.fn(() => ({ dispose: vi.fn() })),
+      onDidOpenTextDocument: vi.fn((callback: Function) => { workspaceEvents.set("open", callback); return { dispose: vi.fn() }; }),
+      onDidChangeTextDocument: vi.fn((callback: Function) => { workspaceEvents.set("change", callback); return { dispose: vi.fn() }; }),
+      onDidCloseTextDocument: vi.fn((callback: Function) => { workspaceEvents.set("close", callback); return { dispose: vi.fn() }; }),
       openTextDocument: vi.fn().mockResolvedValue({ uri: "untitled:test.ts", getText: () => "" }),
     },
     StatusBarAlignment: {
@@ -75,6 +82,8 @@ vi.mock("vscode-languageclient/node", () => {
     started = false;
     stopped = false;
     trace: any = undefined;
+    sendNotification = vi.fn().mockResolvedValue(undefined);
+    get state() { return this.started && !this.stopped ? 2 : 1; }
 
     constructor(id: string, name: string, serverOptions: any, clientOptions: any) {
       this.id = id;
@@ -647,6 +656,23 @@ describe("VS Code Extension Package (TASK-018)", () => {
       await expect(formatCurrentFile()).resolves.not.toThrow();
       await expect(restartServer()).resolves.not.toThrow();
       await expect(openGeneratedTypeScript()).resolves.not.toThrow();
+    });
+
+    it("synchronizes open TypeScript buffers for cross-language rename", async () => {
+      const { activate, getClient, deactivate } = await import("../editors/vscode/src/extension.js");
+      let text = 'import { value } from "./lib.js";';
+      const doc = { fileName: "/project/app.ts", languageId: "typescript", version: 1, uri: { scheme: "file", toString: () => "file:///project/app.ts" }, getText: () => text };
+      openDocuments.push(doc);
+      activate({ subscriptions: [] } as any);
+      await vi.waitFor(() => expect((getClient() as any).sendNotification).toHaveBeenCalledWith("funscript/interopDocument", expect.objectContaining({ kind: "upsert", textDocument: expect.objectContaining({ text }) })));
+      text = "const unsaved = 1;";
+      doc.version = 2;
+      workspaceEvents.get("change")!({ document: doc });
+      expect((getClient() as any).sendNotification).toHaveBeenLastCalledWith("funscript/interopDocument", expect.objectContaining({ textDocument: expect.objectContaining({ text, version: 2 }) }));
+      workspaceEvents.get("close")!(doc);
+      expect((getClient() as any).sendNotification).toHaveBeenLastCalledWith("funscript/interopDocument", { kind: "close", uri: "file:///project/app.ts" });
+      openDocuments.splice(0);
+      await deactivate();
     });
   });
 });

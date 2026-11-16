@@ -28,6 +28,11 @@ preserved. Rename requires a local workspace and declines when it cannot inspect
 resolve a potentially relevant import, avoid a binding collision, or account for an
 in-use generated schema companion or dynamic namespace access. Review the proposed edits before applying them.
 References outside the workspace and unsupported module resolution are not indexed.
+The VS Code extension synchronizes open JavaScript and TypeScript buffers for rename.
+Other LSP clients must send `funscript/interopDocument` notifications to provide those
+unsaved buffers; otherwise the server reads their contents from disk. Send
+`{ "kind": "upsert", "textDocument": { "uri": ..., "languageId": ..., "version": ..., "text": ... } }`
+on open and change, and `{ "kind": "close", "uri": ... }` on close.
 
 ## Hover information
 
