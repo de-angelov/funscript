@@ -261,28 +261,78 @@ const AUTO_NEW_CONSTRUCTORS = new Set([
 ]);
 
 const EFFECT_BUILTIN_MODULES = new Set([
-  "Console",
-  "Effect",
-  "Random",
-  "Clock",
-  "DateTime",
-  "Schedule",
   "Array",
+  "BigDecimal",
+  "BigInt",
+  "Boolean",
+  "Brand",
+  "Cache",
+  "Cause",
+  "Chunk",
+  "Clock",
+  "Config",
+  "ConfigProvider",
+  "Console",
+  "Context",
+  "Cron",
+  "Data",
+  "DateTime",
+  "Deferred",
+  "Duration",
+  "Effect",
+  "Equal",
+  "Exit",
+  "Fiber",
+  "FiberMap",
+  "FiberSet",
+  "HashMap",
+  "HashSet",
+  "Layer",
+  "LogLevel",
+  "Logger",
+  "Match",
+  "Metric",
+  "Number",
   "Option",
+  "Order",
+  "PubSub",
+  "Queue",
+  "Random",
+  "Record",
+  "Redacted",
+  "Ref",
+  "Result",
+  "Runtime",
+  "Schedule",
   "Schema",
+  "Scope",
+  "Sink",
+  "Stream",
+  "String",
+  "Struct",
+  "SubscriptionRef",
+  "SynchronizedRef",
+  "Tuple",
+]);
+
+const NATIVE_CONSTRUCTOR_NAMES = new Set(["Number", "String", "Boolean", "Array"]);
+
+const EFFECT_TYPE_MODULES = new Set([
+  "Option",
+  "Duration",
+  "Result",
+  "Effect",
+  "Config",
   "Queue",
   "Ref",
   "Fiber",
-  "Context",
-  "Layer",
-  "String",
-  "Number",
-  "Record",
-  "Duration",
+  "Scope",
+  "Stream",
+  "Chunk",
   "HashMap",
   "HashSet",
-  "Result",
-  "Struct",
+  "Cause",
+  "Exit",
   "Brand",
 ]);
 
@@ -1332,6 +1382,13 @@ export class Emitter {
         if (expr.name === "dbg" && !this.isUserBinding("dbg")) {
           return `((__v: any) => { console.log(__v); return __v; })`;
         }
+        if (
+          EFFECT_BUILTIN_MODULES.has(expr.name) &&
+          !NATIVE_CONSTRUCTOR_NAMES.has(expr.name) &&
+          !this.isUserBinding(expr.name)
+        ) {
+          this.effectImports.add(expr.name);
+        }
         return expr.name;
       case "Placeholder":
         return this.currentPlaceholderParam ?? "__placeholder";
@@ -1594,7 +1651,7 @@ export class Emitter {
           /^(url|search|query|param|header|form|request|response|req|res)/i.test(root);
         if (!isWebMutable) {
           throw new FunScriptError(
-            `Native ${info.category} method '.${prop}()' is banned by the Effect style guide. Use '${info.replacement}(...)' or pipeline '${info.pipeline}' instead.`,
+            `In-place mutation '.${prop}()' is quarantined in FunScript. Use '${info.replacement}(...)' or pipeline '${info.pipeline}' instead, or isolate mutable edits inside 'mut (draft) => { ... }'.`,
             expr.callee.property.span,
           );
         }
@@ -1802,7 +1859,9 @@ export class Emitter {
       this.bindings.has(name) ||
       this.userImportBindings.has(name) ||
       this.userEffectBindings.has(name) ||
-      this.userEsToolkitBindings.has(name)
+      this.userEsToolkitBindings.has(name) ||
+      this.declaredTypeNames.has(name) ||
+      this.parameterScopes.some((scope) => scope.has(name))
     );
   }
 
@@ -2178,6 +2237,9 @@ export class Emitter {
       const obj = effectExpr.callee.object;
       if (obj.kind === "UpperIdentifier") {
         if (EFFECT_BUILTIN_MODULES.has(obj.name) || this.effectModuleBindings.has(obj.name) || obj.name === "Promise") {
+          if (EFFECT_BUILTIN_MODULES.has(obj.name) && !this.isUserBinding(obj.name)) {
+            this.effectImports.add(obj.name);
+          }
           return `${obj.name}.${this.emitMemberProperty(effectExpr.callee)}(${effectExpr.args.map((a) => this.emitExpression(a)).join(", ")})`;
         }
         // Direct Service Call: Service.method(...) => (yield* Service).method(...)
@@ -2228,9 +2290,13 @@ export class Emitter {
         if (name === "Array" && !this.declaredTypeNames.has(name)) name = "ReadonlyArray";
         else if (name === "Map" && !this.declaredTypeNames.has(name)) name = "ReadonlyMap";
         else if (name === "Set" && !this.declaredTypeNames.has(name)) name = "ReadonlySet";
-        else if (["Option", "Record", "Duration", "Result"].includes(name) && !this.declaredTypeNames.has(name)) {
+        else if (name === "Record" && !this.declaredTypeNames.has(name) && !this.isUserBinding(name)) {
+          this.effectImports.add("Record");
+          name = "Record.ReadonlyRecord";
+        }
+        else if (EFFECT_TYPE_MODULES.has(name) && !this.declaredTypeNames.has(name) && !this.isUserBinding(name)) {
           this.effectImports.add(name);
-          name = name === "Record" ? "Record.ReadonlyRecord" : `${name}.${name}`;
+          name = `${name}.${name}`;
         }
         if (node.typeArgs && node.typeArgs.length > 0) {
           return `${name}<${node.typeArgs.map((t) => this.emitTypeNode(t)).join(", ")}>`;

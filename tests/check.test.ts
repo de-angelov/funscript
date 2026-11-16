@@ -825,5 +825,95 @@ export task = effect {
       expect(resultValid.success).toBe(true);
       expect(resultValid.errorCount).toBe(0);
     });
+
+    it("auto-imports standard library Effect modules and types without manual import headers", async () => {
+      const resultPrelude = await Effect.runPromise(
+        typeCheckSource(
+          `
+export num = Option.some(42)
+export dur = Duration.millis(100)
+export cfg = Config.String("PORT")
+export readTime = effect {
+  t <- Clock.currentTimeMillis
+  => t
+}
+`.trim(),
+          "lib/prelude-sample.fun",
+        ),
+      );
+
+      expect(resultPrelude.success).toBe(true);
+      expect(resultPrelude.errorCount).toBe(0);
+    });
+
+    it("quarantines in-place array mutation outside mut (draft) => with FS_INPLACE_MUTATION", async () => {
+      // 1. Rejected outside mut block
+      const resultMutate = await Effect.runPromise(
+        typeCheckSource(
+          `
+export addItem = (arr: Array<Number>, item: Number) => {
+  arr.push(item)
+  => arr
+}
+`.trim(),
+          "lib/bad-mutation.fun",
+        ),
+      );
+
+      expect(resultMutate.success).toBe(false);
+      const mutDiag = resultMutate.diagnostics.find(
+        (d) => d.code === "INPLACE_MUTATION" || d.diagnosticCode === "FS_INPLACE_MUTATION",
+      );
+      expect(mutDiag).toBeDefined();
+      expect(mutDiag?.diagnosticCode).toBe("FS_INPLACE_MUTATION");
+      expect(mutDiag?.message).toContain("In-place mutation '.push()' is quarantined in FunScript");
+      expect(mutDiag?.suggestedAction).toContain("mut (draft) =>");
+
+      // 2. Permitted inside mut (draft) =>
+      const resultValidMut = await Effect.runPromise(
+        typeCheckSource(
+          `
+export addItem = (arr: Array<Number>, item: Number) =>
+  arr |> mut (draft) => {
+    draft.push(item)
+    => draft
+  }
+`.trim(),
+          "lib/good-mutation.fun",
+        ),
+      );
+
+      expect(resultValidMut.success).toBe(true);
+      expect(resultValidMut.errorCount).toBe(0);
+    });
+
+    it("quarantines legacy TS globals and guides developer to proper Effect tools", async () => {
+      // 1. Bare native API references and TypeError
+      const resultLegacy = await Effect.runPromise(
+        typeCheckSource(
+          `
+export myFetch = fetch
+export myTimer = setTimeout
+export badErr = TypeError("invalid argument")
+`.trim(),
+          "lib/legacy-globals.fun",
+        ),
+      );
+
+      expect(resultLegacy.success).toBe(false);
+      const fetchDiag = resultLegacy.diagnostics.find((d) => d.message.includes("fetch"));
+      expect(fetchDiag).toBeDefined();
+      expect(fetchDiag?.category).toBe("error");
+      expect(fetchDiag?.suggestedAction).toContain("HttpClient");
+
+      const timerDiag = resultLegacy.diagnostics.find((d) => d.message.includes("setTimeout"));
+      expect(timerDiag).toBeDefined();
+      expect(timerDiag?.suggestedAction).toContain("Effect.sleep");
+
+      const errorDiag = resultLegacy.diagnostics.find((d) => d.message.includes("TypeError"));
+      expect(errorDiag).toBeDefined();
+      expect(errorDiag?.code).toBe("THROW");
+      expect(errorDiag?.suggestedAction).toContain("Effect.dieMessage");
+    });
   });
 });

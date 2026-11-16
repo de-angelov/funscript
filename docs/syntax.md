@@ -2543,11 +2543,18 @@ nor `Unknown` itself proves that an external value satisfies a schema.
 | `FS_DETACHED_FIBER` | Error | `Effect.forkDetach` is forbidden outside entry modules because detached fibers outlive their caller with no owner. | Use `Effect.forkScoped` (tied to an enclosing `Scope`) or `Effect.forkChild` (tied to parent fiber). Long-lived background tasks belong in a `Layer` (`Layer.effectDiscard(Effect.forkScoped(...))`). |
 | `FS_UNBOUNDED_CONCURRENCY` | Warning | `{ concurrency: "unbounded" }` is flagged to prevent resource exhaustion (socket, descriptor, or memory starvation under burst load). | Specify an explicit concurrency limit (e.g. `{ concurrency: 10 }`). |
 | `FS_THROW` | Error | Raw `throw` statements and throwing methods (`Option.getOrThrow`, `Either.getOrThrow`, `JSON.parse`, `Error(...)`) are forbidden. | Model failures with Effect typed errors (`Effect.fail`, `error Name { ... }`), handle absence with `Option.getOrElse`/`match`, or decode JSON with `Schema.parseJson`. |
-| `FS_NATIVE_API` | Error | Unmanaged native JS/Node APIs (`fetch`, `setTimeout`, `setInterval`, `console.log` in library code) are forbidden. | Use Effect ecosystem equivalents (`@effect/platform` `HttpClient`, `Effect.sleep`, `Schedule.spaced`, `Console.log`) or isolate foreign calls with `js ...`. |
+| `FS_NATIVE_API` | Error | Unmanaged native JS/Node APIs (`fetch`, `setTimeout`, `setInterval`, `console.log` in library code, `Promise.resolve`, etc.) are forbidden. | Use Effect ecosystem equivalents (`@effect/platform` `HttpClient`, `Effect.sleep`, `Schedule.spaced`, `Console.log`, `Effect.promise`) or isolate foreign calls with `js ...`. |
+| `FS_INPLACE_MUTATION` | Error | In-place mutating array methods (`.push()`, `.pop()`, `.shift()`, `.unshift()`, `.splice()`, `.sort()`, `.reverse()`) are quarantined outside draft proxy blocks. | Use immutable functional alternatives (`Array.append`, `Array.remove`, `Array.modify`) or isolate mutable recipes inside `mut (draft) => { ... }`. |
 | `FS_NESTED_EFFECT` | Error | Returning an `Effect` value from inside an `effect` block creates a nested `Effect<Effect<...>>`. | Bind the effect using `<-` before returning it (`res <- myEffect; => res`). Prevents accidentally returning unexecuted effects. |
 
 #### Escape hatches
 When interacting with third-party JavaScript libraries that require `Date`, raw `process.env`, or detached promises, isolate the foreign interop inside an explicit `ts { ... }` block. Raw TypeScript blocks bypass these static AST guardrails and remain visible in code review.
+
+### 12.3.2 Standard Library Prelude (Ambient Effect Modules)
+
+To maintain idiomatic Effect code without boilerplates, common Effect modules (`Effect`, `Option`, `Result`, `Duration`, `Clock`, `Console`, `Random`, `Config`, `Schedule`, `Queue`, `Ref`, `Fiber`, `Layer`, `HashMap`, `HashSet`, `Stream`, `Chunk`) are ambiently available in FunScript files without manual `import { ... } from "effect"` declarations. The compiler automatically tracks referenced Effect modules and generates optimal TypeScript header imports.
+
+In type positions, types such as `Option<T>`, `Result<A, E>`, `Duration`, `Config<T>`, `Queue<T>`, `Ref<T>`, `Fiber<E, A>`, and `HashMap<K, V>` automatically resolve to their canonical Effect types (`Option.Option<T>`, `Duration.Duration`, etc.).
 
 ### 12.4 Typed holes (`???`)
 

@@ -427,6 +427,15 @@ export const typeCheckVirtualFiles = (
               diagnosticCode = "FS_THROW";
               explanation = "FunScript has no 'throw' and bans throwing APIs. Recoverable failures must be modeled using typed errors in the Effect E channel, and unrecoverable bugs should use 'Effect.die'.";
               suggestedAction = "Replace throwing code with Effect typed errors or schema decoding.";
+            } else if (
+              compErr.message.includes("is banned by the Effect style guide") ||
+              compErr.message.includes("In-place mutation") ||
+              compErr.message.includes("quarantined")
+            ) {
+              code = "INPLACE_MUTATION";
+              diagnosticCode = "FS_INPLACE_MUTATION";
+              explanation = "In-place mutation is quarantined in FunScript. Arrays and records are immutable by default outside 'mut (draft) =>' blocks.";
+              suggestedAction = "Use immutable functional alternatives (e.g. 'Array.append', 'Array.modify') or wrap local mutations in 'mut (draft) => { ... }'.";
             }
 
             const header = `${filePath}:${errLine}:${errCol} - error: ${compErr.message}`;
@@ -837,17 +846,30 @@ export const typeCheckVirtualFiles = (
 
           if (meta.ast) {
             const isEntry = isEntryModule(meta.funPath, meta.ast, cwd);
-            const walkAst = (node: any, parent?: any) => {
+            const INPLACE_MUTATING_METHODS = new Set(["push", "pop", "shift", "unshift", "splice", "sort", "reverse"]);
+            const ERROR_CONSTRUCTORS = new Set(["Error", "TypeError", "RangeError", "SyntaxError", "ReferenceError", "EvalError", "URIError"]);
+            const walkAst = (node: any, parent?: any, inMutBlock = false) => {
               if (!node || typeof node !== "object") return;
               if (node.kind === "TsEscapeDeclaration" || node.kind === "TsEscapeExpression" || node.kind === "JsExpression") return;
 
+              const currentInMut = inMutBlock || node.kind === "MutBlockExpression";
+
               if (node.kind === "CallExpression") {
                 const callee = node.callee;
-                if ((callee?.kind === "UpperIdentifier" || callee?.kind === "Identifier") && callee.name === "Error") {
+                if (!currentInMut && callee?.kind === "MemberExpression" && INPLACE_MUTATING_METHODS.has(callee.property?.name)) {
+                  addAstDiag(
+                    node.span,
+                    "INPLACE_MUTATION",
+                    `In-place mutation '.${callee.property.name}()' is quarantined in FunScript. Arrays are immutable by default outside 'mut (draft) =>' blocks.`,
+                    "error",
+                    "Direct array mutation outside draft proxy blocks causes accidental state pollution.",
+                    `Use immutable functional alternatives (e.g. 'Array.append', 'Array.modify') or wrap local mutations in 'mut (draft) => { ... }'.`,
+                  );
+                } else if ((callee?.kind === "UpperIdentifier" || callee?.kind === "Identifier") && ERROR_CONSTRUCTORS.has(callee.name)) {
                   addAstDiag(
                     node.span,
                     "THROW",
-                    "`Error(...)` constructs an unmanaged JavaScript exception. In FunScript, declare domain failures with 'error Name { ... }' or fail within Effect using 'Effect.fail' or 'Effect.die'.",
+                    `\`${callee.name}(...)\` constructs an unmanaged JavaScript exception. In FunScript, declare domain failures with 'error Name { ... }' or fail within Effect using 'Effect.fail' or 'Effect.die'.`,
                     "error",
                     "FunScript avoids raw JavaScript Error exceptions in favor of typed errors or explicit defects.",
                     "Declare a typed error using `error Name { ... }` or use `Effect.dieMessage(...)`.",
@@ -977,6 +999,45 @@ export const typeCheckVirtualFiles = (
                       "error",
                       "Direct console logging in library code bypasses Effect's Logger services and cannot be intercepted or silenced in tests.",
                       `Use \`Console.${p}\` from 'effect'.`,
+                    );
+                  }
+                }
+              }
+
+              if (node.kind === "Identifier" || node.kind === "UpperIdentifier") {
+                const isProp = parent?.kind === "MemberExpression" && parent?.property === node;
+                const isCallee = parent?.kind === "CallExpression" && parent?.callee === node;
+                const isBinding = (parent?.kind === "BindingDeclaration" && parent?.id === node) || parent?.kind === "FunctionDeclaration" || parent?.kind === "VariablePattern";
+                const isImport = parent?.kind === "ImportSpecifier" || parent?.kind === "ImportDeclaration";
+                const isType = parent?.kind === "TypeReferenceNode" || parent?.kind === "QualifiedTypeReferenceNode";
+
+                if (!isProp && !isCallee && !isBinding && !isImport && !isType) {
+                  if (node.name === "fetch") {
+                    addAstDiag(
+                      node.span,
+                      "NATIVE_API",
+                      "`fetch` is an unmanaged native HTTP client returning an untyped Promise. In FunScript, use '@effect/platform' HttpClient or lift with 'js fetch(...)'.",
+                      "error",
+                      "Bare fetch returns an unmanaged Promise without typed errors or retry policies.",
+                      "Use '@effect/platform' HttpClient or lift with `js fetch(...)`.",
+                    );
+                  } else if (node.name === "setTimeout" || node.name === "setInterval" || node.name === "clearTimeout" || node.name === "clearInterval") {
+                    addAstDiag(
+                      node.span,
+                      "NATIVE_API",
+                      `\`${node.name}\` is an unmanaged native timer. Time and scheduling are Effect services; use 'Effect.sleep' or 'Schedule.spaced'.`,
+                      "error",
+                      "Native timers run outside Effect's fiber scheduler and cannot be controlled with TestClock.",
+                      "Replace with `Effect.sleep(...)` or `Schedule.spaced(...)`.",
+                    );
+                  } else if (ERROR_CONSTRUCTORS.has(node.name)) {
+                    addAstDiag(
+                      node.span,
+                      "THROW",
+                      `\`${node.name}\` is an unmanaged JavaScript exception constructor. In FunScript, declare domain failures with 'error Name { ... }' or fail within Effect using 'Effect.fail' or 'Effect.die'.`,
+                      "error",
+                      "FunScript avoids raw JavaScript Error exceptions in favor of typed errors or explicit defects.",
+                      "Declare a typed error using `error Name { ... }` or use `Effect.dieMessage(...)`.",
                     );
                   }
                 }
@@ -1162,9 +1223,9 @@ export const typeCheckVirtualFiles = (
                 if (k === "span") continue;
                 const child = node[k];
                 if (Array.isArray(child)) {
-                  for (const c of child) walkAst(c, node);
+                  for (const c of child) walkAst(c, node, currentInMut);
                 } else if (child && typeof child === "object") {
-                  walkAst(child, node);
+                  walkAst(child, node, currentInMut);
                 }
               }
             };
