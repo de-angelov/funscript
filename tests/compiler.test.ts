@@ -524,15 +524,6 @@ export run = effect (unscoped) {
     const resUnscoped = await Effect.runPromise(compileString(unscopedCode));
     expect(resUnscoped.typescript).not.toContain(`Effect.scoped(`);
     expect(resUnscoped.typescript).toContain(`Effect.gen(function* () {`);
-
-    const scopedAliasCode = `
-export run = scoped {
-  x <- Effect.succeed(10)
-  => x
-}
-`.trim();
-    const resAlias = await Effect.runPromise(compileString(scopedAliasCode));
-    expect(resAlias.typescript).toContain(`Effect.scoped(Effect.gen(function* () {`);
   });
 
   it("compiles structured concurrency par blocks with inherit and custom concurrency", async () => {

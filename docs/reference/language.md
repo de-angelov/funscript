@@ -1062,7 +1062,7 @@ Delimits a structured concurrency block that runs all bound tasks in parallel. D
 
 
 
-See also: `effect`, `scoped`, `Effect.all`.
+See also: `effect`, `Effect.all`.
 
 ## `pipe`
 
@@ -1183,23 +1183,6 @@ Describes values before schema decoding. Defaulted schema fields can be omitted 
 
 
 See also: `schema`, `Option`.
-
-## `scoped`
-
-Alias for effect block with automatic Scope management.
-
-```funscript
-scoped {
-  res <- acquireResource
-  => use(res)
-}
-```
-
-First-class synonym for `effect { ... }`. In FunScript, effect blocks are scoped by default, lowering to `Effect.scoped(Effect.gen(...))` to ensure resources are safely released when the block exits.
-
-
-
-See also: `effect`, `par`, `Effect.scoped`.
 
 ## `service`
 

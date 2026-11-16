@@ -241,10 +241,10 @@ The compiler enforces the convention for declarations it generates. Imported Jav
 values may have any casing; they are only relevant in expression position.
 
 <!-- GENERATED: keywords -->
-### 1.5 Keywords (20 total)
+### 1.5 Keywords (19 total)
 
 ```text
-and default effect error export false from import js match mut not or par schema scoped service true ts when
+and default effect error export false from import js match mut not or par schema service true ts when
 ```
 <!-- /GENERATED: keywords -->
 
@@ -1924,7 +1924,7 @@ Effect is the only effect model. There is no `async`/`await`, no Promise chain, 
 `setTimeout`, and no manual `try`/`catch` in the surface. Promise-based libraries are
 interop, wrapped with `Effect.tryPromise` or an Effect platform module.
 
-### 9.1 `effect` blocks and `scoped`
+### 9.1 `effect` blocks (scoped by default)
 
 The canonical form uses braces with one statement per line. In FunScript, `effect` blocks are **scoped by default**, lowering to `Effect.scoped(Effect.gen(...))` to guarantee that resources acquired with `Effect.acquireRelease` are safely closed at the block boundary:
 
@@ -1945,9 +1945,6 @@ export const getUser = (id: string) =>
     return { user, org };
   }));
 ```
-
-#### `scoped` alias
-`scoped { ... }` is supported as a first-class synonym for `effect { ... }`.
 
 #### `effect (unscoped)` escape hatch
 When a function is explicitly designed to acquire a resource and pass the open `Scope` to its caller (e.g., custom resource combinators), use the `unscoped` option:

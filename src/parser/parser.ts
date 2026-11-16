@@ -1588,8 +1588,8 @@ export class Parser {
       return this.parseMatchExpression();
     }
 
-    // 10. Effect Block: effect ... or scoped ...
-    if (this.match(TokenType.EFFECT) || this.match(TokenType.SCOPED)) {
+    // 10. Effect Block: effect ...
+    if (this.match(TokenType.EFFECT)) {
       return this.parseEffectBlock();
     }
 
@@ -1963,7 +1963,6 @@ export class Parser {
   // --- Effect Blocks ---
 
   private parseEffectBlock(): EffectBlockExpression {
-    const isScopedKeyword = this.previous().type === TokenType.SCOPED;
     const start = this.previous().span.start;
     let unscoped = false;
     if (this.match(TokenType.LPAREN)) {
@@ -1976,8 +1975,8 @@ export class Parser {
     const braced = this.match(TokenType.LBRACE);
     if (braced) this.parsingBraceEffect = true;
     if (!braced) {
-      this.consume(TokenType.NEWLINE, `Expected newline or '{' after '${isScopedKeyword ? "scoped" : "effect"}'`);
-      this.consume(TokenType.INDENT, `Expected indent after '${isScopedKeyword ? "scoped" : "effect"}'`);
+      this.consume(TokenType.NEWLINE, "Expected newline or '{' after 'effect'");
+      this.consume(TokenType.INDENT, "Expected indent after 'effect'");
     }
 
     const body: EffectStatement[] = [];
@@ -2105,7 +2104,7 @@ export class Parser {
       kind: "EffectBlockExpression",
       body,
       finalExpression,
-      unscoped: isScopedKeyword ? false : unscoped,
+      unscoped,
       legacyReturnKind,
       span: { start, end: finalExpression.span.end },
     };
