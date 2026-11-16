@@ -214,6 +214,7 @@ export type Expression =
   | MutBlockExpression
   | MatchExpression
   | EffectBlockExpression
+  | ParBlockExpression
   | JSXElement
   | JSXSelfClosingElement
   | JsExpression
@@ -451,8 +452,17 @@ export interface EffectBlockExpression extends NodeBase {
   kind: "EffectBlockExpression";
   body: EffectStatement[];
   finalExpression: Expression;
+  unscoped?: boolean;
   /** Legacy return syntax that requires manual migration. */
   legacyReturnKind?: "bare" | "missing";
+}
+
+export interface ParBlockExpression extends NodeBase {
+  kind: "ParBlockExpression";
+  concurrency?: Expression;
+  body: EffectStatement[];
+  finalExpression: Expression;
+  hasExplicitReturn?: boolean;
 }
 
 export type EffectStatement =

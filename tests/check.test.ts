@@ -583,6 +583,76 @@ export run = Effect.all([task], { concurrency: "unbounded" })
       expect(warn?.message).toContain('concurrency: "unbounded"');
     });
 
+    it("reports FS_REF_RACE on consecutive Ref.get and Ref.set calls", async () => {
+      const result = await Effect.runPromise(
+        typeCheckSource(
+          `
+import { Effect, Ref } from "effect"
+
+export badIncrement = (counter: Ref) => effect {
+  curr <- Ref.get(counter)
+  _ <- Ref.set(counter, curr + 1)
+  => curr
+}
+`.trim(),
+          "counter.fun",
+        ),
+      );
+
+      const race = result.diagnostics.find((d) => d.code === "REF_RACE");
+      expect(race).toBeDefined();
+      expect(race?.diagnosticCode).toBe("FS_REF_RACE");
+      expect(race?.category).toBe("error");
+      expect(race?.message).toContain("Insecure non-atomic Ref mutation");
+    });
+
+    it("reports FS_MANUAL_SEMAPHORE on manual take or release calls", async () => {
+      const result = await Effect.runPromise(
+        typeCheckSource(
+          `
+import { Effect, Semaphore } from "effect"
+
+export run = (sem: Semaphore) => effect {
+  _ <- sem.take(1)
+  _ <- Effect.sleep(100)
+  _ <- sem.release(1)
+  => "done"
+}
+`.trim(),
+          "semaphore.fun",
+        ),
+      );
+
+      const semDiag = result.diagnostics.find((d) => d.code === "MANUAL_SEMAPHORE");
+      expect(semDiag).toBeDefined();
+      expect(semDiag?.diagnosticCode).toBe("FS_MANUAL_SEMAPHORE");
+      expect(semDiag?.category).toBe("error");
+      expect(semDiag?.message).toContain("Manual semaphore permit management leaks permits");
+    });
+
+    it("warns FS_UNBOUNDED_QUEUE on Queue.unbounded() and bare Queue.make()", async () => {
+      const result = await Effect.runPromise(
+        typeCheckSource(
+          `
+import { Effect, Queue } from "effect"
+
+export run = effect {
+  q1 <- Queue.unbounded()
+  q2 <- Queue.make()
+  => q1
+}
+`.trim(),
+          "queue.fun",
+        ),
+      );
+
+      const queueWarnings = result.diagnostics.filter((d) => d.code === "UNBOUNDED_QUEUE");
+      expect(queueWarnings.length).toBe(2);
+      expect(queueWarnings[0].diagnosticCode).toBe("FS_UNBOUNDED_QUEUE");
+      expect(queueWarnings[0].category).toBe("warning");
+      expect(queueWarnings[0].message).toContain("Queue created with infinite capacity");
+    });
+
     it("rejects running Effects mid-program (EFFECT_RUN) outside entry modules", async () => {
       const result = await Effect.runPromise(
         typeCheckSource(

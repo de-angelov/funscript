@@ -490,6 +490,11 @@ export function inferPipelineCompanions(
 
       // 6. Undefined companion: check candidate ambiguity
       if (!currentCompanion) {
+        if (fnName === "retry" && stage.kind === "CallExpression" && stage.args.length === 1 && stage.args[0].kind === "RecordExpression") {
+          stageResolutions.set(stage.span.start.offset, { module: "Effect", method: "retry" });
+          currentCompanion = "Effect";
+          continue;
+        }
         const candidates = pipelineCompanionCandidates(fnName);
         if (candidates.length > 1) {
           throw new PipelineResolutionError(

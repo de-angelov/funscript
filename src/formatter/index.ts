@@ -56,6 +56,7 @@ import {
   RestPattern,
   OrPattern,
   EffectBlockExpression,
+  ParBlockExpression,
   EffectStatement,
   EffectBindStatement,
   EffectDiscardStatement,
@@ -720,7 +721,43 @@ export class Formatter {
     const trailingFinal = this.getTrailingComment(expr.finalExpression.span.end.line);
     lines.push(`${leadingFinal}${stmtIndent}=> ${this.formatExpression(expr.finalExpression, indent + this.indentSize)}${trailingFinal}`);
 
-    return `effect {\n${lines.join("\n")}\n${this.spaces(indent)}}`;
+    const prefix = expr.unscoped ? "effect (unscoped)" : "effect";
+    return `${prefix} {\n${lines.join("\n")}\n${this.spaces(indent)}}`;
+  }
+
+  private formatParBlock(expr: ParBlockExpression, indent = 0): string {
+    const stmtIndent = this.spaces(indent + this.indentSize);
+    const lines: string[] = [];
+
+    for (let i = 0; i < expr.body.length; i++) {
+      const stmt = expr.body[i];
+      const leading = this.formatLeadingComments(stmt, stmtIndent);
+      const trailing = this.getTrailingComment(stmt.span.end.line);
+      const formatted = this.formatEffectStatement(stmt, indent + this.indentSize);
+      lines.push(`${leading}${stmtIndent}${formatted}${trailing}`);
+      if (i < expr.body.length - 1) {
+        const next = expr.body[i + 1];
+        if (next.span && stmt.span && next.span.start.line - stmt.span.end.line > 1) {
+          lines.push("");
+        }
+      }
+    }
+
+    if (expr.hasExplicitReturn) {
+      if (expr.body.length > 0) {
+        const last = expr.body[expr.body.length - 1];
+        if (expr.finalExpression.span && last.span && expr.finalExpression.span.start.line - last.span.end.line > 1) {
+          lines.push("");
+        }
+      }
+
+      const leadingFinal = this.formatLeadingComments(expr.finalExpression, stmtIndent);
+      const trailingFinal = this.getTrailingComment(expr.finalExpression.span.end.line);
+      lines.push(`${leadingFinal}${stmtIndent}=> ${this.formatExpression(expr.finalExpression, indent + this.indentSize)}${trailingFinal}`);
+    }
+
+    const opt = expr.concurrency ? ` (${this.formatExpression(expr.concurrency)})` : "";
+    return `par${opt} {\n${lines.join("\n")}\n${this.spaces(indent)}}`;
   }
 
   private formatEffectStatement(stmt: EffectStatement, indent: number): string {
@@ -973,6 +1010,8 @@ export class Formatter {
         return this.formatMatchExpression(expr, indent);
       case "EffectBlockExpression":
         return this.formatEffectBlock(expr, indent);
+      case "ParBlockExpression":
+        return this.formatParBlock(expr, indent);
       case "TypedHole":
         return expr.label ? `??? "${this.escapeStringPart(expr.label)}"` : "???";
       case "Placeholder":

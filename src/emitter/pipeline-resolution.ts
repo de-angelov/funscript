@@ -1,4 +1,4 @@
-import type { BindingDeclaration, Expression } from "../ast/types.js";
+import type { BindingDeclaration, Expression, RecordEntry } from "../ast/types.js";
 import { EFFECT_PIPELINE_COMPATIBILITY_ALIASES, PIPELINE_COMPANION_CATALOG, pipelineCompanionCandidates, type PipelineCompanionModule } from "./pipeline-catalog.js";
 
 const ARRAY_COMPANION_METHODS = new Set(PIPELINE_COMPANION_CATALOG.Array);
@@ -187,6 +187,110 @@ export class PipelineResolver {
         property: { kind: "Identifier", name: "runPromise", span: stage.span },
         span: stage.span,
       };
+    }
+
+    // 0b. 'retry({ backoff, max, jitter? })' with jittered exponential backoff default
+    const isRetryCall =
+      stage.kind === "CallExpression" &&
+      ((stage.callee.kind === "Identifier" && stage.callee.name === "retry") ||
+        (stage.callee.kind === "MemberExpression" &&
+          stage.callee.object.kind === "UpperIdentifier" &&
+          stage.callee.object.name === "Effect" &&
+          stage.callee.property.name === "retry"));
+
+    if (isRetryCall && stage.kind === "CallExpression" && stage.args.length === 1 && stage.args[0].kind === "RecordExpression") {
+      const record = stage.args[0];
+      let backoffExpr: Expression | undefined;
+      let maxExpr: Expression | undefined;
+      let jitterExpr: Expression | undefined;
+      const otherEntries: RecordEntry[] = [];
+
+      for (const entry of record.entries) {
+        if (entry.kind === "FieldEntry") {
+          if (entry.key.name === "backoff") {
+            backoffExpr = entry.value;
+          } else if (entry.key.name === "max" || entry.key.name === "times") {
+            maxExpr = entry.value;
+          } else if (entry.key.name === "jitter") {
+            jitterExpr = entry.value;
+          } else {
+            otherEntries.push(entry);
+          }
+        } else {
+          otherEntries.push(entry);
+        }
+      }
+
+      if (backoffExpr) {
+        this.context.effectImports.add("Effect");
+        this.context.effectImports.add("Schedule");
+
+        const isJitterDisabled = jitterExpr?.kind === "BooleanLiteral" && jitterExpr.value === false;
+
+        let scheduleExpr: Expression = {
+          kind: "CallExpression",
+          callee: {
+            kind: "MemberExpression",
+            object: { kind: "UpperIdentifier", name: "Schedule", span: stage.span },
+            property: { kind: "Identifier", name: "exponential", span: stage.span },
+            span: stage.span,
+          },
+          args: [backoffExpr],
+          span: stage.span,
+        };
+
+        if (!isJitterDisabled) {
+          scheduleExpr = {
+            kind: "CallExpression",
+            callee: {
+              kind: "MemberExpression",
+              object: { kind: "UpperIdentifier", name: "Schedule", span: stage.span },
+              property: { kind: "Identifier", name: "jittered", span: stage.span },
+              span: stage.span,
+            },
+            args: [scheduleExpr],
+            span: stage.span,
+          };
+        }
+
+        const retryEntries: RecordEntry[] = [
+          {
+            kind: "FieldEntry",
+            key: { kind: "Identifier", name: "schedule", span: stage.span },
+            value: scheduleExpr,
+            span: stage.span,
+          },
+          ...(maxExpr
+            ? [
+                {
+                  kind: "FieldEntry" as const,
+                  key: { kind: "Identifier" as const, name: "times", span: stage.span },
+                  value: maxExpr,
+                  span: stage.span,
+                },
+              ]
+            : []),
+          ...otherEntries,
+        ];
+
+        return {
+          kind: "CallExpression",
+          callee: {
+            kind: "MemberExpression",
+            object: { kind: "UpperIdentifier", name: "Effect", span: stage.span },
+            property: { kind: "Identifier", name: "retry", span: stage.span },
+            span: stage.span,
+          },
+          args: [
+            {
+              kind: "RecordExpression",
+              entries: retryEntries,
+              span: stage.span,
+            },
+          ],
+          span: stage.span,
+        };
+      }
     }
 
     // 1. Bare CallExpression: reduce(acc, f), map(f), lessThanOrEqualTo(0), orDie()
@@ -395,7 +499,8 @@ export class PipelineResolver {
       name === "decodeJson" ||
       name === "decodeJsonSync" ||
       name === "encodeJson" ||
-      name === "encodeJsonSync"
+      name === "encodeJsonSync" ||
+      (name === "retry" && stage.kind === "CallExpression" && stage.args.length === 1 && stage.args[0].kind === "RecordExpression")
     ) return;
     if (this.context.isUserBinding(name)) return;
     const candidates = pipelineCompanionCandidates(name);

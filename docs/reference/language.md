@@ -1046,6 +1046,24 @@ Evaluates to `true` if either operand is truthy. Short-circuits if the left oper
 
 See also: `and`, `not`.
 
+## `par`
+
+Executes tasks in parallel using structured fork-join concurrency.
+
+```funscript
+par (concurrency?) {
+  a <- taskA
+  b <- taskB
+  => { a, b }
+}
+```
+
+Delimits a structured concurrency block that runs all bound tasks in parallel. Defaults to `concurrency: 'inherit'`, allowing it to automatically participate in outer concurrency pools. Compiles to `Effect.all(..., { concurrency })`.
+
+
+
+See also: `effect`, `scoped`, `Effect.all`.
+
 ## `pipe`
 
 Chains values through functions from left to right.
@@ -1165,6 +1183,23 @@ Describes values before schema decoding. Defaulted schema fields can be omitted 
 
 
 See also: `schema`, `Option`.
+
+## `scoped`
+
+Alias for effect block with automatic Scope management.
+
+```funscript
+scoped {
+  res <- acquireResource
+  => use(res)
+}
+```
+
+First-class synonym for `effect { ... }`. In FunScript, effect blocks are scoped by default, lowering to `Effect.scoped(Effect.gen(...))` to ensure resources are safely released when the block exits.
+
+
+
+See also: `effect`, `par`, `Effect.scoped`.
 
 ## `service`
 

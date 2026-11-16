@@ -151,7 +151,7 @@ export runTask = effect {
 
         const result = await Effect.runPromise(compileString(source, "runTask.fun"));
         expect(result.typescript).toContain('import { Effect } from "effect";');
-        expect(result.typescript).toContain("export const runTask = Effect.gen(function* () {");
+        expect(result.typescript).toContain("export const runTask = Effect.scoped(Effect.gen(function* () {");
         expect(result.typescript).toContain("const step1 = yield* init();");
         expect(result.typescript).toContain("yield* notify(step1);");
         expect(result.typescript).toContain("const total = (step1 + 42);");

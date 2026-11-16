@@ -936,7 +936,34 @@ export const typeCheckVirtualFiles = (
                 } else if (callee?.kind === "MemberExpression") {
                   const o = callee.object?.name;
                   const p = callee.property?.name;
-                  if (o === "Date" && p === "now") {
+                  if ((o === "Semaphore" || (o && /semaphore|sem/i.test(o))) && (p === "take" || p === "release")) {
+                    addAstDiag(
+                      node.span,
+                      "MANUAL_SEMAPHORE",
+                      `Manual semaphore permit management leaks permits on fiber interruption. Use 'withPermits' instead.`,
+                      "error",
+                      "Manually calling take and release on a semaphore leaks permits if the fiber is interrupted or fails between take and release.",
+                      "Wrap the critical section in 'semaphore.withPermits(n)(effect)' for guaranteed permit acquisition and release.",
+                    );
+                  } else if (o === "Queue" && p === "unbounded") {
+                    addAstDiag(
+                      node.span,
+                      "UNBOUNDED_QUEUE",
+                      `Queue created with infinite capacity. High-volume producers can exhaust memory without backpressure. Prefer 'Queue.bounded(capacity)' or specify '{ capacity: 1024 }'.`,
+                      "warning",
+                      "Unbounded queues buffer work indefinitely without limit. If producers outpace consumers, the queue will grow until memory is exhausted.",
+                      "Prefer 'Queue.bounded(capacity)' or specify '{ capacity: 1024 }'.",
+                    );
+                  } else if (o === "Queue" && p === "make" && (!node.args || node.args.length === 0)) {
+                    addAstDiag(
+                      node.span,
+                      "UNBOUNDED_QUEUE",
+                      `Queue created with infinite capacity. High-volume producers can exhaust memory without backpressure. Prefer 'Queue.bounded(capacity)' or specify '{ capacity: 1024 }'.`,
+                      "warning",
+                      "Queue.make() defaults to unbounded capacity in Effect v4.",
+                      "Specify a bounded capacity with 'Queue.bounded(capacity)' or 'Queue.make({ capacity })'.",
+                    );
+                  } else if (o === "Date" && p === "now") {
                     addAstDiag(
                       node.span,
                       "HIDDEN_INPUT",
@@ -1234,6 +1261,50 @@ export const typeCheckVirtualFiles = (
                         "Unbounded concurrency can exhaust sockets, file handles, or memory under burst traffic.",
                         "Specify a bounded concurrency number, e.g. `{ concurrency: 10 }`.",
                       );
+                    }
+                  }
+                }
+              }
+
+              if (node.kind === "EffectBlockExpression" || node.kind === "ParBlockExpression") {
+                const readRefs = new Set<string>();
+                const getRefOp = (expr: any): { type: "get" | "set"; refName: string } | null => {
+                  if (!expr || expr.kind !== "CallExpression") return null;
+                  const c = expr.callee;
+                  if (!c || c.kind !== "MemberExpression") return null;
+                  const obj = c.object;
+                  const prop = c.property?.name;
+                  if (obj?.name === "Ref" && (prop === "get" || prop === "set")) {
+                    const firstArg = expr.args?.[0];
+                    if (firstArg && (firstArg.kind === "Identifier" || firstArg.kind === "UpperIdentifier")) {
+                      return { type: prop, refName: firstArg.name };
+                    }
+                  } else if ((prop === "get" || prop === "set") && (obj?.kind === "Identifier" || obj?.kind === "UpperIdentifier")) {
+                    return { type: prop, refName: obj.name };
+                  }
+                  return null;
+                };
+
+                for (const stmt of (node.body || [])) {
+                  let effExpr: any;
+                  if (stmt.kind === "EffectBindStatement" || stmt.kind === "EffectDiscardStatement") {
+                    effExpr = stmt.effect;
+                  }
+                  if (effExpr) {
+                    const op = getRefOp(effExpr);
+                    if (op) {
+                      if (op.type === "get") {
+                        readRefs.add(op.refName);
+                      } else if (op.type === "set" && readRefs.has(op.refName)) {
+                        addAstDiag(
+                          stmt.span,
+                          "REF_RACE",
+                          `Insecure non-atomic Ref mutation. Consecutive 'Ref.get' and 'Ref.set' on '${op.refName}' creates a concurrency race condition. Use 'Ref.update(${op.refName}, ...)' or 'Ref.modify' for atomic updates.`,
+                          "error",
+                          "Reading a Ref and subsequently writing to it in separate effect steps allows concurrent fibers to interleave and overwrite state updates.",
+                          `Use 'Ref.update(${op.refName}, ...)' or 'Ref.modify' for atomic updates.`,
+                        );
+                      }
                     }
                   }
                 }

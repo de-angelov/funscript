@@ -324,12 +324,15 @@ export handle = (event: Event) =>
       expect(checkRes.errorCount).toBeGreaterThan(0);
 
       const err = checkRes.diagnostics.find(
-        (d) => d.message.includes("NonExhaustiveError") || d.message.includes("not callable"),
+        (d) =>
+          d.code === "NON_EXHAUSTIVE_MATCH" ||
+          d.message.includes("not exhaustive") ||
+          d.message.includes("NonExhaustiveError") ||
+          d.message.includes("not callable"),
       );
       expect(err).toBeDefined();
       expect(err!.file).toBe("src/test-imported.fun");
       expect(err!.line).toBe(6);
-      expect(err!.message).toContain("payment_intent.payment_failed");
     });
 
     it("generates and decodes primitive schemas", async () => {

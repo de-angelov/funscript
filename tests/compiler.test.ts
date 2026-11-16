@@ -444,8 +444,8 @@ export getUser = (id: String) =>
 `.trim();
 
     const res = await Effect.runPromise(compileString(code));
-    expect(res.typescript).toContain(`import { Effect } from "effect";`);
-    expect(res.typescript).toContain(`Effect.gen(function* () {`);
+    expect(res.typescript).toMatch(/import \{.*Effect.*\} from "effect";/);
+    expect(res.typescript).toContain(`Effect.scoped(Effect.gen(function* () {`);
     expect(res.typescript).toContain(`const user = yield* (yield* UserRepo).find(id);`);
     expect(res.typescript).toContain(`yield* Console.log(user);`);
     expect(res.typescript).toContain(`return user;`);
@@ -503,6 +503,95 @@ export conditionalBlock = (enabled: Boolean) =>
     expect(res.typescript).toContain(`if (shouldFail) return yield* Effect.fail("failed");`);
     expect(res.typescript).toContain(`if (enabled) {\n  const selected = "inside";\n}`);
     expect(res.typescript).toContain(`return "done";`);
+  });
+
+  it("compiles effect blocks scoped by default and unscoped with escape hatch", async () => {
+    const scopedCode = `
+export run = effect {
+  x <- Effect.succeed(10)
+  => x
+}
+`.trim();
+    const resScoped = await Effect.runPromise(compileString(scopedCode));
+    expect(resScoped.typescript).toContain(`Effect.scoped(Effect.gen(function* () {`);
+
+    const unscopedCode = `
+export run = effect (unscoped) {
+  x <- Effect.succeed(10)
+  => x
+}
+`.trim();
+    const resUnscoped = await Effect.runPromise(compileString(unscopedCode));
+    expect(resUnscoped.typescript).not.toContain(`Effect.scoped(`);
+    expect(resUnscoped.typescript).toContain(`Effect.gen(function* () {`);
+
+    const scopedAliasCode = `
+export run = scoped {
+  x <- Effect.succeed(10)
+  => x
+}
+`.trim();
+    const resAlias = await Effect.runPromise(compileString(scopedAliasCode));
+    expect(resAlias.typescript).toContain(`Effect.scoped(Effect.gen(function* () {`);
+  });
+
+  it("compiles structured concurrency par blocks with inherit and custom concurrency", async () => {
+    const parInheritCode = `
+export fetchBoth = par {
+  users <- fetchUsers()
+  posts <- fetchPosts()
+}
+`.trim();
+    const resInherit = await Effect.runPromise(compileString(parInheritCode));
+    expect(resInherit.typescript).toContain(`Effect.all({\n      users: fetchUsers(),\n      posts: fetchPosts()\n    }, { concurrency: "inherit" })`);
+
+    const parCustomCode = `
+export fetchBoth = par (2) {
+  users <- fetchUsers()
+  posts <- fetchPosts()
+  => { users, posts }
+}
+`.trim();
+    const resCustom = await Effect.runPromise(compileString(parCustomCode));
+    expect(resCustom.typescript).toContain(`Effect.all({\n      users: fetchUsers(),\n      posts: fetchPosts()\n    }, { concurrency: 2 })`);
+
+    const parMappedCode = `
+export sum = par {
+  a <- getA()
+  b <- getB()
+  => a + b
+}
+`.trim();
+    const resMapped = await Effect.runPromise(compileString(parMappedCode));
+    expect(resMapped.typescript).toContain(`Effect.map(Effect.all({\n      a: getA(),\n      b: getB()\n    }, { concurrency: "inherit" }), ({ a, b }) => (a + b))`);
+  });
+
+  it("rejects early returns inside par blocks", async () => {
+    const code = `
+export bad = par {
+  when (true) => 1
+  a <- getA()
+}
+`.trim();
+    await expect(Effect.runPromise(compileString(code))).rejects.toThrow("Early return 'when (...) =>' is rejected inside 'par' blocks");
+  });
+
+  it("compiles retry pipeline stage with jittered exponential backoff default", async () => {
+    const defaultJitterCode = `
+export fetchWithRetry = apiCall |> retry({ backoff: "100 millis", max: 3 })
+`.trim();
+    const resDefault = await Effect.runPromise(compileString(defaultJitterCode));
+    expect(resDefault.typescript).toContain(`import { Effect, Schedule, pipe } from "effect";`);
+    expect(resDefault.typescript).toContain(`Effect.retry({`);
+    expect(resDefault.typescript).toContain(`schedule: Schedule.jittered(Schedule.exponential("100 millis"))`);
+    expect(resDefault.typescript).toContain(`times: 3`);
+
+    const disabledJitterCode = `
+export fetchWithRetry = apiCall |> retry({ backoff: "100 millis", max: 3, jitter: false })
+`.trim();
+    const resDisabled = await Effect.runPromise(compileString(disabledJitterCode));
+    expect(resDisabled.typescript).toContain(`schedule: Schedule.exponential("100 millis")`);
+    expect(resDisabled.typescript).not.toContain(`Schedule.jittered`);
   });
 
   it("compiles deep Mutative spreads", async () => {

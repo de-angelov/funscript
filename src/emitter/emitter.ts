@@ -51,6 +51,7 @@ import {
   MatchExpression,
   Pattern,
   EffectBlockExpression,
+  ParBlockExpression,
   EffectStatement,
   EffectBindStatement,
   EffectDiscardStatement,
@@ -1447,6 +1448,8 @@ export class Emitter {
         return this.emitMatchExpression(expr);
       case "EffectBlockExpression":
         return this.emitEffectBlockExpression(expr);
+      case "ParBlockExpression":
+        return this.emitParBlockExpression(expr);
       case "JSXElement":
         return this.emitJsxElement(expr);
       case "JSXSelfClosingElement":
@@ -1707,10 +1710,17 @@ export class Emitter {
           root !== null &&
           /^(url|search|query|param|header|form|request|response|req|res)/i.test(root);
         if (!isWebMutable) {
-          throw new FunScriptError(
-            `In-place mutation '.${prop}()' is quarantined in FunScript. Use '${info.replacement}(...)' or pipeline '${info.pipeline}' instead, or isolate mutable edits inside 'mut (draft) => { ... }'.`,
-            expr.callee.property.span,
-          );
+          if (["push", "pop", "shift", "unshift", "splice"].includes(prop)) {
+            throw new FunScriptError(
+              `In-place mutation '.${prop}()' is quarantined in FunScript. Use '${info.replacement}(...)' or pipeline '${info.pipeline}' instead, or isolate mutable edits inside 'mut (draft) => { ... }'.`,
+              expr.callee.property.span,
+            );
+          } else {
+            throw new FunScriptError(
+              `Native ${info.category} method '.${prop}()' is banned by the Effect style guide. Use '${info.replacement}(...)' or pipeline '${info.pipeline}' instead.`,
+              expr.callee.property.span,
+            );
+          }
         }
       }
 
@@ -1852,6 +1862,10 @@ export class Emitter {
           const res = this.options.stageResolutions.get(s.span.start.offset)!;
           if (isEffectModule(res.module)) {
             this.effectImports.add(res.module);
+          }
+          if (res.module === "Effect" && (res.method === "retry" || (s.kind === "CallExpression" && (s.callee as Identifier).name === "retry"))) {
+            const resolved = resolver.resolvePipelineStage(s, "Effect");
+            return this.emitExpression(resolved);
           }
           if (s.kind === "Identifier" || s.kind === "UpperIdentifier") {
             return `${res.module}.${res.method ?? s.name}`;
@@ -2282,12 +2296,65 @@ export class Emitter {
     const ret = isUnit
       ? `    return;`
       : `    return ${this.emitExpression(expr.finalExpression)};`;
-    return `Effect.gen(function* () {\n${statements}\n${ret}\n  })`;
+    const gen = `Effect.gen(function* () {\n${statements}\n${ret}\n  })`;
+    if (expr.unscoped) {
+      return gen;
+    }
+    return `Effect.scoped(${gen})`;
+  }
+
+  private emitParBlockExpression(expr: ParBlockExpression): string {
+    this.effectImports.add("Effect");
+    const entries: string[] = [];
+    const boundNames: string[] = [];
+
+    for (const s of expr.body) {
+      if (s.kind === "EffectBindStatement") {
+        const key = this.emitBindingTarget(s.id);
+        const effectVal = this.emitEffectCall(s.effect);
+        entries.push(`      ${key}: ${effectVal}`);
+        boundNames.push(key);
+      } else if (s.kind === "EffectDiscardStatement") {
+        const effectVal = this.emitEffectCall(s.effect);
+        entries.push(`      _: ${effectVal}`);
+      }
+    }
+
+    const concurrencyArg = expr.concurrency ? this.emitExpression(expr.concurrency) : `"inherit"`;
+    const dict = `{\n${entries.join(",\n")}\n    }`;
+    const allCall = `Effect.all(${dict}, { concurrency: ${concurrencyArg} })`;
+
+    const isExactShorthand =
+      !expr.hasExplicitReturn ||
+      (expr.finalExpression.kind === "RecordExpression" &&
+        expr.finalExpression.entries.length === boundNames.length &&
+        expr.finalExpression.entries.every((e, i) => {
+          if (e.kind === "ShorthandEntry") {
+            return e.key.name === boundNames[i];
+          }
+          if (e.kind === "FieldEntry") {
+            return e.key.name === boundNames[i] && e.value.kind === "Identifier" && e.value.name === boundNames[i];
+          }
+          return false;
+        }));
+
+    if (isExactShorthand) {
+      return allCall;
+    }
+
+    const retExpr = this.emitExpression(expr.finalExpression);
+    return `Effect.map(${allCall}, ({ ${boundNames.join(", ")} }) => ${retExpr})`;
   }
 
   private emitEffectCall(effectExpr: Expression): string {
     if (effectExpr.kind === "JsExpression") {
       return this.emitJsExpression(effectExpr);
+    }
+    if (effectExpr.kind === "ParBlockExpression") {
+      return this.emitParBlockExpression(effectExpr);
+    }
+    if (effectExpr.kind === "EffectBlockExpression") {
+      return this.emitEffectBlockExpression(effectExpr);
     }
     // Check if this is a direct service call: Service.method(args)
     if (effectExpr.kind === "CallExpression" && effectExpr.callee.kind === "MemberExpression") {
@@ -2347,12 +2414,12 @@ export class Emitter {
         if (name === "Array" && !this.declaredTypeNames.has(name)) name = "ReadonlyArray";
         else if (name === "Map" && !this.declaredTypeNames.has(name)) name = "ReadonlyMap";
         else if (name === "Set" && !this.declaredTypeNames.has(name)) name = "ReadonlySet";
-        else if (name === "Record" && !this.declaredTypeNames.has(name) && !this.isUserBinding(name)) {
-          this.effectImports.add("Record");
+        else if (name === "Record" && !this.declaredTypeNames.has(name)) {
+          if (!this.isUserBinding(name)) this.effectImports.add("Record");
           name = "Record.ReadonlyRecord";
         }
-        else if (EFFECT_TYPE_MODULES.has(name) && !this.declaredTypeNames.has(name) && !this.isUserBinding(name)) {
-          this.effectImports.add(name);
+        else if (EFFECT_TYPE_MODULES.has(name) && !this.declaredTypeNames.has(name)) {
+          if (!this.isUserBinding(name)) this.effectImports.add(name);
           name = `${name}.${name}`;
         }
         if (node.typeArgs && node.typeArgs.length > 0) {

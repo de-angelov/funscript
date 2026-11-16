@@ -241,10 +241,10 @@ The compiler enforces the convention for declarations it generates. Imported Jav
 values may have any casing; they are only relevant in expression position.
 
 <!-- GENERATED: keywords -->
-### 1.5 Keywords (18 total)
+### 1.5 Keywords (20 total)
 
 ```text
-and default effect error export false from import js match mut not or schema service true ts when
+and default effect error export false from import js match mut not or par schema scoped service true ts when
 ```
 <!-- /GENERATED: keywords -->
 
@@ -1924,10 +1924,9 @@ Effect is the only effect model. There is no `async`/`await`, no Promise chain, 
 `setTimeout`, and no manual `try`/`catch` in the surface. Promise-based libraries are
 interop, wrapped with `Effect.tryPromise` or an Effect platform module.
 
-### 9.1 `effect` blocks
+### 9.1 `effect` blocks and `scoped`
 
-The canonical form uses braces with one statement per line. The established
-indentation-based form remains compatible:
+The canonical form uses braces with one statement per line. In FunScript, `effect` blocks are **scoped by default**, lowering to `Effect.scoped(Effect.gen(...))` to guarantee that resources acquired with `Effect.acquireRelease` are safely closed at the block boundary:
 
 ```funscript
 export getUser = (id: String) =>
@@ -1940,11 +1939,31 @@ export getUser = (id: String) =>
 
 ```ts
 export const getUser = (id: string) =>
-  Effect.gen(function* () {
+  Effect.scoped(Effect.gen(function* () {
     const user = yield* (yield* UserRepo).find(id);
     const org = yield* (yield* OrgRepo).find(user.orgId);
     return { user, org };
-  });
+  }));
+```
+
+#### `scoped` alias
+`scoped { ... }` is supported as a first-class synonym for `effect { ... }`.
+
+#### `effect (unscoped)` escape hatch
+When a function is explicitly designed to acquire a resource and pass the open `Scope` to its caller (e.g., custom resource combinators), use the `unscoped` option:
+
+```funscript
+export openResource = effect (unscoped) {
+  conn <- Database.connect()
+  => conn
+}
+```
+
+```ts
+export const openResource = Effect.gen(function* () {
+  const conn = yield* Database.connect();
+  return conn;
+});
 ```
 
 #### Direct service calls
@@ -2175,7 +2194,58 @@ plumbing), and a failing worker cancels its siblings.
 | fan-out broadcast            | `PubSub`                                                       | `events <- PubSub.unbounded<Event>()`                            |
 | one-shot promise / latch     | `Deferred` / `Latch`                                           | `ready <- Deferred.make<void>()`                                 |
 
-#### Structured parallelism (the common case)
+#### Structured parallelism (`par`)
+
+FunScript provides the `par` construct for fork-join structured concurrency. `par` runs all bound tasks in parallel and defaults to `concurrency: "inherit"`, allowing it to automatically participate in outer concurrency pools:
+
+```funscript
+export fetchDashboard = (userId: String) =>
+  par {
+    user <- fetchUser(userId)
+    orders <- fetchOrders(userId)
+    # When no explicit '=>' return is specified, defaults to returning a record of all bound variables
+  }
+```
+
+```ts
+export const fetchDashboard = (userId: string) =>
+  Effect.all({
+    user: fetchUser(userId),
+    orders: fetchOrders(userId)
+  }, { concurrency: "inherit" });
+```
+
+Custom concurrency limits can be specified in parentheses:
+```funscript
+export fetchLimited = par (concurrency = 2) {
+  a <- taskA()
+  b <- taskB()
+  => a + b
+}
+```
+
+> **Safety invariant**: Early returns (`when (...) =>`) are statically rejected inside `par` blocks to prevent leaving sibling fibers in an ambiguous or orphaned state.
+
+#### Jittered exponential retries (`retry`)
+
+In production, naive exponential backoffs lead to thundering herd outages. FunScript's `retry({ backoff, max })` automatically applies `Schedule.jittered` under the hood:
+
+```funscript
+export fetchWithRetry = apiCall |> retry({ backoff: "100 millis", max: 3 })
+```
+
+```ts
+export const fetchWithRetry = pipe(
+  apiCall,
+  Effect.retry({
+    schedule: Schedule.jittered(Schedule.exponential("100 millis")),
+    times: 3
+  })
+);
+```
+To opt out of jitter (e.g., in deterministic unit tests), specify `jitter: false`.
+
+#### Structured parallelism with Effect combinators
 
 Most concurrency is "do these N things in parallel and collect the results". That never
 needs an explicit fork:
@@ -2546,6 +2616,9 @@ nor `Unknown` itself proves that an external value satisfies a schema.
 | `FS_INPLACE_MUTATION` | Error | In-place mutating array methods (`.push()`, `.pop()`, `.shift()`, `.unshift()`, `.splice()`, `.sort()`, `.reverse()`) are quarantined outside draft proxy blocks. | Use immutable functional alternatives (`Array.append`, `Array.remove`, `Array.modify`) or isolate mutable recipes inside `mut (draft) => { ... }`. |
 | `FS_NON_EXHAUSTIVE_MATCH` | Error | Pattern match on schemas, variants, or tagged unions fails to handle all cases without a wildcard fallback. | Add an explicit pattern arm for the missing variant (e.g. `\| Overnight => ...`) or add a wildcard fallback `\| _ => ...`. |
 | `FS_NESTED_EFFECT` | Error | Returning an `Effect` value from inside an `effect` block creates a nested `Effect<Effect<...>>`. | Bind the effect using `<-` before returning it (`res <- myEffect; => res`). Prevents accidentally returning unexecuted effects. |
+| `FS_REF_RACE` | Error | Consecutive `Ref.get` and `Ref.set` on the same `Ref` identifier within an effect block creates race conditions under concurrency. | Use atomic transition combinators: `Ref.update(ref, fn)` or `Ref.modify(ref, fn)`. |
+| `FS_MANUAL_SEMAPHORE` | Error | Calling `.take()` or `.release()` directly on semaphores leaks permits if the fiber is interrupted. | Use `semaphore.withPermits(n)(effect)` to guarantee permit acquisition and release. |
+| `FS_UNBOUNDED_QUEUE` | Warning | Calling `Queue.unbounded()` or bare `Queue.make()` creates queues with infinite capacity that exhaust memory under backpressure. | Prefer bounded queues (`Queue.bounded(capacity)`) or dropping/sliding strategies (`Queue.dropping(capacity)` / `Queue.sliding(capacity)`). |
 
 #### Escape hatches
 When interacting with third-party JavaScript libraries that require `Date`, raw `process.env`, or detached promises, isolate the foreign interop inside an explicit `ts { ... }` block. Raw TypeScript blocks bypass these static AST guardrails and remain visible in code review.

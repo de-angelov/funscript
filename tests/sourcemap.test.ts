@@ -147,7 +147,7 @@ export main = effect
       const tracer = new TraceMap(res.map!.toString());
       const tsLines = res.typescript.split("\n");
 
-      const mainLine = tsLines.findIndex((l) => l.includes("export const main = Effect.gen"));
+      const mainLine = tsLines.findIndex((l) => l.includes("export const main = Effect.scoped(Effect.gen"));
       expect(mainLine).toBeGreaterThanOrEqual(0);
 
       const mainPos = originalPositionFor(tracer, {
