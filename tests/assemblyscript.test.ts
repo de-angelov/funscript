@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import { readFile } from "node:fs/promises";
-import { Effect, Exit } from "effect";
+import { Effect, Exit, Stream } from "effect";
 import { format } from "../src/formatter/index.js";
 import { Lexer } from "../src/lexer/lexer.js";
 import { compileString } from "../src/compiler.js";
@@ -188,6 +188,130 @@ export countCalls = () => count()`);
 as { export function plusOne(x: f32): f32 { return x + 1; } }
 export result = twice(plusOne(1.25))`);
     expect(output.result).toBe(4.5);
+  });
+
+  it("supports Float32Array parameters and scalar return", async () => {
+    const source = `as {
+  export function dotProduct(a: Float32Array, b: Float32Array): f32 {
+    let sum: f32 = 0.0;
+    for (let i = 0; i < a.length; ++i) {
+      sum += a[i] * b[i];
+    }
+    return sum;
+  }
+}
+export computeDot = (x: Float32Array, y: Float32Array) => dotProduct(x, y)`;
+    const output = await execute(source);
+    const a = new Float32Array([1.0, 2.0, 3.0]);
+    const b = new Float32Array([4.0, 5.0, 6.0]);
+    expect(output.computeDot(a, b)).toBeCloseTo(32.0, 5);
+  });
+
+  it("supports returning newly allocated TypedArrays from kernels", async () => {
+    const source = `as {
+  export function scale(v: Float32Array, factor: f32): Float32Array {
+    const out = new Float32Array(v.length);
+    for (let i = 0; i < v.length; ++i) {
+      out[i] = v[i] * factor;
+    }
+    return out;
+  }
+}
+export scaleVector = (v: Float32Array, f: Number) => scale(v, f)`;
+    const output = await execute(source);
+    const input = new Float32Array([1.5, 2.5, -3.0]);
+    const result = output.scaleVector(input, 2.0);
+    expect(result).toBeInstanceOf(Float32Array);
+    expect(Array.from(result)).toEqual([3.0, 5.0, -6.0]);
+  });
+
+  it("supports in-place mutation of buffers with void return", async () => {
+    const source = `as {
+  export function invertBytes(buf: Uint8Array): void {
+    for (let i = 0; i < buf.length; ++i) {
+      buf[i] = u8(255 - buf[i]);
+    }
+  }
+}
+export mutateInPlace = (buf: Uint8Array) => invertBytes(buf)`;
+    const output = await execute(source);
+    const buffer = new Uint8Array([0, 100, 255]);
+    output.mutateInPlace(buffer);
+    expect(Array.from(buffer)).toEqual([255, 155, 0]);
+  });
+
+  it("validates TypedArray types in .effect companion and reports WasmInputError", async () => {
+    const source = `as {
+  export function sumBytes(buf: Uint8Array): u32 {
+    let total: u32 = 0;
+    for (let i = 0; i < buf.length; ++i) {
+      total += buf[i];
+    }
+    return total;
+  }
+}
+export sumEffect = (buf: Uint8Array) => sumBytes.effect(buf)`;
+    const output = await execute(source);
+    const valid = new Uint8Array([10, 20, 30]);
+    const result = await Effect.runPromise(output.sumEffect(valid));
+    expect(result).toBe(60);
+
+    const err = await Effect.runPromise(Effect.flip(output.sumEffect([10, 20, 30] as any)));
+    expect(err).toMatchObject({
+      _tag: "WasmInputError",
+      function: "sumBytes",
+      parameter: "buf",
+      expected: "Uint8Array",
+      value: [10, 20, 30],
+    });
+  });
+
+  it("supports mixed parameters with TypedArrays and scalar values", async () => {
+    const source = `as {
+  export function fill(buf: Uint8Array, value: u32, count: u32): void {
+    const n = count < u32(buf.length) ? count : u32(buf.length);
+    for (let i: u32 = 0; i < n; ++i) {
+      buf[i] = u8(value);
+    }
+  }
+}
+export fillBuffer = (buf: Uint8Array, value: Number, count: Number) => fill(buf, value, count)
+export fillEffect = (buf: Uint8Array, value: Number, count: Number) => fill.effect(buf, value, count)`;
+    const output = await execute(source);
+    const buf = new Uint8Array(5);
+    output.fillBuffer(buf, 42, 3);
+    expect(Array.from(buf)).toEqual([42, 42, 42, 0, 0]);
+
+    const buf2 = new Uint8Array(5);
+    await Effect.runPromise(output.fillEffect(buf2, 7, 2));
+    expect(Array.from(buf2)).toEqual([7, 7, 0, 0, 0]);
+  });
+
+  it("integrates seamlessly into Effect Stream processing", async () => {
+    const source = `import { Stream } from "effect"
+
+as {
+  export function checksum(chunk: Uint8Array): u32 {
+    let sum: u32 = 0;
+    for (let i = 0; i < chunk.length; ++i) {
+      sum = (sum + chunk[i]) & 0xffff;
+    }
+    return sum;
+  }
+}
+
+export processStream = (chunks: Array<Uint8Array>) =>
+  Stream.fromIterable(chunks)
+  |> Stream.mapEffect((chunk) => checksum.effect(chunk))
+  |> Stream.runFold(() => 0, (acc, n) => acc + n)`;
+    const output = await execute(source, { scope: { Stream } });
+    const chunks = [
+      new Uint8Array([1, 2, 3]),
+      new Uint8Array([4, 5, 6]),
+      new Uint8Array([7, 8, 9]),
+    ];
+    const total = await Effect.runPromise(output.processStream(chunks));
+    expect(total).toBe(45);
   });
 
   it("round trips a block through the formatter", async () => {
