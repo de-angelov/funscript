@@ -77,7 +77,7 @@ export completeTask = (manager: TaskManager, targetId: Number) =>
     idx = draft.findIndex((t) => t.id #= targetId)
 
     when (idx #! -1) {
-      existing = Option.getOrThrow(draft[idx])
+      existing = Option.getOrElse(draft[idx], () => ({ id: 0, title: "", tag: "", completed: false }))
       updatedItem = { ...existing, completed: true }
       draft.splice(idx, 1, updatedItem)
     }

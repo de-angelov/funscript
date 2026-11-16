@@ -417,7 +417,18 @@ export const typeCheckVirtualFiles = (
             }
 
             const schemaError = compErr.error instanceof ImportedSchemaError ? compErr.error : undefined;
-            const suggestedAction = schemaError?.suggestedAction ?? "Fix the syntax at the highlighted location and run `funscript check` again.";
+            let code = schemaError ? "IMPORTED_SCHEMA" : "SYNTAX";
+            let diagnosticCode = schemaError?.code ?? "FS_SYNTAX";
+            let explanation = schemaError?.explanation ?? "The FunScript source could not be parsed.";
+            let suggestedAction = schemaError?.suggestedAction ?? "Fix the syntax at the highlighted location and run `funscript check` again.";
+
+            if (compErr.message.includes("FunScript has no 'throw'") || compErr.message.includes("is unsafe because it throws")) {
+              code = "THROW";
+              diagnosticCode = "FS_THROW";
+              explanation = "FunScript has no 'throw' and bans throwing APIs. Recoverable failures must be modeled using typed errors in the Effect E channel, and unrecoverable bugs should use 'Effect.die'.";
+              suggestedAction = "Replace throwing code with Effect typed errors or schema decoding.";
+            }
+
             const header = `${filePath}:${errLine}:${errCol} - error: ${compErr.message}`;
             const related = schemaError?.related;
             const relatedText = related ? `\n  TypeScript declaration: ${related.file}:${related.line + 1}:${related.column + 1}` : "";
@@ -428,12 +439,12 @@ export const typeCheckVirtualFiles = (
               line: errLine,
               column: errCol,
               message: compErr.message,
-              diagnosticCode: schemaError?.code ?? "FS_SYNTAX",
-              explanation: schemaError?.explanation ?? "The FunScript source could not be parsed.",
+              diagnosticCode,
+              explanation,
               suggestedAction,
               ...(related ? { related: { file: related.file, line: related.line + 1, column: related.column + 1, endLine: related.endLine + 1, endColumn: related.endColumn + 1 } } : {}),
               category: "error",
-              code: schemaError ? "IMPORTED_SCHEMA" : "SYNTAX",
+              code,
               frame,
               formatted,
             });
@@ -814,11 +825,50 @@ export const typeCheckVirtualFiles = (
             const isEntry = isEntryModule(meta.funPath, meta.ast, cwd);
             const walkAst = (node: any, parent?: any) => {
               if (!node || typeof node !== "object") return;
-              if (node.kind === "TsEscapeDeclaration" || node.kind === "TsEscapeExpression") return;
+              if (node.kind === "TsEscapeDeclaration" || node.kind === "TsEscapeExpression" || node.kind === "JsExpression") return;
 
               if (node.kind === "CallExpression") {
                 const callee = node.callee;
-                if (callee?.kind === "UpperIdentifier" && callee.name === "Date") {
+                if ((callee?.kind === "UpperIdentifier" || callee?.kind === "Identifier") && callee.name === "Error") {
+                  addAstDiag(
+                    node.span,
+                    "THROW",
+                    "`Error(...)` constructs an unmanaged JavaScript exception. In FunScript, declare domain failures with 'error Name { ... }' or fail within Effect using 'Effect.fail' or 'Effect.die'.",
+                    "error",
+                    "FunScript avoids raw JavaScript Error exceptions in favor of typed errors or explicit defects.",
+                    "Declare a typed error using `error Name { ... }` or use `Effect.dieMessage(...)`.",
+                  );
+                } else if (callee?.kind === "Identifier" && callee.name === "fetch") {
+                  addAstDiag(
+                    node.span,
+                    "NATIVE_API",
+                    "`fetch` is an unmanaged native HTTP client returning an untyped Promise. In FunScript, use '@effect/platform' HttpClient or lift with 'js fetch(...)'.",
+                    "error",
+                    "Bare fetch returns an unmanaged Promise without typed errors or retry policies.",
+                    "Use '@effect/platform' HttpClient or lift with `js fetch(...)`.",
+                  );
+                } else if (
+                  callee?.kind === "Identifier" &&
+                  (callee.name === "setTimeout" || callee.name === "setInterval" || callee.name === "clearTimeout" || callee.name === "clearInterval")
+                ) {
+                  addAstDiag(
+                    node.span,
+                    "NATIVE_API",
+                    `\`${callee.name}\` is an unmanaged native timer. Time and scheduling are Effect services; use 'Effect.sleep' or 'Schedule.spaced' to ensure fibers can be interrupted and tested deterministically.`,
+                    "error",
+                    "Native timers run outside Effect's fiber scheduler, leak when tasks are cancelled, and cannot be controlled with TestClock.",
+                    "Replace with `Effect.sleep(...)` or `Schedule.spaced(...)`.",
+                  );
+                } else if (callee?.kind === "Identifier" && (callee.name === "getOrThrow" || callee.name === "getOrThrowWith")) {
+                  addAstDiag(
+                    node.span,
+                    "THROW",
+                    `\`${callee.name}\` throws an unhandled exception at runtime. In FunScript, handle absence or failure safely using 'getOrElse', pattern matching ('match'), or lift with 'Effect.fromOption'.`,
+                    "error",
+                    "FunScript disallows runtime throwing methods.",
+                    "Use `Option.getOrElse`, `Option.match`, or `Effect.fromOption`.",
+                  );
+                } else if (callee?.kind === "UpperIdentifier" && callee.name === "Date") {
                   addAstDiag(
                     node.span,
                     "HIDDEN_INPUT",
@@ -874,6 +924,77 @@ export const typeCheckVirtualFiles = (
                       "error",
                       "Randomness is an Effect service; reading crypto directly creates non-reproducible states in tests.",
                       "Use Effect's Random service.",
+                    );
+                  } else if (o === "JSON" && p === "parse") {
+                    addAstDiag(
+                      node.span,
+                      "THROW",
+                      "`JSON.parse` is an unmanaged API that throws SyntaxError on invalid input. In FunScript, decode JSON safely using Effect's 'Schema.parseJson' or 'Schema.decodeUnknown'.",
+                      "error",
+                      "JSON.parse throws raw exceptions on malformed input.",
+                      "Use `Schema.parseJson(MySchema)` or `Schema.decodeUnknown(MySchema)`.",
+                    );
+                  } else if ((o === "Option" || o === "Either") && (p === "getOrThrow" || p === "getOrThrowWith")) {
+                    addAstDiag(
+                      node.span,
+                      "THROW",
+                      `\`${o}.${p}\` throws an unhandled exception at runtime. In FunScript, handle absence or failure safely using '${o}.getOrElse', pattern matching ('match'), or lift with 'Effect.from${o}'.`,
+                      "error",
+                      "FunScript disallows runtime throwing methods.",
+                      `Use \`${o}.getOrElse\`, \`${o}.match\`, or \`Effect.from${o}\`.`,
+                    );
+                  } else if (
+                    (o === "globalThis" || o === "window") &&
+                    (p === "setTimeout" || p === "setInterval" || p === "clearTimeout" || p === "clearInterval" || p === "fetch")
+                  ) {
+                    addAstDiag(
+                      node.span,
+                      "NATIVE_API",
+                      `\`${o}.${p}\` is an unmanaged native API. In FunScript, use Effect services instead.`,
+                      "error",
+                      "Unmanaged native APIs bypass Effect cancellation and tracing.",
+                      "Use Effect services ('Effect.sleep', '@effect/platform' HttpClient).",
+                    );
+                  } else if (!isEntry && o === "console" && (p === "log" || p === "error" || p === "warn" || p === "info")) {
+                    addAstDiag(
+                      node.span,
+                      "NATIVE_API",
+                      `\`console.${p}\` writes unmanaged output to global stream. In FunScript library code, use Effect's 'Console.${p}' service to keep logging contextual, traceable, and testable.`,
+                      "error",
+                      "Direct console logging in library code bypasses Effect's Logger services and cannot be intercepted or silenced in tests.",
+                      `Use \`Console.${p}\` from 'effect'.`,
+                    );
+                  }
+                }
+              } else if (node.kind === "PipelineExpression") {
+                const r = node.right;
+                if (
+                  (r?.kind === "MemberExpression" && (r.object?.name === "Option" || r.object?.name === "Either") && (r.property?.name === "getOrThrow" || r.property?.name === "getOrThrowWith")) ||
+                  (r?.kind === "Identifier" && (r.name === "getOrThrow" || r.name === "getOrThrowWith"))
+                ) {
+                  const targetName = r.kind === "MemberExpression" ? `${r.object.name}.${r.property.name}` : r.name;
+                  addAstDiag(
+                    r.span || node.span,
+                    "THROW",
+                    `\`${targetName}\` throws an unhandled exception at runtime. In FunScript, handle absence or failure safely using 'getOrElse', pattern matching ('match'), or lift to Effect.`,
+                    "error",
+                    "FunScript disallows runtime throwing methods.",
+                    "Use `Option.getOrElse`, `Option.match`, or `Effect.fromOption`.",
+                  );
+                } else if (r?.kind === "CallExpression") {
+                  const c = r.callee;
+                  if (
+                    (c?.kind === "MemberExpression" && (c.object?.name === "Option" || c.object?.name === "Either") && (c.property?.name === "getOrThrow" || c.property?.name === "getOrThrowWith")) ||
+                    (c?.kind === "Identifier" && (c.name === "getOrThrow" || c.name === "getOrThrowWith"))
+                  ) {
+                    const targetName = c.kind === "MemberExpression" ? `${c.object.name}.${c.property.name}` : c.name;
+                    addAstDiag(
+                      c.span || r.span,
+                      "THROW",
+                      `\`${targetName}\` throws an unhandled exception at runtime. In FunScript, handle absence or failure safely using 'getOrElse', pattern matching ('match'), or lift to Effect.`,
+                      "error",
+                      "FunScript disallows runtime throwing methods.",
+                      "Use `Option.getOrElse`, `Option.match`, or `Effect.fromOption`.",
                     );
                   }
                 }

@@ -688,5 +688,97 @@ ts {
       expect(resultEscape.success).toBe(true);
       expect(resultEscape.errorCount).toBe(0);
     });
+
+    it("rejects throw keyword and throwing functions (Option.getOrThrow, JSON.parse, Error) with THROW", async () => {
+      // 1. Keyword throw
+      const resultThrow = await Effect.runPromise(
+        typeCheckSource("export fail = () => throw new Error('boom')", "lib/throw.fun"),
+      );
+      expect(resultThrow.success).toBe(false);
+      expect(resultThrow.diagnostics.some((d) => d.code === "THROW" || d.diagnosticCode === "FS_THROW")).toBe(true);
+
+      // 2. JSON.parse (checked at emission)
+      const resultJson = await Effect.runPromise(
+        typeCheckSource("export parse = (s: String) => JSON.parse(s)", "lib/json-parse.fun"),
+      );
+      expect(resultJson.success).toBe(false);
+      expect(resultJson.diagnostics.some((d) => d.code === "THROW" || d.diagnosticCode === "FS_THROW")).toBe(true);
+      expect(resultJson.formattedOutput).toContain("JSON.parse");
+
+      // 3. Option.getOrThrow and Error(...)
+      const resultThrowCalls = await Effect.runPromise(
+        typeCheckSource(
+          `
+import { Option } from "effect"
+
+export unwrap = (o: Option<Number>) => Option.getOrThrow(o)
+export unwrapPipe = (o: Option<Number>) => o |> Option.getOrThrow
+export rawError = (msg: String) => Error(msg)
+`.trim(),
+          "lib/throwing-helpers.fun",
+        ),
+      );
+
+      expect(resultThrowCalls.success).toBe(false);
+      const throwDiags = resultThrowCalls.diagnostics.filter((d) => d.code === "THROW");
+      expect(throwDiags.length).toBeGreaterThanOrEqual(3);
+      expect(resultThrowCalls.formattedOutput).toContain("Option.getOrThrow");
+      expect(resultThrowCalls.formattedOutput).toContain("Error(...)");
+    });
+
+    it("rejects unmanaged native APIs (fetch, setTimeout, console.log in library) with NATIVE_API", async () => {
+      const resultNative = await Effect.runPromise(
+        typeCheckSource(
+          `
+export timer = (cb: () => Unit) => setTimeout(cb, 100)
+export callApi = (url: String) => fetch(url)
+export log = (msg: String) => console.log(msg)
+`.trim(),
+          "lib/native-calls.fun",
+        ),
+      );
+
+      expect(resultNative.success).toBe(false);
+      const nativeDiags = resultNative.diagnostics.filter((d) => d.code === "NATIVE_API");
+      expect(nativeDiags.length).toBeGreaterThanOrEqual(3);
+      expect(resultNative.formattedOutput).toContain("setTimeout");
+      expect(resultNative.formattedOutput).toContain("fetch");
+      expect(resultNative.formattedOutput).toContain("console.log");
+    });
+
+    it("permits js fetch(...) and console.log in entry modules", async () => {
+      const resultEntry = await Effect.runPromise(
+        typeCheckSource(
+          `
+ts { declare function fetch(url: string): Promise<any> }
+
+export main = () =>
+  console.log("Starting server...")
+`.trim(),
+          "src/main.fun",
+        ),
+      );
+
+      expect(resultEntry.success).toBe(true);
+      expect(resultEntry.errorCount).toBe(0);
+
+      const resultJsInterop = await Effect.runPromise(
+        typeCheckSource(
+          `
+ts { declare function fetch(url: string): Promise<{ ok: boolean }> }
+
+export fetchUser = (url: String) =>
+  effect {
+    res <- js fetch(url)
+    => res
+  }
+`.trim(),
+          "lib/api-interop.fun",
+        ),
+      );
+
+      expect(resultJsInterop.success).toBe(true);
+      expect(resultJsInterop.errorCount).toBe(0);
+    });
   });
 });
