@@ -915,5 +915,87 @@ export badErr = TypeError("invalid argument")
       expect(errorDiag?.code).toBe("THROW");
       expect(errorDiag?.suggestedAction).toContain("Effect.dieMessage");
     });
+
+    it("supports ambient decodeJson and encodeJson codec helpers in pipelines and direct calls", async () => {
+      const resultCodec = await Effect.runPromise(
+        typeCheckSource(
+          `
+export schema User = {
+  id: Number
+  name: String
+}
+
+export parseEffect = (raw: String) =>
+  effect {
+    user <- raw |> decodeJson(User)
+    jsonText <- user |> encodeJson(User)
+    => jsonText
+  }
+
+export parseDirect = (raw: String) => decodeJson(User, raw)
+export parseMember = (raw: String) => raw |> User.decodeJson
+export parseSync = (raw: String) => raw |> decodeJsonSync(User)
+export encodeMember = (u: User) => u |> User.encodeJson
+export encodeSync = (u: User) => u |> encodeJsonSync(User)
+`.trim(),
+          "lib/json-codec.fun",
+        ),
+      );
+
+      expect(resultCodec.success).toBe(true);
+      expect(resultCodec.errorCount).toBe(0);
+    });
+
+    it("detects non-exhaustive pattern match with FS_NON_EXHAUSTIVE_MATCH and actionable guidance", async () => {
+      // 1. Missing variant 'Overnight' without wildcard
+      const resultMissing = await Effect.runPromise(
+        typeCheckSource(
+          `
+export schema DeliveryTier =
+  | Standard
+  | Express
+  | Overnight
+
+export handle = (tier: DeliveryTier) =>
+  match tier
+    | Standard => "standard"
+    | Express => "express"
+`.trim(),
+          "lib/missing-arm.fun",
+        ),
+      );
+
+      expect(resultMissing.success).toBe(false);
+      const exhDiag = resultMissing.diagnostics.find(
+        (d) => d.code === "NON_EXHAUSTIVE_MATCH" || d.diagnosticCode === "FS_NON_EXHAUSTIVE_MATCH",
+      );
+      expect(exhDiag).toBeDefined();
+      expect(exhDiag?.diagnosticCode).toBe("FS_NON_EXHAUSTIVE_MATCH");
+      expect(exhDiag?.message).toContain("Pattern match is not exhaustive");
+      expect(exhDiag?.message).toContain("Overnight");
+      expect(exhDiag?.suggestedAction).toContain("Add arm '| Overnight => ...'");
+
+      // 2. Exhaustive match with all arms passes cleanly
+      const resultExhaustive = await Effect.runPromise(
+        typeCheckSource(
+          `
+export schema DeliveryTier =
+  | Standard
+  | Express
+  | Overnight
+
+export handle = (tier: DeliveryTier) =>
+  match tier
+    | Standard => "standard"
+    | Express => "express"
+    | Overnight => "overnight"
+`.trim(),
+          "lib/exhaustive-arm.fun",
+        ),
+      );
+
+      expect(resultExhaustive.success).toBe(true);
+      expect(resultExhaustive.errorCount).toBe(0);
+    });
   });
 });

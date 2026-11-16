@@ -192,6 +192,14 @@ export class PipelineResolver {
     // 1. Bare CallExpression: reduce(acc, f), map(f), lessThanOrEqualTo(0), orDie()
     if (stage.kind === "CallExpression" && stage.callee.kind === "Identifier") {
       const name = stage.callee.name;
+      if (
+        name === "decodeJson" ||
+        name === "decodeJsonSync" ||
+        name === "encodeJson" ||
+        name === "encodeJsonSync"
+      ) {
+        return stage;
+      }
       if (!this.context.isUserBinding(name)) {
         if ((!preferredCompanion || (preferredCompanion === "String" && ES_TOOLKIT_STRING_METHODS.has(name))) && ES_TOOLKIT_METHODS.has(name)) {
           this.context.esToolkitImports.add(name);
@@ -383,6 +391,12 @@ export class PipelineResolver {
       ? stage.callee.name
       : undefined;
     if (!name || preferredCompanion) return;
+    if (
+      name === "decodeJson" ||
+      name === "decodeJsonSync" ||
+      name === "encodeJson" ||
+      name === "encodeJsonSync"
+    ) return;
     if (this.context.isUserBinding(name)) return;
     const candidates = pipelineCompanionCandidates(name);
     if (candidates.length > 1 && !this.context.allowAmbiguousPipeline) {

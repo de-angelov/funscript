@@ -634,12 +634,31 @@ export const typeCheckVirtualFiles = (
             }
           }
 
+          let explanation = typeof code === "number" ? `TypeScript reported diagnostic TS${code} for the generated source.` : message;
+          let suggestedAction: string | undefined;
+
           if (
             (diag.code === 2488 || diag.code === 2461) &&
             /Promise/.test(message)
           ) {
             code = "PROMISE_BIND";
             message = "Cannot bind raw Promise in effect block. External asynchronous calls must be explicitly lifted using the 'js' operator (e.g. '<- js <expr>') or wrapped in 'Effect.tryPromise'.";
+            explanation = message;
+            suggestedAction = "Use '<- js <expr>' to lift foreign asynchronous calls into the effect block.";
+          }
+
+          if (
+            diag.code === 2349 &&
+            message.includes("NonExhaustiveError")
+          ) {
+            code = "NON_EXHAUSTIVE_MATCH";
+            const tagMatch = message.match(/_tag:\s*["']([^"']+)["']/);
+            const missingInfo = tagMatch ? ` Missing variant: '${tagMatch[1]}'.` : "";
+            explanation = "The pattern match expression does not handle all possible variants of the scrutinee type.";
+            suggestedAction = tagMatch
+              ? `Add arm '| ${tagMatch[1]} => ...' or use wildcard '| _ => ...' to handle remaining cases.`
+              : "Add arms for the missing variants or use a wildcard '| _ => ...'.";
+            message = `Pattern match is not exhaustive.${missingInfo} In FunScript, all variants must be handled or guarded with a fallback '| _ =>'.`;
           }
 
           let frame: string | undefined;
@@ -661,7 +680,7 @@ export const typeCheckVirtualFiles = (
 
           const codePrefix = typeof code === "number" ? `TS${code}` : code;
           const header = `${loc.file}:${loc.line}:${loc.column} - ${category} ${codePrefix}: ${message}`;
-          const formatted = frame ? `${header}\n${frame}` : header;
+          const formatted = `${frame ? `${header}\n${frame}` : header}${suggestedAction ? `\n  help: ${suggestedAction}` : ""}`;
 
           tsDiagnostics.push({
             file: loc.file,
@@ -670,8 +689,9 @@ export const typeCheckVirtualFiles = (
             endLine: loc.endLine,
             endColumn: loc.endColumn,
             message,
-            diagnosticCode: typeof code === "number" ? `TS${code}` : code,
-            explanation: typeof code === "number" ? `TypeScript reported diagnostic TS${code} for the generated source.` : message,
+            diagnosticCode: typeof code === "number" ? `TS${code}` : `FS_${code}`,
+            explanation,
+            suggestedAction,
             category,
             code,
             frame,

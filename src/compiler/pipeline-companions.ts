@@ -350,7 +350,14 @@ export function inferPipelineCompanions(
 
       // `js` is a language pipeline operator handled directly by the emitter;
       // its input is intentionally a Promise, not a companion operation.
-      if (fnName === "js") continue;
+      // Built-in codec helpers (decodeJson, encodeJson) are handled directly by emitter.
+      if (
+        fnName === "js" ||
+        fnName === "decodeJson" ||
+        fnName === "decodeJsonSync" ||
+        fnName === "encodeJson" ||
+        fnName === "encodeJsonSync"
+      ) continue;
 
       // User scope wins: local bindings and explicit imports take precedence
       // over type-directed companion dispatch.

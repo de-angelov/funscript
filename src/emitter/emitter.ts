@@ -1403,6 +1403,21 @@ export class Emitter {
       case "CallExpression":
         return this.emitCallExpression(expr);
       case "MemberExpression": {
+        const prop = expr.property.name;
+        if (
+          prop === "decodeJson" ||
+          prop === "decodeJsonSync" ||
+          prop === "encodeJson" ||
+          prop === "encodeJsonSync"
+        ) {
+          this.effectImports.add("Schema");
+          const schema = this.emitExpression(expr.object);
+          let combinator = "Schema.decodeUnknownEffect";
+          if (prop === "decodeJsonSync") combinator = "Schema.decodeUnknownSync";
+          else if (prop === "encodeJson") combinator = "Schema.encodeEffect";
+          else if (prop === "encodeJsonSync") combinator = "Schema.encodeSync";
+          return `${combinator}(Schema.fromJsonString(${schema}))`;
+        }
         const raw = `${this.emitExpression(expr.object)}.${this.emitMemberProperty(expr)}`;
         const field = this.recordField(expr);
         if (field?.defaultBinding) return field.defaultBinding;
@@ -1522,6 +1537,48 @@ export class Emitter {
         return `((__v) => { console.log(${label}, __v); return __v; })(${val})`;
       }
       return `((__v: any) => { console.log(__v); return __v; })`;
+    }
+
+    if (expr.callee.kind === "Identifier" && !this.isUserBinding(expr.callee.name)) {
+      const name = expr.callee.name;
+      if (name === "decodeJson" || name === "decodeJsonSync" || name === "encodeJson" || name === "encodeJsonSync") {
+        this.effectImports.add("Schema");
+        const schema = expr.args.length > 0 ? this.emitExpression(expr.args[0]) : "Schema.Unknown";
+        let combinator = "Schema.decodeUnknownEffect";
+        if (name === "decodeJsonSync") combinator = "Schema.decodeUnknownSync";
+        else if (name === "encodeJson") combinator = "Schema.encodeEffect";
+        else if (name === "encodeJsonSync") combinator = "Schema.encodeSync";
+
+        const codec = `${combinator}(Schema.fromJsonString(${schema}))`;
+        if (expr.args.length >= 2) {
+          const target = this.emitExpression(expr.args[1]);
+          return `${codec}(${target})`;
+        }
+        return codec;
+      }
+    }
+
+    if (
+      expr.callee.kind === "MemberExpression" &&
+      (expr.callee.property.name === "decodeJson" ||
+        expr.callee.property.name === "decodeJsonSync" ||
+        expr.callee.property.name === "encodeJson" ||
+        expr.callee.property.name === "encodeJsonSync")
+    ) {
+      this.effectImports.add("Schema");
+      const schema = this.emitExpression(expr.callee.object);
+      const prop = expr.callee.property.name;
+      let combinator = "Schema.decodeUnknownEffect";
+      if (prop === "decodeJsonSync") combinator = "Schema.decodeUnknownSync";
+      else if (prop === "encodeJson") combinator = "Schema.encodeEffect";
+      else if (prop === "encodeJsonSync") combinator = "Schema.encodeSync";
+
+      const codec = `${combinator}(Schema.fromJsonString(${schema}))`;
+      if (expr.args.length >= 1) {
+        const target = this.emitExpression(expr.args[0]);
+        return `${codec}(${target})`;
+      }
+      return codec;
     }
 
     if (

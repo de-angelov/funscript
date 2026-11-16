@@ -2545,16 +2545,51 @@ nor `Unknown` itself proves that an external value satisfies a schema.
 | `FS_THROW` | Error | Raw `throw` statements and throwing methods (`Option.getOrThrow`, `Either.getOrThrow`, `JSON.parse`, `Error(...)`) are forbidden. | Model failures with Effect typed errors (`Effect.fail`, `error Name { ... }`), handle absence with `Option.getOrElse`/`match`, or decode JSON with `Schema.parseJson`. |
 | `FS_NATIVE_API` | Error | Unmanaged native JS/Node APIs (`fetch`, `setTimeout`, `setInterval`, `console.log` in library code, `Promise.resolve`, etc.) are forbidden. | Use Effect ecosystem equivalents (`@effect/platform` `HttpClient`, `Effect.sleep`, `Schedule.spaced`, `Console.log`, `Effect.promise`) or isolate foreign calls with `js ...`. |
 | `FS_INPLACE_MUTATION` | Error | In-place mutating array methods (`.push()`, `.pop()`, `.shift()`, `.unshift()`, `.splice()`, `.sort()`, `.reverse()`) are quarantined outside draft proxy blocks. | Use immutable functional alternatives (`Array.append`, `Array.remove`, `Array.modify`) or isolate mutable recipes inside `mut (draft) => { ... }`. |
+| `FS_NON_EXHAUSTIVE_MATCH` | Error | Pattern match on schemas, variants, or tagged unions fails to handle all cases without a wildcard fallback. | Add an explicit pattern arm for the missing variant (e.g. `\| Overnight => ...`) or add a wildcard fallback `\| _ => ...`. |
 | `FS_NESTED_EFFECT` | Error | Returning an `Effect` value from inside an `effect` block creates a nested `Effect<Effect<...>>`. | Bind the effect using `<-` before returning it (`res <- myEffect; => res`). Prevents accidentally returning unexecuted effects. |
 
 #### Escape hatches
 When interacting with third-party JavaScript libraries that require `Date`, raw `process.env`, or detached promises, isolate the foreign interop inside an explicit `ts { ... }` block. Raw TypeScript blocks bypass these static AST guardrails and remain visible in code review.
 
-### 12.3.2 Standard Library Prelude (Ambient Effect Modules)
+### 12.3.2 Standard Library Prelude & JSON Codec Helpers
 
 To maintain idiomatic Effect code without boilerplates, common Effect modules (`Effect`, `Option`, `Result`, `Duration`, `Clock`, `Console`, `Random`, `Config`, `Schedule`, `Queue`, `Ref`, `Fiber`, `Layer`, `HashMap`, `HashSet`, `Stream`, `Chunk`) are ambiently available in FunScript files without manual `import { ... } from "effect"` declarations. The compiler automatically tracks referenced Effect modules and generates optimal TypeScript header imports.
 
 In type positions, types such as `Option<T>`, `Result<A, E>`, `Duration`, `Config<T>`, `Queue<T>`, `Ref<T>`, `Fiber<E, A>`, and `HashMap<K, V>` automatically resolve to their canonical Effect types (`Option.Option<T>`, `Duration.Duration`, etc.).
+
+#### Ambient JSON Codecs (`decodeJson` / `encodeJson`)
+
+FunScript provides first-class JSON codec helpers that lower directly to Effect's `Schema.fromJsonString`:
+
+```funscript
+export schema User = {
+  id: Number
+  name: String
+}
+
+// 1. Pipeline style (Effect returning):
+export parseUser = (rawJson: String) =>
+  rawJson |> decodeJson(User)
+
+// 2. Direct call style:
+export userEff = decodeJson(User, rawJson)
+
+// 3. Schema companion member style:
+export userFromMember = rawJson |> User.decodeJson
+
+// 4. Synchronous parsing:
+export syncUser = rawJson |> decodeJsonSync(User)
+
+// 5. Encoding to JSON string:
+export userJson = user |> encodeJson(User)
+export syncJson = user |> encodeJsonSync(User)
+```
+
+In `effect { ... }` blocks:
+```funscript
+user <- rawJson |> decodeJson(User)
+jsonText <- user |> encodeJson(User)
+```
 
 ### 12.4 Typed holes (`???`)
 
