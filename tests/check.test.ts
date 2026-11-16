@@ -780,5 +780,50 @@ export fetchUser = (url: String) =>
       expect(resultJsInterop.success).toBe(true);
       expect(resultJsInterop.errorCount).toBe(0);
     });
+
+    it("rejects returning an Effect from inside an effect block (NESTED_EFFECT)", async () => {
+      const resultNested = await Effect.runPromise(
+        typeCheckSource(
+          `
+import { Effect } from "effect"
+
+fetchData = () => Effect.succeed("data")
+
+export task = effect {
+  _ <- Effect.succeed(1)
+  => fetchData()
+}
+`.trim(),
+          "lib/nested-effect.fun",
+        ),
+      );
+
+      expect(resultNested.success).toBe(false);
+      const nestedDiag = resultNested.diagnostics.find((d) => d.code === "NESTED_EFFECT");
+      expect(nestedDiag).toBeDefined();
+      expect(nestedDiag?.diagnosticCode).toBe("FS_NESTED_EFFECT");
+      expect(nestedDiag?.message).toContain("Returning an Effect from inside an 'effect' block creates a nested 'Effect<Effect<...>>'");
+      expect(resultNested.formattedOutput).toContain("fetchData()");
+
+      // Valid: binding with <- and returning result
+      const resultValid = await Effect.runPromise(
+        typeCheckSource(
+          `
+import { Effect } from "effect"
+
+fetchData = () => Effect.succeed("data")
+
+export task = effect {
+  data <- fetchData()
+  => data
+}
+`.trim(),
+          "lib/valid-effect.fun",
+        ),
+      );
+
+      expect(resultValid.success).toBe(true);
+      expect(resultValid.errorCount).toBe(0);
+    });
   });
 });

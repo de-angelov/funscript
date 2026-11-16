@@ -724,10 +724,21 @@ export const typeCheckVirtualFiles = (
           const unannotatedBindings = getFunScriptUnannotatedBindings(meta.ast);
           const memberAccesses = getFunScriptMemberAccesses(meta.ast);
 
+          const isEffectType = (type: ts.Type): boolean => {
+            if (!type) return false;
+            if (type.isUnion()) return type.types.some((t) => isEffectType(t));
+            if (type.symbol?.name === "Effect" || type.aliasSymbol?.name === "Effect") return true;
+            if (type.getProperties().some((p) => p.name.includes("effect/Effect") || p.name === "~effect/Effect")) return true;
+            const str = checker.typeToString(type);
+            return str.startsWith("Effect<") || str.includes("Effect.Effect<");
+          };
+
           const addCustomDiag = (
             targetNode: ts.Node,
             code: string,
             customMsg: string,
+            explanation?: string,
+            suggestedAction?: string,
           ) => {
             const loc = mapDiagnosticLocation(
               {
@@ -767,6 +778,9 @@ export const typeCheckVirtualFiles = (
               endLine: loc.endLine,
               endColumn: loc.endColumn,
               message: customMsg,
+              diagnosticCode: `FS_${code}`,
+              explanation,
+              suggestedAction,
               category: "error",
               code,
               frame,
@@ -1158,7 +1172,30 @@ export const typeCheckVirtualFiles = (
           }
 
           const visit = (node: ts.Node): void => {
-            if (ts.isYieldExpression(node) && node.asteriskToken && node.expression) {
+            if (ts.isReturnStatement(node) && node.expression) {
+              let enc: ts.Node | undefined = node.parent;
+              while (enc && !ts.isFunctionExpression(enc) && !ts.isArrowFunction(enc) && !ts.isFunctionDeclaration(enc)) {
+                enc = enc.parent;
+              }
+              if (enc && ts.isFunctionExpression(enc) && enc.asteriskToken) {
+                const parentCall = enc.parent;
+                if (parentCall && ts.isCallExpression(parentCall)) {
+                  const calleeText = parentCall.expression.getText(sf);
+                  if (calleeText === "Effect.gen" || calleeText.endsWith(".gen")) {
+                    const retType = checker.getTypeAtLocation(node.expression);
+                    if (isEffectType(retType)) {
+                      addCustomDiag(
+                        node.expression,
+                        "NESTED_EFFECT",
+                        "Returning an Effect from inside an 'effect' block creates a nested 'Effect<Effect<...>>' that will not be executed. Use '<-' to bind and execute the effect (e.g. 'result <- <effect>; => result').",
+                        "An 'effect' block automatically wraps its final value in an Effect. Returning an Effect without binding it means the inner effect is returned as unexecuted data.",
+                        "Bind the effect with `<-` before returning it, or return a non-Effect value.",
+                      );
+                    }
+                  }
+                }
+              }
+            } else if (ts.isYieldExpression(node) && node.asteriskToken && node.expression) {
               const isJsInterop =
                 ts.isCallExpression(node.expression) &&
                 ts.isIdentifier(node.expression.expression) &&

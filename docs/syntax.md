@@ -2544,6 +2544,7 @@ nor `Unknown` itself proves that an external value satisfies a schema.
 | `FS_UNBOUNDED_CONCURRENCY` | Warning | `{ concurrency: "unbounded" }` is flagged to prevent resource exhaustion (socket, descriptor, or memory starvation under burst load). | Specify an explicit concurrency limit (e.g. `{ concurrency: 10 }`). |
 | `FS_THROW` | Error | Raw `throw` statements and throwing methods (`Option.getOrThrow`, `Either.getOrThrow`, `JSON.parse`, `Error(...)`) are forbidden. | Model failures with Effect typed errors (`Effect.fail`, `error Name { ... }`), handle absence with `Option.getOrElse`/`match`, or decode JSON with `Schema.parseJson`. |
 | `FS_NATIVE_API` | Error | Unmanaged native JS/Node APIs (`fetch`, `setTimeout`, `setInterval`, `console.log` in library code) are forbidden. | Use Effect ecosystem equivalents (`@effect/platform` `HttpClient`, `Effect.sleep`, `Schedule.spaced`, `Console.log`) or isolate foreign calls with `js ...`. |
+| `FS_NESTED_EFFECT` | Error | Returning an `Effect` value from inside an `effect` block creates a nested `Effect<Effect<...>>`. | Bind the effect using `<-` before returning it (`res <- myEffect; => res`). Prevents accidentally returning unexecuted effects. |
 
 #### Escape hatches
 When interacting with third-party JavaScript libraries that require `Date`, raw `process.env`, or detached promises, isolate the foreign interop inside an explicit `ts { ... }` block. Raw TypeScript blocks bypass these static AST guardrails and remain visible in code review.
