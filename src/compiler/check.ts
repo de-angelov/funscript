@@ -292,6 +292,11 @@ export function isEntryModule(funPath: string, ast?: any, cwd: string = process.
       if (stmt.kind === "BindingDeclaration" && stmt.id?.name === "main" && stmt.isExported) {
         return true;
       }
+      if (stmt.kind === "ExportNamedDeclaration" && Array.isArray(stmt.specifiers)) {
+        if (stmt.specifiers.some((s: any) => s.exported?.name === "main" || s.local?.name === "main")) {
+          return true;
+        }
+      }
     }
   }
 
@@ -311,6 +316,39 @@ export function isEntryModule(funPath: string, ast?: any, cwd: string = process.
   } catch {}
 
   return false;
+}
+
+const EFFECT_RUNNER_FUNCTIONS = new Set([
+  "runPromise",
+  "runSync",
+  "runFork",
+  "runPromiseExit",
+  "runSyncExit",
+  "runMain",
+]);
+
+const EFFECT_RUNNER_MODULES = new Set([
+  "Effect",
+  "Runtime",
+  "ManagedRuntime",
+  "NodeRuntime",
+  "BunRuntime",
+]);
+
+function getEffectRunnerName(node: any): string | null {
+  if (!node) return null;
+  if (node.kind === "MemberExpression") {
+    const objName = node.object?.name;
+    const propName = node.property?.name;
+    if (EFFECT_RUNNER_MODULES.has(objName) && EFFECT_RUNNER_FUNCTIONS.has(propName)) {
+      return `${objName}.${propName}`;
+    }
+  } else if (node.kind === "Identifier") {
+    if (EFFECT_RUNNER_FUNCTIONS.has(node.name)) {
+      return node.name;
+    }
+  }
+  return null;
 }
 
 export const typeCheckVirtualFiles = (
@@ -867,6 +905,57 @@ export const typeCheckVirtualFiles = (
               }
 
               if (!isEntry) {
+                // §1.10: Running Effects mid-program
+                let runnerName: string | null = null;
+                let runnerSpan: any = null;
+
+                if (node.kind === "CallExpression") {
+                  runnerName = getEffectRunnerName(node.callee);
+                  runnerSpan = node.callee?.span || node.span;
+                } else if (node.kind === "PipelineExpression") {
+                  const r = node.right;
+                  if (r?.kind === "CallExpression") {
+                    runnerName = getEffectRunnerName(r.callee);
+                    runnerSpan = r.callee?.span || r.span;
+                  } else {
+                    runnerName = getEffectRunnerName(r);
+                    runnerSpan = r?.span || node.span;
+                  }
+                }
+
+                if (runnerName) {
+                  addAstDiag(
+                    runnerSpan,
+                    "EFFECT_RUN",
+                    `\`${runnerName}\` executes an Effect mid-program. In FunScript, library code must compose and return Effects. Only entry modules (e.g. 'main.fun', or modules exporting 'main') may run effects.`,
+                    "error",
+                    "Running effects mid-program breaks composability, defeats dependency injection with Layer/Context, and prevents the caller from controlling execution or handling errors.",
+                    "Return the `Effect` directly from this function and allow the entry module (or main) to execute it.",
+                  );
+                }
+
+                // §1.11: Reading globals for configuration
+                if (node.kind === "MemberExpression") {
+                  const obj = node.object;
+                  const prop = node.property;
+                  if (
+                    obj?.kind === "Identifier" &&
+                    (obj.name === "process" || obj.name === "Deno" || obj.name === "Bun") &&
+                    prop?.name === "env"
+                  ) {
+                    const fullName = `${obj.name}.env`;
+                    addAstDiag(
+                      node.span,
+                      "ENV_GLOBAL",
+                      `\`${fullName}\` reads environment configuration directly from global state. In FunScript, library code should declare configuration dependencies using Effect's 'Config' service, or receive configuration as parameters.`,
+                      "error",
+                      "Reading global environment variables in library code couples modules to ambient state and makes testing and re-configuration difficult.",
+                      "Use Effect 'Config' (e.g. `Config.string('VAR')`) or pass configuration explicitly as arguments.",
+                    );
+                  }
+                }
+
+                // §1.13: Detached fibers
                 if (node.kind === "CallExpression") {
                   const c = node.callee;
                   if (

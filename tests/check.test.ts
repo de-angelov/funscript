@@ -582,5 +582,111 @@ export run = Effect.all([task], { concurrency: "unbounded" })
       expect(warn?.category).toBe("warning");
       expect(warn?.message).toContain('concurrency: "unbounded"');
     });
+
+    it("rejects running Effects mid-program (EFFECT_RUN) outside entry modules", async () => {
+      const result = await Effect.runPromise(
+        typeCheckSource(
+          `
+import { Effect } from "effect"
+
+task = Effect.succeed(42)
+export calc = Effect.runPromise(task)
+export sync = task |> Effect.runSync
+`.trim(),
+          "lib/calc.fun",
+        ),
+      );
+
+      expect(result.success).toBe(false);
+      const codes = result.diagnostics.map((d) => d.code);
+      expect(codes).toContain("EFFECT_RUN");
+      expect(result.formattedOutput).toContain("Effect.runPromise");
+      expect(result.formattedOutput).toContain("Effect.runSync");
+      expect(result.formattedOutput).toContain("executes an Effect mid-program");
+    });
+
+    it("permits running Effects in entry modules (main.fun or export main)", async () => {
+      const resultMain = await Effect.runPromise(
+        typeCheckSource(
+          `
+import { Effect } from "effect"
+
+task = Effect.succeed(42)
+export result = Effect.runPromise(task)
+`.trim(),
+          "src/main.fun",
+        ),
+      );
+
+      expect(resultMain.success).toBe(true);
+      expect(resultMain.errorCount).toBe(0);
+
+      const resultExportMain = await Effect.runPromise(
+        typeCheckSource(
+          `
+import { Effect } from "effect"
+
+task = Effect.succeed(42)
+export main = Effect.runPromise(task)
+`.trim(),
+          "server.fun",
+        ),
+      );
+
+      expect(resultExportMain.success).toBe(true);
+      expect(resultExportMain.errorCount).toBe(0);
+    });
+
+    it("rejects reading process.env / Deno.env / Bun.env outside entry modules", async () => {
+      const result = await Effect.runPromise(
+        typeCheckSource(
+          `
+import process from "node:process"
+
+export port = process.env.PORT
+export host = process.env["HOST"]
+`.trim(),
+          "lib/config.fun",
+        ),
+      );
+
+      expect(result.success).toBe(false);
+      const codes = result.diagnostics.map((d) => d.code);
+      expect(codes).toContain("ENV_GLOBAL");
+      expect(result.formattedOutput).toContain("process.env");
+      expect(result.formattedOutput).toContain("Config");
+    });
+
+    it("permits reading process.env in entry modules or ts escape hatches", async () => {
+      const resultEntry = await Effect.runPromise(
+        typeCheckSource(
+          `
+import process from "node:process"
+
+port = Number(process.env.PORT) or 3000
+export main = port
+`.trim(),
+          "server.fun",
+        ),
+      );
+
+      expect(resultEntry.success).toBe(true);
+      expect(resultEntry.errorCount).toBe(0);
+
+      const resultEscape = await Effect.runPromise(
+        typeCheckSource(
+          `
+ts {
+  const p = process.env.PORT;
+  export const port = p ? Number(p) : 3000;
+}
+`.trim(),
+          "lib/escape-config.fun",
+        ),
+      );
+
+      expect(resultEscape.success).toBe(true);
+      expect(resultEscape.errorCount).toBe(0);
+    });
   });
 });
