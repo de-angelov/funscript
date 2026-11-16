@@ -1,12 +1,11 @@
 import { parentPort } from "node:worker_threads";
 import { fileURLToPath } from "node:url";
-import { Effect } from "effect";
 import { DiagnosticSeverity, type Diagnostic, type PublishDiagnosticsParams, type TextDocumentItem } from "vscode-languageserver/node";
-import { createTypeCheckCache, typeCheckVirtualFiles } from "../compiler/check.js";
-import { validateFunScript } from "./server.js";
+import type { TypeCheckCache, TypeCheckResult } from "../compiler/check.js";
+import { validateFunScript } from "./validation.js";
 
 type Request = { revision: number; documents: TextDocumentItem[] };
-const cache = createTypeCheckCache();
+let cache: TypeCheckCache | undefined;
 let previousFiles = new Set<string>();
 
 parentPort?.on("message", async (request: Request) => {
@@ -27,11 +26,16 @@ parentPort?.on("message", async (request: Request) => {
     }
     const currentFiles = new Set(Object.keys(files));
     for (const filename of previousFiles) if (!currentFiles.has(filename)) {
-      cache.compiledFiles.delete(filename);
-      cache.sourceFiles.delete(filename.replace(/\.(fun|funx)$/, filename.endsWith(".funx") ? ".tsx" : ".ts"));
+      cache?.compiledFiles.delete(filename);
+      cache?.sourceFiles.delete(filename.replace(/\.(fun|funx)$/, filename.endsWith(".funx") ? ".tsx" : ".ts"));
     }
     previousFiles = currentFiles;
-    const checked = currentFiles.size ? await Effect.runPromise(typeCheckVirtualFiles(files, { cache })) : undefined;
+    let checked: TypeCheckResult | undefined;
+    if (currentFiles.size) {
+      const [{ Effect }, { createTypeCheckCache, typeCheckVirtualFiles }] = await Promise.all([import("effect"), import("../compiler/check.js")]);
+      cache ??= createTypeCheckCache();
+      checked = await Effect.runPromise(typeCheckVirtualFiles(files, { cache }));
+    }
     const diagnostics: PublishDiagnosticsParams[] = request.documents.flatMap(doc => {
       const direct = semantic.get(doc.uri) ?? [];
       const filename = filenames.get(doc.uri);

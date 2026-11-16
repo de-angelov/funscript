@@ -21,6 +21,56 @@ function spanAtOffset(source: string, offset: number): Span {
   return { start: position, end: position };
 }
 
+function comparisonError(source: string, offset: number, operator: string, received: string): NumericComparisonError {
+  const helper = operator === ">=" ? "isGreaterThanOrEqualTo"
+    : operator === "<=" ? "isLessThanOrEqualTo"
+    : operator === ">" ? "isGreaterThan" : "isLessThan";
+  return new NumericComparisonError(
+    `${operator} is only available for numbers; this operand has type ${received}. Use Order.${helper}(String.Order)(...) or an explicit domain Order. See docs/syntax.md#42-equality-and-comparisons.`,
+    spanAtOffset(source, offset),
+  );
+}
+
+/** Handle only direct comparisons of explicitly typed primitive parameters. */
+function checkDirectParameters(generated: string, source: string): boolean {
+  const file = ts.createSourceFile("numeric-fast-path.ts", generated, ts.ScriptTarget.Latest, true, ts.ScriptKind.TS);
+  if ((file as ts.SourceFile & { parseDiagnostics: readonly ts.Diagnostic[] }).parseDiagnostics.length) return false;
+  let count = 0;
+  let unresolved = false;
+  let firstError: NumericComparisonError | undefined;
+  const visit = (node: ts.Node): void => {
+    if (ts.isCallExpression(node) && ts.isIdentifier(node.expression) && node.expression.text === "__funscriptNumericOperand" && node.arguments.length === 3) {
+      count++;
+      const [offset, operator, value] = node.arguments;
+      const binary = node.parent;
+      if (!ts.isNumericLiteral(offset) || !ts.isStringLiteral(operator) || !ts.isIdentifier(value) || !ts.isBinaryExpression(binary) || (binary.left !== node && binary.right !== node)) {
+        unresolved = true;
+      } else {
+        let body: ts.Node = binary;
+        while (body.parent && ts.isParenthesizedExpression(body.parent)) body = body.parent;
+        const arrow = body.parent;
+        if (!arrow || !ts.isArrowFunction(arrow) || arrow.body !== body) {
+          unresolved = true;
+        } else {
+          const matches = arrow.parameters.filter(parameter => ts.isIdentifier(parameter.name) && parameter.name.text === value.text);
+          const parameter = matches[0];
+          if (matches.length !== 1 || !parameter.type || parameter.questionToken || parameter.initializer || parameter.dotDotDotToken ||
+            (parameter.type.kind !== ts.SyntaxKind.NumberKeyword && parameter.type.kind !== ts.SyntaxKind.StringKeyword)) {
+            unresolved = true;
+          } else if (parameter.type.kind === ts.SyntaxKind.StringKeyword && !firstError) {
+            firstError = comparisonError(source, Number(offset.text), operator.text, "string");
+          }
+        }
+      }
+    }
+    ts.forEachChild(node, visit);
+  };
+  visit(file);
+  if (!count || unresolved) return false;
+  if (firstError) throw firstError;
+  return true;
+}
+
 /**
  * Native relational operators deliberately have a much narrower domain than
  * JavaScript: both operands must be proven numbers. This keeps string,
@@ -36,6 +86,7 @@ export function validateNumericComparisons(ast: Program, source: string, context
   if (!marked.includes("__funscriptNumericOperand(")) return;
 
   const generated = `const __funscriptNumericOperand = <T,>(_offset: number, _operator: string, value: T): T => value;\n${marked}`;
+  if (checkDirectParameters(generated, source)) return;
   const checked = context.check(generated);
   if (!checked) return;
   const { sourceFile, checker } = checked;
@@ -62,14 +113,8 @@ export function validateNumericComparisons(ast: Program, source: string, context
       const type = checker.getTypeAtLocation(node.arguments[2]);
       if (!isDefinitelyNumber(type)) {
         const operator = node.arguments[1].text;
-        const helper = operator === ">=" ? "isGreaterThanOrEqualTo"
-          : operator === "<=" ? "isLessThanOrEqualTo"
-          : operator === ">" ? "isGreaterThan" : "isLessThan";
         const received = checker.typeToString(type);
-        throw new NumericComparisonError(
-          `${operator} is only available for numbers; this operand has type ${received}. Use Order.${helper}(String.Order)(...) or an explicit domain Order. See docs/syntax.md#42-equality-and-comparisons.`,
-          spanAtOffset(source, Number(node.arguments[0].text)),
-        );
+        throw comparisonError(source, Number(node.arguments[0].text), operator, received);
       }
     }
     ts.forEachChild(node, visit);
