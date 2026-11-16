@@ -1585,10 +1585,20 @@ validation behavior. A callback-bearing declaration such as
 
 This first slice supports unconstrained type parameters and required or optional fields
 made from primitives, type parameters, arrays, unions, local data schemas, and nested
-records with required fields. Defaults, recursive or nested generic declarations, and
-generic tagged-union decoders are not supported. A local generic data schema can be used
-in another data schema as `Page<Country>`; across modules, import the factory and call
-`Page(Country)` explicitly. `SchemaInput` does not yet accept generic applications.
+records with required fields. Generic data schemas can also compose verified generic
+factories, including through named imports:
+
+```funscript
+export schema Result<A> = { data: Page<A>, requestId: String }
+```
+
+Defaults, recursive generic declarations, and generic tagged-union decoders are not
+supported. A generic data schema can be used
+in another data schema as `Page<Country>`, including through a named import or named
+re-export when the compiler can verify the factory. Imported factories with references
+to non-generic named schemas currently require an explicit `Page(Country)` call. For an
+imported factory, schema arguments must be local data schemas, supported primitives,
+or imported identity record schemas the compiler can verify. `SchemaInput` does not yet accept generic applications.
 Factory arguments must have required, readonly **field modifiers**; passing an
 optional-key or mutable-key wrapper is rejected by type checking and at the factory
 boundary. Declare optional fields on the generic data record itself. Nested values keep

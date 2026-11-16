@@ -108,6 +108,7 @@ export interface EmitterOptions {
   importedRecordContracts?: ReadonlyMap<string, import("../ast/types.js").RecordTypeNode>;
   /** Direct imported data schemas verified to have an identity encoding. */
   importedIdentitySchemas?: ReadonlySet<string>;
+  importedGenericDataSchemas?: ReadonlyMap<string, number>;
   /** Whether the output is `.tsx`; generic arrows need a comma there. */
   isJsx?: boolean;
 }
@@ -310,6 +311,7 @@ export class Emitter {
   private declaredTypeNames = new Set<string>();
   private runtimeSchemaNames = new Set<string>();
   private genericDataSchemas = new Map<string, number>();
+  private genericSchemaDeclarations = new Map<string, SchemaDeclaration>();
   private activeSchemaParameters?: Set<string>;
   private unsafeSchemaBinding = false;
   private inPipelineStage = false;
@@ -444,6 +446,7 @@ export class Emitter {
       const decl = item.kind === "ExportDeclaration" ? item.declaration : item;
       if (decl.kind === "SchemaDeclaration" && decl.body.kind === "RecordSchema" && decl.typeParams?.length && !this.recordContracts.has(decl.id.name)) {
         this.genericDataSchemas.set(decl.id.name, decl.typeParams.length);
+        this.genericSchemaDeclarations.set(decl.id.name, decl);
       }
     }
   }
@@ -714,6 +717,38 @@ export class Emitter {
     if (names.size !== parameters.length || decl.typeParams.some(param => param.constraint || ["Schema", "String", "Number", "Boolean", "Array", "Option", "Record", decl.id.name].includes(param.name.name))) {
       throw new FunScriptError("Generic data schemas require distinct, unconstrained type parameters that do not shadow built-in schema names.", decl.span);
     }
+    // A generic factory is evaluated when called. Cycles would recurse forever,
+    // including cycles formed by declarations that appear later in the file.
+    const visitFactory = (name: string, active: Set<string>): boolean => {
+      if (active.has(name)) return false;
+      const target = this.genericSchemaDeclarations.get(name);
+      if (!target || target.body.kind !== "RecordSchema") return true;
+      const next = new Set(active).add(name);
+      const params = new Set(target.typeParams?.map(param => param.name.name));
+      const visitType = (type: TypeNode): boolean => {
+        if (type.kind === "ParenthesizedTypeNode") return visitType(type.typeNode);
+        if (type.kind === "ArrayTypeNode") return visitType(type.elementType);
+        if (type.kind === "UnionTypeNode") return type.types.every(visitType);
+        if (type.kind === "RecordTypeNode") return type.fields.every(field => visitType(field.typeAnnotation));
+        if (type.kind !== "TypeReferenceNode") return true;
+        return (params.has(type.name.name) || !this.genericSchemaDeclarations.has(type.name.name) || visitFactory(type.name.name, next)) && (type.typeArgs?.every(visitType) ?? true);
+      };
+      return target.body.fields.every(field => visitType(field.typeAnnotation));
+    };
+    if (!visitFactory(decl.id.name, new Set())) {
+      throw new FunScriptError(`Generic data schema '${decl.id.name}' cannot use recursive generic schema factories.`, decl.span);
+    }
+    const supportsArgument = (type: TypeNode): boolean => {
+      if (type.kind === "ParenthesizedTypeNode") return supportsArgument(type.typeNode);
+      if (type.kind !== "TypeReferenceNode") return false;
+      const name = type.name.name;
+      if (names.has(name)) return !type.typeArgs?.length;
+      if (["String", "Number", "Boolean"].includes(name)) return !type.typeArgs?.length && !this.declaredTypeNames.has(name);
+      if (name === "Array") return type.typeArgs?.length === 1 && supportsArgument(type.typeArgs[0]);
+      const arity = this.genericDataSchemas.get(name) ?? this.options.importedGenericDataSchemas?.get(name);
+      if (arity !== undefined) return type.typeArgs?.length === arity && type.typeArgs.every(supportsArgument);
+      return !type.typeArgs?.length && ((this.runtimeSchemaNames.has(name) && !this.genericDataSchemas.has(name)) || this.options.importedIdentitySchemas?.has(name) === true);
+    };
     const supports = (type: TypeNode): boolean => {
       if (type.kind === "ParenthesizedTypeNode") return supports(type.typeNode);
       if (type.kind === "LiteralTypeNode") return true;
@@ -725,11 +760,13 @@ export class Emitter {
       if (names.has(name)) return !type.typeArgs?.length;
       if (["String", "Number", "Boolean"].includes(name)) return !type.typeArgs?.length && !this.declaredTypeNames.has(name);
       if (name === "Array") return type.typeArgs?.length === 1 && supports(type.typeArgs[0]);
+      const arity = this.genericDataSchemas.get(name) ?? this.options.importedGenericDataSchemas?.get(name);
+      if (arity !== undefined) return type.typeArgs?.length === arity && type.typeArgs.every(supportsArgument);
       return !type.typeArgs?.length && this.runtimeSchemaNames.has(name) && !this.genericDataSchemas.has(name);
     };
     for (const field of decl.body.fields) {
       if (field.name.name === "__proto__" || field.defaultValue || !supports(field.typeAnnotation)) {
-        throw new FunScriptError(`Generic data schema '${decl.id.name}' currently supports required or optional fields with primitive, local data-schema, type-parameter, array, union, or nested required-record types. Field '${field.name.name}' needs an explicit non-generic schema or contract.`, field.span);
+        throw new FunScriptError(`Generic data schema '${decl.id.name}' currently supports required or optional fields with primitive, local data-schema, type-parameter, array, union, verified generic application, or nested required-record types. Field '${field.name.name}' needs an explicit non-generic schema or contract.`, field.span);
       }
     }
     this.effectImports.add("Schema");
@@ -891,10 +928,10 @@ export class Emitter {
       if (tName === "Record" && typeNode.typeArgs?.length === 2) {
         return `Schema.Record(${this.emitSchemaTypeField(typeNode.typeArgs[0])}, ${this.emitSchemaTypeField(typeNode.typeArgs[1])})`;
       }
-      const genericArity = this.genericDataSchemas.get(tName);
+      const genericArity = this.genericDataSchemas.get(tName) ?? this.options.importedGenericDataSchemas?.get(tName);
       if (genericArity !== undefined) {
         if (typeNode.typeArgs?.length !== genericArity) throw new FunScriptError(`Generic data schema '${tName}' requires ${genericArity} schema argument(s).`, typeNode.span);
-        return `${tName}(${typeNode.typeArgs.map(arg => this.emitGenericSchemaArgument(arg)).join(", ")})`;
+        return `${tName}(${typeNode.typeArgs.map(arg => this.emitGenericSchemaArgument(arg, this.options.importedGenericDataSchemas?.has(tName) === true)).join(", ")})`;
       }
       if (this.runtimeSchemaNames.has(tName)) return tName;
       if (this.options.importedSchemas?.has(tName)) return this.options.importedSchemas.get(tName)!;
@@ -911,16 +948,16 @@ export class Emitter {
     return this.emitTypeNode(typeNode);
   }
 
-  private emitGenericSchemaArgument(type: TypeNode): string {
-    if (type.kind === "ParenthesizedTypeNode") return this.emitGenericSchemaArgument(type.typeNode);
+  private emitGenericSchemaArgument(type: TypeNode, verifyImports = false): string {
+    if (type.kind === "ParenthesizedTypeNode") return this.emitGenericSchemaArgument(type.typeNode, verifyImports);
     if (type.kind === "TypeReferenceNode") {
       const name = type.name.name;
       if (this.activeSchemaParameters?.has(name) && !type.typeArgs?.length) return name;
       if (["String", "Number", "Boolean"].includes(name) && !type.typeArgs?.length && !this.declaredTypeNames.has(name)) return this.emitSchemaTypeField(type);
-      if (name === "Array" && type.typeArgs?.length === 1) return `Schema.Array(${this.emitGenericSchemaArgument(type.typeArgs[0])})`;
-      const arity = this.genericDataSchemas.get(name);
-      if (arity !== undefined && type.typeArgs?.length === arity) return `${name}(${type.typeArgs.map(arg => this.emitGenericSchemaArgument(arg)).join(", ")})`;
-      if (!type.typeArgs?.length && (this.runtimeSchemaNames.has(name) || this.userImportBindings.has(name))) return this.emitSchemaTypeField(type);
+      if (name === "Array" && type.typeArgs?.length === 1) return `Schema.Array(${this.emitGenericSchemaArgument(type.typeArgs[0], verifyImports)})`;
+      const arity = this.genericDataSchemas.get(name) ?? this.options.importedGenericDataSchemas?.get(name);
+      if (arity !== undefined && type.typeArgs?.length === arity) return `${name}(${type.typeArgs.map(arg => this.emitGenericSchemaArgument(arg, verifyImports || this.options.importedGenericDataSchemas?.has(name) === true)).join(", ")})`;
+      if (!type.typeArgs?.length && (this.runtimeSchemaNames.has(name) || (this.userImportBindings.has(name) && (!verifyImports || this.options.importedIdentitySchemas?.has(name))))) return this.emitSchemaTypeField(type);
     }
     throw new FunScriptError("Generic data schema arguments must name a runtime data schema or supported primitive; compile-time contracts and unknown types cannot validate data.", type.span);
   }

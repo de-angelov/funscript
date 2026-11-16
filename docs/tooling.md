@@ -45,6 +45,10 @@ immediately before a top-level binding to include its FunScript documentation:
 export greet = (name: String) => "Hello, {name}!"
 ```
 
+Hovering a record-schema declaration identifies it as a data schema, a generic
+data-schema factory, or a compile-time contract. Contract hover explicitly notes
+that callbacks and data are not validated by the declaration.
+
 Hover also explains language constructs and resolved pipeline operations. When
 the server cannot safely distinguish shadowed symbols or compile an incomplete
 document, type information may be unavailable.

@@ -205,6 +205,81 @@ export names = (page: Page<Country>) => page.items |> Array.map((country) => cou
     expect(checked.success, checked.formattedOutput).toBe(true);
   }, 60000);
 
+  it("composes a verified imported factory through renamed re-exports", async () => {
+    const page = "export schema Page<A> = { items: Array<A>, next?: String }";
+    const app = 'import { Listing as Page } from "./barrel.js"\nexport schema Country = { name: String }\nexport schema Response = { page: Page<Country> }';
+    const files = {
+      "page.fun": page,
+      "barrel.fun": 'export { Page as Listing } from "./page.js"',
+      "app.fun": app,
+    };
+    const checked = await Effect.runPromise(typeCheckVirtualFiles(files, { compilerOptions: { rootDir: process.cwd() } }));
+    expect(checked.success, checked.formattedOutput).toBe(true);
+    const virtualSources = new Map(Object.entries(files).map(([name, source]) => [path.resolve(name), source]));
+    const pageModule = await execute(page, { scope: { $funscriptSchemaAST: SchemaAST } });
+    const result = await execute(app, { filename: path.resolve("app.fun"), compileOptions: { virtualSources }, scope: { Page: pageModule.Page } });
+    expect(result.ResponseFromUnknown({ page: { items: [{ name: "Bulgaria" }] } })).toEqual({ page: { items: [{ name: "Bulgaria" }], next: Option.none() } });
+    expect(() => result.ResponseFromUnknown({ page: { items: [{ name: 42 }] } })).toThrow();
+  }, 60000);
+
+  it("composes generic factories locally and across modules", async () => {
+    const files = {
+      "page.fun": "export schema Page<A> = { items: Array<A>, next?: String }",
+      "result.fun": 'import { Page } from "./page.js"\nexport schema Result<A> = { data: Page<A>, requestId: String }',
+      "country-app.fun": 'import { Result } from "./result.js"\nexport schema Country = { name: String }\nexport schema CountryResult = { result: Result<Country> }',
+    };
+    const checked = await Effect.runPromise(typeCheckVirtualFiles(files, { compilerOptions: { rootDir: process.cwd() } }));
+    expect(checked.success, checked.formattedOutput).toBe(true);
+    const virtualSources = new Map(Object.entries(files).map(([name, source]) => [path.resolve(name), source]));
+    const page = await execute(files["page.fun"], { scope: { $funscriptSchemaAST: SchemaAST } });
+    const result = await execute(files["result.fun"], { filename: path.resolve("result.fun"), compileOptions: { virtualSources }, scope: { Page: page.Page, $funscriptSchemaAST: SchemaAST } });
+    const app = await execute(files["country-app.fun"], { filename: path.resolve("country-app.fun"), compileOptions: { virtualSources }, scope: { Result: result.Result } });
+    expect(app.CountryResultFromUnknown({ result: { data: { items: [{ name: "Bulgaria" }] }, requestId: "1" } })).toEqual({ result: { data: { items: [{ name: "Bulgaria" }], next: Option.none() }, requestId: "1" } });
+    expect(() => app.CountryResultFromUnknown({ result: { data: { items: [{ name: 4 }] }, requestId: "1" } })).toThrow();
+    const numbers = result.Result(Schema.NumberFromString);
+    const value = Schema.decodeUnknownSync(numbers)({ data: { items: ["42"] }, requestId: "1" });
+    expect(value).toEqual({ data: { items: [42], next: Option.none() }, requestId: "1" });
+    expect(Schema.encodeSync(numbers)(value)).toEqual({ data: { items: ["42"] }, requestId: "1" });
+    const local = await execute('export schema Page<A> = { value: A }\nexport schema Result<A> = { page: Page<A> }\nexport number = Result(Schema.NumberFromString)', { scope: { $funscriptSchemaAST: SchemaAST } });
+    expect(Schema.decodeUnknownSync(local.number)({ page: { value: "42" } })).toEqual({ page: { value: 42 } });
+  }, 60000);
+
+  it("rejects recursive and unverified nested generic factories", async () => {
+    await expectCompileError('export schema Box<A> = { value: Box<A> }', /recursive generic schema factories/);
+    await expectCompileError('export schema First<A> = { value: Second<A> }\nexport schema Second<A> = { value: First<A> }', /recursive generic schema factories/);
+    await expectCompileError('export schema Box<A> = { value: A }\nexport schema Bad<A> = { value: Box<A, String> }', /currently supports/);
+    await expectCompileError('import { Page } from "./unknown.js"\nexport schema Bad<A> = { value: Page<A> }', /currently supports/);
+    const filename = path.resolve("consumer.fun");
+    const virtualSources = new Map<string, string>([
+      [path.resolve("one.fun"), 'import { Two } from "./two.js"\nexport schema One<A> = { value: Two<A> }'],
+      [path.resolve("two.fun"), 'import { One } from "./one.js"\nexport schema Two<A> = { value: One<A> }'],
+    ]);
+    await expectCompileError('import { One } from "./one.js"\nexport schema Response = { value: One<String> }', /Cannot derive a runtime schema/, filename, { virtualSources });
+  });
+
+  it("rejects unverified imported factories and arguments", async () => {
+    const filename = path.resolve("app.fun");
+    const virtualSources = new Map<string, string>([
+      [path.resolve("page.fun"), "export schema Page<A> = { value: A }"],
+      [path.resolve("contract.fun"), "export schema Handler<A> = { value: A, call: (value: A) => Void }"],
+      [path.resolve("barrel.fun"), 'export { type Page } from "./page.js"'],
+      [path.resolve("cycle.fun"), 'export { Page } from "./cycle.js"'],
+    ]);
+    const options = { virtualSources };
+    await expectCompileError('import { Page } from "./page.js"\nexport schema Bad = { value: Page<Unknown> }', /must name a runtime data schema/, filename, options);
+    await expectCompileError('import { Page } from "./page.js"\nexport schema Bad = { value: Page<String, Number> }', /requires 1 schema argument/, filename, options);
+    await expectCompileError('import { Page } from "./page.js"\nimport { Anything } from "./foreign.js"\nexport schema Bad = { value: Page<Anything> }', /must name a runtime data schema/, filename, options);
+    const contract = await compile('import { Handler } from "./contract.js"\nexport schema Bad = { value: Handler<String> }', filename, options);
+    expect(contract.typescript).toContain("export type Bad");
+    expect(contract.typescript).not.toContain("export const Bad");
+    for (const source of ["barrel", "cycle"]) {
+      await expectCompileError(`import { Page } from "./${source}.js"\nexport schema Bad = { value: Page<String> }`, /Cannot derive a runtime schema/, filename, options);
+    }
+    virtualSources.set(path.resolve("page.fun"), "export schema Page<A> = { call: (value: A) => Void }");
+    const changed = await compile('import { Page } from "./page.js"\nexport schema Bad = { value: Page<String> }', filename, options);
+    expect(changed.typescript).not.toContain("export const Bad");
+  });
+
   it("rejects unsupported generic data shapes without widening", async () => {
     await expectCompileError('export schema Box<A> = { value: A, label: String = "x" }', /Generic data schema 'Box' currently supports required or optional fields/);
     await expectCompileError("export schema Box<A> = { value: Unknown }", /Generic data schema 'Box' currently supports required or optional fields/);

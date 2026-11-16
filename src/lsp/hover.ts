@@ -38,6 +38,26 @@ function symbolHover(source: string, uri: string, token: Token): Hover | null {
 
 function symbolHoverFromResult(source: string, token: Token, context: TypeScriptCompilationContext, result: CompileResult): Hover | null {
   try {
+    const schema = result.ast.body.flatMap(entry => {
+      const decl = entry.kind === "ExportDeclaration" ? entry.declaration : entry;
+      return decl.kind === "SchemaDeclaration" && decl.body.kind === "RecordSchema" && decl.id.span.start.offset === token.span.start.offset ? [decl] : [];
+    });
+    if (schema.length === 1) {
+      const decl = schema[0];
+      const generated = ts.createSourceFile("hover.tsx", result.typescript, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
+      const hasValue = generated.statements.some(statement => ts.isVariableStatement(statement) && statement.declarationList.declarations.some(binding => ts.isIdentifier(binding.name) && binding.name.text === decl.id.name));
+      const hasType = generated.statements.some(statement => ts.isTypeAliasDeclaration(statement) && statement.name.text === decl.id.name);
+      if (hasType) {
+        const params = decl.typeParams?.map(param => param.name.name) ?? [];
+        const name = `${decl.id.name}${params.length ? `<${params.join(", ")}>` : ""}`;
+        const detail = hasValue
+          ? params.length
+            ? `**Generic data schema** \`${name}\`\n\nCall \`${decl.id.name}(${params.map(param => `schemaFor${param}`).join(", ")})\` with runtime schemas to create a decoder. The type describes decoded data.`
+            : `**Data schema** \`${name}\`\n\nThis declaration provides a runtime schema and a decoded data type.`
+          : `**Compile-time contract** \`${name}\`\n\nThis declaration provides a type only. It does not validate data or callbacks at runtime.`;
+        return { contents: { kind: MarkupKind.Markdown, value: detail }, range: spanToRange(token.span) };
+      }
+    }
     const checked = context.check(result.typescript);
     if (!checked) return null;
     const found = new Map<ts.Symbol, ts.Identifier>();
