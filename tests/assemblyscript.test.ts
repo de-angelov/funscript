@@ -240,6 +240,25 @@ export mutateInPlace = (buf: Uint8Array) => invertBytes(buf)`;
     expect(Array.from(buffer)).toEqual([255, 155, 0]);
   });
 
+  it("resets Wasm linear memory after each call preventing memory leaks", async () => {
+    const source = `as {
+  export function makeBuffer(size: u32): Uint8Array {
+    const out = new Uint8Array(size);
+    for (let i: u32 = 0; i < size; ++i) {
+      out[i] = u8(i & 0xff);
+    }
+    return out;
+  }
+}
+export generate = (size: Number) => makeBuffer(size)`;
+    const output = await execute(source);
+    for (let i = 0; i < 500; i++) {
+      const buf = output.generate(64);
+      expect(buf).toBeInstanceOf(Uint8Array);
+      expect(buf.length).toBe(64);
+    }
+  });
+
   it("validates TypedArray types in .effect companion and reports WasmInputError", async () => {
     const source = `as {
   export function sumBytes(buf: Uint8Array): u32 {

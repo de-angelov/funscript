@@ -45,7 +45,8 @@ export async function prepareAssemblyScript(decl: AsDeclaration): Promise<void> 
   if (!binary) {
     try {
       const asc: { compileString(source: string, options: object): Promise<{ error: unknown; binary: Uint8Array | null; stderr: { toString(): string } }> } = await import("assemblyscript/" + "asc");
-      const result = await asc.compileString(decl.code, { optimizeLevel: 3, runtime: "stub", exportRuntime: true });
+      const compileSource = decl.code + "\nexport function __funscript_reset_heap(): void { __reset(); }\n";
+      const result = await asc.compileString(compileSource, { optimizeLevel: 3, runtime: "stub", exportRuntime: true });
       if (result.error || !result.binary) {
         const detail = result.stderr.toString();
         const location = /(?:input|stdin)\.ts\((\d+),(\d+)\)/.exec(detail);
@@ -139,7 +140,7 @@ export function emitAssemblyScript(decl: AsDeclaration): string {
       return `arg${i}: ${tsType}`;
     }).join(", ");
 
-    const hasBuffers = fn.params.some(p => TYPED_ARRAY_TYPES.has(p.type)) || isBufferResult;
+    const hasBuffers = fn.params.some(p => TYPED_ARRAY_TYPES.has(p.type)) || isBufferResult || decl.code.includes("Array") || decl.code.includes("new ");
     const wasmFnType = fn.result === "void" ? "(...args: number[]) => void" : "(...args: number[]) => number";
 
     const errorType = `{ readonly _tag: "WasmInputError"; readonly function: string; readonly parameter: string; readonly expected: string; readonly value: unknown } | { readonly _tag: "WasmTrapError"; readonly function: string; readonly cause: unknown } | { readonly _tag: "WasmInitializationError"; readonly function: string; readonly cause: unknown }`;
@@ -185,13 +186,13 @@ export function emitAssemblyScript(decl: AsDeclaration): string {
       const callExpr = `(exports[${JSON.stringify(fn.name)}] as ${wasmFnType})(${passedVars.join(", ")})`;
       let returnExpr: string;
       if (fn.result === "void") {
-        returnExpr = `${callExpr}; ${syncs.join(" ")} return;`;
+        returnExpr = `try { ${callExpr}; ${syncs.join(" ")} } finally { (exports.__funscript_reset_heap as () => void)(); } return;`;
       } else if (isBufferResult) {
-        returnExpr = `const __res = ${callExpr}; ${syncs.join(" ")} return ${prefix}Read(exports, __res, ${fn.result});`;
+        returnExpr = `try { const __res = ${callExpr}; ${syncs.join(" ")} return ${prefix}Read(exports, __res, ${fn.result}); } finally { (exports.__funscript_reset_heap as () => void)(); }`;
       } else if (fn.result === "u32") {
-        returnExpr = `const __res = ${callExpr}; ${syncs.join(" ")} return (__res >>> 0);`;
+        returnExpr = `try { const __res = ${callExpr}; ${syncs.join(" ")} return (__res >>> 0); } finally { (exports.__funscript_reset_heap as () => void)(); }`;
       } else {
-        returnExpr = `const __res = ${callExpr}; ${syncs.join(" ")} return __res;`;
+        returnExpr = `try { const __res = ${callExpr}; ${syncs.join(" ")} return __res; } finally { (exports.__funscript_reset_heap as () => void)(); }`;
       }
 
       syncBody = `const exports = ${prefix}Get(); ${allocs.join(" ")} ${returnExpr}`;
