@@ -351,6 +351,408 @@ function getEffectRunnerName(node: any): string | null {
   return null;
 }
 
+interface CheckScope {
+  parent: CheckScope | null;
+  isEffectBoundary: boolean;
+  bindings: Map<string, { isMut: boolean }>;
+}
+
+function collectPatternVars(pat: any): string[] {
+  if (!pat) return [];
+  if (pat.kind === "Identifier" || pat.kind === "UpperIdentifier") {
+    return [pat.name];
+  }
+  if (pat.kind === "VariablePattern") {
+    return [pat.name?.name || pat.name];
+  }
+  if (pat.kind === "RecordPattern") {
+    const vars: string[] = [];
+    for (const f of pat.fields || []) {
+      if (!f.pattern) {
+        if (f.key?.name) vars.push(f.key.name);
+      } else {
+        vars.push(...collectPatternVars(f.pattern));
+      }
+    }
+    return vars;
+  }
+  if (pat.kind === "ArrayPattern") {
+    const vars: string[] = [];
+    for (const el of pat.elements || []) {
+      vars.push(...collectPatternVars(el));
+    }
+    return vars;
+  }
+  if (pat.kind === "ConstructorPattern") {
+    const vars: string[] = [];
+    for (const arg of pat.args || []) {
+      vars.push(...collectPatternVars(arg));
+    }
+    return vars;
+  }
+  if (pat.kind === "OrPattern") {
+    return [...collectPatternVars(pat.left), ...collectPatternVars(pat.right)];
+  }
+  if (pat.kind === "RestPattern") {
+    return collectPatternVars(pat.argument);
+  }
+  return [];
+}
+
+function checkCapturedMutInEffect(
+  ast: any,
+  addAstDiag: (
+    span: { start: { line: number; column: number }; end: { line: number; column: number } },
+    code: string,
+    customMsg: string,
+    category: DiagnosticCategory,
+    explanation?: string,
+    suggestedAction?: string,
+  ) => void,
+): void {
+  if (!ast) return;
+
+  const rootScope: CheckScope = {
+    parent: null,
+    isEffectBoundary: false,
+    bindings: new Map(),
+  };
+
+  // First pass: register top-level declarations
+  for (const topDecl of ast.body || []) {
+    const decl = topDecl.kind === "ExportDeclaration" ? topDecl.declaration : topDecl;
+    if (decl && decl.kind === "BindingDeclaration") {
+      const isMut = Boolean(decl.isMut);
+      for (const name of collectPatternVars(decl.id)) {
+        rootScope.bindings.set(name, { isMut });
+      }
+    }
+  }
+
+  const lookup = (scope: CheckScope, name: string): { isMut: boolean; crossedEffectBoundary: boolean } | null => {
+    let curr: CheckScope | null = scope;
+    let crossed = false;
+    while (curr) {
+      const b = curr.bindings.get(name);
+      if (b) {
+        return { isMut: b.isMut, crossedEffectBoundary: crossed };
+      }
+      if (curr.isEffectBoundary) {
+        crossed = true;
+      }
+      curr = curr.parent;
+    }
+    return null;
+  };
+
+  const checkIdent = (node: any, scope: CheckScope) => {
+    if (!node || !node.name || !node.span) return;
+    const res = lookup(scope, node.name);
+    if (res && res.isMut && res.crossedEffectBoundary) {
+      addAstDiag(
+        node.span,
+        "CAPTURED_MUT",
+        `Mutable variable '${node.name}' declared outside this effect block cannot be captured inside an effect block. Concurrent fibers or asynchronous steps could access '${node.name}' without synchronization, causing data races. Use 'Ref' or 'SynchronizedRef' instead.`,
+        "error",
+        "Closing over mutable 'mut' variables across effect boundaries introduces non-deterministic data races when effects run concurrently or across fiber suspensions.",
+        "Use 'Ref.make' or 'SynchronizedRef.make' for concurrency-safe shared state, or pass immutable values.",
+      );
+    }
+  };
+
+  const visit = (node: any, scope: CheckScope): void => {
+    if (!node || typeof node !== "object") return;
+    if (node.kind === "TsEscapeDeclaration" || node.kind === "TsEscapeExpression" || node.kind === "AsDeclaration") return;
+
+    switch (node.kind) {
+      case "Program": {
+        for (const stmt of node.body || []) {
+          visit(stmt, scope);
+        }
+        break;
+      }
+
+      case "ExportDeclaration": {
+        visit(node.declaration, scope);
+        break;
+      }
+
+      case "ExportDefaultDeclaration": {
+        visit(node.expression, scope);
+        break;
+      }
+
+      case "BindingDeclaration": {
+        if (node.init?.kind === "FunctionExpression") {
+          // Allow recursive immutable functions
+          if (!node.isMut) {
+            for (const name of collectPatternVars(node.id)) {
+              scope.bindings.set(name, { isMut: false });
+            }
+          }
+          visit(node.init, scope);
+        } else {
+          visit(node.init, scope);
+          const isMut = Boolean(node.isMut);
+          for (const name of collectPatternVars(node.id)) {
+            scope.bindings.set(name, { isMut });
+          }
+        }
+        break;
+      }
+
+      case "AssignmentStatement": {
+        if (node.target) {
+          if (node.target.kind === "Identifier" || node.target.kind === "UpperIdentifier") {
+            checkIdent(node.target, scope);
+          } else if (node.target.kind === "DotPathExpression") {
+            if (node.target.path?.length > 0) {
+              checkIdent(node.target.path[0], scope);
+            }
+          } else if (node.target.kind === "IndexExpression") {
+            visit(node.target.object, scope);
+            visit(node.target.index, scope);
+          }
+        }
+        visit(node.value, scope);
+        break;
+      }
+
+      case "FunctionExpression": {
+        const fnScope: CheckScope = {
+          parent: scope,
+          isEffectBoundary: false,
+          bindings: new Map(),
+        };
+        for (const param of node.params || []) {
+          for (const name of collectPatternVars(param.name)) {
+            fnScope.bindings.set(name, { isMut: false });
+          }
+          if (param.defaultValue) {
+            visit(param.defaultValue, fnScope);
+          }
+        }
+        visit(node.body, fnScope);
+        break;
+      }
+
+      case "BlockStatement": {
+        const blockScope: CheckScope = {
+          parent: scope,
+          isEffectBoundary: false,
+          bindings: new Map(),
+        };
+        for (const stmt of node.statements || []) {
+          visit(stmt, blockScope);
+        }
+        if (node.finalExpression) {
+          visit(node.finalExpression, blockScope);
+        }
+        break;
+      }
+
+      case "EffectBlockExpression":
+      case "ParBlockExpression": {
+        if (node.concurrency) {
+          visit(node.concurrency, scope);
+        }
+        const effectScope: CheckScope = {
+          parent: scope,
+          isEffectBoundary: true,
+          bindings: new Map(),
+        };
+        for (const stmt of node.body || []) {
+          visit(stmt, effectScope);
+        }
+        if (node.finalExpression) {
+          visit(node.finalExpression, effectScope);
+        }
+        break;
+      }
+
+      case "EffectBindStatement": {
+        visit(node.effect, scope);
+        for (const name of collectPatternVars(node.id)) {
+          scope.bindings.set(name, { isMut: false });
+        }
+        break;
+      }
+
+      case "EffectDiscardStatement": {
+        visit(node.effect, scope);
+        break;
+      }
+
+      case "EffectControlFlowStatement": {
+        visit(node.statement, scope);
+        break;
+      }
+
+      case "WhenStatement": {
+        visit(node.condition, scope);
+        visit(node.consequent, scope);
+        break;
+      }
+
+      case "ReturnStatement": {
+        visit(node.argument, scope);
+        break;
+      }
+
+      case "ExpressionStatement": {
+        visit(node.expression, scope);
+        break;
+      }
+
+      case "Identifier":
+      case "UpperIdentifier": {
+        checkIdent(node, scope);
+        break;
+      }
+
+      case "CallExpression": {
+        visit(node.callee, scope);
+        for (const arg of node.args || []) {
+          visit(arg, scope);
+        }
+        break;
+      }
+
+      case "MemberExpression": {
+        visit(node.object, scope);
+        // Do not visit node.property - it is a member property name
+        break;
+      }
+
+      case "IndexExpression": {
+        visit(node.object, scope);
+        visit(node.index, scope);
+        break;
+      }
+
+      case "PipelineExpression":
+      case "BinaryExpression": {
+        visit(node.left, scope);
+        visit(node.right, scope);
+        break;
+      }
+
+      case "UnaryExpression": {
+        visit(node.argument, scope);
+        break;
+      }
+
+      case "RecordExpression": {
+        for (const entry of node.entries || []) {
+          if (entry.kind === "FieldEntry") {
+            visit(entry.value, scope);
+          } else if (entry.kind === "DotPathEntry") {
+            visit(entry.value, scope);
+          } else if (entry.kind === "ShorthandEntry") {
+            checkIdent(entry.key, scope);
+          } else if (entry.kind === "SpreadEntry") {
+            visit(entry.argument, scope);
+          }
+        }
+        break;
+      }
+
+      case "ArrayExpression": {
+        for (const el of node.elements || []) {
+          visit(el, scope);
+        }
+        break;
+      }
+
+      case "MatchExpression": {
+        if (node.scrutinee) visit(node.scrutinee, scope);
+        for (const arm of node.arms || []) {
+          const armScope: CheckScope = {
+            parent: scope,
+            isEffectBoundary: false,
+            bindings: new Map(),
+          };
+          for (const name of collectPatternVars(arm.pattern)) {
+            armScope.bindings.set(name, { isMut: false });
+          }
+          if (arm.guard) visit(arm.guard, armScope);
+          visit(arm.body, armScope);
+        }
+        break;
+      }
+
+      case "MutBlockExpression": {
+        const mutScope: CheckScope = {
+          parent: scope,
+          isEffectBoundary: false,
+          bindings: new Map(),
+        };
+        const draftName = node.draftParam?.name || node.draft?.name;
+        if (draftName) {
+          mutScope.bindings.set(draftName, { isMut: false });
+        }
+        visit(node.body, mutScope);
+        break;
+      }
+
+      case "StringLiteral":
+      case "TemplateLiteral": {
+        for (const part of node.parts || []) {
+          if (part.kind === "StringInterpolationPart") {
+            visit(part.expression, scope);
+          }
+        }
+        break;
+      }
+
+      case "TaggedTemplateExpression": {
+        visit(node.tag, scope);
+        for (const part of node.template?.parts || []) {
+          if (part.kind === "StringInterpolationPart") {
+            visit(part.expression, scope);
+          }
+        }
+        break;
+      }
+
+      case "SpreadElement": {
+        visit(node.argument, scope);
+        break;
+      }
+
+      case "JsExpression": {
+        visit(node.expression, scope);
+        break;
+      }
+
+      case "JSXElement":
+      case "JSXSelfClosingElement": {
+        const opening = node.openingElement || node;
+        if (opening.name?.kind === "Identifier" || opening.name?.kind === "UpperIdentifier") {
+          checkIdent(opening.name, scope);
+        } else if (opening.name?.kind === "MemberExpression") {
+          visit(opening.name.object, scope);
+        }
+        for (const attr of opening.attributes || []) {
+          if (attr.kind === "JSXSpreadAttribute") visit(attr.argument, scope);
+          else if (attr.value?.kind === "JSXExpressionContainer") visit(attr.value.expression, scope);
+          else if (attr.value?.kind === "Identifier" || attr.value?.kind === "UpperIdentifier") checkIdent(attr.value, scope);
+        }
+        for (const child of node.children || []) {
+          if (child.kind === "JSXElement" || child.kind === "JSXSelfClosingElement") visit(child, scope);
+          else if (child.kind === "JSXExpressionContainer") visit(child.expression, scope);
+        }
+        break;
+      }
+
+      default:
+        break;
+    }
+  };
+
+  visit(ast, rootScope);
+}
+
 export const typeCheckVirtualFiles = (
   virtualInputFiles: Record<string, string>,
   options?: CheckOptions,
@@ -1321,6 +1723,7 @@ export const typeCheckVirtualFiles = (
               }
             };
             walkAst(meta.ast);
+            checkCapturedMutInEffect(meta.ast, addAstDiag);
           }
 
           const visit = (node: ts.Node): void => {

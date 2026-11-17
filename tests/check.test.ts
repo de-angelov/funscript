@@ -606,6 +606,112 @@ export badIncrement = (counter: Ref) => effect {
       expect(race?.message).toContain("Insecure non-atomic Ref mutation");
     });
 
+    it("reports FS_CAPTURED_MUT when outer mut variables are captured in effect or par blocks", async () => {
+      // 1. Top-level mut variable captured in effect block
+      const res1 = await Effect.runPromise(
+        typeCheckSource(
+          `
+import { Effect } from "effect"
+
+mut globalCounter = 0
+
+export inc = () => effect {
+  globalCounter = globalCounter + 1
+  => globalCounter
+}
+`.trim(),
+          "bad_effect.fun",
+        ),
+      );
+
+      const captured1 = res1.diagnostics.filter((d) => d.code === "CAPTURED_MUT");
+      expect(captured1.length).toBeGreaterThan(0);
+      expect(captured1[0].diagnosticCode).toBe("FS_CAPTURED_MUT");
+      expect(captured1[0].category).toBe("error");
+      expect(captured1[0].message).toContain("Mutable variable 'globalCounter' declared outside this effect block cannot be captured inside an effect block");
+      expect(captured1[0].suggestedAction).toContain("Ref.make");
+
+      // 2. Local mut variable in outer function captured in effect block
+      const res2 = await Effect.runPromise(
+        typeCheckSource(
+          `
+import { Effect } from "effect"
+
+export run = () =>
+  mut count = 0
+  effect
+    count = count + 1
+    => count
+`.trim(),
+          "bad_local.fun",
+        ),
+      );
+
+      const captured2 = res2.diagnostics.filter((d) => d.code === "CAPTURED_MUT");
+      expect(captured2.length).toBeGreaterThan(0);
+      expect(captured2[0].diagnosticCode).toBe("FS_CAPTURED_MUT");
+      expect(captured2[0].message).toContain("Mutable variable 'count' declared outside this effect block cannot be captured inside an effect block");
+
+      // 3. Mut variable captured in par block
+      const res3 = await Effect.runPromise(
+        typeCheckSource(
+          `
+import { Effect } from "effect"
+
+mut total = 0
+
+export run = () => par {
+  total = total + 1
+  => total
+}
+`.trim(),
+          "bad_par.fun",
+        ),
+      );
+
+      const captured3 = res3.diagnostics.filter((d) => d.code === "CAPTURED_MUT");
+      expect(captured3.length).toBeGreaterThan(0);
+      expect(captured3[0].diagnosticCode).toBe("FS_CAPTURED_MUT");
+
+      // 4. Permitted: local mut variable declared inside the effect block itself
+      const res4 = await Effect.runPromise(
+        typeCheckSource(
+          `
+import { Effect } from "effect"
+
+export run = () => effect {
+  mut local = 0
+  local = local + 1
+  => local
+}
+`.trim(),
+          "ok_local.fun",
+        ),
+      );
+
+      const captured4 = res4.diagnostics.filter((d) => d.code === "CAPTURED_MUT");
+      expect(captured4.length).toBe(0);
+
+      // 5. Permitted: immutable variables closed over across effect blocks
+      const res5 = await Effect.runPromise(
+        typeCheckSource(
+          `
+import { Effect } from "effect"
+
+factor = 2
+
+export scale = (n: Number) => effect {
+  => n * factor
+}
+`.trim(),
+          "ok_immutable.fun",
+        ),
+      );
+
+      const captured5 = res5.diagnostics.filter((d) => d.code === "CAPTURED_MUT");
+      expect(captured5.length).toBe(0);
+    });
+
     it("reports FS_MANUAL_SEMAPHORE on manual take or release calls", async () => {
       const result = await Effect.runPromise(
         typeCheckSource(
