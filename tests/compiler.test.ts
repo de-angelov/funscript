@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { Effect } from "effect";
+import { Effect, Option } from "effect";
 import ts from "typescript";
 import { compileString, checkString, CompilerError, TypeScriptCompilationContext } from "../src/compiler.js";
 import { typeCheckSource } from "../src/compiler/check.js";
@@ -366,6 +366,57 @@ export untrusted = effect {
 
     const checked = await Effect.runPromise(typeCheckSource(code, "native-interop.fun"));
     expect(checked.success, checked.formattedOutput).toBe(true);
+  });
+
+  it("guards synchronous throwing and non-throwing foreign JS calls with js and js.try", async () => {
+    const code = `
+ts {
+declare function syncSuccess(): string
+declare function syncNullable(): string | null
+declare function syncThrow(): string
+}
+
+export runSuccess = effect {
+  res <- js syncSuccess()
+  => res
+}
+
+export runNullable = effect {
+  res <- js syncNullable()
+  => res
+}
+
+export runTry = effect {
+  res <- js.try(() => syncThrow())
+  => res
+}
+`.trim();
+
+    const res = await Effect.runPromise(compileString(code, "sync-interop.fun"));
+    expect(res.typescript).toContain("__funscriptJs(() => syncSuccess(), false)");
+    expect(res.typescript).toContain("__funscriptJs(() => syncNullable(), true)");
+    expect(res.typescript).toContain("__funscriptJs(() => syncThrow(), false)");
+
+    const checked = await Effect.runPromise(typeCheckSource(code, "sync-interop.fun"));
+    expect(checked.success, checked.formattedOutput).toBe(true);
+
+    const output = await execute(code, {
+      scope: {
+        syncSuccess: () => "computed",
+        syncNullable: () => null,
+        syncThrow: () => { throw new Error("sync error message"); },
+      },
+    });
+
+    const successVal = await Effect.runPromise(output.runSuccess);
+    expect(successVal).toBe("computed");
+
+    const nullableVal = await Effect.runPromise(output.runNullable);
+    expect(Option.isNone(nullableVal)).toBe(true);
+
+    const failureVal = await Effect.runPromise(Effect.flip(output.runTry));
+    expect(failureVal._tag).toBe("JsInteropError");
+    expect((failureVal as any).cause.message).toBe("sync error message");
   });
 
   it("preserves unions of native Promise return types", async () => {

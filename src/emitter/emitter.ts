@@ -1469,7 +1469,11 @@ export class Emitter {
     this.needsJsInterop = true;
     // compiler.ts replaces this provisional flag with the nullability inferred
     // from the native TypeScript return type.
-    return `__funscriptJs(() => ${this.emitExpression(expr.expression)}, false)`;
+    const inner = this.emitExpression(expr.expression);
+    if (expr.expression.kind === "FunctionExpression" && (expr.expression as any).params?.length === 0) {
+      return `__funscriptJs(${inner}, false)`;
+    }
+    return `__funscriptJs(() => ${inner}, false)`;
   }
 
   private emitMemberProperty(expr: MemberExpression): string {

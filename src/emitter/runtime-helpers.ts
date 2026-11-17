@@ -18,7 +18,10 @@ export function emitRuntimeHelpers(options: RuntimeHelperOptions): string {
     header += `function __funscriptJs<P extends Promise<unknown>>(thunk: () => P, nullable: true): Effect.Effect<Option.Option<NonNullable<Awaited<P>>>, JsInteropError>;\n`;
     header += `function __funscriptJs<P extends Promise<unknown>>(thunk: () => P, nullable: false): Effect.Effect<Awaited<P>, JsInteropError>;\n`;
     header += `function __funscriptJs<P extends Promise<unknown>>(thunk: () => P, nullable: "unknown"): Effect.Effect<Option.Option<unknown>, JsInteropError>;\n`;
-    header += `function __funscriptJs(thunk: () => Promise<unknown>, nullable: boolean | "unknown"): Effect.Effect<unknown, JsInteropError> {\n  const effect = Effect.tryPromise({ try: thunk, catch: (cause) => new JsInteropError(cause) });\n  return nullable === false ? effect : Effect.map(effect, Option.fromNullishOr);\n}\n`;
+    header += `function __funscriptJs<A>(thunk: () => A, nullable: true): Effect.Effect<Option.Option<NonNullable<A>>, JsInteropError>;\n`;
+    header += `function __funscriptJs<A>(thunk: () => A, nullable: false): Effect.Effect<A, JsInteropError>;\n`;
+    header += `function __funscriptJs<A>(thunk: () => A, nullable: "unknown"): Effect.Effect<Option.Option<unknown>, JsInteropError>;\n`;
+    header += `function __funscriptJs(thunk: () => unknown, nullable: boolean | "unknown"): Effect.Effect<unknown, JsInteropError> {\n  const effect = Effect.suspend(() => {\n    let res: unknown;\n    try {\n      res = thunk();\n    } catch (cause) {\n      return Effect.fail(new JsInteropError(cause));\n    }\n    if (res != null && typeof (res as any).then === "function") {\n      return Effect.tryPromise({ try: () => res as Promise<unknown>, catch: (cause) => new JsInteropError(cause) });\n    }\n    return Effect.succeed(res);\n  });\n  return nullable === false ? effect : Effect.map(effect, Option.fromNullishOr);\n}\n`;
   }
   if (options.decodeUnknown) {
     header += `declare module "effect" {\n  namespace Schema {\n    export const decodeUnknown: typeof Schema.decodeUnknownEffect;\n  }\n}\n`;

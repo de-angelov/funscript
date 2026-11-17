@@ -33,9 +33,10 @@ export function applyJsInteropNullability(typescript: string, context: TypeScrip
     ) {
       const returnType = checker.getTypeAtLocation(node.arguments[0].body);
       const awaited = checker.getAwaitedType(returnType);
-      const flag = !awaited || isUntrusted(awaited)
+      const targetType = awaited ?? returnType;
+      const flag = !targetType || isUntrusted(targetType)
         ? '"unknown"'
-        : includesNullish(awaited)
+        : includesNullish(targetType)
         ? "true"
         : "false";
       replacements.push({ start: node.arguments[1].getStart(sourceFile), end: node.arguments[1].getEnd(), value: flag });

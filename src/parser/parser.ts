@@ -1533,6 +1533,18 @@ export class Parser {
           span: this.previous().span,
         };
       }
+      if (this.match(TokenType.DOT)) {
+        if (this.check(TokenType.IDENTIFIER) && this.peek().value === "try") {
+          this.advance(); // consume 'try'
+          const inner = this.parseExpression();
+          return {
+            kind: "JsExpression",
+            expression: inner,
+            span: { start, end: inner.span.end },
+          };
+        }
+        throw new ParseError("Expected 'try' after 'js.'", this.peek().span);
+      }
       const inner = this.parseExpression();
       return {
         kind: "JsExpression",
