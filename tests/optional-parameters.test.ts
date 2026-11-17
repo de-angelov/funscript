@@ -120,10 +120,10 @@ export forwardedNone = forward(Option.some(Option.none()))`;
   });
 
   it("safely handles an optional JavaScript callback and checks its argument type", async () => {
-    const source = 'export invoke = (callback?: (name: String) => String) =>\n  match callback\n    | Some(fn) => fn("Ada")\n    | None => "missing"';
+    const source = 'export invoke = (callback?: (name: String) => String) =>\n  match callback\n    | Some(cb) => cb("Ada")\n    | None => "missing"';
     const checked = await typeCheck(source, "optional-callback.fun");
     expect(checked.success, checked.formattedOutput).toBe(true);
-    const invalid = await typeCheck(source.replace('fn("Ada")', 'fn(5)'), "optional-callback.fun");
+    const invalid = await typeCheck(source.replace('cb("Ada")', 'cb(5)'), "optional-callback.fun");
     expect(invalid.success).toBe(false);
     const { invoke } = await execute(source);
     expect(invoke()).toBe("missing");
@@ -204,7 +204,7 @@ export forwardedNone = forward(Option.some(Option.none()))`;
     await expectCompileError('export f = (x?) => x', /require a type annotation/);
     await expectCompileError('export f = (x?: Number = 5) => x', /both optional and defaulted/);
     await expectCompileError('export f = (x?: Number, y: Number) => y', /Only optional parameters/);
-    await expectCompileError('export js f = (x?: Number) => x', /not yet supported/);
+    await expectCompileError('export js f = (x: { opt?: Number }) => x', /not yet supported/);
   });
 });
 

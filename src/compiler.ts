@@ -106,7 +106,9 @@ export const compileString = (
       };
       const optionalResolutions = resolveOptionalArguments(ast, context, emitterOptions, options?.sourcePath ?? filename, options?.virtualSources);
       emitterOptions.forwardOptionalArguments = optionalResolutions.arguments;
+      emitterOptions.forwardNullArguments = optionalResolutions.nullArguments;
       emitterOptions.forwardOptionalProperties = optionalResolutions.properties;
+      emitterOptions.forwardNullProperties = optionalResolutions.nullProperties;
       const emitter = new Emitter(ast, undefined, emitterOptions);
       const typescript = applyJsInteropNullability(emitter.emit(), context);
       const targetExtension = filename.endsWith(".funx") ? ".tsx" : ".ts";

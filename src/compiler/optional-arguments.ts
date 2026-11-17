@@ -9,7 +9,12 @@ import { FunScriptError } from "../errors.js";
 import { TypeScriptCompilationContext } from "./typescript-context.js";
 
 /** Determine optional argument conversions from types, never from runtime shape. */
-export function resolveOptionalArguments(ast: Program, context: TypeScriptCompilationContext, options: EmitterOptions, filename: string, virtualSources?: ReadonlyMap<string, string>): { arguments: ReadonlySet<number>; properties: ReadonlySet<number> } {
+export function resolveOptionalArguments(ast: Program, context: TypeScriptCompilationContext, options: EmitterOptions, filename: string, virtualSources?: ReadonlyMap<string, string>): {
+  arguments: ReadonlySet<number>;
+  nullArguments: ReadonlySet<number>;
+  properties: ReadonlySet<number>;
+  nullProperties: ReadonlySet<number>;
+} {
   const spans = new Map<number, Span>();
   const collect = (value: any): void => {
     if (!value || typeof value !== "object") return;
@@ -19,7 +24,7 @@ export function resolveOptionalArguments(ast: Program, context: TypeScriptCompil
     for (const [key, child] of Object.entries(value)) if (key !== "span") collect(child);
   };
   collect(ast);
-  if (!spans.size) return { arguments: new Set(), properties: new Set() };
+  if (!spans.size) return { arguments: new Set(), nullArguments: new Set(), properties: new Set(), nullProperties: new Set() };
   const auxiliary = new Map<string, string>();
   const known = new Map(virtualSources ?? []);
   // Resolve direct relative imports when compiling a single on-disk file.
@@ -41,14 +46,16 @@ export function resolveOptionalArguments(ast: Program, context: TypeScriptCompil
     } catch { /* Unresolvable imports are handled by the regular compiler diagnostics. */ }
   }
   const marked = new Emitter(ast, undefined, { ...options, markCallArguments: true, allowAmbiguousPipeline: true }).emit();
-  if (!marked.includes("__funscriptCallArgument(")) return { arguments: new Set(), properties: new Set() };
+  if (!marked.includes("__funscriptCallArgument(")) return { arguments: new Set(), nullArguments: new Set(), properties: new Set(), nullProperties: new Set() };
   context.setAuxiliarySources(auxiliary);
   try {
     const checked = context.check(marked + "\nfunction __funscriptCallArgument<T>(_offset: number, value: T): T { return value; }\n");
-    if (!checked) return { arguments: new Set(), properties: new Set() };
+    if (!checked) return { arguments: new Set(), nullArguments: new Set(), properties: new Set(), nullProperties: new Set() };
     const { sourceFile, checker } = checked;
     const result = new Set<number>();
+    const nullArguments = new Set<number>();
     const properties = new Set<number>();
+    const nullProperties = new Set<number>();
     const visit = (node: ts.Node): void => {
       if (ts.isCallExpression(node) && ts.isIdentifier(node.expression) && node.expression.text === "__funscriptCallArgument" && ts.isNumericLiteral(node.arguments[0]) && (ts.isPropertyAssignment(node.parent) || ts.isJsxExpression(node.parent))) {
         let target = checker.getContextualType(node);
@@ -82,12 +89,17 @@ export function resolveOptionalArguments(ast: Program, context: TypeScriptCompil
         }
         const value = node.arguments[1];
         const type = checker.getTypeAtLocation(value);
-        const optional = declaredOptional || (target?.isUnion() && target.types.some(t => Boolean(t.flags & ts.TypeFlags.Undefined)));
-        if (target && optional && checker.getPropertyOfType(type, "~effect/Option")) {
+        const optional = declaredOptional || (target?.isUnion() ? target.types.some(t => Boolean(t.flags & ts.TypeFlags.Undefined)) : Boolean(target && (target.flags & ts.TypeFlags.Undefined)));
+        const includesNull = target?.isUnion() ? target.types.some(t => Boolean(t.flags & ts.TypeFlags.Null)) : Boolean(target && (target.flags & ts.TypeFlags.Null));
+        if (target && (optional || includesNull) && checker.getPropertyOfType(type, "~effect/Option")) {
           const explicitSome = ts.isCallExpression(value) && ts.isPropertyAccessExpression(value.expression) && ts.isIdentifier(value.expression.expression) && value.expression.expression.text === "Option" && value.expression.name.text === "some";
           const offset = Number(node.arguments[0].text);
           if (checker.isTypeAssignableTo(type, target) && !explicitSome) throw new FunScriptError("Ambiguous optional property: use Option.some(value) to pass the Option as a value, or an explicit boundary adapter to forward it", spans.get(offset));
-          properties.add(offset);
+          if (includesNull && !optional) {
+            nullProperties.add(offset);
+          } else {
+            properties.add(offset);
+          }
         }
       }
       if (ts.isCallExpression(node)) {
@@ -95,11 +107,17 @@ export function resolveOptionalArguments(ast: Program, context: TypeScriptCompil
         node.arguments.forEach((argument, index) => {
           if (!ts.isCallExpression(argument) || !ts.isIdentifier(argument.expression) || argument.expression.text !== "__funscriptCallArgument" || !ts.isNumericLiteral(argument.arguments[0])) return;
           const parameter = signature?.getParameters()[index];
-          if (!parameter?.name.startsWith("$funscriptOptional")) return;
+          if (!parameter) return;
+          const isFunscriptOptional = parameter.name.startsWith("$funscriptOptional");
+          const declaredOptional = Boolean(parameter.flags & ts.SymbolFlags.Optional) || Boolean((parameter.valueDeclaration as any)?.questionToken);
+          const target = checker.getTypeOfSymbolAtLocation(parameter, node);
+          const includesUndefined = target.isUnion() ? target.types.some(t => Boolean(t.flags & ts.TypeFlags.Undefined)) : Boolean(target.flags & ts.TypeFlags.Undefined);
+          const includesNull = target.isUnion() ? target.types.some(t => Boolean(t.flags & ts.TypeFlags.Null)) : Boolean(target.flags & ts.TypeFlags.Null);
+          const isOptional = isFunscriptOptional || declaredOptional || includesUndefined;
+          if (!isOptional && !includesNull) return;
           const value = argument.arguments[1];
           const type = checker.getTypeAtLocation(value);
           if (!checker.getPropertyOfType(type, "~effect/Option")) return;
-          const target = checker.getTypeOfSymbolAtLocation(parameter, node);
           const explicitSome = ts.isCallExpression(value) && ts.isPropertyAccessExpression(value.expression) && ts.isIdentifier(value.expression.expression) && value.expression.expression.text === "Option" && value.expression.name.text === "some";
           const offset = Number(argument.arguments[0].text);
           if (checker.isTypeAssignableTo(type, target) && !explicitSome) {
@@ -110,12 +128,16 @@ export function resolveOptionalArguments(ast: Program, context: TypeScriptCompil
           if (!payload || mayContainUndefined(payload)) {
             throw new FunScriptError("Cannot automatically forward an Option that may contain undefined: normalize it explicitly or use a presence-preserving boundary", spans.get(offset));
           }
-          result.add(offset);
+          if (includesNull && !isOptional) {
+            nullArguments.add(offset);
+          } else {
+            result.add(offset);
+          }
         });
       }
       ts.forEachChild(node, visit);
     };
     visit(sourceFile);
-    return { arguments: result, properties };
+    return { arguments: result, nullArguments, properties, nullProperties };
   } finally { context.setAuxiliarySources(new Map()); }
 }

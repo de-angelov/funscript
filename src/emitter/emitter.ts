@@ -105,7 +105,9 @@ export interface EmitterOptions {
   /** Preserve source locations of ordinary call arguments during checker analysis. */
   markCallArguments?: boolean;
   forwardOptionalArguments?: ReadonlySet<number>;
+  forwardNullArguments?: ReadonlySet<number>;
   forwardOptionalProperties?: ReadonlySet<number>;
+  forwardNullProperties?: ReadonlySet<number>;
   /** Pre-resolved Effect schema expressions for imported data types keyed by schema name. */
   importedSchemas?: ReadonlyMap<string, string>;
   /** Direct imported FunScript functions with verified optional-record parameters. */
@@ -1284,10 +1286,21 @@ export class Emitter {
       if (decl.init.kind === "FunctionExpression") {
         const fn = decl.init;
         const validations = fn.params
-          .filter((p) => p.typeAnnotation && p.name.kind === "Identifier")
+          .filter((p) => !p.optional && p.typeAnnotation && p.name.kind === "Identifier")
           .map((p) => `  ${(p.name as Identifier).name} = Schema.decodeUnknownSync(${this.emitSchemaTypeField(p.typeAnnotation!)})(${(p.name as Identifier).name});`)
           .join("\n");
-        if (validations) this.effectImports.add("Schema");
+        const optionalBindings = fn.params.flatMap((p, index) => {
+          if (!p.optional) return [];
+          this.effectImports.add("Option");
+          const targetName = this.emitBindingTarget(p.name);
+          const rawName = `$funscriptOptional${index}`;
+          if (p.typeAnnotation && p.name.kind === "Identifier") {
+            this.effectImports.add("Schema");
+            return [`  const ${targetName} = ${rawName} !== undefined ? Option.some(Schema.decodeUnknownSync(${this.emitSchemaTypeField(p.typeAnnotation)})(${rawName})) : Option.none();`];
+          }
+          return [`  const ${targetName} = Option.fromUndefinedOr(${rawName});`];
+        });
+        if (validations || optionalBindings.length > 0) this.effectImports.add("Schema");
         for (const p of fn.params) {
           if (this.isPrimitiveType(p.typeAnnotation)) {
             for (const n of this.collectBindingNames(p.name)) {
@@ -1296,20 +1309,25 @@ export class Emitter {
           }
         }
         const params = fn.params
-          .map((p) => {
+          .map((p, index) => {
+            const rest = p.isRest ? "..." : "";
+            const name = p.optional ? `$funscriptOptional${index}` : this.emitBindingTarget(p.name);
             const t = p.typeAnnotation ? `: ${this.emitTypeNode(p.typeAnnotation)}` : "";
-            return `${this.emitBindingTarget(p.name)}${t}`;
+            const def = p.defaultValue ? ` = ${this.emitExpression(p.defaultValue)}` : "";
+            return `${rest}${name}${p.optional ? "?" : ""}${t}${def}`;
           })
           .join(", ");
+        const headerStatements = [validations, ...optionalBindings].filter(Boolean).join("\n");
+        const prefix = headerStatements ? `${headerStatements}\n` : "";
         if (fn.body.kind === "BlockStatement") {
           const retExpr = fn.body.finalExpression ? this.emitExpression(fn.body.finalExpression) : "undefined";
           if (fn.body.statements.length === 0) {
-            return `${exp}${keyword} ${target} = (${params}) => {\n${validations}\n  return Effect.runPromise(${retExpr});\n};`;
+            return `${exp}${keyword} ${target} = (${params}) => {\n${prefix}  return Effect.runPromise(${retExpr});\n};`;
           }
           const stmts = fn.body.statements.map((s) => "    " + this.emitStatement(s)).join("\n");
-          return `${exp}${keyword} ${target} = (${params}) => {\n${validations}\n  return Effect.runPromise(Effect.gen(function* () {\n${stmts}\n    return ${retExpr};\n  }));\n};`;
+          return `${exp}${keyword} ${target} = (${params}) => {\n${prefix}  return Effect.runPromise(Effect.gen(function* () {\n${stmts}\n    return ${retExpr};\n  }));\n};`;
         }
-        return `${exp}${keyword} ${target} = (${params}) => {\n${validations}\n  return Effect.runPromise(${this.emitExpression(fn.body)});\n};`;
+        return `${exp}${keyword} ${target} = (${params}) => {\n${prefix}  return Effect.runPromise(${this.emitExpression(fn.body)});\n};`;
       }
       return `${exp}${keyword} ${target}${typeAnn} = Effect.runPromise(${this.emitExpression(decl.init)});`;
     }
@@ -1808,6 +1826,10 @@ export class Emitter {
 
     return `${this.emitExpression(expr.callee)}(${expr.args.map((a) => {
       const emitted = this.emitExpression(a);
+      if (this.options.forwardNullArguments?.has(a.span.start.offset)) {
+        this.effectImports.add("Option");
+        return `Option.getOrNull(${emitted})`;
+      }
       if (this.options.forwardOptionalArguments?.has(a.span.start.offset)) {
         this.effectImports.add("Option");
         return `Option.getOrUndefined(${emitted})`;
@@ -2033,6 +2055,10 @@ export class Emitter {
         if (e.kind === "SpreadEntry") return `...${this.emitExpression(e.argument)}`;
         if (e.kind === "FieldEntry") {
           let val = this.emitExpression(e.value);
+          if (this.options.forwardNullProperties?.has(e.value.span.start.offset)) {
+            this.effectImports.add("Option");
+            return `[${JSON.stringify(e.key.name)}]: Option.getOrNull(${val})`;
+          }
           if (this.options.forwardOptionalProperties?.has(e.value.span.start.offset)) {
             this.effectImports.add("Option");
             return `...((__value: import("effect").Option.Option<any>) => Option.isSome(__value) ? { [${JSON.stringify(e.key.name)}]: __value.value } : {})(${val})`;
@@ -2529,6 +2555,10 @@ export class Emitter {
     if (attr.value.kind === "JSXExpressionContainer") {
       const expression = attr.value.expression;
       const value = this.emitExpression(expression);
+      if (this.options.forwardNullProperties?.has(expression.span.start.offset)) {
+        this.effectImports.add("Option");
+        return `${name}={Option.getOrNull(${value})}`;
+      }
       if (this.options.forwardOptionalProperties?.has(expression.span.start.offset)) {
         this.effectImports.add("Option");
         return `{...((__value: import("effect").Option.Option<any>) => Option.isSome(__value) ? { [${JSON.stringify(name)}]: __value.value } : {})(${value})}`;

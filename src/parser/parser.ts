@@ -758,8 +758,8 @@ export class Parser {
       init.typeParams = typeParams;
       init.span = { start: typeParams[0].span.start, end: init.span.end };
     }
-    if (isJs && init.kind === "FunctionExpression" && init.params.some((p) => p.optional || p.defaultValue || (p.typeAnnotation?.kind === "RecordTypeNode" && p.typeAnnotation.fields.some((field) => field.optional || field.defaultValue)))) {
-      throw new ParseError("Optional and defaulted parameters are not yet supported on js entry bindings", init.span);
+    if (isJs && init.kind === "FunctionExpression" && init.params.some((p) => p.typeAnnotation?.kind === "RecordTypeNode" && p.typeAnnotation.fields.some((field) => field.optional || field.defaultValue))) {
+      throw new ParseError("Optional and defaulted parameters inside record contracts are not yet supported on js entry bindings", init.span);
     }
     if (hasIndent) {
       this.skipNewlines();

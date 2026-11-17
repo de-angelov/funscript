@@ -640,4 +640,56 @@ export manageCollections = (map: Object, set: Object) =>
     expect(res.typescript).toContain("HashMap.set");
     expect(res.typescript).toContain("HashSet.add");
   });
+
+  it("supports optional parameters on export js entry bindings", async () => {
+    const src = `
+export js greet = (name?: String) => effect
+  => match name
+    | Some(n) => "Hello, " + n
+    | None => "Hello, stranger"
+`;
+    const res = Effect.runSync(compileString(src));
+    expect(res.typescript).toContain("($funscriptOptional0?: string)");
+    expect(res.typescript).toContain("Option.some");
+    expect(res.typescript).toContain("Option.none");
+
+    const greet = evaluateTsFunction(res.typescript, "greet");
+    expect(await greet("Ada")).toBe("Hello, Ada");
+    expect(await greet()).toBe("Hello, stranger");
+    expect(await greet(undefined)).toBe("Hello, stranger");
+  });
+
+  it("supports defaulted parameters on export js entry bindings", async () => {
+    const src = `
+export js repeat = (n: Number = 3) => effect
+  => n * 2
+`;
+    const res = Effect.runSync(compileString(src));
+    expect(res.typescript).toContain("(n: number = 3)");
+
+    const repeat = evaluateTsFunction(res.typescript, "repeat");
+    expect(await repeat()).toBe(6);
+    expect(await repeat(5)).toBe(10);
+  });
+
+  it("automatically lowers Option into foreign optional and null parameters and record properties", () => {
+    const src = `
+ts {
+  declare function foreignOptional(opt?: string): string;
+  declare function foreignNull(data: string, replacer: string | null, space?: number): string;
+  declare function updateRecord(req: { readonly deletedAt: string | null, readonly comment?: string }): void;
+}
+
+export callInterop = (optStr: Option<String>) => effect
+  _ <- js foreignOptional(optStr)
+  _ <- js foreignNull("data", optStr, 2)
+  _ <- js updateRecord({ deletedAt: optStr, comment: optStr })
+  => "ok"
+`;
+    const res = Effect.runSync(compileString(src));
+    expect(res.typescript).toContain("foreignOptional(Option.getOrUndefined(optStr))");
+    expect(res.typescript).toContain("foreignNull(\"data\", Option.getOrNull(optStr), 2)");
+    expect(res.typescript).toContain('["deletedAt"]: Option.getOrNull(optStr)');
+    expect(res.typescript).toContain('Option.isSome(__value) ? { ["comment"]: __value.value } : {}');
+  });
 });
