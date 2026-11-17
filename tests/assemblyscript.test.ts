@@ -333,6 +333,81 @@ export processStream = (chunks: Array<Uint8Array>) =>
     expect(total).toBe(45);
   });
 
+  it("supports 64-bit integer scalars (i64 / u64) mapped to BigInt", async () => {
+    const source = `as {
+  export function add64(a: i64, b: i64): i64 {
+    return a + b;
+  }
+  export function addU64(a: u64, b: u64): u64 {
+    return a + b;
+  }
+}
+export runAdd64 = (a: BigInt, b: BigInt) => add64(a, b)
+export runAdd64Effect = (a: BigInt, b: BigInt) => add64.effect(a, b)
+export runAddU64 = (a: BigInt, b: BigInt) => addU64(a, b)`;
+
+    const output = await execute(source);
+    expect(output.runAdd64(1000000000000n, 2000000000000n)).toBe(3000000000000n);
+    const effResult = await Effect.runPromise(output.runAdd64Effect(5000000000000n, 4000000000000n));
+    expect(effResult).toBe(9000000000000n);
+
+    // u64 wrapping above 2^63 - 1
+    const large = 18446744073709551610n; // 2^64 - 6
+    expect(output.runAddU64(large, 5n)).toBe(18446744073709551615n);
+
+    // Effect validation: rejects non-bigint or out of range values
+    const errResult = await Effect.runPromise(Effect.flip(output.runAdd64Effect(42 as any, 10n)));
+    expect(errResult).toMatchObject({
+      _tag: "WasmInputError",
+      function: "add64",
+      parameter: "a",
+      expected: "i64",
+      value: 42,
+    });
+  });
+
+  it("supports BigInt64Array and BigUint64Array marshaling and mutation", async () => {
+    const source = `as {
+  export function sumBigInts(arr: BigInt64Array): i64 {
+    let sum: i64 = 0;
+    for (let i = 0; i < arr.length; ++i) {
+      sum += arr[i];
+    }
+    return sum;
+  }
+  export function doubleBigInts(arr: BigInt64Array): void {
+    for (let i = 0; i < arr.length; ++i) {
+      arr[i] = arr[i] * 2;
+    }
+  }
+  export function makeRange(count: i32): BigInt64Array {
+    const res = new BigInt64Array(count);
+    for (let i: i32 = 0; i < count; ++i) {
+      res[i] = i64(i * 10);
+    }
+    return res;
+  }
+}
+export sum = (arr: BigInt64Array) => sumBigInts(arr)
+export sumEffect = (arr: BigInt64Array) => sumBigInts.effect(arr)
+export double = (arr: BigInt64Array) => doubleBigInts(arr)
+export range = (count: Number) => makeRange(count)`;
+
+    const output = await execute(source);
+    const data = new BigInt64Array([10n, 20n, 30n, 40n]);
+    expect(output.sum(data)).toBe(100n);
+
+    const effSum = await Effect.runPromise(output.sumEffect(data));
+    expect(effSum).toBe(100n);
+
+    output.double(data);
+    expect(Array.from(data)).toEqual([20n, 40n, 60n, 80n]);
+
+    const generated = output.range(4);
+    expect(generated instanceof BigInt64Array).toBe(true);
+    expect(Array.from(generated)).toEqual([0n, 10n, 20n, 30n]);
+  });
+
   it("round trips a block through the formatter", async () => {
     const source = await readFile("examples/assemblyscript-numeric.fun", "utf8");
     const formatted = format(source);
@@ -343,7 +418,7 @@ export processStream = (chunks: Array<Uint8Array>) =>
 
   it.each([
     ['as { export function missing(a: i32) { return a; } }', 'explicit i32'],
-    ['as { export function large(a: i64): i64 { return a; } }', 'explicit i32'],
+    ['as { export function invalid(a: boolean): boolean { return a; } }', 'explicit i32'],
     ['as { export const value: i32 = 1; }', 'only export numeric functions'],
     ['as { function hidden(): i32 { return 1; } }', 'export at least one'],
     ['as { import { value } from "other"; export function f(): i32 { return value; } }', 'cannot import'],

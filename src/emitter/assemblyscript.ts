@@ -5,7 +5,8 @@ import { FunScriptError } from "../errors.js";
 const cache = new Map<string, string>();
 const prepared = new WeakMap<AsDeclaration, string>();
 
-export const SCALAR_TYPES = new Set(["i32", "u32", "f32", "f64"]);
+export const SCALAR_TYPES = new Set(["i32", "u32", "i64", "u64", "f32", "f64"]);
+export const BIGINT_SCALAR_TYPES = new Set(["i64", "u64"]);
 export const TYPED_ARRAY_TYPES = new Set([
   "Float32Array",
   "Float64Array",
@@ -16,7 +17,14 @@ export const TYPED_ARRAY_TYPES = new Set([
   "Uint16Array",
   "Int16Array",
   "Uint8ClampedArray",
+  "BigInt64Array",
+  "BigUint64Array",
+  "Int64Array",
+  "Uint64Array",
 ]);
+
+const toJsTypedArray = (t: string): string =>
+  t === "Int64Array" ? "BigInt64Array" : t === "Uint64Array" ? "BigUint64Array" : t;
 
 /** Compile a numeric or typed-array kernel while keeping the existing synchronous compiler API. */
 export async function prepareAssemblyScript(decl: AsDeclaration): Promise<void> {
@@ -45,7 +53,7 @@ export async function prepareAssemblyScript(decl: AsDeclaration): Promise<void> 
   if (!binary) {
     try {
       const asc: { compileString(source: string, options: object): Promise<{ error: unknown; binary: Uint8Array | null; stderr: { toString(): string } }> } = await import("assemblyscript/" + "asc");
-      const compileSource = decl.code + "\nexport function __funscript_reset_heap(): void { __reset(); }\n";
+      const compileSource = decl.code + "\nclass BigInt64Array extends Int64Array {}\nclass BigUint64Array extends Uint64Array {}\nexport function __funscript_reset_heap(): void { __reset(); }\n";
       const result = await asc.compileString(compileSource, { optimizeLevel: 3, runtime: "stub", exportRuntime: true });
       if (result.error || !result.binary) {
         const detail = result.stderr.toString();
@@ -105,7 +113,7 @@ export function emitAssemblyScript(decl: AsDeclaration): string {
     `  const runtime = (globalThis as unknown as { WebAssembly: { Module: new (bytes: Uint8Array) => object; Instance: new (module: object, imports: { env: { abort: () => never } }) => { exports: Record<string, unknown> } } }).WebAssembly;`,
     `  return ${prefix}Instance = new runtime.Instance(new runtime.Module(bytes), { env: { abort: () => { throw new Error("AssemblyScript abort"); } } }).exports;`,
     `};`,
-    `const ${prefix}Alloc = (exports: Record<string, unknown>, arr: ArrayBufferView, Ctor: { new (buffer: ArrayBuffer, byteOffset: number, length: number): { set(source: ArrayLike<number>): void }; BYTES_PER_ELEMENT: number }): { viewPtr: number; bufPtr: number; arr: ArrayBufferView; Ctor: { new (buffer: ArrayBuffer, byteOffset: number, length: number): { set(source: ArrayLike<number>): void }; BYTES_PER_ELEMENT: number } } => {`,
+    `const ${prefix}Alloc = (exports: Record<string, unknown>, arr: ArrayBufferView, Ctor: { new (buffer: ArrayBuffer, byteOffset: number, length: number): { set(source: any): void }; BYTES_PER_ELEMENT: number }): { viewPtr: number; bufPtr: number; arr: ArrayBufferView; Ctor: { new (buffer: ArrayBuffer, byteOffset: number, length: number): { set(source: any): void }; BYTES_PER_ELEMENT: number } } => {`,
     `  const byteLength = arr.byteLength;`,
     `  const newFn = exports.__new as (size: number, id: number) => number;`,
     `  const bufPtr = newFn(byteLength, 0);`,
@@ -115,7 +123,7 @@ export function emitAssemblyScript(decl: AsDeclaration): string {
     `  mem32[viewPtr >> 2] = bufPtr;`,
     `  mem32[(viewPtr + 4) >> 2] = bufPtr;`,
     `  mem32[(viewPtr + 8) >> 2] = byteLength;`,
-    `  new Ctor(mem, bufPtr, (arr as unknown as { length: number }).length).set(arr as unknown as ArrayLike<number>);`,
+    `  new Ctor(mem, bufPtr, (arr as unknown as { length: number }).length).set(arr as any);`,
     `  return { viewPtr, bufPtr, arr, Ctor };`,
     `};`,
     `const ${prefix}Read = <T extends { slice(): T }>(exports: Record<string, unknown>, ptr: number, Ctor: { new (buffer: ArrayBuffer, byteOffset: number, length: number): T; BYTES_PER_ELEMENT: number }): T => {`,
@@ -126,7 +134,7 @@ export function emitAssemblyScript(decl: AsDeclaration): string {
     `  const len = byteLength / Ctor.BYTES_PER_ELEMENT;`,
     `  return new Ctor(mem, dataStart, len).slice();`,
     `};`,
-    `const ${prefix}Sync = (exports: Record<string, unknown>, handle: { viewPtr: number; bufPtr: number; arr: ArrayBufferView; Ctor: { new (buffer: ArrayBuffer, byteOffset: number, length: number): { set(source: ArrayLike<number>): void }; BYTES_PER_ELEMENT: number } }): void => {`,
+    `const ${prefix}Sync = (exports: Record<string, unknown>, handle: { viewPtr: number; bufPtr: number; arr: ArrayBufferView; Ctor: { new (buffer: ArrayBuffer, byteOffset: number, length: number): { set(source: any): void }; BYTES_PER_ELEMENT: number } }): void => {`,
     `  const mem = (exports.memory as { buffer: ArrayBuffer }).buffer;`,
     `  (handle.arr as unknown as { set(source: unknown): void }).set(new handle.Ctor(mem, handle.bufPtr, (handle.arr as unknown as { length: number }).length));`,
     `};`,
@@ -134,23 +142,26 @@ export function emitAssemblyScript(decl: AsDeclaration): string {
 
   for (const fn of signatures) {
     const isBufferResult = TYPED_ARRAY_TYPES.has(fn.result);
-    const tsReturnType = fn.result === "void" ? "void" : isBufferResult ? fn.result : "number";
+    const tsReturnType = fn.result === "void" ? "void" : isBufferResult ? toJsTypedArray(fn.result) : BIGINT_SCALAR_TYPES.has(fn.result) ? "bigint" : "number";
     const args = fn.params.map((p, i) => {
-      const tsType = TYPED_ARRAY_TYPES.has(p.type) ? p.type : "number";
+      const tsType = TYPED_ARRAY_TYPES.has(p.type) ? toJsTypedArray(p.type) : BIGINT_SCALAR_TYPES.has(p.type) ? "bigint" : "number";
       return `arg${i}: ${tsType}`;
     }).join(", ");
 
     const hasBuffers = fn.params.some(p => TYPED_ARRAY_TYPES.has(p.type)) || isBufferResult || decl.code.includes("Array") || decl.code.includes("new ");
-    const wasmFnType = fn.result === "void" ? "(...args: number[]) => void" : "(...args: number[]) => number";
+    const wasmFnType = fn.result === "void" ? "(...args: (number | bigint)[]) => void" : isBufferResult ? "(...args: (number | bigint)[]) => number" : `(...args: (number | bigint)[]) => ${tsReturnType}`;
 
     const errorType = `{ readonly _tag: "WasmInputError"; readonly function: string; readonly parameter: string; readonly expected: string; readonly value: unknown } | { readonly _tag: "WasmTrapError"; readonly function: string; readonly cause: unknown } | { readonly _tag: "WasmInitializationError"; readonly function: string; readonly cause: unknown }`;
 
     const validations = fn.params.map((param, i) => {
       const arg = `arg${i}`;
       if (TYPED_ARRAY_TYPES.has(param.type)) {
-        return `if (!(${arg} instanceof ${param.type})) return Effect.fail({ _tag: "WasmInputError" as const, function: ${JSON.stringify(fn.name)}, parameter: ${JSON.stringify(param.name)}, expected: ${JSON.stringify(param.type)}, value: ${arg} });`;
+        const jsType = toJsTypedArray(param.type);
+        return `if (!(${arg} instanceof ${jsType})) return Effect.fail({ _tag: "WasmInputError" as const, function: ${JSON.stringify(fn.name)}, parameter: ${JSON.stringify(param.name)}, expected: ${JSON.stringify(jsType)}, value: ${arg} });`;
       }
-      const invalid = param.type === "i32" ? `!Number.isInteger(${arg}) || ${arg} < -2147483648 || ${arg} > 2147483647`
+      const invalid = param.type === "i64" ? `typeof ${arg} !== "bigint" || ${arg} < -9223372036854775808n || ${arg} > 9223372036854775807n`
+        : param.type === "u64" ? `typeof ${arg} !== "bigint" || ${arg} < 0n || ${arg} > 18446744073709551615n`
+        : param.type === "i32" ? `!Number.isInteger(${arg}) || ${arg} < -2147483648 || ${arg} > 2147483647`
         : param.type === "u32" ? `!Number.isInteger(${arg}) || ${arg} < 0 || ${arg} > 4294967295`
         : param.type === "f32" ? `!Number.isFinite(${arg}) || Math.abs(${arg}) > 3.4028234663852886e38`
         : `!Number.isFinite(${arg})`;
@@ -164,8 +175,8 @@ export function emitAssemblyScript(decl: AsDeclaration): string {
       const passed = fn.params.map((_, i) => `arg${i}`).join(", ");
       const call = `(${prefix}Get()[${JSON.stringify(fn.name)}] as ${wasmFnType})(${passed})`;
       const effectCall = `(exports[${JSON.stringify(fn.name)}] as ${wasmFnType})(${passed})`;
-      const raw = fn.result === "void" ? `${call};` : fn.result === "u32" ? `(${call} >>> 0)` : call;
-      const effectRaw = fn.result === "void" ? `${effectCall};` : fn.result === "u32" ? `(${effectCall} >>> 0)` : effectCall;
+      const raw = fn.result === "void" ? `${call};` : fn.result === "u32" ? `(${call} as number >>> 0)` : fn.result === "u64" ? `BigInt.asUintN(64, ${call} as bigint)` : fn.result === "i64" ? `BigInt.asIntN(64, ${call} as bigint)` : call;
+      const effectRaw = fn.result === "void" ? `${effectCall};` : fn.result === "u32" ? `(${effectCall} as number >>> 0)` : fn.result === "u64" ? `BigInt.asUintN(64, ${effectCall} as bigint)` : fn.result === "i64" ? `BigInt.asIntN(64, ${effectCall} as bigint)` : effectCall;
       syncBody = fn.result === "void" ? raw : `return ${raw};`;
       effectTryBody = fn.result === "void" ? effectRaw : `return ${effectRaw};`;
     } else {
@@ -175,7 +186,8 @@ export function emitAssemblyScript(decl: AsDeclaration): string {
 
       fn.params.forEach((p, i) => {
         if (TYPED_ARRAY_TYPES.has(p.type)) {
-          allocs.push(`const __h${i} = ${prefix}Alloc(exports, arg${i}, ${p.type});`);
+          const jsType = toJsTypedArray(p.type);
+          allocs.push(`const __h${i} = ${prefix}Alloc(exports, arg${i}, ${jsType});`);
           passedVars.push(`__h${i}.viewPtr`);
           syncs.push(`${prefix}Sync(exports, __h${i});`);
         } else {
@@ -188,9 +200,14 @@ export function emitAssemblyScript(decl: AsDeclaration): string {
       if (fn.result === "void") {
         returnExpr = `try { ${callExpr}; ${syncs.join(" ")} } finally { (exports.__funscript_reset_heap as () => void)(); } return;`;
       } else if (isBufferResult) {
-        returnExpr = `try { const __res = ${callExpr}; ${syncs.join(" ")} return ${prefix}Read(exports, __res, ${fn.result}); } finally { (exports.__funscript_reset_heap as () => void)(); }`;
+        const jsType = toJsTypedArray(fn.result);
+        returnExpr = `try { const __res = ${callExpr} as number; ${syncs.join(" ")} return ${prefix}Read(exports, __res, ${jsType}); } finally { (exports.__funscript_reset_heap as () => void)(); }`;
       } else if (fn.result === "u32") {
-        returnExpr = `try { const __res = ${callExpr}; ${syncs.join(" ")} return (__res >>> 0); } finally { (exports.__funscript_reset_heap as () => void)(); }`;
+        returnExpr = `try { const __res = ${callExpr} as number; ${syncs.join(" ")} return (__res >>> 0); } finally { (exports.__funscript_reset_heap as () => void)(); }`;
+      } else if (fn.result === "u64") {
+        returnExpr = `try { const __res = ${callExpr} as bigint; ${syncs.join(" ")} return BigInt.asUintN(64, __res); } finally { (exports.__funscript_reset_heap as () => void)(); }`;
+      } else if (fn.result === "i64") {
+        returnExpr = `try { const __res = ${callExpr} as bigint; ${syncs.join(" ")} return BigInt.asIntN(64, __res); } finally { (exports.__funscript_reset_heap as () => void)(); }`;
       } else {
         returnExpr = `try { const __res = ${callExpr}; ${syncs.join(" ")} return __res; } finally { (exports.__funscript_reset_heap as () => void)(); }`;
       }
