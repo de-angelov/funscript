@@ -27,15 +27,37 @@ export function resolveOptionalArguments(ast: Program, context: TypeScriptCompil
   if (!spans.size) return { arguments: new Set(), nullArguments: new Set(), properties: new Set(), nullProperties: new Set() };
   const auxiliary = new Map<string, string>();
   const known = new Map(virtualSources ?? []);
-  // Resolve direct relative imports when compiling a single on-disk file.
-  for (const item of ast.body) {
-    if (item.kind !== "ImportDeclaration" || item.source.parts.length !== 1 || item.source.parts[0].kind !== "StringRawPart") continue;
-    const specifier = item.source.parts[0].value;
-    if (!specifier.startsWith(".") || !specifier.endsWith(".js")) continue;
-    const base = path.resolve(path.dirname(filename), specifier.slice(0, -3));
-    for (const ext of [".fun", ".funx"]) {
-      const file = base + ext;
-      if (!known.has(file) && fs.existsSync(file)) known.set(file, fs.readFileSync(file, "utf8"));
+  // Resolve transitive relative imports when compiling a single on-disk file.
+  const queue = [filename];
+  const visited = new Set<string>([path.resolve(filename)]);
+  while (queue.length > 0) {
+    const currentFile = queue.shift()!;
+    let currentAst: Program;
+    if (path.resolve(currentFile) === path.resolve(filename)) {
+      currentAst = ast;
+    } else {
+      const src = known.get(currentFile);
+      if (!src) continue;
+      try {
+        currentAst = new Parser(new Lexer(src, currentFile).tokenize(), currentFile, src).parse();
+      } catch {
+        continue;
+      }
+    }
+    for (const item of currentAst.body) {
+      if (item.kind !== "ImportDeclaration" || item.source.parts.length !== 1 || item.source.parts[0].kind !== "StringRawPart") continue;
+      const specifier = item.source.parts[0].value;
+      if (!specifier.startsWith(".") || !specifier.endsWith(".js")) continue;
+      const base = path.resolve(path.dirname(currentFile), specifier.slice(0, -3));
+      for (const ext of [".fun", ".funx"]) {
+        const file = base + ext;
+        const norm = path.resolve(file);
+        if (!visited.has(norm) && fs.existsSync(file)) {
+          visited.add(norm);
+          known.set(file, fs.readFileSync(file, "utf8"));
+          queue.push(file);
+        }
+      }
     }
   }
   for (const [file, source] of known) {
