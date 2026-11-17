@@ -1,6 +1,6 @@
 // Program 03: Todo Service with Direct Service Calls and Layers
 
-import { Console, Effect, Layer, Array, pipe } from "effect"
+import { Console, Effect, Layer, Array, Ref, pipe } from "effect"
 
 export schema Todo = {
   id: Number
@@ -16,35 +16,44 @@ export service TodoRepo
   all: () => Effect<Array<Todo>>
 
 // In-memory layer implementation using local store:
-mut store: Array<Todo> = []
-
 export TodoRepoLive =
-  Layer.succeed(TodoRepo, {
-    create: (title) =>
-      effect {
-        id = store.length + 1
-        newTodo: Todo = { id, title, completed: false }
-        store = store |> Array.append(newTodo)
-        => newTodo
-      }
+  Layer.effect(TodoRepo, effect {
+    initialStore: Array<Todo> = []
+    store <- Ref.make(initialStore)
+    => {
+      create: (title) =>
+        effect {
+          items <- Ref.get(store)
+          id = items.length + 1
+          newTodo: Todo = { id, title, completed: false }
+          _ <- Ref.update(store, (curr) => curr |> Array.append(newTodo))
+          => newTodo
+        }
 
-    complete: (id) =>
-      store
-      |> Array.findFirstIndex((t) => t.id #= id)
-      |> match
-        | None => Effect.fail(TodoNotFound({ id }))
-        | Some(idx) =>
-            match store[idx]
-              | Some(todo) =>
-                  updated = { ...todo, completed: true }
-                  store = store |> mut (draft) =>
-                    draft[idx] = updated
-                    draft
-                  Effect.succeed(updated)
-              | None => Effect.fail(TodoNotFound({ id }))
+      complete: (id) =>
+        effect {
+          items <- Ref.get(store)
+          idxOpt = items |> Array.findFirstIndex((t) => t.id #= id)
+          res <- match idxOpt
+            | None => Effect.fail(TodoNotFound({ id }))
+            | Some(idx) =>
+                match items[idx]
+                  | Some(todo) =>
+                      effect {
+                        updated = { ...todo, completed: true }
+                        _ <- Ref.update(store, (curr) =>
+                          curr |> mut (draft) =>
+                            draft[idx] = updated
+                            draft
+                        )
+                        => updated
+                      }
+                  | None => Effect.fail(TodoNotFound({ id }))
+          => res
+        }
 
-    all: () =>
-      => Effect.succeed(store)
+      all: () => Ref.get(store)
+    }
   })
 
 export formatTodo = (t: Todo) =>

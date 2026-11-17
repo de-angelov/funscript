@@ -1727,6 +1727,8 @@ export const typeCheckVirtualFiles = (
           }
 
           const visit = (node: ts.Node): void => {
+            if (ts.isFunctionDeclaration(node) && (node.name?.text === "__funscriptJs" || node.name?.text === "fromNullishOrElse" || node.name?.text === "fromNullishOr" || node.name?.text === "optionTry")) return;
+            if (ts.isClassDeclaration(node) && node.name?.text === "JsInteropError") return;
             if (ts.isReturnStatement(node) && node.expression) {
               let enc: ts.Node | undefined = node.parent;
               while (enc && !ts.isFunctionExpression(enc) && !ts.isArrowFunction(enc) && !ts.isFunctionDeclaration(enc)) {

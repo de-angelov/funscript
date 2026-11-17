@@ -39,8 +39,8 @@ export high = unsigned()`;
 export result = divide(1, 0)`)).rejects.toThrow();
   });
 
-  it("rejects reference types at the boundary", async () => {
-    await expectCompileError('as { export function text(a: string): i32 { return a.length; } }', 'explicit i32, u32, f32, or f64');
+  it("rejects unsupported types at the boundary", async () => {
+    await expectCompileError('as { export function text(a: boolean): i32 { return 0; } }', 'explicit i32, u32, f32, or f64');
   });
 
   it("reports AssemblyScript compiler errors", async () => {
@@ -406,6 +406,84 @@ export range = (count: Number) => makeRange(count)`;
     const generated = output.range(4);
     expect(generated instanceof BigInt64Array).toBe(true);
     expect(Array.from(generated)).toEqual([0n, 10n, 20n, 30n]);
+  });
+
+  it("supports string parameters and string returns", async () => {
+    const source = `as {
+  export function greet(name: string): string {
+    return "Hello, " + name + "!";
+  }
+  export function countChars(s: string): i32 {
+    return s.length;
+  }
+}
+export resGreet = greet("FunScript")
+export resLen = countChars("AssemblyScript")
+export safeGreet = greet.effect("Effect")
+export greetFn = greet
+`;
+    const output = await execute(source);
+    expect(output.resGreet).toBe("Hello, FunScript!");
+    expect(output.resLen).toBe(14);
+    const effRes = await Effect.runPromise(output.safeGreet);
+    expect(effRes).toBe("Hello, Effect!");
+
+    const badCall = output.greetFn.effect(123 as any);
+    const exit = await Effect.runPromiseExit(badCall);
+    expect(exit._tag).toBe("Failure");
+  });
+
+  it("supports struct classes as parameters and returns", async () => {
+    const source = `as {
+  export class Point {
+    x: f64 = 0;
+    y: f64 = 0;
+  }
+  export function makePoint(x: f64, y: f64): Point {
+    const p = new Point();
+    p.x = x;
+    p.y = y;
+    return p;
+  }
+  export function addPoints(p1: Point, p2: Point): Point {
+    const p = new Point();
+    p.x = p1.x + p2.x;
+    p.y = p1.y + p2.y;
+    return p;
+  }
+}
+export p1 = makePoint(1.5, 2.5)
+export p2 = makePoint(3.5, 4.5)
+export p3 = addPoints(p1, p2)
+export safeAdd = addPoints.effect(p1, p2)
+`;
+    const output = await execute(source);
+    expect(output.p1).toEqual({ x: 1.5, y: 2.5 });
+    expect(output.p2).toEqual({ x: 3.5, y: 4.5 });
+    expect(output.p3).toEqual({ x: 5.0, y: 7.0 });
+
+    const effRes = await Effect.runPromise(output.safeAdd);
+    expect(effRes).toEqual({ x: 5.0, y: 7.0 });
+  });
+
+  it("supports structs containing strings", async () => {
+    const source = `as {
+  export class User {
+    name: string = "";
+    age: i32 = 0;
+  }
+  export function celebrate(u: User): User {
+    const next = new User();
+    next.name = u.name;
+    next.age = u.age + 1;
+    return next;
+  }
+}
+export user = { name: "Ada", age: 36 }
+export nextUser = celebrate(user)
+`;
+    const output = await execute(source);
+    expect(output.nextUser).toEqual({ name: "Ada", age: 37 });
   });
 
   it("round trips a block through the formatter", async () => {

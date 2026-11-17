@@ -4,7 +4,7 @@
 // 2. Immutable nested domain state updates and draft recipes (Mutative)
 // 3. Typed effects, concurrent batch checks, retry policies, background fibers, and layer provision (Effect)
 
-import { Array, Console, Effect, Fiber, Layer, Number, Schedule, pipe } from "effect"
+import { Array, Console, Effect, Fiber, Layer, Number, Ref, Schedule, pipe } from "effect"
 
 // --- Domain Data Model (Schemas) ---
 
@@ -99,8 +99,6 @@ export service NotificationService
 
 // --- Live Layer Implementations ---
 
-mut paymentCallCount: Number = 0
-
 export InventoryServiceLive =
   Layer.succeed(InventoryService, {
     checkAvailability: (sku) =>
@@ -117,34 +115,36 @@ export InventoryServiceLive =
   })
 
 export PaymentGatewayLive =
-  Layer.succeed(PaymentGateway, {
-    charge: (orderId, amount, method) =>
-      effect {
-        methodDesc = formatPaymentMethod(method)
-        _ <- Console.log("  [PaymentGateway] Attempting to charge ${amount} via {methodDesc}")
-        paymentCallCount = paymentCallCount + 1
-        calls = paymentCallCount
-        res <- match
-          | amount |> isGreaterThan(50000) =>
-              effect {
-                _ <- Console.log("  [PaymentGateway] Transaction denied: credit limit exceeded")
-                _ <- Effect.fail("CreditLimitExceeded")
-                => ""
-              }
-          | calls #= 1 =>
-              effect {
-                _ <- Console.log("  [PaymentGateway] Transient network glitch on attempt 1! Retrying...")
-                _ <- Effect.fail("GatewayTimeout")
-                => ""
-              }
-          | _ =>
-              effect {
-                _ <- Console.log("  [PaymentGateway] Payment authorized successfully!")
-                => "TXN-90210"
-              }
+  Layer.effect(PaymentGateway, effect {
+    paymentCallCount <- Ref.make(0)
+    => {
+      charge: (orderId, amount, method) =>
+        effect {
+          methodDesc = formatPaymentMethod(method)
+          _ <- Console.log("  [PaymentGateway] Attempting to charge ${amount} via {methodDesc}")
+          calls <- Ref.updateAndGet(paymentCallCount, (n) => n + 1)
+          res <- match
+            | amount |> isGreaterThan(50000) =>
+                effect {
+                  _ <- Console.log("  [PaymentGateway] Transaction denied: credit limit exceeded")
+                  _ <- Effect.fail("CreditLimitExceeded")
+                  => ""
+                }
+            | calls #= 1 =>
+                effect {
+                  _ <- Console.log("  [PaymentGateway] Transient network glitch on attempt 1! Retrying...")
+                  _ <- Effect.fail("GatewayTimeout")
+                  => ""
+                }
+            | _ =>
+                effect {
+                  _ <- Console.log("  [PaymentGateway] Payment authorized successfully!")
+                  => "TXN-90210"
+                }
 
-        => res
-      }
+          => res
+        }
+    }
   })
 
 export NotificationServiceLive =
