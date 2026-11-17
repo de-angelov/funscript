@@ -1534,16 +1534,7 @@ export class Parser {
         };
       }
       if (this.match(TokenType.DOT)) {
-        if (this.check(TokenType.IDENTIFIER) && this.peek().value === "try") {
-          this.advance(); // consume 'try'
-          const inner = this.parseExpression();
-          return {
-            kind: "JsExpression",
-            expression: inner,
-            span: { start, end: inner.span.end },
-          };
-        }
-        throw new ParseError("Expected 'try' after 'js.'", this.peek().span);
+        throw new ParseError("FunScript has no 'js.try'; use 'js <expr>' (or '<- js <expr>') directly.", this.previous().span);
       }
       const inner = this.parseExpression();
       return {

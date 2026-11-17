@@ -541,14 +541,14 @@ export parseTotal = (s: String): Number =>
 export parsePayload = (raw: String) => JSON.parse(raw)
 `;
     expect(() => Effect.runSync(compileString(directJson))).toThrow(
-      "'JSON.parse()' is unsafe because it throws on malformed input. Guard it with 'Result.try(() => JSON.parse(...))' or use 'Schema.decodeUnknown'."
+      "'JSON.parse()' is unsafe because it throws on malformed input. Guard it with 'js JSON.parse(...)', 'Result.try(() => JSON.parse(...))', or use 'Schema.decodeUnknown'."
     );
 
     const directUrl = `
 export makeUrl = (raw: String) => URL(raw)
 `;
     expect(() => Effect.runSync(compileString(directUrl))).toThrow(
-      "'URL(...)' is unsafe because URL constructors throw on malformed input. Guard it with 'Result.try(() => URL(...))' or 'Option.try(() => URL(...))'."
+      "'URL(...)' is unsafe because URL constructors throw on malformed input. Guard it with 'js URL(...)', 'Result.try(() => URL(...))', or 'Option.try(() => URL(...))'."
     );
 
     const guardedJson = `
@@ -557,6 +557,13 @@ export safeJson = (raw: String) =>
 `;
     const res = Effect.runSync(compileString(guardedJson));
     expect(res.typescript).toContain("Result.try");
+
+    const guardedWithJs = `
+export safeJsJson = (raw: String) =>
+  js JSON.parse(raw)
+`;
+    const resJs = Effect.runSync(compileString(guardedWithJs));
+    expect(resJs.typescript).toContain('__funscriptJs(() => JSON.parse(raw), "unknown")');
   });
 
   it("bans mutating collection methods on Map and Set while allowing web params", () => {

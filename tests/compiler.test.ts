@@ -368,7 +368,7 @@ export untrusted = effect {
     expect(checked.success, checked.formattedOutput).toBe(true);
   });
 
-  it("guards synchronous throwing and non-throwing foreign JS calls with js and js.try", async () => {
+  it("guards synchronous throwing and non-throwing foreign JS calls with js", async () => {
     const code = `
 ts {
 declare function syncSuccess(): string
@@ -386,8 +386,8 @@ export runNullable = effect {
   => res
 }
 
-export runTry = effect {
-  res <- js.try(() => syncThrow())
+export runThrow = effect {
+  res <- js syncThrow()
   => res
 }
 `.trim();
@@ -414,9 +414,12 @@ export runTry = effect {
     const nullableVal = await Effect.runPromise(output.runNullable);
     expect(Option.isNone(nullableVal)).toBe(true);
 
-    const failureVal = await Effect.runPromise(Effect.flip(output.runTry));
+    const failureVal = await Effect.runPromise(Effect.flip(output.runThrow));
     expect(failureVal._tag).toBe("JsInteropError");
     expect((failureVal as any).cause.message).toBe("sync error message");
+
+    // Rejects redundant js.try with clear guidance
+    await expectCompileError("res = js.try(myFunction)", "FunScript has no 'js.try'; use 'js <expr>'");
   });
 
   it("preserves unions of native Promise return types", async () => {

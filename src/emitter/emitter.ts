@@ -1469,7 +1469,13 @@ export class Emitter {
     this.needsJsInterop = true;
     // compiler.ts replaces this provisional flag with the nullability inferred
     // from the native TypeScript return type.
-    const inner = this.emitExpression(expr.expression);
+    this.tryContextDepth++;
+    let inner: string;
+    try {
+      inner = this.emitExpression(expr.expression);
+    } finally {
+      this.tryContextDepth--;
+    }
     if (expr.expression.kind === "FunctionExpression" && (expr.expression as any).params?.length === 0) {
       return `__funscriptJs(${inner}, false)`;
     }
@@ -1625,7 +1631,7 @@ export class Emitter {
       this.tryContextDepth === 0
     ) {
       throw new FunScriptError(
-        `'URL(...)' is unsafe because URL constructors throw on malformed input. Guard it with 'Result.try(() => URL(...))' or 'Option.try(() => URL(...))'.`,
+        `'URL(...)' is unsafe because URL constructors throw on malformed input. Guard it with 'js URL(...)', 'Result.try(() => URL(...))', or 'Option.try(() => URL(...))'.`,
         expr.callee.span,
       );
     }
@@ -1677,7 +1683,7 @@ export class Emitter {
 
       if ((objName === "JSON" || objName === "globalThis") && prop === "parse" && this.tryContextDepth === 0) {
         throw new FunScriptError(
-          `'JSON.parse()' is unsafe because it throws on malformed input. Guard it with 'Result.try(() => JSON.parse(...))' or use 'Schema.decodeUnknown'.`,
+          `'JSON.parse()' is unsafe because it throws on malformed input. Guard it with 'js JSON.parse(...)', 'Result.try(() => JSON.parse(...))', or use 'Schema.decodeUnknown'.`,
           expr.callee.property.span,
         );
       }
