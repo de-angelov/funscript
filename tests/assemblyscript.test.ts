@@ -740,6 +740,77 @@ export mid = midpoint(seg)
     expect(output.mid).toEqual([5.0, 15.0]);
   });
 
+  it("supports zero-copy kernel chaining with .raw and direct WasmHandle passing", async () => {
+    const source = `as {
+  export function doubleVec(data: Float64Array): Float64Array {
+    const out = new Float64Array(data.length);
+    for (let i = 0; i < data.length; i++) out[i] = data[i] * 2.0;
+    return out;
+  }
+  export function addOne(data: Float64Array): Float64Array {
+    const out = new Float64Array(data.length);
+    for (let i = 0; i < data.length; i++) out[i] = data[i] + 1.0;
+    return out;
+  }
+  export function sumVec(data: Float64Array): f64 {
+    let sum: f64 = 0;
+    for (let i = 0; i < data.length; i++) sum += data[i];
+    return sum;
+  }
+}
+export doubleFn = doubleVec
+export addOneFn = addOne
+export sumFn = sumVec
+`;
+    const output = await execute(source);
+    const initial = new Float64Array([1.0, 2.0, 3.0]);
+
+    // Chain step 1 -> step 2 -> step 3 entirely in Wasm linear memory
+    const h1 = output.doubleFn.raw(initial);
+    expect(h1._tag).toBe("WasmHandle");
+    expect(Array.from(h1.read())).toEqual([2.0, 4.0, 6.0]);
+
+    const h2 = output.addOneFn.raw(h1);
+    expect(h2._tag).toBe("WasmHandle");
+    expect(Array.from(h2.read())).toEqual([3.0, 5.0, 7.0]);
+
+    // Final sum consumes handle h2 and resets Wasm heap
+    const total = output.sumFn(h2);
+    expect(total).toBe(15.0);
+  });
+
+  it("integrates zero-copy Wasm handles with Effect Scope via .scoped", async () => {
+    const source = `as {
+  export function scale(data: Float64Array, factor: f64): Float64Array {
+    const out = new Float64Array(data.length);
+    for (let i = 0; i < data.length; i++) out[i] = data[i] * factor;
+    return out;
+  }
+  export function sum(data: Float64Array): f64 {
+    let s: f64 = 0;
+    for (let i = 0; i < data.length; i++) s += data[i];
+    return s;
+  }
+}
+export scaleFn = scale
+export sumFn = sum
+`;
+    const output = await execute(source);
+    const initial = new Float64Array([10.0, 20.0, 30.0]);
+
+    const program = Effect.scoped(
+      Effect.gen(function* () {
+        const h1 = yield* output.scaleFn.scoped(initial, 3.0);
+        expect(h1._tag).toBe("WasmHandle");
+        const total = output.sumFn(h1);
+        return total;
+      })
+    );
+
+    const result = await Effect.runPromise(program);
+    expect(result).toBe(180.0);
+  });
+
   it("round trips a block through the formatter", async () => {
     const source = await readFile("examples/assemblyscript-numeric.fun", "utf8");
     const formatted = format(source);

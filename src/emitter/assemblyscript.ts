@@ -385,6 +385,10 @@ export function emitAssemblyScript(decl: AsDeclaration): string {
     `  const runtime = (globalThis as unknown as { WebAssembly: { Module: new (bytes: Uint8Array) => object; Instance: new (module: object, imports: { env: { abort: () => never } }) => { exports: Record<string, unknown> } } }).WebAssembly;`,
     `  return ${prefix}Instance = new runtime.Instance(new runtime.Module(bytes), { env: { abort: () => { throw new Error("AssemblyScript abort"); } } }).exports;`,
     `};`,
+    `class ${prefix}WasmHandle<T = unknown> {`,
+    `  readonly _tag = "WasmHandle" as const;`,
+    `  constructor(readonly ptr: number, readonly read: () => T) {}`,
+    `};`,
     `const ${prefix}Alloc = (exports: Record<string, unknown>, arr: ArrayBufferView, Ctor: { new (buffer: ArrayBuffer, byteOffset: number, length: number): { set(source: any): void }; BYTES_PER_ELEMENT: number }): { viewPtr: number; bufPtr: number; arr: ArrayBufferView; Ctor: { new (buffer: ArrayBuffer, byteOffset: number, length: number): { set(source: any): void }; BYTES_PER_ELEMENT: number } } => {`,
     `  const byteLength = arr.byteLength;`,
     `  const newFn = exports.__new as (size: number, id: number) => number;`,
@@ -440,6 +444,14 @@ export function emitAssemblyScript(decl: AsDeclaration): string {
     const tupleElems = parseTupleElementTypeList(t);
     if (tupleElems) return `readonly [${tupleElems.map(toTsType).join(", ")}]`;
     return t;
+  };
+
+  const isHandleEligible = (t: string): boolean =>
+    TYPED_ARRAY_TYPES.has(t) || classes.has(t) || parseTupleElementTypeList(t) !== null || parseArrayElementType(t) !== null;
+
+  const toTsParamType = (t: string): string => {
+    const base = toTsType(t);
+    return isHandleEligible(t) ? `${base} | ${prefix}WasmHandle<${base}>` : base;
   };
 
   const { allTuples } = transformKernelSource(decl.code);
@@ -650,26 +662,29 @@ export function emitAssemblyScript(decl: AsDeclaration): string {
   }
 
   const generateValidation = (valExpr: string, type: string, fnName: string, paramName: string): string => {
+    const handlePrefix = isHandleEligible(type)
+      ? `if (typeof ${valExpr} === "object" && ${valExpr} !== null && (((${valExpr} as any)._tag === "WasmHandle") || (${valExpr} as any) instanceof ${prefix}WasmHandle)) {} else `
+      : "";
     if (BOOLEAN_TYPES.has(type)) {
       return `if (typeof ${valExpr} !== "boolean") return Effect.fail({ _tag: "WasmInputError" as const, function: ${JSON.stringify(fnName)}, parameter: ${JSON.stringify(paramName)}, expected: "boolean", value: ${valExpr} });`;
     }
     if (TYPED_ARRAY_TYPES.has(type)) {
       const jsType = toJsTypedArray(type);
-      return `if (!(${valExpr} instanceof ${jsType})) return Effect.fail({ _tag: "WasmInputError" as const, function: ${JSON.stringify(fnName)}, parameter: ${JSON.stringify(paramName)}, expected: ${JSON.stringify(jsType)}, value: ${valExpr} });`;
+      return `${handlePrefix}if (!(${valExpr} instanceof ${jsType})) return Effect.fail({ _tag: "WasmInputError" as const, function: ${JSON.stringify(fnName)}, parameter: ${JSON.stringify(paramName)}, expected: ${JSON.stringify(jsType)}, value: ${valExpr} });`;
     }
     if (type === "string") {
-      return `if (typeof ${valExpr} !== "string") return Effect.fail({ _tag: "WasmInputError" as const, function: ${JSON.stringify(fnName)}, parameter: ${JSON.stringify(paramName)}, expected: "string", value: ${valExpr} });`;
+      return `${handlePrefix}if (typeof ${valExpr} !== "string") return Effect.fail({ _tag: "WasmInputError" as const, function: ${JSON.stringify(fnName)}, parameter: ${JSON.stringify(paramName)}, expected: "string", value: ${valExpr} });`;
     }
     if (classes.has(type)) {
-      return `if (typeof ${valExpr} !== "object" || ${valExpr} === null) return Effect.fail({ _tag: "WasmInputError" as const, function: ${JSON.stringify(fnName)}, parameter: ${JSON.stringify(paramName)}, expected: ${JSON.stringify(type)}, value: ${valExpr} });`;
+      return `${handlePrefix}if (typeof ${valExpr} !== "object" || ${valExpr} === null) return Effect.fail({ _tag: "WasmInputError" as const, function: ${JSON.stringify(fnName)}, parameter: ${JSON.stringify(paramName)}, expected: ${JSON.stringify(type)}, value: ${valExpr} });`;
     }
     const elem = parseArrayElementType(type);
     if (elem) {
-      return `if (!Array.isArray(${valExpr})) return Effect.fail({ _tag: "WasmInputError" as const, function: ${JSON.stringify(fnName)}, parameter: ${JSON.stringify(paramName)}, expected: "Array", value: ${valExpr} });`;
+      return `${handlePrefix}if (!Array.isArray(${valExpr})) return Effect.fail({ _tag: "WasmInputError" as const, function: ${JSON.stringify(fnName)}, parameter: ${JSON.stringify(paramName)}, expected: "Array", value: ${valExpr} });`;
     }
     const tupleElems = parseTupleElementTypeList(type);
     if (tupleElems) {
-      const head = `if (!Array.isArray(${valExpr}) || ${valExpr}.length !== ${tupleElems.length}) return Effect.fail({ _tag: "WasmInputError" as const, function: ${JSON.stringify(fnName)}, parameter: ${JSON.stringify(paramName)}, expected: ${JSON.stringify(type)}, value: ${valExpr} });`;
+      const head = `${handlePrefix}if (!Array.isArray(${valExpr}) || ${valExpr}.length !== ${tupleElems.length}) return Effect.fail({ _tag: "WasmInputError" as const, function: ${JSON.stringify(fnName)}, parameter: ${JSON.stringify(paramName)}, expected: ${JSON.stringify(type)}, value: ${valExpr} });`;
       const checks = tupleElems.map((te, idx) => generateValidation(`${valExpr}[${idx}]`, te, fnName, `${paramName}[${idx}]`)).join(" ");
       return `${head} ${checks}`;
     }
@@ -689,9 +704,12 @@ export function emitAssemblyScript(decl: AsDeclaration): string {
     const isArrayResult = parseArrayElementType(fn.result) !== null;
     const isTupleResult = parseTupleElementTypeList(fn.result) !== null;
     const isBooleanResult = BOOLEAN_TYPES.has(fn.result);
+    const isHandleResult = isBufferResult || isStringResult || isClassResult || isArrayResult || isTupleResult;
     const tsReturnType = toTsType(fn.result);
+    const rawReturnType = isHandleResult ? `${prefix}WasmHandle<${tsReturnType}>` : tsReturnType;
 
-    const args = fn.params.map((p, i) => `arg${i}: ${toTsType(p.type)}`).join(", ");
+    const args = fn.params.map((p, i) => `arg${i}: ${toTsParamType(p.type)}`).join(", ");
+    const passedArgs = fn.params.map((_, i) => `arg${i}`).join(", ");
 
     const hasBuffers = fn.params.some(p => TYPED_ARRAY_TYPES.has(p.type) || p.type === "string" || classes.has(p.type) || parseArrayElementType(p.type) !== null || parseTupleElementTypeList(p.type) !== null)
       || isBufferResult || isStringResult || isClassResult || isArrayResult || isTupleResult
@@ -708,6 +726,24 @@ export function emitAssemblyScript(decl: AsDeclaration): string {
 
     let syncBody: string;
     let effectTryBody: string;
+    let rawBody: string;
+
+    const readExpr = fn.result === "void" ? ""
+      : isBooleanResult ? `Boolean(__res)`
+      : isBufferResult ? `${prefix}Read(exports, __res, ${toJsTypedArray(fn.result)})`
+      : isStringResult ? `${prefix}ReadString(exports, __res)`
+      : isClassResult ? `${prefix}Read_${fn.result}(exports, __res)`
+      : isTupleResult ? `${prefix}Read_${tupleClassName(parseTupleElementTypeList(fn.result)!)}(exports, __res)`
+      : isArrayResult ? (() => {
+          const elem = parseArrayElementType(fn.result)!;
+          const tupleElems = parseTupleElementTypeList(elem);
+          const safeElem = elem === "boolean" ? "bool" : tupleElems ? tupleClassName(tupleElems) : elem;
+          return `${prefix}Read_Array_${safeElem}(exports, __res)`;
+        })()
+      : fn.result === "u32" ? `((__res) >>> 0)`
+      : fn.result === "u64" ? `BigInt.asUintN(64, __res as bigint)`
+      : fn.result === "i64" ? `BigInt.asIntN(64, __res as bigint)`
+      : `__res`;
 
     if (!hasBuffers) {
       const passed = fn.params.map((p, i) => BOOLEAN_TYPES.has(p.type) ? `(arg${i} ? 1 : 0)` : `arg${i}`).join(", ");
@@ -727,6 +763,7 @@ export function emitAssemblyScript(decl: AsDeclaration): string {
         : effectCall;
       syncBody = fn.result === "void" ? raw : `return ${raw};`;
       effectTryBody = fn.result === "void" ? effectRaw : `return ${effectRaw};`;
+      rawBody = syncBody;
     } else {
       const allocs: string[] = [];
       const passedVars: string[] = [];
@@ -737,25 +774,36 @@ export function emitAssemblyScript(decl: AsDeclaration): string {
           passedVars.push(`(arg${i} ? 1 : 0)`);
         } else if (TYPED_ARRAY_TYPES.has(p.type)) {
           const jsType = toJsTypedArray(p.type);
-          allocs.push(`const __h${i} = ${prefix}Alloc(exports, arg${i}, ${jsType});`);
+          allocs.push(
+            `const __isH${i} = Boolean(arg${i} && (arg${i} as any)._tag === "WasmHandle");`,
+            `const __h${i} = __isH${i} ? { viewPtr: (arg${i} as any).ptr } : ${prefix}Alloc(exports, arg${i} as any, ${jsType});`,
+          );
           passedVars.push(`__h${i}.viewPtr`);
-          syncs.push(`${prefix}Sync(exports, __h${i});`);
+          syncs.push(`if (!__isH${i}) ${prefix}Sync(exports, __h${i} as any);`);
         } else if (p.type === "string") {
-          allocs.push(`const __h${i} = ${prefix}AllocString(exports, arg${i});`);
+          allocs.push(
+            `const __h${i} = (arg${i} && (arg${i} as any)._tag === "WasmHandle") ? (arg${i} as any).ptr : ${prefix}AllocString(exports, arg${i} as any);`,
+          );
           passedVars.push(`__h${i}`);
         } else if (classes.has(p.type)) {
-          allocs.push(`const __h${i} = ${prefix}Alloc_${p.type}(exports, arg${i});`);
+          allocs.push(
+            `const __h${i} = (arg${i} && (arg${i} as any)._tag === "WasmHandle") ? (arg${i} as any).ptr : ${prefix}Alloc_${p.type}(exports, arg${i} as any);`,
+          );
           passedVars.push(`__h${i}`);
         } else if (parseTupleElementTypeList(p.type)) {
           const tupleElems = parseTupleElementTypeList(p.type)!;
           const clsName = tupleClassName(tupleElems);
-          allocs.push(`const __h${i} = ${prefix}Alloc_${clsName}(exports, arg${i});`);
+          allocs.push(
+            `const __h${i} = (arg${i} && (arg${i} as any)._tag === "WasmHandle") ? (arg${i} as any).ptr : ${prefix}Alloc_${clsName}(exports, arg${i} as any);`,
+          );
           passedVars.push(`__h${i}`);
         } else if (parseArrayElementType(p.type)) {
           const elem = parseArrayElementType(p.type)!;
           const tupleElems = parseTupleElementTypeList(elem);
           const safeElem = elem === "boolean" ? "bool" : tupleElems ? tupleClassName(tupleElems) : elem;
-          allocs.push(`const __h${i} = ${prefix}Alloc_Array_${safeElem}(exports, arg${i});`);
+          allocs.push(
+            `const __h${i} = (arg${i} && (arg${i} as any)._tag === "WasmHandle") ? (arg${i} as any).ptr : ${prefix}Alloc_Array_${safeElem}(exports, arg${i} as any);`,
+          );
           passedVars.push(`__h${i}`);
         } else {
           passedVars.push(`arg${i}`);
@@ -763,45 +811,32 @@ export function emitAssemblyScript(decl: AsDeclaration): string {
       });
 
       const callExpr = `(exports[${JSON.stringify(fn.name)}] as ${wasmFnType})(${passedVars.join(", ")})`;
-      let returnExpr: string;
-      if (fn.result === "void") {
-        returnExpr = `try { ${callExpr}; ${syncs.join(" ")} } finally { (exports.__funscript_reset_heap as () => void)(); } return;`;
-      } else if (isBooleanResult) {
-        returnExpr = `try { const __res = ${callExpr} as number; ${syncs.join(" ")} return Boolean(__res); } finally { (exports.__funscript_reset_heap as () => void)(); }`;
-      } else if (isBufferResult) {
-        const jsType = toJsTypedArray(fn.result);
-        returnExpr = `try { const __res = ${callExpr} as number; ${syncs.join(" ")} return ${prefix}Read(exports, __res, ${jsType}); } finally { (exports.__funscript_reset_heap as () => void)(); }`;
-      } else if (isStringResult) {
-        returnExpr = `try { const __res = ${callExpr} as number; ${syncs.join(" ")} return ${prefix}ReadString(exports, __res); } finally { (exports.__funscript_reset_heap as () => void)(); }`;
-      } else if (isClassResult) {
-        returnExpr = `try { const __res = ${callExpr} as number; ${syncs.join(" ")} return ${prefix}Read_${fn.result}(exports, __res); } finally { (exports.__funscript_reset_heap as () => void)(); }`;
-      } else if (isTupleResult) {
-        const tupleElems = parseTupleElementTypeList(fn.result)!;
-        const clsName = tupleClassName(tupleElems);
-        returnExpr = `try { const __res = ${callExpr} as number; ${syncs.join(" ")} return ${prefix}Read_${clsName}(exports, __res); } finally { (exports.__funscript_reset_heap as () => void)(); }`;
-      } else if (isArrayResult) {
-        const elem = parseArrayElementType(fn.result)!;
-        const tupleElems = parseTupleElementTypeList(elem);
-        const safeElem = elem === "boolean" ? "bool" : tupleElems ? tupleClassName(tupleElems) : elem;
-        returnExpr = `try { const __res = ${callExpr} as number; ${syncs.join(" ")} return ${prefix}Read_Array_${safeElem}(exports, __res); } finally { (exports.__funscript_reset_heap as () => void)(); }`;
-      } else if (fn.result === "u32") {
-        returnExpr = `try { const __res = ${callExpr} as number; ${syncs.join(" ")} return (__res >>> 0); } finally { (exports.__funscript_reset_heap as () => void)(); }`;
-      } else if (fn.result === "u64") {
-        returnExpr = `try { const __res = ${callExpr} as bigint; ${syncs.join(" ")} return BigInt.asUintN(64, __res); } finally { (exports.__funscript_reset_heap as () => void)(); }`;
-      } else if (fn.result === "i64") {
-        returnExpr = `try { const __res = ${callExpr} as bigint; ${syncs.join(" ")} return BigInt.asIntN(64, __res); } finally { (exports.__funscript_reset_heap as () => void)(); }`;
-      } else {
-        returnExpr = `try { const __res = ${callExpr}; ${syncs.join(" ")} return __res; } finally { (exports.__funscript_reset_heap as () => void)(); }`;
-      }
+      const returnExpr = fn.result === "void"
+        ? `try { ${callExpr}; ${syncs.join(" ")} } finally { (exports.__funscript_reset_heap as () => void)(); } return;`
+        : `try { const __res = ${callExpr} as any; ${syncs.join(" ")} return ${readExpr}; } finally { (exports.__funscript_reset_heap as () => void)(); }`;
+
+      const rawReturnExpr = fn.result === "void"
+        ? `${callExpr}; ${syncs.join(" ")} return;`
+        : isHandleResult
+        ? `const __res = ${callExpr} as number; ${syncs.join(" ")} return new ${prefix}WasmHandle(__res, () => ${readExpr});`
+        : `const __res = ${callExpr} as any; ${syncs.join(" ")} return ${readExpr};`;
 
       syncBody = `const exports = ${prefix}Get(); ${allocs.join(" ")} ${returnExpr}`;
       effectTryBody = `${allocs.join(" ")} ${returnExpr}`;
+      rawBody = `const exports = ${prefix}Get(); ${allocs.join(" ")} ${rawReturnExpr}`;
     }
 
     lines.push(
       `const ${fn.name} = Object.assign(`,
       `  (${args}): ${tsReturnType} => { ${syncBody} },`,
       `  {`,
+      `    raw: (${args}): ${rawReturnType} => { ${rawBody} },`,
+      `    reset: (): void => { ((${prefix}Get()).__funscript_reset_heap as () => void)(); },`,
+      `    scoped: (${args}): Effect.Effect<${rawReturnType}, ${errorType}, Scope.Scope> =>`,
+      `      Effect.acquireRelease(`,
+      `        Effect.sync((): ${rawReturnType} => ${fn.name}.raw(${passedArgs})),`,
+      `        () => Effect.sync((): void => { ((${prefix}Get()).__funscript_reset_heap as () => void)(); })`,
+      `      ),`,
       `    effect: (${args}): Effect.Effect<${tsReturnType}, ${errorType}> =>`,
       `      Effect.suspend((): Effect.Effect<${tsReturnType}, ${errorType}> => {`,
       `        ${validations}`,

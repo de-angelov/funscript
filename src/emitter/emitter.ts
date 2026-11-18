@@ -585,6 +585,7 @@ export class Emitter {
         return decl.code + "\n";
       case "AsDeclaration":
         this.effectImports.add("Effect");
+        this.effectImports.add("Scope");
         return emitAssemblyScript(decl);
     }
   }
