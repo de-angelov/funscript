@@ -1,6 +1,6 @@
 {
   "name": "funscript",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "description": "Indentation-based functional notation compiling to TypeScript for the Effect + ts-pattern + Mutative ecosystem",
   "type": "module",
   "bin": {
