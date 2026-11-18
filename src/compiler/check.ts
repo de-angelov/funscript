@@ -289,7 +289,7 @@ export function isEntryModule(funPath: string, ast?: any, cwd: string = process.
       if (stmt.kind === "ExportDeclaration" && stmt.declaration?.id?.name === "main") {
         return true;
       }
-      if (stmt.kind === "BindingDeclaration" && stmt.id?.name === "main" && stmt.isExported) {
+      if (stmt.kind === "BindingDeclaration" && stmt.id?.name === "main") {
         return true;
       }
       if (stmt.kind === "ExportNamedDeclaration" && Array.isArray(stmt.specifiers)) {

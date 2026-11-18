@@ -639,6 +639,107 @@ export center = centroid(poly)
     expect(output.center).toEqual({ x: 1.0, y: 2.0 });
   });
 
+  it("supports SIMD vector math using v128 and f64x2 intrinsics", async () => {
+    const source = `as {
+  export function vecAdd(dest: Float64Array, a: Float64Array, b: Float64Array): void {
+    const v1 = v128.load(changetype<usize>(a.dataStart));
+    const v2 = v128.load(changetype<usize>(b.dataStart));
+    v128.store(changetype<usize>(dest.dataStart), f64x2.add(v1, v2));
+  }
+}
+export addVectors = (dest: Float64Array, a: Float64Array, b: Float64Array) => vecAdd(dest, a, b)
+export vecAddFn = vecAdd
+`;
+    const output = await execute(source);
+    const dest = new Float64Array(2);
+    const a = new Float64Array([1.5, 2.5]);
+    const b = new Float64Array([10.0, 20.0]);
+    output.addVectors(dest, a, b);
+    expect(Array.from(dest)).toEqual([11.5, 22.5]);
+
+    const dest2 = new Float64Array(2);
+    await Effect.runPromise(
+      output.vecAddFn.effect(dest2, new Float64Array([3.0, 4.0]), new Float64Array([7.0, 6.0]))
+    );
+    expect(Array.from(dest2)).toEqual([10.0, 10.0]);
+  });
+
+  it("supports returning tuples [f64, f64] and [i32, string]", async () => {
+    const source = `as {
+  export function minMax(arr: Float64Array): [f64, f64] {
+    let min = arr[0];
+    let max = arr[0];
+    for (let i = 1; i < arr.length; i++) {
+      if (arr[i] < min) min = arr[i];
+      if (arr[i] > max) max = arr[i];
+    }
+    return [min, max];
+  }
+  export function status(code: i32): [i32, string] {
+    return [code, code == 200 ? "OK" : "ERR"];
+  }
+}
+export computeStats = (numbers: Float64Array) => minMax(numbers)
+export getStatus = (code: Number) => status(code)
+export minMaxFn = minMax
+export statusFn = status
+`;
+    const output = await execute(source);
+    const numbers = new Float64Array([42.0, 3.5, 100.25, -5.0]);
+    expect(output.computeStats(numbers)).toEqual([-5.0, 100.25]);
+    expect(output.getStatus(200)).toEqual([200, "OK"]);
+    expect(output.getStatus(404)).toEqual([404, "ERR"]);
+
+    const effStats = await Effect.runPromise(output.minMaxFn.effect(new Float64Array([1.0, 10.0])));
+    expect(effStats).toEqual([1.0, 10.0]);
+
+    const effStatus = await Effect.runPromise(output.statusFn.effect(200));
+    expect(effStatus).toEqual([200, "OK"]);
+  });
+
+  it("supports tuple parameters and validates tuple inputs in .effect companion", async () => {
+    const source = `as {
+  export function distance(p1: [f64, f64], p2: [f64, f64]): f64 {
+    const dx = p2[0] - p1[0];
+    const dy = p2[1] - p1[1];
+    return Math.sqrt(dx * dx + dy * dy);
+  }
+}
+export d = distance([0.0, 0.0], [3.0, 4.0])
+export distFn = distance
+`;
+    const output = await execute(source);
+    expect(output.d).toBe(5.0);
+
+    const effD = await Effect.runPromise(output.distFn.effect([1.0, 2.0], [4.0, 6.0]));
+    expect(effD).toBe(5.0);
+
+    const invalidExit = await Effect.runPromiseExit(output.distFn.effect([1.0] as any, [4.0, 6.0]));
+    expect(Exit.isFailure(invalidExit)).toBe(true);
+  });
+
+  it("supports classes containing tuple fields", async () => {
+    const source = `as {
+  export class Segment {
+    start: [f64, f64];
+    end: [f64, f64];
+  }
+  export function midpoint(seg: Segment): [f64, f64] {
+    const mx = (seg.start[0] + seg.end[0]) / 2.0;
+    const my = (seg.start[1] + seg.end[1]) / 2.0;
+    return [mx, my];
+  }
+}
+export seg = {
+  start: [0.0, 10.0],
+  end: [10.0, 20.0]
+}
+export mid = midpoint(seg)
+`;
+    const output = await execute(source);
+    expect(output.mid).toEqual([5.0, 15.0]);
+  });
+
   it("round trips a block through the formatter", async () => {
     const source = await readFile("examples/assemblyscript-numeric.fun", "utf8");
     const formatted = format(source);
