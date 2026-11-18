@@ -1947,21 +1947,78 @@ export const getUser = (id: string) =>
   }));
 ```
 
-#### `effect (unscoped)` escape hatch
-When a function is explicitly designed to acquire a resource and pass the open `Scope` to its caller (e.g., custom resource combinators), use the `unscoped` option:
+#### Scoped vs. Unscoped Effects (`effect` vs. `effect (unscoped)`)
+
+In FunScript, `effect` blocks are **scoped by default** (`Effect.scoped(Effect.gen(...))`). This provides safe, automatic cleanup boundaries for self-contained workflows, ensuring any resources acquired via `Effect.acquireRelease` or finalizers registered via `Effect.addFinalizer` are cleanly torn down when the block exits:
 
 ```funscript
-export openResource = effect (unscoped) {
-  conn <- Database.connect()
-  => conn
-}
+# Boundary (Consumer): opens and closes its own Scope
+export processFile = (path: String) => effect
+  file <- acquireFile(path)
+  data <- readFile(file)
+  # 'file' is automatically closed here when the block exits!
+  => data
 ```
 
 ```ts
-export const openResource = Effect.gen(function* () {
-  const conn = yield* Database.connect();
-  return conn;
-});
+export const processFile = (path: string) =>
+  Effect.scoped(
+    Effect.gen(function* () {
+      const file = yield* acquireFile(path);
+      const data = yield* readFile(file);
+      return data;
+    })
+  );
+```
+
+#### The Immediate-Close Trap and Resource Constructors
+
+When writing a reusable **resource constructor** (provider) that creates a resource and attaches finalizers for a caller to manage, standard `effect` causes a silent runtime failure: `Effect.scoped` closes immediately when the constructor returns, executing finalizers and tearing down the resource before the caller can use it (leading to `EPIPE: broken pipe`, `Connection closed`, or closed stream errors).
+
+To build resource constructors that pass open resources and attach finalizers to the **caller's scope**, use `effect (unscoped)`:
+
+| Role | Responsibility | Keyword | Emitted TypeScript |
+|---|---|---|---|
+| **Resource Constructor** (Provider) | Creates a resource and attaches cleanup to the caller's scope without closing it. | `effect (unscoped)` | `Effect.gen(...)` (requires `Scope` in environment `R`) |
+| **Resource Consumer** (Boundary) | Creates a fresh `Scope`, runs work using resources, and ensures all resources are torn down. | `effect` (default) | `Effect.scoped(Effect.gen(...))` |
+
+#### Resource Constructor Example:
+
+```funscript
+# Resource Constructor: attaches cleanup to caller's scope
+export spawnScopedProcess = (cmd: Array<String>, cwd: String) => effect (unscoped)
+  proc = Bun.spawn(cmd, { cwd: cwd })
+  _ <- Effect.addFinalizer(() => proc.kill("SIGTERM"))
+  => proc
+
+# Resource Consumer (Boundary): manages the lifetime
+export runAgentSession = (cmd: Array<String>, cwd: String) => effect
+  proc <- spawnScopedProcess(cmd, cwd) # Finalizer attaches to runAgentSession's scope
+  outText <- js Bun.readableStreamToText(proc.stdout) # Stream reads successfully!
+  code <- js proc.exited
+  => { exitCode: code, output: outText }
+  # Scope closes here when runAgentSession completes or is cancelled,
+  # triggering the finalizer and guaranteeing zero orphan processes!
+```
+
+```ts
+export const spawnScopedProcess = (cmd: ReadonlyArray<string>, cwd: string) =>
+  Effect.gen(function* () {
+    const proc = Bun.spawn(cmd, { cwd });
+    yield* Effect.addFinalizer(() => Effect.sync(() => proc.kill("SIGTERM")));
+    return proc;
+  }); // Note: No Effect.scoped wrapper!
+```
+
+#### Compile-Time Guardrail: `FS_PREMATURE_FINALIZER_CLOSE`
+
+FunScript enforces structured concurrency at compile time via `funscript check`. If an `effect` block without `(unscoped)` calls `Effect.addFinalizer` or `Effect.acquireRelease` and returns a non-Unit value, the compiler raises a diagnostic:
+
+```text
+src/proc.fun:4:8 - error PREMATURE_FINALIZER_CLOSE: Finalizer registered with 'Effect.addFinalizer' in a scoped effect block will execute immediately when this function returns, closing the returned resource.
+  4 |   _ <- Effect.addFinalizer(() => proc.kill("SIGTERM"))
+    |        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  help: Change 'effect' to 'effect (unscoped)' so the resource's lifetime is bound to the caller's scope, or return 'Unit' if all work is completed inside this block.
 ```
 
 #### Direct service calls

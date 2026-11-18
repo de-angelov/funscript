@@ -1239,5 +1239,85 @@ export agentName = state.agents[0] |> Option.map((a) => a.id)
       const optionMapDiag = resultOptionMap.diagnostics.find((d) => d.code === "INDEX_OPTION_PROPERTY" || d.diagnosticCode === "FS_INDEX_OPTION_PROPERTY");
       expect(optionMapDiag).toBeUndefined();
     });
+
+    it("enforces effect (unscoped) for resource constructors with finalizers (FS_PREMATURE_FINALIZER_CLOSE)", async () => {
+      // 1. Scoped effect returning a resource with Effect.addFinalizer triggers FS_PREMATURE_FINALIZER_CLOSE
+      const badResult = await Effect.runPromise(
+        typeCheckSource(
+          `
+import { Effect } from "effect"
+
+export spawnProcess = (cmd: Array<String>) => effect
+  proc = { pid: 1234, kill: () => Unit }
+  _ <- Effect.addFinalizer(() => proc.kill())
+  => proc
+`.trim(),
+          "lib/spawn-bad.fun",
+        ),
+      );
+      const badDiag = badResult.diagnostics.find(
+        (d) => d.code === "PREMATURE_FINALIZER_CLOSE" || d.diagnosticCode === "FS_PREMATURE_FINALIZER_CLOSE",
+      );
+      expect(badDiag).toBeDefined();
+      expect(badDiag?.category).toBe("error");
+      expect(badDiag?.message).toContain("Finalizer registered with 'Effect.addFinalizer' in a scoped effect block");
+      expect(badDiag?.suggestedAction).toContain("Change 'effect' to 'effect (unscoped)'");
+
+      // 2. effect (unscoped) returning a resource passes cleanly without FS_PREMATURE_FINALIZER_CLOSE
+      const goodUnscoped = await Effect.runPromise(
+        typeCheckSource(
+          `
+import { Effect } from "effect"
+
+export spawnProcess = (cmd: Array<String>) => effect (unscoped)
+  proc = { pid: 1234, kill: () => Unit }
+  _ <- Effect.addFinalizer(() => proc.kill())
+  => proc
+`.trim(),
+          "lib/spawn-good.fun",
+        ),
+      );
+      const unscopedDiag = goodUnscoped.diagnostics.find(
+        (d) => d.code === "PREMATURE_FINALIZER_CLOSE" || d.diagnosticCode === "FS_PREMATURE_FINALIZER_CLOSE",
+      );
+      expect(unscopedDiag).toBeUndefined();
+
+      // 3. Scoped effect returning Unit is a valid consumer boundary and passes without diagnostic
+      const goodUnit = await Effect.runPromise(
+        typeCheckSource(
+          `
+import { Effect } from "effect"
+
+export runTask = (cmd: Array<String>) => effect
+  proc = { pid: 1234, kill: () => Unit }
+  _ <- Effect.addFinalizer(() => proc.kill())
+  => Unit
+`.trim(),
+          "lib/task-unit.fun",
+        ),
+      );
+      const unitDiag = goodUnit.diagnostics.find(
+        (d) => d.code === "PREMATURE_FINALIZER_CLOSE" || d.diagnosticCode === "FS_PREMATURE_FINALIZER_CLOSE",
+      );
+      expect(unitDiag).toBeUndefined();
+
+      // 4. Scoped effect with Effect.acquireRelease returning a resource triggers diagnostic
+      const badAcquire = await Effect.runPromise(
+        typeCheckSource(
+          `
+import { Effect } from "effect"
+
+export openResource = effect
+  res <- Effect.acquireRelease(Effect.succeed({ fd: 1 }), () => Effect.void)
+  => res
+`.trim(),
+          "lib/acquire-bad.fun",
+        ),
+      );
+      const acquireDiag = badAcquire.diagnostics.find(
+        (d) => d.code === "PREMATURE_FINALIZER_CLOSE" || d.diagnosticCode === "FS_PREMATURE_FINALIZER_CLOSE",
+      );
+      expect(acquireDiag).toBeDefined();
+    });
   });
 });

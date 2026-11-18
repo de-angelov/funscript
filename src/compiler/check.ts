@@ -1732,6 +1732,74 @@ export const typeCheckVirtualFiles = (
                 }
               }
 
+              if (node.kind === "EffectBlockExpression" && !node.unscoped) {
+                const isUnit =
+                  (node.finalExpression?.kind === "Identifier" || node.finalExpression?.kind === "UpperIdentifier") &&
+                  node.finalExpression.name === "Unit";
+
+                if (!isUnit) {
+                  const findFinalizer = (n: any): { name: string; span: any } | null => {
+                    if (!n || typeof n !== "object") return null;
+                    if (n !== node && n.kind === "EffectBlockExpression") return null;
+                    if (n.kind === "CallExpression") {
+                      const callee = n.callee;
+                      if (callee?.kind === "MemberExpression") {
+                        const obj = callee.object?.name;
+                        const prop = callee.property?.name;
+                        if (
+                          (obj === "Effect" || obj === "Scope") &&
+                          (prop === "addFinalizer" || prop === "acquireRelease")
+                        ) {
+                          return { name: `${obj}.${prop}`, span: n.span };
+                        }
+                      } else if (callee?.kind === "Identifier") {
+                        if (callee.name === "addFinalizer" || callee.name === "acquireRelease") {
+                          return { name: callee.name, span: n.span };
+                        }
+                      }
+                    }
+                    for (const k of Object.keys(n)) {
+                      if (k === "span") continue;
+                      const val = n[k];
+                      if (Array.isArray(val)) {
+                        for (const item of val) {
+                          const res = findFinalizer(item);
+                          if (res) return res;
+                        }
+                      } else if (val && typeof val === "object") {
+                        const res = findFinalizer(val);
+                        if (res) return res;
+                      }
+                    }
+                    return null;
+                  };
+
+                  let detectedCall: { name: string; span: any } | null = null;
+                  for (const stmt of (node.body || [])) {
+                    const res = findFinalizer(stmt);
+                    if (res) {
+                      detectedCall = res;
+                      break;
+                    }
+                  }
+                  if (!detectedCall && node.finalExpression) {
+                    detectedCall = findFinalizer(node.finalExpression);
+                  }
+
+                  if (detectedCall) {
+                    const callInfo: { name: string; span: any } = detectedCall;
+                    addAstDiag(
+                      callInfo.span,
+                      "PREMATURE_FINALIZER_CLOSE",
+                      `Finalizer registered with '${callInfo.name}' in a scoped effect block will execute immediately when this function returns, closing the returned resource.`,
+                      "error",
+                      "By default, 'effect' blocks create a scoped boundary ('Effect.scoped'). Any finalizer registered via 'Effect.addFinalizer' or 'Effect.acquireRelease' executes as soon as the block returns, tearing down the resource before the caller can use it.",
+                      "Change 'effect' to 'effect (unscoped)' so the resource's lifetime is bound to the caller's scope, or return 'Unit' if all work is completed inside this block.",
+                    );
+                  }
+                }
+              }
+
               for (const k of Object.keys(node)) {
                 if (k === "span") continue;
                 const child = node[k];

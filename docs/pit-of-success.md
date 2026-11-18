@@ -642,6 +642,9 @@ it and runs its finalizers (`acquireRelease`, `ensuring`). `funscript check` add
 - `Effect.forkDetach` is an error outside an `entry` module (suggest `forkScoped`, or
   `Layer.effectDiscard(Effect.forkScoped(...))` for application-lifetime background work);
 - `concurrency: "unbounded"` is a warning (suggest a number);
+- `FS_PREMATURE_FINALIZER_CLOSE` is an error when a scoped `effect` registers `Effect.addFinalizer` or
+  `Effect.acquireRelease` and returns a non-Unit resource (suggest `effect (unscoped)` so the resource's
+  lifetime is bound to the caller's scope);
 - closure-captured `mut` across fibers is already a compile error (§1.5); shared state uses
   `Ref`, `SynchronizedRef`, `Queue`, or `PubSub`.
 
