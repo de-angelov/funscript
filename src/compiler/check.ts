@@ -1050,6 +1050,14 @@ export const typeCheckVirtualFiles = (
           }
 
           if (
+            diag.code === 2339 &&
+            /Option<|Option\.|\bOption\b/.test(message) &&
+            diag.file.text.slice(Math.max(0, (diag.start ?? 0) - 100), (diag.start ?? 0) + (diag.length ?? 0)).includes("fromNullishOr")
+          ) {
+            continue;
+          }
+
+          if (
             diag.code === 2349 &&
             message.includes("NonExhaustiveError")
           ) {
@@ -1522,30 +1530,42 @@ export const typeCheckVirtualFiles = (
                     );
                   }
                 }
-              } else if (node.kind === "MemberExpression" && parent?.kind !== "CallExpression") {
-                const o = node.object?.name;
-                const p = node.property?.name;
-                if (o === "Date" && p === "now") {
+              } else if (node.kind === "MemberExpression") {
+                if (node.object?.kind === "IndexExpression" && node.object.index?.kind !== "StringLiteral") {
                   addAstDiag(
                     node.span,
-                    "HIDDEN_INPUT",
-                    "`Date.now` is a hidden input. Time is an Effect service; use 'Clock.currentTimeMillis' or 'DateTime.now' to make code testable.",
+                    "INDEX_OPTION_PROPERTY",
+                    "Array indexing returns an Option<T>. Unwrap with match, Option.map, or Option.getOrElse before accessing properties.",
                     "error",
+                    "In FunScript's Pit of Success, array indexing returns an Option<T> to prevent runtime undefined errors. Direct property access on an Option reads undefined at runtime.",
+                    "Unwrap with match, Option.map, or Option.getOrElse before accessing properties.",
                   );
-                } else if (o === "Math" && p === "random") {
-                  addAstDiag(
-                    node.span,
-                    "HIDDEN_INPUT",
-                    "`Math.random` is a hidden input. Randomness is an Effect service; use 'Random.nextInt', 'Random.next', or 'Random.nextIntBetween' to make code testable.",
-                    "error",
-                  );
-                } else if (o === "performance" && p === "now") {
-                  addAstDiag(
-                    node.span,
-                    "HIDDEN_INPUT",
-                    "`performance.now` is a hidden input. Time is an Effect service; use 'Clock.currentTimeNanos' or 'Clock.currentTimeMillis' to make code testable.",
-                    "error",
-                  );
+                }
+                if (parent?.kind !== "CallExpression") {
+                  const o = node.object?.name;
+                  const p = node.property?.name;
+                  if (o === "Date" && p === "now") {
+                    addAstDiag(
+                      node.span,
+                      "HIDDEN_INPUT",
+                      "`Date.now` is a hidden input. Time is an Effect service; use 'Clock.currentTimeMillis' or 'DateTime.now' to make code testable.",
+                      "error",
+                    );
+                  } else if (o === "Math" && p === "random") {
+                    addAstDiag(
+                      node.span,
+                      "HIDDEN_INPUT",
+                      "`Math.random` is a hidden input. Randomness is an Effect service; use 'Random.nextInt', 'Random.next', or 'Random.nextIntBetween' to make code testable.",
+                      "error",
+                    );
+                  } else if (o === "performance" && p === "now") {
+                    addAstDiag(
+                      node.span,
+                      "HIDDEN_INPUT",
+                      "`performance.now` is a hidden input. Time is an Effect service; use 'Clock.currentTimeNanos' or 'Clock.currentTimeMillis' to make code testable.",
+                      "error",
+                    );
+                  }
                 }
               }
 

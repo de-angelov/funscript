@@ -1173,5 +1173,71 @@ export handle = (tier: DeliveryTier) =>
       expect(resultExhaustive.success).toBe(true);
       expect(resultExhaustive.errorCount).toBe(0);
     });
+
+    it("reports FS_INDEX_OPTION_PROPERTY when chaining property access onto an indexed array element", async () => {
+      // 1. Chaining property access onto an indexed array element is rejected
+      const resultInvalid = await Effect.runPromise(
+        typeCheckSource(
+          `
+export schema Agent = { id: String }
+export state = { agents: [{ id: "Dev Agent 1" }] }
+export agentName = state.agents[0].id
+`.trim(),
+          "lib/invalid-index-prop.fun",
+        ),
+      );
+
+      expect(resultInvalid.success).toBe(false);
+      const diag = resultInvalid.diagnostics.find((d) => d.code === "INDEX_OPTION_PROPERTY" || d.diagnosticCode === "FS_INDEX_OPTION_PROPERTY");
+      expect(diag).toBeDefined();
+      expect(diag?.diagnosticCode).toBe("FS_INDEX_OPTION_PROPERTY");
+      expect(diag?.category).toBe("error");
+      expect(diag?.message).toBe("Array indexing returns an Option<T>. Unwrap with match, Option.map, or Option.getOrElse before accessing properties.");
+      expect(diag?.suggestedAction).toContain("Option.map");
+
+      // 2. Chaining a method call onto an indexed array element is also rejected
+      const resultMethod = await Effect.runPromise(
+        typeCheckSource(
+          `
+export schema Service = { getStatus: () => String }
+export list: Array<Service> = []
+export status = list[0].getStatus()
+`.trim(),
+          "lib/invalid-index-method.fun",
+        ),
+      );
+      expect(resultMethod.success).toBe(false);
+      const methodDiag = resultMethod.diagnostics.find((d) => d.code === "INDEX_OPTION_PROPERTY" || d.diagnosticCode === "FS_INDEX_OPTION_PROPERTY");
+      expect(methodDiag).toBeDefined();
+
+      // 3. String literal indexing (e.g. dictionary / record lookup) is allowed
+      const resultStringKey = await Effect.runPromise(
+        typeCheckSource(
+          `
+export lookup = { dev: { id: "d1" } }
+export id = lookup["dev"].id
+`.trim(),
+          "lib/valid-string-key.fun",
+        ),
+      );
+      const stringKeyDiag = resultStringKey.diagnostics.find((d) => d.code === "INDEX_OPTION_PROPERTY" || d.diagnosticCode === "FS_INDEX_OPTION_PROPERTY");
+      expect(stringKeyDiag).toBeUndefined();
+
+      // 4. Explicit unwrapping via Option.map passes cleanly
+      const resultOptionMap = await Effect.runPromise(
+        typeCheckSource(
+          `
+import { Option } from "effect"
+
+export schema Agent = { id: String }
+export state = { agents: [{ id: "Dev Agent 1" }] }
+export agentName = state.agents[0] |> Option.map((a) => a.id)
+`.trim(),
+          "lib/valid-option-map.fun",
+        ),
+      );
+      const optionMapDiag = resultOptionMap.diagnostics.find((d) => d.code === "INDEX_OPTION_PROPERTY" || d.diagnosticCode === "FS_INDEX_OPTION_PROPERTY");
+      expect(optionMapDiag).toBeUndefined();
+    });
   });
 });
