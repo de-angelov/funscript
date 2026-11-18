@@ -1347,7 +1347,8 @@ export class Emitter {
       return "";
     }
     if (target.kind === "RestPattern") {
-      return `...${this.emitBindingTarget(target.argument)}`;
+      const arg = this.emitBindingTarget(target.argument);
+      return arg ? `...${arg}` : "";
     }
     if (target.kind === "RecordPattern") {
       const fields = target.fields.map((f) => {
@@ -1362,7 +1363,9 @@ export class Emitter {
       return `{ ${fields.join(", ")} }`;
     }
     if (target.kind === "ArrayPattern") {
-      const elements = target.elements.map((el) => this.emitBindingTarget(el));
+      const elements = target.elements
+        .map((el) => this.emitBindingTarget(el))
+        .filter((el) => el.length > 0);
       return `[${elements.join(", ")}]`;
     }
     return "_";
