@@ -314,7 +314,7 @@ export class MatchEmitter {
     }
     if (vars.length > 0) {
       const unpack = pat?.kind === "VariablePattern"
-        ? `const ${vars[0]} = $matched;`
+        ? `const { ${vars[0]} } = $matched as any;`
         : `const { _tag: _, ...__fields } = $matched as any;\n    const [${vars.join(", ")}] = Object.values(__fields) as any[];`;
       if (body.kind === "BlockStatement") {
         return `($matched) => {\n    ${unpack}\n${this.context.emitFunctionBody(body)}\n  }`;
