@@ -494,6 +494,24 @@ export classifyAction = (act: Action) =>
       expect(classify(Reset)).toBe("reset");
     });
 
+    it("compiles and executes variable pattern with when guards on primitive values", async () => {
+      const code = `
+import { String } from "effect"
+
+export classifyLine = (line: String) =>
+  match line
+    | s when s |> String.startsWith("- [x]") => "done"
+    | s when s |> String.startsWith("- [ ]") => "todo"
+    | _ => "other"
+`.trim();
+
+      const res = await Effect.runPromise(compileString(code));
+      expect(res.typescript).toContain("const s = $matched;");
+      expect(res.typescript).toContain('"done"');
+      expect(res.typescript).toContain('"todo"');
+      expect(res.typescript).toContain('"other"');
+    });
+
     it("formats match-arm when guards cleanly with spacing", () => {
       const unformatted = `
 export check = (act: Action) =>

@@ -58,6 +58,7 @@
     "assemblyscript": "^0.28.20",
     "effect": "^4.1.2",
     "es-toolkit": "^1.53.2",
+    "esbuild": "^0.21.5",
     "magic-string": "^1.4.5",
     "mutative": "^1.1.0",
     "ts-pattern": "^5.5.0",

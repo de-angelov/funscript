@@ -116,7 +116,13 @@ export class MatchEmitter {
             if (vars.length > 0) {
               const some = arm.pattern.kind === "ConstructorPattern" && arm.pattern.constructorName.name === "Some" && arm.pattern.args.length === 1 && arm.pattern.args[0].kind === "VariablePattern" && vars.length === 1;
               const directOptional = expr.scrutinee?.kind === "Identifier" && this.context.isOptionalParameter(expr.scrutinee.name);
-              const unpack = some && directOptional ? `const { value: ${vars[0]} } = $matched;` : some ? `const { _tag: _, ...__fields } = $matched;\n    const [${vars[0]}] = Object.values(__fields) as [typeof $matched extends import("effect").Option.Some<infer V> ? V : any];` : `const { _tag: _, ...__fields } = $matched as any;\n    const [${vars.join(", ")}] = Object.values(__fields) as any[];`;
+              const unpack = arm.pattern.kind === "VariablePattern"
+                ? `const ${vars[0]} = $matched;`
+                : some && directOptional
+                ? `const { value: ${vars[0]} } = $matched;`
+                : some
+                ? `const { _tag: _, ...__fields } = $matched;\n    const [${vars[0]}] = Object.values(__fields) as [typeof $matched extends import("effect").Option.Some<infer V> ? V : any];`
+                : `const { _tag: _, ...__fields } = $matched as any;\n    const [${vars.join(", ")}] = Object.values(__fields) as any[];`;
               guardFn = `($matched) => {\n    ${unpack}\n    return ${this.context.emitExpression(arm.guard)};\n  }`;
             } else {
               guardFn = `() => ${this.context.emitExpression(arm.guard)}`;
@@ -307,7 +313,9 @@ export class MatchEmitter {
       return `() => ${this.context.emitArrowExpression(body)}`;
     }
     if (vars.length > 0) {
-      const unpack = `const { _tag: _, ...__fields } = $matched as any;\n    const [${vars.join(", ")}] = Object.values(__fields) as any[];`;
+      const unpack = pat?.kind === "VariablePattern"
+        ? `const ${vars[0]} = $matched;`
+        : `const { _tag: _, ...__fields } = $matched as any;\n    const [${vars.join(", ")}] = Object.values(__fields) as any[];`;
       if (body.kind === "BlockStatement") {
         return `($matched) => {\n    ${unpack}\n${this.context.emitFunctionBody(body)}\n  }`;
       }
