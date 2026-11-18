@@ -40,7 +40,7 @@ export result = divide(1, 0)`)).rejects.toThrow();
   });
 
   it("rejects unsupported types at the boundary", async () => {
-    await expectCompileError('as { export function text(a: boolean): i32 { return 0; } }', 'explicit i32, u32, f32, or f64');
+    await expectCompileError('as { export function text(a: symbol): i32 { return 0; } }', 'explicit i32, u32, f32, or f64');
   });
 
   it("reports AssemblyScript compiler errors", async () => {
@@ -486,6 +486,159 @@ export nextUser = celebrate(user)
     expect(output.nextUser).toEqual({ name: "Ada", age: 37 });
   });
 
+  it("supports boolean parameters and returns", async () => {
+    const source = `as {
+  export function negate(flag: bool): bool {
+    return !flag;
+  }
+  export function both(a: boolean, b: boolean): boolean {
+    return a && b;
+  }
+}
+export negateFn = negate
+export notTrue = negate(true)
+export notFalse = negate(false)
+export bothTrue = both(true, true)
+export bothMixed = both(true, false)
+export safeNegate = negate.effect(true)
+`;
+    const output = await execute(source);
+    expect(output.notTrue).toBe(false);
+    expect(output.notFalse).toBe(true);
+    expect(output.bothTrue).toBe(true);
+    expect(output.bothMixed).toBe(false);
+
+    const effRes = await Effect.runPromise(output.safeNegate);
+    expect(effRes).toBe(false);
+
+    const badCall = (output.negateFn as any).effect(123);
+    const exit = await Effect.runPromiseExit(badCall);
+    expect(exit._tag).toBe("Failure");
+  });
+
+  it("supports nested struct classes", async () => {
+    const source = `as {
+  export class Point {
+    x: f64 = 0;
+    y: f64 = 0;
+  }
+  export class Circle {
+    center: Point = new Point();
+    radius: f64 = 0;
+    filled: bool = false;
+  }
+  export function scaleCircle(c: Circle, factor: f64): Circle {
+    const next = new Circle();
+    next.center = new Point();
+    next.center.x = c.center.x * factor;
+    next.center.y = c.center.y * factor;
+    next.radius = c.radius * factor;
+    next.filled = c.filled;
+    return next;
+  }
+}
+export origin = { x: 2.0, y: 3.0 }
+export c1 = { center: origin, radius: 5.0, filled: true }
+export scaled = scaleCircle(c1, 2.0)
+export safeScaled = scaleCircle.effect(c1, 2.0)
+`;
+    const output = await execute(source);
+    expect(output.scaled).toEqual({
+      center: { x: 4.0, y: 6.0 },
+      radius: 10.0,
+      filled: true,
+    });
+
+    const effRes = await Effect.runPromise(output.safeScaled);
+    expect(effRes).toEqual({
+      center: { x: 4.0, y: 6.0 },
+      radius: 10.0,
+      filled: true,
+    });
+  });
+
+  it("supports arrays of structs and arrays of strings", async () => {
+    const source = `as {
+  export class Item {
+    id: i32;
+    score: f64;
+  }
+  export function totalScore(items: Item[]): f64 {
+    let sum = 0.0;
+    for (let i = 0; i < items.length; i++) {
+      sum += items[i].score;
+    }
+    return sum;
+  }
+  export function filterHighScore(items: Item[], threshold: f64): Item[] {
+    const res = new Array<Item>();
+    for (let i = 0; i < items.length; i++) {
+      if (items[i].score >= threshold) res.push(items[i]);
+    }
+    return res;
+  }
+  export function joinWords(words: string[]): string {
+    return words.join(" | ");
+  }
+  export function duplicateWords(words: string[]): string[] {
+    const res = new Array<string>();
+    for (let i = 0; i < words.length; i++) {
+      res.push(words[i]);
+      res.push(words[i]);
+    }
+    return res;
+  }
+}
+export items = [{ id: 1, score: 10.5 }, { id: 2, score: 20.25 }, { id: 3, score: 5.0 }]
+export total = totalScore(items)
+export filtered = filterHighScore(items, 10.0)
+export joined = joinWords(["alpha", "beta", "gamma"])
+export duped = duplicateWords(["hello", "wasm"])
+`;
+    const output = await execute(source);
+    expect(output.total).toBe(35.75);
+    expect(output.filtered).toEqual([
+      { id: 1, score: 10.5 },
+      { id: 2, score: 20.25 },
+    ]);
+    expect(output.joined).toBe("alpha | beta | gamma");
+    expect(output.duped).toEqual(["hello", "hello", "wasm", "wasm"]);
+  });
+
+  it("supports struct classes containing arrays", async () => {
+    const source = `as {
+  export class Point {
+    x: f64;
+    y: f64;
+  }
+  export class Polygon {
+    name: string;
+    points: Point[];
+  }
+  export function centroid(poly: Polygon): Point {
+    let sumX = 0.0;
+    let sumY = 0.0;
+    const len = poly.points.length;
+    for (let i = 0; i < len; i++) {
+      sumX += poly.points[i].x;
+      sumY += poly.points[i].y;
+    }
+    const c = new Point();
+    c.x = sumX / f64(len);
+    c.y = sumY / f64(len);
+    return c;
+  }
+}
+export poly = {
+  name: "triangle",
+  points: [{ x: 0.0, y: 0.0 }, { x: 3.0, y: 0.0 }, { x: 0.0, y: 6.0 }]
+}
+export center = centroid(poly)
+`;
+    const output = await execute(source);
+    expect(output.center).toEqual({ x: 1.0, y: 2.0 });
+  });
+
   it("round trips a block through the formatter", async () => {
     const source = await readFile("examples/assemblyscript-numeric.fun", "utf8");
     const formatted = format(source);
@@ -496,7 +649,7 @@ export nextUser = celebrate(user)
 
   it.each([
     ['as { export function missing(a: i32) { return a; } }', 'explicit i32'],
-    ['as { export function invalid(a: boolean): boolean { return a; } }', 'explicit i32'],
+    ['as { export function invalid(a: symbol): symbol { return a; } }', 'explicit i32'],
     ['as { export const value: i32 = 1; }', 'only export numeric functions'],
     ['as { function hidden(): i32 { return 1; } }', 'export at least one'],
     ['as { import { value } from "other"; export function f(): i32 { return value; } }', 'cannot import'],

@@ -6,6 +6,7 @@ const cache = new Map<string, string>();
 const prepared = new WeakMap<AsDeclaration, string>();
 
 export const SCALAR_TYPES = new Set(["i32", "u32", "i64", "u64", "f32", "f64"]);
+export const BOOLEAN_TYPES = new Set(["bool", "boolean"]);
 export const BIGINT_SCALAR_TYPES = new Set(["i64", "u64"]);
 export const TYPED_ARRAY_TYPES = new Set([
   "Float32Array",
@@ -23,10 +24,18 @@ export const TYPED_ARRAY_TYPES = new Set([
   "Uint64Array",
 ]);
 
+export function parseArrayElementType(t: string): string | null {
+  const trimmed = t.trim();
+  if (trimmed.endsWith("[]")) return trimmed.slice(0, -2).trim();
+  const match = /^Array<(.+)>$/.exec(trimmed);
+  if (match) return match[1].trim();
+  return null;
+}
+
 const toJsTypedArray = (t: string): string =>
   t === "Int64Array" ? "BigInt64Array" : t === "Uint64Array" ? "BigUint64Array" : t;
 
-/** Compile a numeric, string, or struct kernel while keeping the existing synchronous compiler API. */
+/** Compile a numeric, string, boolean, struct, or array kernel while keeping the existing synchronous compiler API. */
 export async function prepareAssemblyScript(decl: AsDeclaration): Promise<void> {
   const source = ts.createSourceFile("kernel.ts", decl.code, ts.ScriptTarget.Latest, true);
   const signatures: { name: string; params: string[]; result: string }[] = [];
@@ -46,8 +55,17 @@ export async function prepareAssemblyScript(decl: AsDeclaration): Promise<void> 
     }
   }
 
-  const isValidParamType = (p: string) => SCALAR_TYPES.has(p) || TYPED_ARRAY_TYPES.has(p) || p === "string" || classes.has(p);
-  const isValidReturnType = (r: string) => SCALAR_TYPES.has(r) || TYPED_ARRAY_TYPES.has(r) || r === "string" || classes.has(r) || r === "void";
+  const isValidFieldType = (t: string) => {
+    if (SCALAR_TYPES.has(t) || BOOLEAN_TYPES.has(t) || TYPED_ARRAY_TYPES.has(t) || t === "string" || classes.has(t)) return true;
+    const elem = parseArrayElementType(t);
+    if (elem) {
+      return SCALAR_TYPES.has(elem) || BOOLEAN_TYPES.has(elem) || elem === "string" || classes.has(elem);
+    }
+    return false;
+  };
+
+  const isValidParamType = (p: string) => isValidFieldType(p);
+  const isValidReturnType = (r: string) => r === "void" || isValidFieldType(r);
 
   for (const statement of source.statements) {
     if (ts.isImportDeclaration(statement) || ts.isExportDeclaration(statement)) {
@@ -57,7 +75,7 @@ export async function prepareAssemblyScript(decl: AsDeclaration): Promise<void> 
       const cls = classes.get(statement.name?.text ?? "");
       if (cls) {
         for (const f of cls.fields) {
-          if (!SCALAR_TYPES.has(f.type) && !TYPED_ARRAY_TYPES.has(f.type) && f.type !== "string") {
+          if (!isValidFieldType(f.type)) {
             throw new FunScriptError(`AssemblyScript struct '${cls.name}' has unsupported field type '${f.type}'`, decl.span);
           }
         }
@@ -83,11 +101,34 @@ export async function prepareAssemblyScript(decl: AsDeclaration): Promise<void> 
       let compileSource = decl.code + "\nclass BigInt64Array extends Int64Array {}\nclass BigUint64Array extends Uint64Array {}\nexport function __funscript_reset_heap(): void { __reset(); }\n";
       for (const cls of classes.values()) {
         for (const field of cls.fields) {
-          compileSource += `export function __fs_get_${cls.name}_${field.name}(obj: ${cls.name}): ${field.type} { return obj.${field.name}; }\n`;
+          const asFieldType = BOOLEAN_TYPES.has(field.type) ? "bool" : field.type;
+          compileSource += `export function __fs_get_${cls.name}_${field.name}(obj: ${cls.name}): ${asFieldType} { return obj.${field.name}; }\n`;
         }
-        const ctorParams = cls.fields.map(f => `${f.name}: ${f.type}`).join(", ");
+        const ctorParams = cls.fields.map(f => `${f.name}: ${BOOLEAN_TYPES.has(f.type) ? "bool" : f.type}`).join(", ");
         const ctorBody = cls.fields.map(f => `o.${f.name} = ${f.name};`).join(" ");
-        compileSource += `export function __fs_make_${cls.name}(${ctorParams}): ${cls.name} { const o = new ${cls.name}(); ${ctorBody} return o; }\n`;
+        compileSource += `export function __fs_make_${cls.name}(${ctorParams}): ${cls.name} { const o = changetype<${cls.name}>(__new(offsetof<${cls.name}>(), idof<${cls.name}>())); ${ctorBody} return o; }\n`;
+      }
+
+      const arrayElemTypes = new Set<string>();
+      const registerArray = (t: string) => {
+        const elem = parseArrayElementType(t);
+        if (elem) arrayElemTypes.add(elem);
+      };
+      for (const cls of classes.values()) {
+        for (const f of cls.fields) registerArray(f.type);
+      }
+      for (const sig of signatures) {
+        registerArray(sig.result);
+        for (const p of sig.params) registerArray(p);
+      }
+
+      for (const elem of arrayElemTypes) {
+        const asElem = BOOLEAN_TYPES.has(elem) ? "bool" : elem;
+        const safeElem = elem === "boolean" ? "bool" : elem;
+        compileSource += `export function __fs_arr_len_${safeElem}(arr: ${asElem}[]): i32 { return arr.length; }\n`;
+        compileSource += `export function __fs_arr_get_${safeElem}(arr: ${asElem}[], i: i32): ${asElem} { return arr[i]; }\n`;
+        compileSource += `export function __fs_arr_make_${safeElem}(len: i32): ${asElem}[] { return new Array<${asElem}>(len); }\n`;
+        compileSource += `export function __fs_arr_set_${safeElem}(arr: ${asElem}[], i: i32, val: ${asElem}): void { arr[i] = val; }\n`;
       }
       const result = await asc.compileString(compileSource, { optimizeLevel: 3, runtime: "stub", exportRuntime: true });
       if (result.error || !result.binary) {
@@ -207,48 +248,137 @@ export function emitAssemblyScript(decl: AsDeclaration): string {
     `};`,
   ];
 
+  const toTsType = (t: string): string => {
+    if (t === "void") return "void";
+    if (BOOLEAN_TYPES.has(t)) return "boolean";
+    if (t === "string") return "string";
+    if (TYPED_ARRAY_TYPES.has(t)) return toJsTypedArray(t);
+    if (BIGINT_SCALAR_TYPES.has(t)) return "bigint";
+    if (SCALAR_TYPES.has(t)) return "number";
+    const elem = parseArrayElementType(t);
+    if (elem) return `readonly ${toTsType(elem)}[]`;
+    return t;
+  };
+
+  const arrayElemTypes = new Set<string>();
+  const registerArray = (t: string) => {
+    const elem = parseArrayElementType(t);
+    if (elem) arrayElemTypes.add(elem);
+  };
+  for (const cls of classes.values()) {
+    for (const f of cls.fields) registerArray(f.type);
+  }
+  for (const sig of signatures) {
+    registerArray(sig.result);
+    for (const p of sig.params) registerArray(p.type);
+  }
+
+  for (const elem of arrayElemTypes) {
+    const safeElem = elem === "boolean" ? "bool" : elem;
+    const tsElem = toTsType(elem);
+    const elemReadExpr = BOOLEAN_TYPES.has(elem) ? "Boolean(raw)"
+      : elem === "string" ? `${prefix}ReadString(exports, raw)`
+      : classes.has(elem) ? `${prefix}Read_${elem}(exports, raw)`
+      : elem === "i64" ? "BigInt.asIntN(64, raw)"
+      : elem === "u64" ? "BigInt.asUintN(64, raw)"
+      : elem === "u32" ? "(raw >>> 0)"
+      : "raw";
+
+    const itemAllocExpr = BOOLEAN_TYPES.has(elem) ? ""
+      : elem === "string" ? `const __v = ${prefix}AllocString(exports, item);`
+      : classes.has(elem) ? `const __v = ${prefix}Alloc_${elem}(exports, item);`
+      : "";
+    const itemVal = BOOLEAN_TYPES.has(elem) ? "item ? 1 : 0"
+      : (elem === "string" || classes.has(elem)) ? "__v"
+      : elem === "u32" ? "(item >>> 0)"
+      : "item";
+
+    lines.push(
+      `function ${prefix}Read_Array_${safeElem}(exports: Record<string, unknown>, ptr: number): ${tsElem}[] {`,
+      `  if (!ptr) return [];`,
+      `  const len = (exports.__fs_arr_len_${safeElem} as (p: number) => number)(ptr);`,
+      `  const res: ${tsElem}[] = new Array(len);`,
+      `  for (let i = 0; i < len; i++) {`,
+      `    const raw = (exports.__fs_arr_get_${safeElem} as (p: number, i: number) => any)(ptr, i);`,
+      `    res[i] = ${elemReadExpr};`,
+      `  }`,
+      `  return res;`,
+      `}`,
+      `function ${prefix}Alloc_Array_${safeElem}(exports: Record<string, unknown>, arr: readonly ${tsElem}[]): number {`,
+      `  const len = arr.length;`,
+      `  const arrPtr = (exports.__fs_arr_make_${safeElem} as (n: number) => number)(len);`,
+      `  for (let i = 0; i < len; i++) {`,
+      `    const item = arr[i];`,
+      `    ${itemAllocExpr}`,
+      `    (exports.__fs_arr_set_${safeElem} as (a: number, i: number, v: any) => void)(arrPtr, i, ${itemVal});`,
+      `  }`,
+      `  return arrPtr;`,
+      `}`,
+    );
+  }
+
   for (const cls of classes.values()) {
     lines.push(
       `export type ${cls.name} = {`,
-      ...cls.fields.map(f => {
-        const tsT = f.type === "string" ? "string" : TYPED_ARRAY_TYPES.has(f.type) ? toJsTypedArray(f.type) : BIGINT_SCALAR_TYPES.has(f.type) ? "bigint" : "number";
-        return `  readonly ${f.name}: ${tsT};`;
-      }),
+      ...cls.fields.map(f => `  readonly ${f.name}: ${toTsType(f.type)};`),
       `};`,
-      `const ${prefix}Read_${cls.name} = (exports: Record<string, unknown>, ptr: number): ${cls.name} => {`,
+      `function ${prefix}Read_${cls.name}(exports: Record<string, unknown>, ptr: number): ${cls.name} {`,
       `  return {`,
       ...cls.fields.map(f => {
+        const getter = `(exports.__fs_get_${cls.name}_${f.name} as (p: number) => any)(ptr)`;
+        if (BOOLEAN_TYPES.has(f.type)) {
+          return `    ${f.name}: Boolean(${getter}),`;
+        }
         if (f.type === "string") {
-          return `    ${f.name}: ${prefix}ReadString(exports, (exports.__fs_get_${cls.name}_${f.name} as (p: number) => number)(ptr)),`;
+          return `    ${f.name}: ${prefix}ReadString(exports, ${getter}),`;
         }
         if (TYPED_ARRAY_TYPES.has(f.type)) {
-          return `    ${f.name}: ${prefix}Read(exports, (exports.__fs_get_${cls.name}_${f.name} as (p: number) => number)(ptr), ${toJsTypedArray(f.type)}),`;
+          return `    ${f.name}: ${prefix}Read(exports, ${getter}, ${toJsTypedArray(f.type)}),`;
+        }
+        if (classes.has(f.type)) {
+          return `    ${f.name}: ${prefix}Read_${f.type}(exports, ${getter}),`;
+        }
+        const elem = parseArrayElementType(f.type);
+        if (elem) {
+          const safeElem = elem === "boolean" ? "bool" : elem;
+          return `    ${f.name}: ${prefix}Read_Array_${safeElem}(exports, ${getter}),`;
         }
         if (f.type === "i64") {
-          return `    ${f.name}: BigInt.asIntN(64, (exports.__fs_get_${cls.name}_${f.name} as (p: number) => bigint)(ptr)),`;
+          return `    ${f.name}: BigInt.asIntN(64, ${getter}),`;
         }
         if (f.type === "u64") {
-          return `    ${f.name}: BigInt.asUintN(64, (exports.__fs_get_${cls.name}_${f.name} as (p: number) => bigint)(ptr)),`;
+          return `    ${f.name}: BigInt.asUintN(64, ${getter}),`;
         }
         if (f.type === "u32") {
-          return `    ${f.name}: ((exports.__fs_get_${cls.name}_${f.name} as (p: number) => number)(ptr) >>> 0),`;
+          return `    ${f.name}: ((${getter}) >>> 0),`;
         }
-        return `    ${f.name}: (exports.__fs_get_${cls.name}_${f.name} as (p: number) => number)(ptr),`;
+        return `    ${f.name}: ${getter},`;
       }),
       `  };`,
-      `};`,
-      `const ${prefix}Alloc_${cls.name} = (exports: Record<string, unknown>, obj: ${cls.name}): number => {`,
+      `}`,
+      `function ${prefix}Alloc_${cls.name}(exports: Record<string, unknown>, obj: ${cls.name}): number {`,
       ...cls.fields.map((f, fi) => {
+        if (BOOLEAN_TYPES.has(f.type)) {
+          return `  const __f${fi} = obj.${f.name} ? 1 : 0;`;
+        }
         if (f.type === "string") {
           return `  const __f${fi} = ${prefix}AllocString(exports, obj.${f.name});`;
         }
         if (TYPED_ARRAY_TYPES.has(f.type)) {
           return `  const __h${fi} = ${prefix}Alloc(exports, obj.${f.name}, ${toJsTypedArray(f.type)});\n  const __f${fi} = __h${fi}.viewPtr;`;
         }
+        if (classes.has(f.type)) {
+          return `  const __f${fi} = ${prefix}Alloc_${f.type}(exports, obj.${f.name});`;
+        }
+        const elem = parseArrayElementType(f.type);
+        if (elem) {
+          const safeElem = elem === "boolean" ? "bool" : elem;
+          return `  const __f${fi} = ${prefix}Alloc_Array_${safeElem}(exports, obj.${f.name});`;
+        }
         return `  const __f${fi} = obj.${f.name};`;
       }),
       `  return (exports.__fs_make_${cls.name} as (...args: any[]) => number)(${cls.fields.map((_, fi) => `__f${fi}`).join(", ")});`,
-      `};`,
+      `}`,
     );
   }
 
@@ -256,31 +386,28 @@ export function emitAssemblyScript(decl: AsDeclaration): string {
     const isBufferResult = TYPED_ARRAY_TYPES.has(fn.result);
     const isStringResult = fn.result === "string";
     const isClassResult = classes.has(fn.result);
-    const tsReturnType = fn.result === "void" ? "void"
-      : isBufferResult ? toJsTypedArray(fn.result)
-      : isStringResult ? "string"
-      : isClassResult ? fn.result
-      : BIGINT_SCALAR_TYPES.has(fn.result) ? "bigint" : "number";
+    const isArrayResult = parseArrayElementType(fn.result) !== null;
+    const isBooleanResult = BOOLEAN_TYPES.has(fn.result);
+    const tsReturnType = toTsType(fn.result);
 
-    const args = fn.params.map((p, i) => {
-      const tsType = TYPED_ARRAY_TYPES.has(p.type) ? toJsTypedArray(p.type)
-        : p.type === "string" ? "string"
-        : classes.has(p.type) ? p.type
-        : BIGINT_SCALAR_TYPES.has(p.type) ? "bigint" : "number";
-      return `arg${i}: ${tsType}`;
-    }).join(", ");
+    const args = fn.params.map((p, i) => `arg${i}: ${toTsType(p.type)}`).join(", ");
 
-    const hasBuffers = fn.params.some(p => TYPED_ARRAY_TYPES.has(p.type) || p.type === "string" || classes.has(p.type))
-      || isBufferResult || isStringResult || isClassResult
+    const hasBuffers = fn.params.some(p => TYPED_ARRAY_TYPES.has(p.type) || p.type === "string" || classes.has(p.type) || parseArrayElementType(p.type) !== null)
+      || isBufferResult || isStringResult || isClassResult || isArrayResult
       || decl.code.includes("Array") || decl.code.includes("new ");
     const wasmFnType = fn.result === "void" ? "(...args: (number | bigint)[]) => void"
-      : (isBufferResult || isStringResult || isClassResult) ? "(...args: (number | bigint)[]) => number"
-      : `(...args: (number | bigint)[]) => ${tsReturnType}`;
+      : (isBufferResult || isStringResult || isClassResult || isArrayResult) ? "(...args: (number | bigint)[]) => number"
+      : isBooleanResult ? "(...args: (number | bigint)[]) => number"
+      : BIGINT_SCALAR_TYPES.has(fn.result) ? "(...args: (number | bigint)[]) => bigint"
+      : `(...args: (number | bigint)[]) => number`;
 
     const errorType = `{ readonly _tag: "WasmInputError"; readonly function: string; readonly parameter: string; readonly expected: string; readonly value: unknown } | { readonly _tag: "WasmTrapError"; readonly function: string; readonly cause: unknown } | { readonly _tag: "WasmInitializationError"; readonly function: string; readonly cause: unknown }`;
 
     const validations = fn.params.map((param, i) => {
       const arg = `arg${i}`;
+      if (BOOLEAN_TYPES.has(param.type)) {
+        return `if (typeof ${arg} !== "boolean") return Effect.fail({ _tag: "WasmInputError" as const, function: ${JSON.stringify(fn.name)}, parameter: ${JSON.stringify(param.name)}, expected: "boolean", value: ${arg} });`;
+      }
       if (TYPED_ARRAY_TYPES.has(param.type)) {
         const jsType = toJsTypedArray(param.type);
         return `if (!(${arg} instanceof ${jsType})) return Effect.fail({ _tag: "WasmInputError" as const, function: ${JSON.stringify(fn.name)}, parameter: ${JSON.stringify(param.name)}, expected: ${JSON.stringify(jsType)}, value: ${arg} });`;
@@ -290,6 +417,10 @@ export function emitAssemblyScript(decl: AsDeclaration): string {
       }
       if (classes.has(param.type)) {
         return `if (typeof ${arg} !== "object" || ${arg} === null) return Effect.fail({ _tag: "WasmInputError" as const, function: ${JSON.stringify(fn.name)}, parameter: ${JSON.stringify(param.name)}, expected: ${JSON.stringify(param.type)}, value: ${arg} });`;
+      }
+      const elem = parseArrayElementType(param.type);
+      if (elem) {
+        return `if (!Array.isArray(${arg})) return Effect.fail({ _tag: "WasmInputError" as const, function: ${JSON.stringify(fn.name)}, parameter: ${JSON.stringify(param.name)}, expected: "Array", value: ${arg} });`;
       }
       const invalid = param.type === "i64" ? `typeof ${arg} !== "bigint" || ${arg} < -9223372036854775808n || ${arg} > 9223372036854775807n`
         : param.type === "u64" ? `typeof ${arg} !== "bigint" || ${arg} < 0n || ${arg} > 18446744073709551615n`
@@ -304,11 +435,21 @@ export function emitAssemblyScript(decl: AsDeclaration): string {
     let effectTryBody: string;
 
     if (!hasBuffers) {
-      const passed = fn.params.map((_, i) => `arg${i}`).join(", ");
+      const passed = fn.params.map((p, i) => BOOLEAN_TYPES.has(p.type) ? `(arg${i} ? 1 : 0)` : `arg${i}`).join(", ");
       const call = `(${prefix}Get()[${JSON.stringify(fn.name)}] as ${wasmFnType})(${passed})`;
       const effectCall = `(exports[${JSON.stringify(fn.name)}] as ${wasmFnType})(${passed})`;
-      const raw = fn.result === "void" ? `${call};` : fn.result === "u32" ? `(${call} as number >>> 0)` : fn.result === "u64" ? `BigInt.asUintN(64, ${call} as bigint)` : fn.result === "i64" ? `BigInt.asIntN(64, ${call} as bigint)` : call;
-      const effectRaw = fn.result === "void" ? `${effectCall};` : fn.result === "u32" ? `(${effectCall} as number >>> 0)` : fn.result === "u64" ? `BigInt.asUintN(64, ${effectCall} as bigint)` : fn.result === "i64" ? `BigInt.asIntN(64, ${effectCall} as bigint)` : effectCall;
+      const raw = fn.result === "void" ? `${call};`
+        : isBooleanResult ? `Boolean(${call})`
+        : fn.result === "u32" ? `(${call} as number >>> 0)`
+        : fn.result === "u64" ? `BigInt.asUintN(64, ${call} as bigint)`
+        : fn.result === "i64" ? `BigInt.asIntN(64, ${call} as bigint)`
+        : call;
+      const effectRaw = fn.result === "void" ? `${effectCall};`
+        : isBooleanResult ? `Boolean(${effectCall})`
+        : fn.result === "u32" ? `(${effectCall} as number >>> 0)`
+        : fn.result === "u64" ? `BigInt.asUintN(64, ${effectCall} as bigint)`
+        : fn.result === "i64" ? `BigInt.asIntN(64, ${effectCall} as bigint)`
+        : effectCall;
       syncBody = fn.result === "void" ? raw : `return ${raw};`;
       effectTryBody = fn.result === "void" ? effectRaw : `return ${effectRaw};`;
     } else {
@@ -317,7 +458,9 @@ export function emitAssemblyScript(decl: AsDeclaration): string {
       const syncs: string[] = [];
 
       fn.params.forEach((p, i) => {
-        if (TYPED_ARRAY_TYPES.has(p.type)) {
+        if (BOOLEAN_TYPES.has(p.type)) {
+          passedVars.push(`(arg${i} ? 1 : 0)`);
+        } else if (TYPED_ARRAY_TYPES.has(p.type)) {
           const jsType = toJsTypedArray(p.type);
           allocs.push(`const __h${i} = ${prefix}Alloc(exports, arg${i}, ${jsType});`);
           passedVars.push(`__h${i}.viewPtr`);
@@ -328,6 +471,11 @@ export function emitAssemblyScript(decl: AsDeclaration): string {
         } else if (classes.has(p.type)) {
           allocs.push(`const __h${i} = ${prefix}Alloc_${p.type}(exports, arg${i});`);
           passedVars.push(`__h${i}`);
+        } else if (parseArrayElementType(p.type)) {
+          const elem = parseArrayElementType(p.type)!;
+          const safeElem = elem === "boolean" ? "bool" : elem;
+          allocs.push(`const __h${i} = ${prefix}Alloc_Array_${safeElem}(exports, arg${i});`);
+          passedVars.push(`__h${i}`);
         } else {
           passedVars.push(`arg${i}`);
         }
@@ -337,6 +485,8 @@ export function emitAssemblyScript(decl: AsDeclaration): string {
       let returnExpr: string;
       if (fn.result === "void") {
         returnExpr = `try { ${callExpr}; ${syncs.join(" ")} } finally { (exports.__funscript_reset_heap as () => void)(); } return;`;
+      } else if (isBooleanResult) {
+        returnExpr = `try { const __res = ${callExpr} as number; ${syncs.join(" ")} return Boolean(__res); } finally { (exports.__funscript_reset_heap as () => void)(); }`;
       } else if (isBufferResult) {
         const jsType = toJsTypedArray(fn.result);
         returnExpr = `try { const __res = ${callExpr} as number; ${syncs.join(" ")} return ${prefix}Read(exports, __res, ${jsType}); } finally { (exports.__funscript_reset_heap as () => void)(); }`;
@@ -344,6 +494,10 @@ export function emitAssemblyScript(decl: AsDeclaration): string {
         returnExpr = `try { const __res = ${callExpr} as number; ${syncs.join(" ")} return ${prefix}ReadString(exports, __res); } finally { (exports.__funscript_reset_heap as () => void)(); }`;
       } else if (isClassResult) {
         returnExpr = `try { const __res = ${callExpr} as number; ${syncs.join(" ")} return ${prefix}Read_${fn.result}(exports, __res); } finally { (exports.__funscript_reset_heap as () => void)(); }`;
+      } else if (isArrayResult) {
+        const elem = parseArrayElementType(fn.result)!;
+        const safeElem = elem === "boolean" ? "bool" : elem;
+        returnExpr = `try { const __res = ${callExpr} as number; ${syncs.join(" ")} return ${prefix}Read_Array_${safeElem}(exports, __res); } finally { (exports.__funscript_reset_heap as () => void)(); }`;
       } else if (fn.result === "u32") {
         returnExpr = `try { const __res = ${callExpr} as number; ${syncs.join(" ")} return (__res >>> 0); } finally { (exports.__funscript_reset_heap as () => void)(); }`;
       } else if (fn.result === "u64") {

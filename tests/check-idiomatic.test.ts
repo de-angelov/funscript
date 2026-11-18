@@ -25,8 +25,8 @@ describe("Audit Showcase Examples and Restrict Unjustified 'ts { }' Blocks (TASK
     it("verifies examples/todo-service.fun uses native FunScript arrays and zero ts blocks", async () => {
       const content = await fs.readFile(path.resolve("examples/todo-service.fun"), "utf-8");
       expect(content).not.toContain("ts {");
-      expect(content).toContain("mut store: Array<Todo> = []");
-      expect(content).toContain("store = store |> Array.append(newTodo)");
+      expect(content).toContain("store <- Ref.make(initialStore)");
+      expect(content).toContain("Array.append(newTodo)");
     });
 
     it("verifies examples/markdown-task-manager.fun uses native TaskManager schema and zero ts blocks", async () => {
@@ -50,7 +50,7 @@ describe("Audit Showcase Examples and Restrict Unjustified 'ts { }' Blocks (TASK
       const content = await fs.readFile(path.resolve("examples/order-fulfillment.fun"), "utf-8");
       expect(content).not.toContain("ts {");
       expect(content).toContain("export appendAuditEntry = (logs: Array<String>, entry: String) =>");
-      expect(content).toContain("mut paymentCallCount: Number = 0");
+      expect(content).toContain("paymentCallCount <- Ref.make(0)");
     });
 
     it("verifies examples/todo-dashboard.funx implements addTodo in native FunScript", async () => {

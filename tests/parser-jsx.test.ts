@@ -487,8 +487,8 @@ describe("JSX Parser (.funx mode)", () => {
       expect(block.finalExpression?.kind).toBe("JSXElement");
     });
 
-    it("parses fn declaration with implicit JSX return (both indented and braced)", () => {
-      const codeIndented = `fn render()
+    it("parses arrow function declaration with implicit JSX return (both indented and braced)", () => {
+      const codeIndented = `render = () =>
   <div />`;
       const ast1 = parse(codeIndented);
       const decl1 = ast1.body[0] as BindingDeclaration;
@@ -497,7 +497,7 @@ describe("JSX Parser (.funx mode)", () => {
       expect(block1.statements.length).toBe(0);
       expect(block1.finalExpression?.kind).toBe("JSXSelfClosingElement");
 
-      const codeBraced = `fn render() {
+      const codeBraced = `render = () => {
   <div />
 }`;
       const ast2 = parse(codeBraced);
