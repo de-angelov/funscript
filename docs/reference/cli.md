@@ -2,7 +2,7 @@
 
 # CLI reference
 
-FunScript 0.1.0. This page is generated from [the CLI command catalogue](../../src/cli/commands.ts).
+FunScript 0.2.0. This page is generated from [the CLI command catalogue](../../src/cli/commands.ts).
 
 ## Commands
 

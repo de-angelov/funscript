@@ -57,6 +57,7 @@ The design rule is simple:
 | Export                       | `export area = (shape: Shape) => ...`                                                            |
 | Barrel re-export             | `export { Circle, Shape } from "./shapes.fun"`                                                   |
 | Raw TS                       | `` `const x = process.env.X` ``                                                                  |
+| WebAssembly kernel (Wasm)    | `as { export function square(x: f64): f64 { ... } }`                                             |
 | Comment                      | `// line comment`                                                                                |
 
 ---
@@ -2698,7 +2699,86 @@ How `???` works:
 
 ---
 
-## 13. Formatting
+## 13. High-Performance WebAssembly Kernels (AssemblyScript)
+
+Top-level `as { ... }` blocks embed high-performance WebAssembly routines written in [AssemblyScript](https://www.assemblyscript.org/). Functions exported from an `as` block are automatically compiled to WebAssembly at FunScript compile time and exposed locally as typed TypeScript functions.
+
+```funscript
+as {
+  export function square(value: f64): f64 {
+    return value * value;
+  }
+
+  export function addVectors(a: Float64Array, b: Float64Array, out: Float64Array): void {
+    for (let i = 0; i < a.length; ++i) {
+      out[i] = a[i] + b[i];
+    }
+  }
+}
+
+export calculate = (x: Number) => square(x)
+```
+
+### Supported Data Types
+
+1. **Primitives:** `i32`, `u32`, `i64`, `u64`, `f32`, `f64`, `boolean`, and `string`.
+2. **Typed Arrays:** `Float64Array`, `Float32Array`, `Int32Array`, `Uint32Array`, `Int16Array`, `Uint16Array`, `Int8Array`, `Uint8Array`.
+3. **Structs & Classes:** Classes with primitive, string, boolean, array, and nested class fields are automatically read across the Wasm memory boundary.
+4. **Tuples:** Native multi-value return types `[f64, f64]` or `[i32, string]` desugar into synthetic classes and return structured objects `{ _0, _1 }` in TypeScript.
+5. **128-bit SIMD:** 128-bit SIMD vector intrinsics (`v128`, `f64x2`, `f32x4`, `i32x4`, `v128.load`, `v128.store`) are enabled by default for maximum vector math throughput.
+
+### Dual Invocation Modes
+
+Every exported Wasm kernel function provides both direct and Effect-wrapped execution:
+
+- **Direct synchronous call:** `square(12)` calls Wasm synchronously with minimal overhead.
+- **Effect call:** `square.effect(12)` runs the kernel wrapped in an Effect, checking input types and providing typed error reporting (`WasmInputError`, `WasmTrapError`, `WasmInitializationError`).
+
+### Zero-Copy Chaining (`.raw` and `WasmHandle`)
+
+For high-throughput pipelines, repeatedly converting buffers between JS and Wasm incurs allocation and copying overhead. The `.raw(...)` method executes synchronously with zero heap resets, accepting either JS TypedArrays or existing `WasmHandle` pointers:
+
+```funscript
+as {
+  export function step1(data: Float64Array): Float64Array { ... }
+  export function step2(data: Float64Array): Float64Array { ... }
+}
+
+export pipeline = (input: Float64Array) =>
+  // Chaining .raw keeps memory inside the Wasm linear heap without copying
+  h1 = step1.raw(input)
+  h2 = step2.raw(h1)
+  result = h2.read()
+  step1.reset() // manual heap reset after the chain completes
+  result
+```
+
+### Managed Scope Lifecycle (`.scoped`)
+
+To guarantee zero memory leaks and deterministic heap cleanup when working with Effect workflows, kernels provide a `.scoped(...)` companion:
+
+```funscript
+import { Effect, Scope } from "effect"
+
+as {
+  export function processData(data: Float64Array): Float64Array { ... }
+}
+
+export runTask = (input: Float64Array) =>
+  Effect.scoped(
+    effect {
+      handle <- processData.scoped(input)
+      result = handle.read()
+      => result
+    }
+  )
+```
+
+Upon exiting the `Scope` (whether by success, failure, or fiber interruption), the Wasm linear heap is automatically and deterministically reset.
+
+---
+
+## 14. Formatting
 
 The formatter is canonical and has no configuration.
 
@@ -2719,7 +2799,7 @@ The formatter is canonical and has no configuration.
 
 ---
 
-## 14. Complete example
+## 15. Complete example
 
 ```funscript
 # A small program using `schema`, tagged unions, `mut` copy-on-write, and effects.

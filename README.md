@@ -12,7 +12,7 @@ matching, and immutable updates less ceremonial.
 <!-- GENERATED: project-facts -->
 ## Generated project facts
 
-- Package: `funscript` `0.1.0`
+- Package: `funscript` `0.2.0`
 - Runtime: Effect `^4.1.2`
 - Source extensions: `.fun`, `.funx`
 - Runnable checked examples: 21
@@ -151,21 +151,9 @@ tests/            Compiler, CLI, formatter, LSP, and integration coverage
 - [Language compatibility policy](docs/compatibility.md) — compatibility guarantees, deprecation lifecycle, and pipeline ambiguity policy.
 - [CI and release operations](docs/ci-release.md) — maintainer workflow.
 
-## Scope and non-goals
+## High-Performance WebAssembly Kernels (AssemblyScript)
 
-FunScript is not a replacement runtime, package manager, framework, or test runner. Use the
-TypeScript ecosystem directly for those concerns: Effect for runtime services, Vite for web
-development, Vitest for tests, and npm/pnpm/Bun for packages. The planned `new`, `dev`,
-`preview`, `test`, `add`, and `doctor` CLI wrappers are not currently implemented.
-
-## License
-
-License selection is pending.
-
-### Numeric AssemblyScript blocks
-
-A top-level `as { ... }` block can define numeric WebAssembly kernels. Exported
-functions are available locally in the FunScript module:
+A top-level `as { ... }` block embeds high-performance WebAssembly routines written in [AssemblyScript](https://www.assemblyscript.org/). Exported functions are compiled to WebAssembly at FunScript compile time and exposed locally as typed TypeScript functions:
 
 ```funscript
 as {
@@ -176,27 +164,23 @@ export result = square(12)
 export safeResult = square.effect(12)
 ```
 
-The current boundary supports explicit `i32`, `u32`, `f32`, and `f64` parameters
-and return values. Strings, arrays, objects, 64-bit integers, imported modules,
-and non-function exports are not supported. Wasm integer operations and numeric
-conversions follow WebAssembly semantics; traps throw JavaScript exceptions and
-can be handled explicitly with Effect. Kernels compile when FunScript compiles,
-and each block instantiates Wasm synchronously on its first call. Each
-function also has a lazy `functionName.effect(...)` companion that returns an
-Effect: it checks inputs before calling Wasm and reports tagged `WasmInputError`,
-`WasmTrapError`, or `WasmInitializationError` failures. Integer inputs must be whole numbers in range;
-floating-point inputs must be finite, and `f32` inputs must be in range (they
-are still rounded to 32-bit precision). Direct calls retain Wasm conversion and
-trap behavior, including throwing initialization failures. A successfully initialized
-instance is reused; a failed initialization is retried on the next call. Calls
-cross a JS/Wasm boundary, so benchmark real workloads before assuming a speedup.
-Compilation of files containing these blocks is asynchronous: use
-`Effect.runPromise(compileString(...))` rather than `Effect.runSync`. Effect
-service generation and automatic currying are not provided.
+### Capabilities & Ergonomics
 
-See [the numeric and Effect example](examples/assemblyscript-numeric.fun) and
-[the prime-counting example](examples/assemblyscript-primes.fun) for complete
-programs.
+- **Rich Data Boundary:** Supports numeric primitives (`i32`, `u32`, `i64`, `u64`, `f32`, `f64`), booleans, strings, typed arrays (`Float64Array`, etc.), classes with nested struct fields, and multi-value return tuples (`[f64, f64]`).
+- **128-bit SIMD Support:** Vector instructions (`v128`, `f64x2`, `f32x4`, `i32x4`) are enabled out of the box for SIMD-accelerated math routines.
+- **Zero-Copy Memory Chaining:** The `.raw(...)` method allows chaining Wasm kernel calls with zero linear-memory reallocations using `WasmHandle<T>` pointers.
+- **Managed Scope Lifecycle:** The `.scoped(...)` companion integrates seamlessly with Effect `Scope`, automatically releasing and resetting Wasm linear memory on scope completion or fiber interruption.
+- **Dual Execution Modes:** Direct synchronous calls `fn(...)` provide maximum throughput; lazy `fn.effect(...)` companions validate inputs and return Effects with typed error channels (`WasmInputError`, `WasmTrapError`, `WasmInitializationError`).
 
-See [optional arguments and Effect Option](docs/optional-arguments.md) for
-the omission, default, and explicit Option rules and migration guidance.
+See [examples/assemblyscript-numeric.fun](examples/assemblyscript-numeric.fun) and [examples/assemblyscript-primes.fun](examples/assemblyscript-primes.fun) for runnable programs.
+
+## Scope and non-goals
+
+FunScript is not a replacement runtime, package manager, framework, or test runner. Use the
+TypeScript ecosystem directly for those concerns: Effect for runtime services, Vite for web
+development, Vitest for tests, and npm/pnpm/Bun for packages. The planned `new`, `dev`,
+`preview`, `test`, `add`, and `doctor` CLI wrappers are not currently implemented.
+
+## License
+
+License selection is pending.

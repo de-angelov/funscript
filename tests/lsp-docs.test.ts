@@ -117,6 +117,7 @@ describe("LSP Keyword & Built-in Documentation Catalog", () => {
       "default",
       "js",
       "ts",
+      "as",
     ];
 
     for (const kw of additionalKeywords) {

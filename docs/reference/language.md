@@ -164,6 +164,30 @@ Standard sequence collection. In FunScript, Arrays are deeply immutable unless o
 
 See also: `Chunk`, `Record`, `mut`.
 
+## `as`
+
+Declares an embedded WebAssembly kernel compiled with AssemblyScript.
+
+```funscript
+as {
+  export function name(args...): Type { ... }
+}
+```
+
+Embeds high-performance numeric WebAssembly routines directly in FunScript using AssemblyScript.
+
+Features:
+- Automatic zero-cost TypeScript wrapper generation with validation.
+- Dual execution modes: synchronous `fn(...)` and Effect-wrapped `fn.effect(...)`.
+- Zero-copy pointer-level chaining via `fn.raw(...)` returning `WasmHandle`.
+- Automatic Wasm memory lifecycle management via `fn.scoped(...)` with Effect `Scope`.
+- Tuples: native multi-value return `[A, B]` desugared into zero-cost records.
+- 128-bit SIMD intrinsics (`v128`, `f64x2`, `f32x4`, `i32x4`) enabled out of the box.
+
+
+
+See also: `effect`, `js`, `ts`.
+
 ## `between`
 
 Typed range comparison resolved from static operand type.
