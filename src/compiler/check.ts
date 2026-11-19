@@ -84,6 +84,8 @@ export function createTypeCheckCache(): TypeCheckCache {
 }
 
 export interface CheckOptions {
+  /** Reject raw TypeScript escapes in all checked FunScript files. */
+  noTs?: boolean;
   compilerOptions?: ts.CompilerOptions;
   cwd?: string;
   highlightCode?: boolean;
@@ -785,13 +787,13 @@ export const typeCheckVirtualFiles = (
         const virtualTsPath = fullFunPath.replace(/\.(fun|funx)$/, ext);
 
         let compiled;
-        const cachedCompiled = cache?.compiledFiles.get(fullFunPath);
+        const cachedCompiled = options?.noTs ? undefined : cache?.compiledFiles.get(fullFunPath);
         if (cachedCompiled && cachedCompiled.source === source) {
           compiled = cachedCompiled.compiled;
         } else {
           try {
-            compiled = await Effect.runPromise(compileString(source, filePath, { sourcemap: true, sourcePath: fullFunPath, virtualSources }));
-            if (cache) {
+            compiled = await Effect.runPromise(compileString(source, filePath, { sourcemap: true, sourcePath: fullFunPath, virtualSources, noTs: options?.noTs }));
+            if (cache && !options?.noTs) {
               cache.compiledFiles.set(fullFunPath, { source, compiled });
             }
           } catch (err: any) {

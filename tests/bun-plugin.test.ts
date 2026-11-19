@@ -71,6 +71,20 @@ describe("Bun Plugin (bun-plugin-funscript)", () => {
     }
   });
 
+  it("rejects raw TypeScript when noTs is enabled", async () => {
+    let loadHandler: any;
+    const plugin = funscriptBunPlugin({ noTs: true });
+    plugin.setup({ onResolve: () => {}, onLoad: (_options: any, cb: any) => { loadHandler = cb; } });
+    const dir = await fs.mkdtemp(path.join(os.tmpdir(), "funscript-no-ts-bun-"));
+    try {
+      const file = path.join(dir, "example.fun");
+      await fs.writeFile(file, "ts { const x = 1; }");
+      await expect(loadHandler({ path: file, namespace: "file", loader: "ts" })).rejects.toThrow("TypeScript escapes are disabled by --no-ts");
+    } finally {
+      await fs.rm(dir, { recursive: true, force: true });
+    }
+  });
+
   it("resolves companion .fun file when .js is imported", async () => {
     const plugin = funscriptBunPlugin();
     let resolveHandler: any;

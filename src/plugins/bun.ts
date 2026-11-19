@@ -5,6 +5,8 @@ import { compileString } from "../compiler.js";
 import { TypeScriptCompilationContext } from "../compiler/typescript-context.js";
 
 export interface BunPluginOptions {
+  /** Reject raw TypeScript escapes in compiled FunScript modules. */
+  noTs?: boolean;
   /**
    * Filter pattern for files to compile.
    * Defaults to /\.funx?$/
@@ -91,6 +93,7 @@ export function funscriptBunPlugin(options: BunPluginOptions = {}): BunPlugin {
 
         const res = await Effect.runPromise(
           compileString(text, args.path, {
+            noTs: options.noTs,
             sourcemap: options.sourcemap ?? true,
             context,
           }),

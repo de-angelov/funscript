@@ -46,6 +46,12 @@ describe("Vite & Vitest Plugin (vite-plugin-funscript)", () => {
   });
 
   describe("File Transformation (transform hook)", () => {
+    it("rejects raw TypeScript when noTs is enabled", async () => {
+      const transform = funscriptPlugin({ noTs: true }).transform as Function;
+      await expect(transform.call({}, "ts { const x = 1; }", "/src/app.fun")).rejects.toThrow("TypeScript escapes are disabled by --no-ts");
+      await expect(transform.call({}, "export value = 1", "/src/app.fun")).resolves.toBeDefined();
+    });
+
     it("transforms .fun files into valid TypeScript with attached source maps", async () => {
       const plugin = funscriptPlugin();
       const code = `

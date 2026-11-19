@@ -23,6 +23,8 @@ export {
 
 export interface CompileOptions {
   sourcemap?: boolean;
+  /** Reject raw TypeScript escapes in FunScript source. */
+  noTs?: boolean;
   outputFile?: string;
   context?: TypeScriptCompilationContext;
   /** In-memory source files, keyed by absolute path, for cross-module analysis. */
@@ -52,6 +54,20 @@ export class CompilerError extends FunScriptError {
   }
 }
 
+/** Reject authored raw TypeScript escapes without inspecting strings or comments. */
+function validateNoTs(ast: Program): void {
+  const visit = (value: unknown): void => {
+    if (!value || typeof value !== "object") return;
+    if (Array.isArray(value)) { for (const item of value) visit(item); return; }
+    const node = value as Record<string, unknown>;
+    if (node.kind === "TsEscapeDeclaration" || node.kind === "TsEscapeExpression" || node.kind === "TsEscapeTypeNode") {
+      throw new FunScriptError("TypeScript escapes are disabled by --no-ts; write this code in FunScript", node.span as any);
+    }
+    for (const [key, child] of Object.entries(node)) if (key !== "span") visit(child);
+  };
+  visit(ast);
+}
+
 /**
  * Compiles FunScript source code directly to TypeScript code as an Effect.
  */
@@ -79,6 +95,8 @@ export const compileString = (
       const ast = preparedAst ?? new Parser(
         new Lexer(source, filename).tokenize(), filename, source,
       ).parse();
+
+      if (options?.noTs) validateNoTs(ast);
 
       // 3. Emit TypeScript
       const context = options?.context ?? new TypeScriptCompilationContext(options?.sourcePath ?? filename);
@@ -135,13 +153,16 @@ export const compileString = (
 export const checkString = (
   source: string,
   filename: string = "<anonymous>",
+  options?: Pick<CompileOptions, "noTs">,
 ): Effect.Effect<Program, CompilerError> =>
   Effect.try({
     try: () => {
       const lexer = new Lexer(source, filename);
       const tokens = lexer.tokenize();
       const parser = new Parser(tokens, filename, source);
-      return parser.parse();
+      const ast = parser.parse();
+      if (options?.noTs) validateNoTs(ast);
+      return ast;
     },
     catch: (error: any) => new CompilerError(error.message, error),
   });

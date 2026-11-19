@@ -54,7 +54,7 @@ const buildCommand = (args: string[]) =>
     const outDir = outDirIndex !== -1 ? args[outDirIndex + 1] : undefined;
 
     const rawFileArgs = args.filter((arg, i) => {
-      if (arg === "--sourcemap" || arg === "--no-check") return false;
+      if (arg === "--sourcemap" || arg === "--no-check" || arg === "--no-ts") return false;
       if (arg === "--out" || (outIndex !== -1 && i === outIndex + 1)) return false;
       if (arg === "--outDir" || (outDirIndex !== -1 && i === outDirIndex + 1)) return false;
       return true;
@@ -97,7 +97,7 @@ const buildCommand = (args: string[]) =>
       return yield* Console.log("No .fun or .funx files found to build");
     }
 
-    if (!args.includes("--no-check") && !(yield* checkCliFiles(filesToBuild))) return;
+    if (!args.includes("--no-check") && !(yield* checkCliFiles(filesToBuild, { noTs: args.includes("--no-ts") }))) return;
 
     for (const filePath of filesToBuild) {
       const source = yield* readFile(filePath);
@@ -117,6 +117,7 @@ const buildCommand = (args: string[]) =>
 
       const result = yield* compileString(source, filePath, {
         sourcemap: isSourcemap,
+        noTs: args.includes("--no-ts"),
         outputFile: path.basename(targetOut),
       });
 
@@ -140,19 +141,20 @@ const emitCommand = (args: string[]) =>
     const outIndex = args.indexOf("--out");
     const outPath = outIndex !== -1 ? args[outIndex + 1] : undefined;
     const fileArgs = args.filter((a, idx) => {
-      if (a === "--sourcemap") return false;
+      if (a === "--sourcemap" || a === "--no-ts") return false;
       if (a === "--out" || (outIndex !== -1 && idx === outIndex + 1)) return false;
       return true;
     });
 
     const filePath = fileArgs[0];
     if (!filePath) {
-      return yield* Console.error("Usage: funscript emit <file.fun|file.funx> [--out <file.ts|file.tsx>] [--sourcemap]");
+      return yield* Console.error("Usage: funscript emit <file.fun|file.funx> [--out <file.ts|file.tsx>] [--sourcemap] [--no-ts]");
     }
 
     const source = yield* readFile(filePath);
     const result = yield* compileString(source, filePath, {
       sourcemap: isSourcemap,
+      noTs: args.includes("--no-ts"),
       outputFile: outPath ? path.basename(outPath) : undefined,
     });
 
@@ -196,7 +198,7 @@ const checkCommand = (args: string[]) =>
         catch: (error: any) => new Error(`Failed to scan files in '${searchDir}': ${error.message}`),
       });
       if (filesToCheck.length === 0) {
-        return yield* Console.error("Usage: funscript check [file.fun|file.funx...] [--idiomatic]");
+        return yield* Console.error("Usage: funscript check [file.fun|file.funx...] [--idiomatic] [--no-ts]");
       }
     } else {
       for (const target of rawFileArgs) {
@@ -234,7 +236,7 @@ const checkCommand = (args: string[]) =>
     }
 
     const allFiles = yield* collectCliFiles(filesToCheck);
-    const result = yield* typeCheckFiles(allFiles);
+    const result = yield* typeCheckFiles(allFiles, { noTs: args.includes("--no-ts") });
     if (!result.success || !idiomaticPassed) {
       process.exitCode = 1;
       if (!result.success) {
@@ -296,16 +298,16 @@ const fmtCommand = (args: string[]) =>
 
 const runCommand = (args: string[]) =>
   Effect.gen(function* () {
-    const filePath = args.find((arg) => arg !== "--no-check");
+    const filePath = args.find((arg) => arg !== "--no-check" && arg !== "--no-ts");
     if (!filePath) {
       process.exitCode = 1;
-      return yield* Console.error("Usage: funscript run <file.fun|file.funx> [--no-check]");
+      return yield* Console.error("Usage: funscript run <file.fun|file.funx> [--no-check] [--no-ts]");
     }
 
-    if (!args.includes("--no-check") && !(yield* checkCliFiles([filePath]))) return;
+    if (!args.includes("--no-check") && !(yield* checkCliFiles([filePath], { noTs: args.includes("--no-ts") }))) return;
 
     const source = yield* readFile(filePath);
-    const result = yield* compileString(source, filePath, { sourcemap: false });
+    const result = yield* compileString(source, filePath, { sourcemap: false, noTs: args.includes("--no-ts") });
 
     let tsCode = result.typescript;
     tsCode += `\nimport * as __effect from "effect";\nif (typeof main !== "undefined") {\n  if (__effect.Effect.isEffect(main)) {\n    await __effect.Effect.runPromise(main);\n  } else if (typeof main === "function") {\n    await main();\n  }\n}\n`;

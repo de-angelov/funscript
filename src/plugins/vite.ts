@@ -26,6 +26,8 @@ export interface ServerBoundaryOptions {
 }
 
 export interface FunscriptPluginOptions {
+  /** Reject raw TypeScript escapes in compiled FunScript modules. */
+  noTs?: boolean;
   /**
    * Filter pattern(s) for files to include. Defaults to [/\.fun$/, /\.funx$/].
    */
@@ -157,6 +159,7 @@ export function funscriptPlugin(options: FunscriptPluginOptions = {}): Plugin {
 
       const res = await Effect.runPromise(
         compileString(code, cleanId, {
+          noTs: options.noTs,
           sourcemap: options.sourcemap ?? true,
           context,
         }),

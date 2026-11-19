@@ -244,3 +244,20 @@ Automated mechanical insertion of `=>` was rejected because semantic equivalence
 
 5. **Mechanical irreversibility**
    Because `=> expr` is identical for hand-authored code and migrated code, an automated transformation is mechanically irreversible. Version control (`git`) serves as the sole rollback mechanism for manual code updates.
+
+### Reject raw TypeScript escapes
+
+Use `--no-ts` when reviewing or generating FunScript and requiring application code to stay in FunScript:
+
+```bash
+funscript check app/ --no-ts
+funscript build app/ --no-ts
+funscript emit app/main.fun --no-ts
+funscript run app/main.fun --no-ts
+```
+
+This rejects `ts { ... }` declarations, expressions, and type annotations with a source diagnostic. Normal checking follows local FunScript imports and applies the rule to those files too. `--no-ts` remains active with `build --no-check` and `run --no-check`, but skipping the check also skips its traversal of imported FunScript files; check the whole project explicitly when enforcing a project-wide policy. The compiler API accepts `{ noTs: true }` in `compileString`, `checkString`, and type-check options.
+
+Vite and Bun integrations can enable the same check with `funscriptPlugin({ noTs: true })` or `funscriptBunPlugin({ noTs: true })`.
+
+This is a raw TypeScript escape restriction, not a sandbox: JavaScript imports, `js` interop, imported TypeScript schemas, AssemblyScript blocks, and code in external dependencies remain available. It does not inspect or prohibit arbitrary JavaScript or TypeScript files outside the FunScript files being checked.
