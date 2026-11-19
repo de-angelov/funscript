@@ -978,10 +978,6 @@ export class Emitter {
       if (PRIMITIVE_TYPES[tName] || tName === "Duration") return `Schema.${tName}`;
       if (tName === "UUID") return "Schema.UUID";
       if (tName === "Int") return "Schema.Int";
-      if ((tName === "NullOr" || tName === "UndefinedOr") && !this.declaredTypeNames.has(tName)) {
-        if (typeNode.typeArgs?.length !== 1) throw new FunScriptError(`${tName} requires exactly one type argument`, typeNode.span);
-        return `Schema.${tName}(${this.emitSchemaTypeField(typeNode.typeArgs[0])})`;
-      }
       if (tName === "Option" && typeNode.typeArgs) {
         return `Schema.Option(${this.emitSchemaTypeField(typeNode.typeArgs[0])})`;
       }
@@ -2440,10 +2436,6 @@ export class Emitter {
       }
       case "TypeReferenceNode": {
         let name = node.name.name;
-        if ((name === "NullOr" || name === "UndefinedOr") && !this.declaredTypeNames.has(name)) {
-          if (node.typeArgs?.length !== 1) throw new FunScriptError(`${name} requires exactly one type argument`, node.span);
-          return `(${this.emitTypeNode(node.typeArgs[0])} | ${name === "NullOr" ? "null" : "undefined"})`;
-        }
         if (name === "SchemaInput" && !this.declaredTypeNames.has(name)) {
           const arg = node.typeArgs?.[0];
           if (node.typeArgs?.length !== 1 || arg?.kind !== "TypeReferenceNode" || arg.typeArgs?.length) {

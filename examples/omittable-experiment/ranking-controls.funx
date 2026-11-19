@@ -1,9 +1,0 @@
-import { Option } from "effect"
-import { optionalProperties } from "funscript/record"
-
-export RankingOrderControls = (props: {
-  order: Omittable<String>
-  onOrderChange: Omittable<(order: String) => Void>
-}) =>
-  order = Option.getOrElse(props.order, () => "highest-first")
-  => <button {...optionalProperties({ onClick: Option.map(props.onOrderChange, (change) => () => change("lowest-first")) })}>{order}</button>

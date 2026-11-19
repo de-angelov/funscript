@@ -126,7 +126,6 @@ export interface RecordFieldSchema extends NodeBase {
   name: Identifier;
   typeAnnotation: TypeNode;
   optional?: boolean;
-  omittableSyntax?: boolean;
   defaultValue?: Expression;
 }
 
@@ -617,7 +616,6 @@ export interface Parameter extends NodeBase {
   name: BindingTarget;
   typeAnnotation?: TypeNode;
   optional?: boolean;
-  omittableSyntax?: boolean;
   defaultValue?: Expression;
   isRest?: boolean;
 }
@@ -646,7 +644,6 @@ export interface RecordTypeField extends NodeBase {
   name: Identifier;
   typeAnnotation: TypeNode;
   optional?: boolean;
-  omittableSyntax?: boolean;
   defaultValue?: Expression;
 }
 

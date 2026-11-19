@@ -487,7 +487,7 @@ export class Formatter {
       const leading = this.formatLeadingComments(f, fieldIndent);
       const trailing = this.getTrailingComment(f.span.end.line);
       const def = f.defaultValue ? ` = ${this.formatExpression(f.defaultValue, indent + this.indentSize)}` : "";
-      return `${leading}${fieldIndent}${f.name.name}${f.optional && !f.omittableSyntax ? "?" : ""}: ${f.omittableSyntax ? `Omittable<${this.formatType(f.typeAnnotation, indent + this.indentSize)}>` : this.formatType(f.typeAnnotation, indent + this.indentSize)}${def}${trailing}`;
+      return `${leading}${fieldIndent}${f.name.name}${f.optional ? "?" : ""}: ${this.formatType(f.typeAnnotation, indent + this.indentSize)}${def}${trailing}`;
     }).join("\n");
     return `{\n${fields}\n${closingIndent}}`;
   }
@@ -548,9 +548,9 @@ export class Formatter {
       const typeParams = this.formatTypeParameters(init.typeParams);
       const params = init.params.map(p => {
         const rest = p.isRest ? "..." : "";
-        const type = p.typeAnnotation ? `: ${p.omittableSyntax ? `Omittable<${this.formatType(p.typeAnnotation)}>` : this.formatType(p.typeAnnotation)}` : "";
+        const type = p.typeAnnotation ? `: ${this.formatType(p.typeAnnotation)}` : "";
         const defaultValue = p.defaultValue ? ` = ${this.formatExpression(p.defaultValue, indent)}` : "";
-        return `${rest}${this.formatBindingTarget(p.name)}${p.optional && !p.omittableSyntax ? "?" : ""}${type}${defaultValue}`;
+        return `${rest}${this.formatBindingTarget(p.name)}${p.optional ? "?" : ""}${type}${defaultValue}`;
       }).join(", ");
       const ret = init.returnType ? `: ${this.formatType(init.returnType)}` : "";
       const isArrowOnly = init.params.length === 0 && !init.returnType && init.span && this.source.slice(init.span.start.offset, init.span.start.offset + 2) === "=>";
@@ -1098,9 +1098,9 @@ export class Formatter {
     const typeParams = this.formatTypeParameters(expr.typeParams);
     const params = expr.params.map(p => {
       const rest = p.isRest ? "..." : "";
-      const type = p.typeAnnotation ? `: ${p.omittableSyntax ? `Omittable<${this.formatType(p.typeAnnotation)}>` : this.formatType(p.typeAnnotation)}` : "";
+      const type = p.typeAnnotation ? `: ${this.formatType(p.typeAnnotation)}` : "";
       const defaultValue = p.defaultValue ? ` = ${this.formatExpression(p.defaultValue, indent)}` : "";
-      return `${rest}${this.formatBindingTarget(p.name)}${p.optional && !p.omittableSyntax ? "?" : ""}${type}${defaultValue}`;
+      return `${rest}${this.formatBindingTarget(p.name)}${p.optional ? "?" : ""}${type}${defaultValue}`;
     }).join(", ");
     const ret = expr.returnType ? `: ${this.formatType(expr.returnType)}` : "";
     const isArrowOnly = expr.params.length === 0 && !expr.returnType && expr.span && this.source.slice(expr.span.start.offset, expr.span.start.offset + 2) === "=>";
@@ -1131,7 +1131,7 @@ export class Formatter {
         const params = node.params.map(p => {
           const rest = p.isRest ? "..." : "";
           const typeStr = p.typeAnnotation ? this.formatType(p.typeAnnotation, indent) : "Unknown";
-          return p.name ? `${rest}${this.formatBindingTarget(p.name)}${p.optional && !p.omittableSyntax ? "?" : ""}: ${typeStr}` : `${rest}${typeStr}`;
+          return p.name ? `${rest}${this.formatBindingTarget(p.name)}${p.optional ? "?" : ""}: ${typeStr}` : `${rest}${typeStr}`;
         }).join(", ");
         return `${this.formatTypeParameters(node.typeParams)}(${params}) => ${this.formatType(node.returnType, indent)}`;
       }
@@ -1151,10 +1151,10 @@ export class Formatter {
         if (isMultiline) {
           const fieldIndent = this.spaces(indent + this.indentSize);
           const closingIndent = this.spaces(indent);
-          const fields = node.fields.map(f => `${fieldIndent}${f.name.name}${f.optional && !f.omittableSyntax ? "?" : ""}: ${f.omittableSyntax ? `Omittable<${this.formatType(f.typeAnnotation, indent + this.indentSize)}>` : this.formatType(f.typeAnnotation, indent + this.indentSize)}${f.defaultValue ? ` = ${this.formatExpression(f.defaultValue, indent + this.indentSize)}` : ""}`).join("\n");
+          const fields = node.fields.map(f => `${fieldIndent}${f.name.name}${f.optional ? "?" : ""}: ${this.formatType(f.typeAnnotation, indent + this.indentSize)}${f.defaultValue ? ` = ${this.formatExpression(f.defaultValue, indent + this.indentSize)}` : ""}`).join("\n");
           return `{\n${fields}\n${closingIndent}}`;
         }
-        const fields = node.fields.map(f => `${f.name.name}${f.optional && !f.omittableSyntax ? "?" : ""}: ${f.omittableSyntax ? `Omittable<${this.formatType(f.typeAnnotation, indent)}>` : this.formatType(f.typeAnnotation, indent)}${f.defaultValue ? ` = ${this.formatExpression(f.defaultValue, indent)}` : ""}`).join(", ");
+        const fields = node.fields.map(f => `${f.name.name}${f.optional ? "?" : ""}: ${this.formatType(f.typeAnnotation, indent)}${f.defaultValue ? ` = ${this.formatExpression(f.defaultValue, indent)}` : ""}`).join(", ");
         return `{ ${fields} }`;
       }
       case "ArrayTypeNode":

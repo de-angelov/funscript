@@ -15,8 +15,6 @@ Every entry below is compiled by `npm run test:examples`.
 | [`examples/hello.fun`](../../examples/hello.fun) | `FunScript` |
 | [`examples/js-ts-interop.fun`](../../examples/js-ts-interop.fun) | `FunScript` |
 | [`examples/markdown-task-manager.fun`](../../examples/markdown-task-manager.fun) | `FunScript` |
-| [`examples/omittable-experiment/patch.fun`](../../examples/omittable-experiment/patch.fun) | `FunScript` |
-| [`examples/omittable-experiment/ranking-controls.funx`](../../examples/omittable-experiment/ranking-controls.funx) | `FunScript JSX` |
 | [`examples/order-fulfillment.fun`](../../examples/order-fulfillment.fun) | `FunScript` |
 | [`examples/pipeline-helpers.fun`](../../examples/pipeline-helpers.fun) | `FunScript` |
 | [`examples/reactive-widget.funx`](../../examples/reactive-widget.funx) | `FunScript JSX` |

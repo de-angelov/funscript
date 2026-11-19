@@ -2,7 +2,7 @@
 
 # Package entry points
 
-Package: `funscript` 0.2.1.
+Package: `funscript` 0.2.2.
 
 | Import | Implementation |
 | --- | --- |
@@ -10,7 +10,6 @@ Package: `funscript` 0.2.1.
 | `funscript/prettier` | `./dist/formatter/prettier.js` |
 | `funscript/prettier-plugin-funscript` | `./dist/formatter/prettier.js` |
 | `funscript/record` | `./dist/interop/record.js` |
-| `funscript/interop` | `./dist/interop/index.js` |
 | `funscript/zod` | `./dist/interop/zod.js` |
 | `funscript/interop/zod` | `./dist/interop/zod.js` |
 | `funscript/valibot` | `./dist/interop/valibot.js` |

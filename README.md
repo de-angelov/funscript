@@ -12,10 +12,10 @@ matching, and immutable updates less ceremonial.
 <!-- GENERATED: project-facts -->
 ## Generated project facts
 
-- Package: `funscript` `0.2.1`
+- Package: `funscript` `0.2.2`
 - Runtime: Effect `^4.1.2`
 - Source extensions: `.fun`, `.funx`
-- Runnable checked examples: 23
+- Runnable checked examples: 21
 
 The exact command surface is generated from the implementation in the [CLI reference](docs/reference/cli.md). The language catalogue used by editor hover help is generated in the [language reference](docs/reference/language.md).
 <!-- /GENERATED: project-facts -->
@@ -96,8 +96,6 @@ For the current, verified contract and runnable source examples, read the
 | [`examples/hello.fun`](examples/hello.fun) | `FunScript` |
 | [`examples/js-ts-interop.fun`](examples/js-ts-interop.fun) | `FunScript` |
 | [`examples/markdown-task-manager.fun`](examples/markdown-task-manager.fun) | `FunScript` |
-| [`examples/omittable-experiment/patch.fun`](examples/omittable-experiment/patch.fun) | `FunScript` |
-| [`examples/omittable-experiment/ranking-controls.funx`](examples/omittable-experiment/ranking-controls.funx) | `FunScript JSX` |
 | [`examples/order-fulfillment.fun`](examples/order-fulfillment.fun) | `FunScript` |
 | [`examples/pipeline-helpers.fun`](examples/pipeline-helpers.fun) | `FunScript` |
 | [`examples/reactive-widget.funx`](examples/reactive-widget.funx) | `FunScript JSX` |
