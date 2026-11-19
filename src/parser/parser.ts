@@ -536,13 +536,21 @@ export class Parser {
       if (this.check(TokenType.RBRACE) || this.check(TokenType.DEDENT)) break;
 
       const fieldName: Identifier = this.parseRecordKeyIdentifier();
-      const optional = this.match(TokenType.QUESTION);
+      let optional = this.match(TokenType.QUESTION);
       this.consume(TokenType.COLON, "Expected ':' after field name");
       const previous = this.allowOptionalRecordFields;
       this.allowOptionalRecordFields = true;
       let fieldType: TypeNode;
       try { fieldType = this.parseTypeNode(); }
       finally { this.allowOptionalRecordFields = previous; }
+      let omittableSyntax = false;
+      const inner = this.unwrapOmittable(fieldType);
+      if (inner) {
+        if (optional) throw new ParseError("Do not combine ? and Omittable", fieldName.span);
+        optional = true;
+        omittableSyntax = true;
+        fieldType = inner;
+      }
       let defaultValue: Expression | undefined;
 
       if (this.match(TokenType.EQ)) {
@@ -555,6 +563,7 @@ export class Parser {
         name: fieldName,
         typeAnnotation: fieldType,
         optional,
+        omittableSyntax,
         defaultValue,
         span: { start: fieldName.span.start, end: (defaultValue || fieldType).span.end },
       });
@@ -858,14 +867,30 @@ export class Parser {
     return null;
   }
 
+  private unwrapOmittable(type: TypeNode): TypeNode | undefined {
+    if (type.kind !== "TypeReferenceNode" || type.name.name !== "Omittable") return undefined;
+    if (type.typeArgs?.length !== 1) throw new ParseError("Omittable requires exactly one type argument", type.span);
+    return type.typeArgs[0];
+  }
+
   private parseValueParameter(name: BindingTarget, nameOnlySpan = false, isRest = false): Parameter {
-    const optional = this.match(TokenType.QUESTION);
+    let optional = this.match(TokenType.QUESTION);
+    let omittableSyntax = false;
     let typeAnnotation: TypeNode | undefined;
     if (this.match(TokenType.COLON)) {
       const previous = this.allowOptionalRecordFields;
       this.allowOptionalRecordFields = this.check(TokenType.LBRACE);
       try { typeAnnotation = this.parseTypeNode(); }
       finally { this.allowOptionalRecordFields = previous; }
+    }
+    if (typeAnnotation) {
+      const inner = this.unwrapOmittable(typeAnnotation);
+      if (inner) {
+        if (optional) throw new ParseError("Do not combine ? and Omittable", name.span);
+        optional = true;
+        omittableSyntax = true;
+        typeAnnotation = inner;
+      }
     }
     if (optional && !typeAnnotation) throw new ParseError("Optional parameters require a type annotation", name.span);
     const defaultValue = this.match(TokenType.EQ) ? this.parseExpression() : undefined;
@@ -875,6 +900,7 @@ export class Parser {
       name,
       typeAnnotation,
       optional,
+      omittableSyntax,
       defaultValue,
       isRest: isRest ? true : undefined,
       span: nameOnlySpan ? name.span : { start: name.span.start, end: (defaultValue ?? typeAnnotation ?? name).span.end },
@@ -2736,15 +2762,23 @@ export class Parser {
           this.skipNewlines();
           if (this.check(TokenType.RBRACE) || this.check(TokenType.DEDENT)) break;
           const fName: Identifier = this.parseRecordKeyIdentifier();
-          const optional = this.match(TokenType.QUESTION);
+          let optional = this.match(TokenType.QUESTION);
           this.consume(TokenType.COLON, "Expected ':' after field name");
-          const fType = this.parseTypeNode();
+          let fType = this.parseTypeNode();
+          let omittableSyntax = false;
+          const inner = this.unwrapOmittable(fType);
+          if (inner) {
+            if (optional) throw new ParseError("Do not combine ? and Omittable", fName.span);
+            optional = true;
+            omittableSyntax = true;
+            fType = inner;
+          }
           const defaultValue = this.match(TokenType.EQ) ? this.parseExpression() : undefined;
           if (defaultValue && (!this.allowOptionalRecordFields || this.recordTypeDepth !== 1)) {
             throw new ParseError("Defaulted record fields are supported only on direct function parameters", fName.span);
           }
           if (optional && defaultValue) throw new ParseError("A record field cannot be both optional and defaulted", fName.span);
-          fields.push({ kind: "RecordTypeField", name: fName, typeAnnotation: fType, optional, defaultValue, span: { start: fName.span.start, end: (defaultValue ?? fType).span.end } });
+          fields.push({ kind: "RecordTypeField", name: fName, typeAnnotation: fType, optional, omittableSyntax, defaultValue, span: { start: fName.span.start, end: (defaultValue ?? fType).span.end } });
           this.match(TokenType.COMMA);
           this.skipNewlines();
         }
