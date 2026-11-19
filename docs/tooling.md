@@ -245,7 +245,7 @@ Automated mechanical insertion of `=>` was rejected because semantic equivalence
 5. **Mechanical irreversibility**
    Because `=> expr` is identical for hand-authored code and migrated code, an automated transformation is mechanically irreversible. Version control (`git`) serves as the sole rollback mechanism for manual code updates.
 
-### Reject raw TypeScript escapes
+### Enforce FunScript source in selected paths
 
 Use `--no-ts` when reviewing or generating FunScript and requiring application code to stay in FunScript:
 
@@ -256,8 +256,28 @@ funscript emit app/main.fun --no-ts
 funscript run app/main.fun --no-ts
 ```
 
-This rejects `ts { ... }` declarations, expressions, and type annotations with a source diagnostic. Normal checking follows local FunScript imports and applies the rule to those files too. `--no-ts` remains active with `build --no-check` and `run --no-check`, but skipping the check also skips its traversal of imported FunScript files; check the whole project explicitly when enforcing a project-wide policy. The compiler API accepts `{ noTs: true }` in `compileString`, `checkString`, and type-check options.
+This rejects `ts { ... }` declarations, expressions, and type annotations, as well as `as { ... }` AssemblyScript blocks. For directories passed to `check` or `build`, it also rejects standalone JavaScript, TypeScript, and AssemblyScript source files, including `.d.ts`, `.d.mts`, `.d.cts`, `.js`, `.jsx`, `.mjs`, `.cjs`, and `.as`. It checks hidden folders and symlinks but skips `.git`, `node_modules`, and `.funscript`. Explicit file arguments are checked individually. Normal checking follows local FunScript imports and applies the rule to those files too. `--no-ts` remains active with `build --no-check` and `run --no-check`, but skipping the check also skips its traversal of imported FunScript files; check the whole project explicitly when enforcing a project-wide policy. The compiler API accepts `{ noTs: true }` in `compileString`, `checkString`, and type-check options.
 
 Vite and Bun integrations can enable the same check with `funscriptPlugin({ noTs: true })` or `funscriptBunPlugin({ noTs: true })`.
 
-This is a raw TypeScript escape restriction, not a sandbox: JavaScript imports, `js` interop, imported TypeScript schemas, AssemblyScript blocks, and code in external dependencies remain available. It does not inspect or prohibit arbitrary JavaScript or TypeScript files outside the FunScript files being checked.
+This is an opt-in audit, not a filesystem permission system: it cannot stop an editor or LLM from creating a file, and it cannot detect code hidden in other file formats. Run `funscript check app/ --no-ts` in CI or after edits to reject violations within that directory. JavaScript imports, `js` interop, imported TypeScript schemas, and external dependencies remain available; code outside audited paths is not checked. Compiled TypeScript output is also found by a later directory audit, so use a separate output directory outside the audited source tree. The compiler API and plugins reject embedded escapes but do not scan directories for standalone files.
+
+### Project and folder policies
+
+Add `funscript.config.fun` to the project root (the working directory for CLI and Bun, or the configured Vite root):
+
+```funscript
+export config = {
+  noTs: ["app/domain", "app/services"]
+  noGlobalThis: ["app/domain", "app/services"]
+  effectOnly: ["app/domain"]
+}
+```
+
+`noTs` and `noGlobalThis` accept `true` to apply everywhere, `false` to disable the rule, or arrays of project-relative directories. `effectOnly` accepts an array of project-relative directories. Paths must not escape the project root. Policies apply to descendants of those directories; multiple restrictions combine. CLI flags can enable a project-wide restriction but cannot disable a configured policy. The config is parsed as a single literal exported record; it is never executed. Unknown options, nonliteral values and invalid paths are errors.
+
+`noGlobalThis` rejects references to `globalThis`, including indexed access and aliases. Property names and string values with the same spelling are allowed. Raw TS or AssemblyScript blocks are not inspected by this rule; combine it with `noTs` when needed. `noTs` applies the escape restrictions and standalone-source audit described above to matching paths. `effectOnly` prohibits raw TS/AssemblyScript escapes, JS interop expressions, common ambient side-effect APIs (including `globalThis`, `fetch`, `process`, `console`, and timers), and non-Effect package imports. Imports from `effect`, `effect/*`, and `@effect/*` are permitted. Relative imports must resolve to FunScript within a configured Effect-only directory; list shared directories too if they need to be used. Pure ordinary functions remain allowed.
+
+`check`, `build`, `emit`, and `run` load this policy automatically. Vite and Bun plugin compilation also applies it. Use `funscript check app/` in CI to audit standalone source files in the selected tree; plugin transforms inspect FunScript source but do not audit all files on disk. `tsc`, the REPL, and the language server do not currently load this policy. Programmatic compiler and type-checker users can pass policy options explicitly.
+
+These are source-level discipline checks, not a proof of purity or a security boundary. Effect packages and allowed code can still perform side effects (including inside callbacks), indirect behavior is not exhaustively analyzed, and files outside audited paths are not policed. Protect the config and run the check in CI if the policy must be enforced against code changes.

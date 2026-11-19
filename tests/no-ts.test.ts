@@ -16,6 +16,12 @@ describe("no-ts mode", () => {
     await expect(Effect.runPromise(checkString(source, "strict.fun", strict))).rejects.toThrow("TypeScript escapes are disabled by --no-ts");
   });
 
+  it("rejects AssemblyScript blocks before invoking the AssemblyScript compiler", async () => {
+    const source = 'as { export function answer(): i32 { return 42; } }';
+    await expect(Effect.runPromise(compileString(source, "strict.fun", strict))).rejects.toThrow("AssemblyScript blocks are disabled by --no-ts");
+    await expect(Effect.runPromise(checkString(source, "strict.fun", strict))).rejects.toThrow("AssemblyScript blocks are disabled by --no-ts");
+  });
+
   it("does not mistake strings or comments for escapes and preserves default behavior", async () => {
     const safe = '// ts { not code }\nexport message = "ts { not code }"';
     await expect(Effect.runPromise(compileString(safe, "safe.fun", strict))).resolves.toBeDefined();

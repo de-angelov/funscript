@@ -12,7 +12,7 @@ matching, and immutable updates less ceremonial.
 <!-- GENERATED: project-facts -->
 ## Generated project facts
 
-- Package: `funscript` `0.2.2`
+- Package: `funscript` `0.2.3`
 - Runtime: Effect `^4.1.2`
 - Source extensions: `.fun`, `.funx`
 - Runnable checked examples: 21

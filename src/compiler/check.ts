@@ -1,3 +1,4 @@
+import { isEffectOnlyFile, isPathPolicyEnabled } from "./project-config.js";
 import ts from "typescript";
 import * as path from "node:path";
 import * as fs from "node:fs/promises";
@@ -86,6 +87,10 @@ export function createTypeCheckCache(): TypeCheckCache {
 export interface CheckOptions {
   /** Reject raw TypeScript escapes in all checked FunScript files. */
   noTs?: boolean;
+  noGlobalThis?: boolean;
+  effectOnly?: string[];
+  noTsPaths?: string[];
+  noGlobalThisPaths?: string[];
   compilerOptions?: ts.CompilerOptions;
   cwd?: string;
   highlightCode?: boolean;
@@ -787,13 +792,16 @@ export const typeCheckVirtualFiles = (
         const virtualTsPath = fullFunPath.replace(/\.(fun|funx)$/, ext);
 
         let compiled;
-        const cachedCompiled = options?.noTs ? undefined : cache?.compiledFiles.get(fullFunPath);
+        const effectOnly = isEffectOnlyFile({ effectOnly: options?.effectOnly }, cwd, fullFunPath);
+        const noTs = !!options?.noTs || isPathPolicyEnabled(options?.noTsPaths, cwd, fullFunPath);
+        const noGlobalThis = !!options?.noGlobalThis || isPathPolicyEnabled(options?.noGlobalThisPaths, cwd, fullFunPath);
+        const cachedCompiled = (noTs || noGlobalThis || effectOnly) ? undefined : cache?.compiledFiles.get(fullFunPath);
         if (cachedCompiled && cachedCompiled.source === source) {
           compiled = cachedCompiled.compiled;
         } else {
           try {
-            compiled = await Effect.runPromise(compileString(source, filePath, { sourcemap: true, sourcePath: fullFunPath, virtualSources, noTs: options?.noTs }));
-            if (cache && !options?.noTs) {
+            compiled = await Effect.runPromise(compileString(source, filePath, { sourcemap: true, sourcePath: fullFunPath, virtualSources, noTs, noGlobalThis, effectOnly, effectOnlyDirectories: options?.effectOnly, policyRoot: cwd }));
+            if (cache && !noTs && !noGlobalThis && !effectOnly) {
               cache.compiledFiles.set(fullFunPath, { source, compiled });
             }
           } catch (err: any) {

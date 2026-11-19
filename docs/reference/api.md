@@ -2,7 +2,7 @@
 
 # Package entry points
 
-Package: `funscript` 0.2.2.
+Package: `funscript` 0.2.3.
 
 | Import | Implementation |
 | --- | --- |

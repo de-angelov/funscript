@@ -1,6 +1,7 @@
 import { type Plugin, createFilter } from "vite";
 import { Effect } from "effect";
 import { compileString } from "../compiler.js";
+import { loadProjectConfig, isEffectOnlyFile, isPathPolicyEnabled, type FunScriptProjectConfig } from "../compiler/project-config.js";
 import { TypeView, type TypeViewOptions } from "./type-view.js";
 import * as path from "node:path";
 import * as fs from "node:fs";
@@ -28,6 +29,7 @@ export interface ServerBoundaryOptions {
 export interface FunscriptPluginOptions {
   /** Reject raw TypeScript escapes in compiled FunScript modules. */
   noTs?: boolean;
+  noGlobalThis?: boolean;
   /**
    * Filter pattern(s) for files to include. Defaults to [/\.fun$/, /\.funx$/].
    */
@@ -68,6 +70,9 @@ export function funscriptPlugin(options: FunscriptPluginOptions = {}): Plugin {
   );
 
   let typeView: TypeView | undefined;
+  let policyRoot = process.cwd();
+  let projectPolicy: FunScriptProjectConfig = {};
+  let policyLoaded = false;
   const context = new TypeScriptCompilationContext(path.resolve("__funscript_vite__.fun"));
   return {
     name: "vite-plugin-funscript",
@@ -75,6 +80,9 @@ export function funscriptPlugin(options: FunscriptPluginOptions = {}): Plugin {
 
     async config(config) {
       const rootDir = path.resolve(config.root ?? process.cwd());
+      policyRoot = rootDir;
+      projectPolicy = loadProjectConfig(rootDir);
+      policyLoaded = true;
       if (options.types) {
         typeView = new TypeView(rootDir, options.types);
         await typeView.generate();
@@ -157,9 +165,17 @@ export function funscriptPlugin(options: FunscriptPluginOptions = {}): Plugin {
         return null;
       }
 
+      if (!policyLoaded) {
+        projectPolicy = loadProjectConfig(policyRoot);
+        policyLoaded = true;
+      }
       const res = await Effect.runPromise(
         compileString(code, cleanId, {
-          noTs: options.noTs,
+          noTs: options.noTs || isPathPolicyEnabled(projectPolicy.noTs, policyRoot, cleanId),
+          noGlobalThis: options.noGlobalThis || isPathPolicyEnabled(projectPolicy.noGlobalThis, policyRoot, cleanId),
+          effectOnly: isEffectOnlyFile(projectPolicy, policyRoot, cleanId),
+          effectOnlyDirectories: projectPolicy.effectOnly,
+          policyRoot,
           sourcemap: options.sourcemap ?? true,
           context,
         }),

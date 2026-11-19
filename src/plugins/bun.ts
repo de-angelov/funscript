@@ -2,11 +2,13 @@ import { Effect } from "effect";
 import * as fs from "node:fs";
 import * as path from "node:path";
 import { compileString } from "../compiler.js";
+import { loadProjectConfig, isEffectOnlyFile, isPathPolicyEnabled } from "../compiler/project-config.js";
 import { TypeScriptCompilationContext } from "../compiler/typescript-context.js";
 
 export interface BunPluginOptions {
   /** Reject raw TypeScript escapes in compiled FunScript modules. */
   noTs?: boolean;
+  noGlobalThis?: boolean;
   /**
    * Filter pattern for files to compile.
    * Defaults to /\.funx?$/
@@ -51,6 +53,7 @@ export interface BunPlugin {
  * Compiles FunScript in-memory directly to TypeScript for Bun's JavaScriptCore runtime.
  */
 export function funscriptBunPlugin(options: BunPluginOptions = {}): BunPlugin {
+  const projectPolicy = loadProjectConfig(process.cwd());
   const filter = options.filter ?? /\.funx?$/;
   const resolveJsToFun = options.resolveJsToFun ?? true;
   const context = new TypeScriptCompilationContext(path.resolve("__funscript_bun__.fun"));
@@ -93,7 +96,11 @@ export function funscriptBunPlugin(options: BunPluginOptions = {}): BunPlugin {
 
         const res = await Effect.runPromise(
           compileString(text, args.path, {
-            noTs: options.noTs,
+            noTs: options.noTs || isPathPolicyEnabled(projectPolicy.noTs, process.cwd(), args.path),
+            noGlobalThis: options.noGlobalThis || isPathPolicyEnabled(projectPolicy.noGlobalThis, process.cwd(), args.path),
+            effectOnly: isEffectOnlyFile(projectPolicy, process.cwd(), args.path),
+            effectOnlyDirectories: projectPolicy.effectOnly,
+            policyRoot: process.cwd(),
             sourcemap: options.sourcemap ?? true,
             context,
           }),

@@ -1,3 +1,6 @@
+import * as fs from "node:fs";
+import * as path from "node:path";
+import { isPathPolicyEnabled } from "./compiler/project-config.js";
 import { prepareAssemblyScript } from "./emitter/assemblyscript.js";
 import { Effect } from "effect";
 import type { SourceMap } from "magic-string";
@@ -25,6 +28,13 @@ export interface CompileOptions {
   sourcemap?: boolean;
   /** Reject raw TypeScript escapes in FunScript source. */
   noTs?: boolean;
+  /** Reject authored references to globalThis. */
+  noGlobalThis?: boolean;
+  /** Restrict authored source to Effect ecosystem imports and explicit Effect APIs. */
+  effectOnly?: boolean;
+  /** Directories governed by the Effect-only policy, relative to policyRoot. */
+  effectOnlyDirectories?: string[];
+  policyRoot?: string;
   outputFile?: string;
   context?: TypeScriptCompilationContext;
   /** In-memory source files, keyed by absolute path, for cross-module analysis. */
@@ -63,8 +73,90 @@ function validateNoTs(ast: Program): void {
     if (node.kind === "TsEscapeDeclaration" || node.kind === "TsEscapeExpression" || node.kind === "TsEscapeTypeNode") {
       throw new FunScriptError("TypeScript escapes are disabled by --no-ts; write this code in FunScript", node.span as any);
     }
+    if (node.kind === "AsDeclaration") {
+      throw new FunScriptError("AssemblyScript blocks are disabled by --no-ts; write this code in FunScript", node.span as any);
+    }
     for (const [key, child] of Object.entries(node)) if (key !== "span") visit(child);
   };
+  visit(ast);
+}
+
+/** Block globalThis references in authored AST, without matching property names or strings. */
+function validateNoGlobalThis(ast: Program): void {
+  const visit = (value: unknown, parent?: Record<string, unknown>, property?: string): void => {
+    if (!value || typeof value !== "object") return;
+    if (Array.isArray(value)) { for (const item of value) visit(item, parent, property); return; }
+    const node = value as Record<string, unknown>;
+    if ((node.kind === "MemberExpression" || node.kind === "IndexExpression") &&
+        ["window", "self", "global"].includes((node.object as any)?.name)) {
+      const member = node.kind === "MemberExpression" ? (node.property as any)?.name :
+        (node.index as any)?.kind === "StringLiteral" ? (node.index as any).parts?.map((part: any) => part.kind === "StringRawPart" ? part.value : "").join("") : undefined;
+      if (member === "globalThis") throw new FunScriptError("globalThis is disabled by project policy; use explicit FunScript imports and interop", node.span as any);
+    }
+    const isPropertyName = (parent?.kind === "MemberExpression" && property === "property") ||
+      (parent?.kind === "FieldEntry" && property === "key") ||
+      (parent?.kind === "RecordTypeField" && property === "name") ||
+      (parent?.kind === "RecordFieldSchema" && property === "name");
+    if (node.kind === "Identifier" && node.name === "globalThis" && !isPropertyName) {
+      throw new FunScriptError("globalThis is disabled by project policy; use explicit FunScript imports and interop", node.span as any);
+    }
+    for (const [key, child] of Object.entries(node)) if (key !== "span") visit(child, node, key);
+  };
+  visit(ast);
+}
+
+/** Conservative source-level Effect ecosystem boundary; this is not a purity proof. */
+function validateEffectOnly(ast: Program, options?: CompileOptions, filename = "<anonymous>"): void {
+  const forbiddenGlobals = new Set(["globalThis", "global", "window", "self", "process", "console", "fetch", "require", "eval", "Function", "Date", "setTimeout", "setInterval", "clearTimeout", "clearInterval", "queueMicrotask", "WebSocket", "XMLHttpRequest", "Bun", "Deno"]);
+  const visit = (value: unknown, parent?: Record<string, unknown>, property?: string): void => {
+    if (!value || typeof value !== "object") return;
+    if (Array.isArray(value)) { for (const item of value) visit(item, parent, property); return; }
+    const node = value as Record<string, any>;
+    if (node.kind === "ImportDeclaration" || node.kind === "ExportFromDeclaration") {
+      const parts = node.source?.parts ?? [];
+      const name = parts.map((part: any) => part.kind === "StringRawPart" ? part.value : "").join("");
+      if (!name.startsWith("./") && !name.startsWith("../") && name !== "effect" && !name.startsWith("effect/") && !name.startsWith("@effect/")) {
+        throw new FunScriptError(`Effect-only policy disallows import '${name}'; use an Effect ecosystem package or a local module`, node.span);
+      }
+      if ((name.startsWith("./") || name.startsWith("../")) && options?.effectOnlyDirectories) {
+        const root = options.policyRoot ?? process.cwd();
+        const source = options.sourcePath ?? filename;
+        const target = path.resolve(path.dirname(path.resolve(root, source)), name);
+        const stem = target.replace(/\.(?:js|jsx|ts|tsx|fun|funx)$/, "");
+        if (!isPathPolicyEnabled(options.effectOnlyDirectories, root, target)) {
+          throw new FunScriptError(`Effect-only local import '${name}' must remain within an Effect-only directory`, node.span);
+        }
+        const nonFunSources = [target, `${stem}.js`, `${stem}.jsx`, `${stem}.ts`, `${stem}.tsx`, `${stem}.mjs`, `${stem}.cjs`].filter(file => /\.(?:[cm]?[jt]s|[jt]sx)$/i.test(file));
+        if (nonFunSources.some(file => fs.existsSync(file) || options.virtualSources?.has(file))) {
+          throw new FunScriptError(`Effect-only local import '${name}' resolves to a JavaScript or TypeScript file`, node.span);
+        }
+        const funSources = [target, `${stem}.fun`, `${stem}.funx`, path.join(target, "index.fun"), path.join(target, "index.funx")].filter(file => /\.funx?$/.test(file));
+        const resolved = funSources.find(file => fs.existsSync(file) || options.virtualSources?.has(file));
+        if (!resolved) throw new FunScriptError(`Effect-only local import '${name}' must resolve to a FunScript source file`, node.span);
+        if (fs.existsSync(resolved)) {
+          const real = fs.realpathSync(resolved);
+          const realDirs = options.effectOnlyDirectories.map(directory => {
+            const absolute = path.resolve(root, directory);
+            return fs.existsSync(absolute) ? fs.realpathSync(absolute) : absolute;
+          });
+          if (!/\.funx?$/.test(real) || !isPathPolicyEnabled(realDirs, root, real)) {
+            throw new FunScriptError(`Effect-only local import '${name}' must resolve to FunScript inside an Effect-only directory`, node.span);
+          }
+        }
+      }
+    }
+    if (node.kind === "JsExpression" || (node.kind === "BindingDeclaration" && node.isJs)) throw new FunScriptError("Effect-only policy disallows 'js' interop; use Effect ecosystem APIs", node.span);
+    if (node.kind === "SchemaDeclaration" && node.isTs) throw new FunScriptError("Effect-only policy disallows TypeScript-derived schemas", node.span);
+    const isPropertyName = (parent?.kind === "MemberExpression" && property === "property") ||
+      (parent?.kind === "FieldEntry" && property === "key") ||
+      (parent?.kind === "RecordTypeField" && property === "name") ||
+      (parent?.kind === "RecordFieldSchema" && property === "name");
+    if ((node.kind === "Identifier" || node.kind === "UpperIdentifier") && forbiddenGlobals.has(node.name) && !isPropertyName) {
+      throw new FunScriptError(`Effect-only policy disallows '${node.name}'; use an Effect ecosystem API`, node.span);
+    }
+    for (const [key, child] of Object.entries(node)) if (key !== "span") visit(child, node, key);
+  };
+  validateNoTs(ast);
   visit(ast);
 }
 
@@ -79,7 +171,12 @@ export const compileString = (
   Effect.flatMap(
     /\bas[ \t]*\{/.test(source)
       ? Effect.flatMap(Effect.try({
-          try: () => new Parser(new Lexer(source, filename).tokenize(), filename, source).parse(),
+          try: () => {
+            const ast = new Parser(new Lexer(source, filename).tokenize(), filename, source).parse();
+            if (options?.effectOnly) validateEffectOnly(ast, options, filename);
+            else if (options?.noTs) validateNoTs(ast);
+            return ast;
+          },
           catch: (error: any) => new CompilerError(error.message, error),
         }), ast => {
           const blocks = ast.body.filter(decl => decl.kind === "AsDeclaration");
@@ -96,7 +193,9 @@ export const compileString = (
         new Lexer(source, filename).tokenize(), filename, source,
       ).parse();
 
-      if (options?.noTs) validateNoTs(ast);
+      if (options?.effectOnly) validateEffectOnly(ast, options, filename);
+      else if (options?.noTs) validateNoTs(ast);
+      if (options?.noGlobalThis) validateNoGlobalThis(ast);
 
       // 3. Emit TypeScript
       const context = options?.context ?? new TypeScriptCompilationContext(options?.sourcePath ?? filename);
@@ -153,7 +252,7 @@ export const compileString = (
 export const checkString = (
   source: string,
   filename: string = "<anonymous>",
-  options?: Pick<CompileOptions, "noTs">,
+  options?: Pick<CompileOptions, "noTs" | "noGlobalThis" | "effectOnly">,
 ): Effect.Effect<Program, CompilerError> =>
   Effect.try({
     try: () => {
@@ -161,7 +260,9 @@ export const checkString = (
       const tokens = lexer.tokenize();
       const parser = new Parser(tokens, filename, source);
       const ast = parser.parse();
-      if (options?.noTs) validateNoTs(ast);
+      if (options?.effectOnly) validateEffectOnly(ast, options, filename);
+      else if (options?.noTs) validateNoTs(ast);
+      if (options?.noGlobalThis) validateNoGlobalThis(ast);
       return ast;
     },
     catch: (error: any) => new CompilerError(error.message, error),

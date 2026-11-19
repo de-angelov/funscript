@@ -36,10 +36,10 @@ export const collectCliFiles = (entryFiles: string[], options?: { cwd?: string }
     return [...files];
   });
 
-export const checkCliFiles = (entryFiles: string[], options?: { cwd?: string; noTs?: boolean }) =>
+export const checkCliFiles = (entryFiles: string[], options?: { cwd?: string; noTs?: boolean; noGlobalThis?: boolean; effectOnly?: string[]; noTsPaths?: string[]; noGlobalThisPaths?: string[] }) =>
   Effect.gen(function* () {
     const files = yield* collectCliFiles(entryFiles, options);
-    const result = yield* typeCheckFiles(files, { cwd: options?.cwd, noTs: options?.noTs });
+    const result = yield* typeCheckFiles(files, { cwd: options?.cwd, noTs: options?.noTs, noGlobalThis: options?.noGlobalThis, effectOnly: options?.effectOnly, noTsPaths: options?.noTsPaths, noGlobalThisPaths: options?.noGlobalThisPaths });
     if (!result.success) {
       process.exitCode = 1;
       yield* Console.error(result.formattedOutput);

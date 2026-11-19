@@ -7,6 +7,9 @@ import { fork } from "node:child_process";
 import { transformSync } from "esbuild";
 import { compileString, checkString } from "../compiler.js";
 import { typeCheckFiles } from "../compiler/check.js";
+import { loadProjectConfig, isEffectOnlyFile, isPathPolicyEnabled, type FunScriptProjectConfig } from "../compiler/project-config.js";
+
+let projectPolicy: FunScriptProjectConfig = {};
 import { checkCliFiles, collectCliFiles } from "./typecheck.js";
 import { runTsc } from "./tsc.js";
 import { startLspServer } from "../lsp/index.js";
@@ -45,6 +48,45 @@ const findFunFiles = async (dir: string): Promise<string[]> => {
   return files;
 };
 
+/** Audit source paths for standalone JS/TS, including declarations and symlinks. */
+const findNonFunScriptSources = async (targets: string[]): Promise<string[]> => {
+  const found = new Set<string>();
+  const visitedDirectories = new Set<string>();
+  const visit = async (target: string): Promise<void> => {
+    const stat = await fs.stat(target);
+    if (stat.isDirectory()) {
+      const real = await fs.realpath(target);
+      if (visitedDirectories.has(real)) return;
+      visitedDirectories.add(real);
+      const entries = await fs.readdir(target, { withFileTypes: true });
+      for (const entry of entries) {
+        if (["node_modules", ".git", ".funscript"].includes(entry.name)) continue;
+        await visit(path.join(target, entry.name));
+      }
+    } else if (stat.isFile()) {
+      const real = await fs.realpath(target);
+      if (/\.(?:[cm]?[jt]s|[jt]sx|as)$/i.test(target) || /\.(?:[cm]?[jt]s|[jt]sx|as)$/i.test(real)) found.add(target);
+    }
+  };
+  for (const target of targets) await visit(target);
+  return [...found].sort();
+};
+
+const checkNoTsPaths = (targets: string[], effectOnly = false) =>
+  Effect.gen(function* () {
+    const files = yield* Effect.tryPromise({
+      try: () => findNonFunScriptSources(targets),
+      catch: (error: any) => new Error(`Cannot audit source paths: ${error.message}`),
+    });
+    const rejected = effectOnly ? files.filter(file => isEffectOnlyFile(projectPolicy, process.cwd(), file) || isPathPolicyEnabled(projectPolicy.noTs, process.cwd(), file)) : files;
+    if (rejected.length) {
+      process.exitCode = 1;
+      for (const file of rejected) yield* Console.error(`${file}: error: JavaScript, TypeScript and AssemblyScript source files are disabled by ${effectOnly ? "project policy" : "--no-ts"}; write this code in FunScript`);
+      return false;
+    }
+    return true;
+  });
+
 const buildCommand = (args: string[]) =>
   Effect.gen(function* () {
     const isSourcemap = args.includes("--sourcemap");
@@ -54,7 +96,7 @@ const buildCommand = (args: string[]) =>
     const outDir = outDirIndex !== -1 ? args[outDirIndex + 1] : undefined;
 
     const rawFileArgs = args.filter((arg, i) => {
-      if (arg === "--sourcemap" || arg === "--no-check" || arg === "--no-ts") return false;
+      if (arg === "--sourcemap" || arg === "--no-check" || arg === "--no-ts" || arg === "--no-global-this") return false;
       if (arg === "--out" || (outIndex !== -1 && i === outIndex + 1)) return false;
       if (arg === "--outDir" || (outDirIndex !== -1 && i === outDirIndex + 1)) return false;
       return true;
@@ -71,11 +113,13 @@ const buildCommand = (args: string[]) =>
         catch: () => false,
       });
       const searchDir = hasSrc ? "src" : ".";
+      if ((args.includes("--no-ts") || projectPolicy.effectOnly?.length || Array.isArray(projectPolicy.noTs)) && !(yield* checkNoTsPaths([searchDir], !args.includes("--no-ts")))) return;
       filesToBuild = yield* Effect.tryPromise({
         try: () => findFunFiles(searchDir),
         catch: (error: any) => new Error(`Failed to scan files in '${searchDir}': ${error.message}`),
       });
     } else {
+      if ((args.includes("--no-ts") || projectPolicy.effectOnly?.length || Array.isArray(projectPolicy.noTs)) && !(yield* checkNoTsPaths(rawFileArgs, !args.includes("--no-ts")))) return;
       for (const target of rawFileArgs) {
         const stat = yield* Effect.tryPromise({
           try: () => fs.stat(target),
@@ -97,7 +141,7 @@ const buildCommand = (args: string[]) =>
       return yield* Console.log("No .fun or .funx files found to build");
     }
 
-    if (!args.includes("--no-check") && !(yield* checkCliFiles(filesToBuild, { noTs: args.includes("--no-ts") }))) return;
+    if (!args.includes("--no-check") && !(yield* checkCliFiles(filesToBuild, { noTs: args.includes("--no-ts"), noGlobalThis: args.includes("--no-global-this"), effectOnly: projectPolicy.effectOnly, noTsPaths: Array.isArray(projectPolicy.noTs) ? projectPolicy.noTs : undefined, noGlobalThisPaths: Array.isArray(projectPolicy.noGlobalThis) ? projectPolicy.noGlobalThis : undefined }))) return;
 
     for (const filePath of filesToBuild) {
       const source = yield* readFile(filePath);
@@ -117,7 +161,11 @@ const buildCommand = (args: string[]) =>
 
       const result = yield* compileString(source, filePath, {
         sourcemap: isSourcemap,
-        noTs: args.includes("--no-ts"),
+        noTs: args.includes("--no-ts") || isPathPolicyEnabled(projectPolicy.noTs, process.cwd(), filePath),
+        noGlobalThis: args.includes("--no-global-this") || isPathPolicyEnabled(projectPolicy.noGlobalThis, process.cwd(), filePath),
+        effectOnly: isEffectOnlyFile(projectPolicy, process.cwd(), filePath),
+        effectOnlyDirectories: projectPolicy.effectOnly,
+        policyRoot: process.cwd(),
         outputFile: path.basename(targetOut),
       });
 
@@ -141,7 +189,7 @@ const emitCommand = (args: string[]) =>
     const outIndex = args.indexOf("--out");
     const outPath = outIndex !== -1 ? args[outIndex + 1] : undefined;
     const fileArgs = args.filter((a, idx) => {
-      if (a === "--sourcemap" || a === "--no-ts") return false;
+      if (a === "--sourcemap" || a === "--no-ts" || a === "--no-global-this") return false;
       if (a === "--out" || (outIndex !== -1 && idx === outIndex + 1)) return false;
       return true;
     });
@@ -151,10 +199,15 @@ const emitCommand = (args: string[]) =>
       return yield* Console.error("Usage: funscript emit <file.fun|file.funx> [--out <file.ts|file.tsx>] [--sourcemap] [--no-ts]");
     }
 
+    if ((args.includes("--no-ts") || projectPolicy.effectOnly?.length || Array.isArray(projectPolicy.noTs)) && !(yield* checkNoTsPaths([filePath], !args.includes("--no-ts")))) return;
     const source = yield* readFile(filePath);
     const result = yield* compileString(source, filePath, {
       sourcemap: isSourcemap,
-      noTs: args.includes("--no-ts"),
+      noTs: args.includes("--no-ts") || isPathPolicyEnabled(projectPolicy.noTs, process.cwd(), filePath),
+      noGlobalThis: args.includes("--no-global-this") || isPathPolicyEnabled(projectPolicy.noGlobalThis, process.cwd(), filePath),
+      effectOnly: isEffectOnlyFile(projectPolicy, process.cwd(), filePath),
+      effectOnlyDirectories: projectPolicy.effectOnly,
+      policyRoot: process.cwd(),
       outputFile: outPath ? path.basename(outPath) : undefined,
     });
 
@@ -193,6 +246,7 @@ const checkCommand = (args: string[]) =>
         catch: () => false,
       });
       const searchDir = hasSrc ? "src" : ".";
+      if ((args.includes("--no-ts") || projectPolicy.effectOnly?.length || Array.isArray(projectPolicy.noTs)) && !(yield* checkNoTsPaths([searchDir], !args.includes("--no-ts")))) return;
       filesToCheck = yield* Effect.tryPromise({
         try: () => findFunFiles(searchDir),
         catch: (error: any) => new Error(`Failed to scan files in '${searchDir}': ${error.message}`),
@@ -201,6 +255,7 @@ const checkCommand = (args: string[]) =>
         return yield* Console.error("Usage: funscript check [file.fun|file.funx...] [--idiomatic] [--no-ts]");
       }
     } else {
+      if ((args.includes("--no-ts") || projectPolicy.effectOnly?.length || Array.isArray(projectPolicy.noTs)) && !(yield* checkNoTsPaths(rawFileArgs, !args.includes("--no-ts")))) return;
       for (const target of rawFileArgs) {
         const stat = yield* Effect.tryPromise({
           try: () => fs.stat(target),
@@ -236,7 +291,7 @@ const checkCommand = (args: string[]) =>
     }
 
     const allFiles = yield* collectCliFiles(filesToCheck);
-    const result = yield* typeCheckFiles(allFiles, { noTs: args.includes("--no-ts") });
+    const result = yield* typeCheckFiles(allFiles, { noTs: args.includes("--no-ts"), noGlobalThis: args.includes("--no-global-this"), effectOnly: projectPolicy.effectOnly, noTsPaths: Array.isArray(projectPolicy.noTs) ? projectPolicy.noTs : undefined, noGlobalThisPaths: Array.isArray(projectPolicy.noGlobalThis) ? projectPolicy.noGlobalThis : undefined });
     if (!result.success || !idiomaticPassed) {
       process.exitCode = 1;
       if (!result.success) {
@@ -298,16 +353,17 @@ const fmtCommand = (args: string[]) =>
 
 const runCommand = (args: string[]) =>
   Effect.gen(function* () {
-    const filePath = args.find((arg) => arg !== "--no-check" && arg !== "--no-ts");
+    const filePath = args.find((arg) => arg !== "--no-check" && arg !== "--no-ts" && arg !== "--no-global-this");
     if (!filePath) {
       process.exitCode = 1;
       return yield* Console.error("Usage: funscript run <file.fun|file.funx> [--no-check] [--no-ts]");
     }
 
-    if (!args.includes("--no-check") && !(yield* checkCliFiles([filePath], { noTs: args.includes("--no-ts") }))) return;
+    if ((args.includes("--no-ts") || projectPolicy.effectOnly?.length || Array.isArray(projectPolicy.noTs)) && !(yield* checkNoTsPaths([filePath], !args.includes("--no-ts")))) return;
+    if (!args.includes("--no-check") && !(yield* checkCliFiles([filePath], { noTs: args.includes("--no-ts"), noGlobalThis: args.includes("--no-global-this"), effectOnly: projectPolicy.effectOnly, noTsPaths: Array.isArray(projectPolicy.noTs) ? projectPolicy.noTs : undefined, noGlobalThisPaths: Array.isArray(projectPolicy.noGlobalThis) ? projectPolicy.noGlobalThis : undefined }))) return;
 
     const source = yield* readFile(filePath);
-    const result = yield* compileString(source, filePath, { sourcemap: false, noTs: args.includes("--no-ts") });
+    const result = yield* compileString(source, filePath, { sourcemap: false, noTs: args.includes("--no-ts") || isPathPolicyEnabled(projectPolicy.noTs, process.cwd(), filePath), noGlobalThis: args.includes("--no-global-this") || isPathPolicyEnabled(projectPolicy.noGlobalThis, process.cwd(), filePath), effectOnly: isEffectOnlyFile(projectPolicy, process.cwd(), filePath), effectOnlyDirectories: projectPolicy.effectOnly, policyRoot: process.cwd() });
 
     let tsCode = result.typescript;
     tsCode += `\nimport * as __effect from "effect";\nif (typeof main !== "undefined") {\n  if (__effect.Effect.isEffect(main)) {\n    await __effect.Effect.runPromise(main);\n  } else if (typeof main === "function") {\n    await main();\n  }\n}\n`;
@@ -351,6 +407,11 @@ const program = Effect.gen(function* () {
   const argv = process.argv.slice(2);
   const command = argv[0];
   const commandArgs = argv.slice(1);
+  if (command && ["check", "build", "emit", "run"].includes(command)) {
+    projectPolicy = yield* Effect.try({ try: () => loadProjectConfig(process.cwd()), catch: (error) => error instanceof Error ? error : new Error(String(error)) });
+    if (projectPolicy.noTs === true && !commandArgs.includes("--no-ts")) commandArgs.push("--no-ts");
+    if (projectPolicy.noGlobalThis === true && !commandArgs.includes("--no-global-this")) commandArgs.push("--no-global-this");
+  }
 
   switch (command) {
     case "build":
