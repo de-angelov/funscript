@@ -6,5 +6,4 @@ export RankingOrderControls = (props: {
   onOrderChange: Omittable<(order: String) => Void>
 }) =>
   order = Option.getOrElse(props.order, () => "highest-first")
-  buttonProps = optionalProperties({ onClick: Option.map(props.onOrderChange, (change) => () => change("lowest-first")) })
-  => <button {...buttonProps}>{order}</button>
+  => <button {...optionalProperties({ onClick: Option.map(props.onOrderChange, (change) => () => change("lowest-first")) })}>{order}</button>

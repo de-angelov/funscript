@@ -28,9 +28,9 @@ export function omit<T extends object, K extends keyof T>(value: T, keys: readon
 }
 
 /** Convert a record of Options into own properties, preserving present nullish values. */
-export function optionalProperties<T extends { [K in keyof T]: Option.Option<unknown> }>(values: T): {
-  [K in keyof T]?: T[K] extends Option.Option<infer V> ? V : never
-} {
+export type OptionalProperties<T> = { [K in keyof T]?: T[K] extends Option.Option<infer V> ? V : never };
+
+export function optionalProperties<T extends { [K in keyof T]: Option.Option<unknown> }>(values: T): OptionalProperties<NoInfer<T>> {
   const result: Record<PropertyKey, unknown> = {};
   for (const key of Reflect.ownKeys(values)) {
     if (!Object.prototype.propertyIsEnumerable.call(values, key)) continue;
@@ -39,5 +39,5 @@ export function optionalProperties<T extends { [K in keyof T]: Option.Option<unk
       value: value.value, enumerable: true, writable: true, configurable: true,
     });
   }
-  return result as { [K in keyof T]?: T[K] extends Option.Option<infer V> ? V : never };
+  return result as OptionalProperties<T>;
 }

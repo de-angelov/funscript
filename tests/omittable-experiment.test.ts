@@ -3,6 +3,7 @@ import { Option } from "effect";
 import { compile, execute, typeCheck } from "./helpers/index.js";
 import { format } from "../src/formatter/index.js";
 import { optionalProperties, propertyPresence } from "../src/interop/record.js";
+import { nullValue, undefinedValue } from "../src/interop/index.js";
 
 describe("experimental Omittable declarations", () => {
   it("accepts React-style props and preserves spelling in formatting", async () => {
@@ -36,10 +37,45 @@ describe("experimental Omittable declarations", () => {
   });
 
   it("builds props while preserving explicit undefined and null", () => {
-    const props = optionalProperties({ absent: Option.none(), empty: Option.some(undefined), clear: Option.some(null), label: Option.some("Ada") });
+    const props = optionalProperties({ absent: Option.none(), empty: Option.some(undefinedValue()), clear: Option.some(nullValue()), label: Option.some("Ada") });
     expect(Object.hasOwn(props, "absent")).toBe(false);
     expect(Object.hasOwn(props, "empty")).toBe(true);
     expect(propertyPresence(props, "empty")).toEqual(Option.some(undefined));
     expect(props).toEqual({ empty: undefined, clear: null, label: "Ada" });
+  });
+});
+
+describe("nullish interop", () => {
+  it("emits nullable unions and type checks explicit Effect conversions", async () => {
+    const source = `import { Option } from "effect"
+export normalizeNull = (value: NullOr<String>) => Option.fromNullOr(value)
+export normalizeUndefined = (value: UndefinedOr<String>) => Option.fromUndefinedOr(value)
+export toNull = (value: Option<String>): NullOr<String> => Option.getOrNull(value)
+export toUndefined = (value: Option<String>): UndefinedOr<String> => Option.getOrUndefined(value)`;
+    const checked = await typeCheck(source, "nullish.fun");
+    expect(checked.success, checked.formattedOutput).toBe(true);
+    const output = await compile(source);
+    expect(output.typescript).toContain("(string | null)");
+    expect(output.typescript).toContain("(string | undefined)");
+    const { normalizeNull, normalizeUndefined, toNull, toUndefined } = await execute(source);
+    expect(normalizeNull(null)).toEqual(Option.none());
+    expect(normalizeNull("Ada")).toEqual(Option.some("Ada"));
+    expect(normalizeUndefined(undefined)).toEqual(Option.none());
+    expect(toNull(Option.none())).toBeNull();
+    expect(toUndefined(Option.none())).toBeUndefined();
+  });
+
+  it("validates required nullish schema values", async () => {
+    const source = 'export schema Values = { name: NullOr<String>, title: UndefinedOr<String> }';
+    const { ValuesFromUnknown } = await execute(source);
+    expect(ValuesFromUnknown({ name: null, title: undefined })).toEqual({ name: null, title: undefined });
+    expect(ValuesFromUnknown({ name: "Ada", title: "Engineer" })).toEqual({ name: "Ada", title: "Engineer" });
+    expect(() => ValuesFromUnknown({ name: 5, title: "Engineer" })).toThrow();
+  });
+
+  it("rejects malformed nullish type constructors", async () => {
+    const { expectCompileError } = await import("./helpers/index.js");
+    await expectCompileError('export bad = (x: NullOr<String, Number>) => x', /requires exactly one type argument/);
+    await expectCompileError('export bad = (x: UndefinedOr) => x', /requires exactly one type argument/);
   });
 });
