@@ -6,6 +6,8 @@ import { Parser } from "../parser/parser.js";
 export interface FunScriptProjectConfig {
   noTs?: boolean | string[];
   noGlobalThis?: boolean | string[];
+  noOptional?: boolean | string[];
+  barePipelines?: boolean | string[];
   effectOnly?: string[];
 }
 
@@ -25,8 +27,8 @@ export function loadProjectConfig(cwd: string): FunScriptProjectConfig {
     const config: FunScriptProjectConfig = {};
     const seen = new Set<string>();
     for (const entry of binding.init.entries) {
-      if (entry.kind !== "FieldEntry" || !["noTs", "noGlobalThis", "effectOnly"].includes(entry.key.name)) {
-        throw new Error("config accepts only 'noTs', 'noGlobalThis', and 'effectOnly'");
+      if (entry.kind !== "FieldEntry" || !["noTs", "noGlobalThis", "noOptional", "barePipelines", "effectOnly"].includes(entry.key.name)) {
+        throw new Error("config accepts only 'noTs', 'noGlobalThis', 'noOptional', 'barePipelines', and 'effectOnly'");
       }
       const name = entry.key.name;
       if (seen.has(name)) throw new Error(`duplicate config field '${name}'`);
@@ -40,10 +42,10 @@ export function loadProjectConfig(cwd: string): FunScriptProjectConfig {
           directories.push(value);
         }
         if (name === "effectOnly") config.effectOnly = directories;
-        else config[name as "noTs" | "noGlobalThis"] = directories;
+        else config[name as "noTs" | "noGlobalThis" | "noOptional" | "barePipelines"] = directories;
       } else {
         if (name === "effectOnly" || entry.value.kind !== "BooleanLiteral") throw new Error(`${name} must be ${name === "effectOnly" ? "an array of paths" : "a boolean or an array of paths"}`);
-        config[name as "noTs" | "noGlobalThis"] = entry.value.value;
+        config[name as "noTs" | "noGlobalThis" | "noOptional" | "barePipelines"] = entry.value.value;
       }
     }
     return config;

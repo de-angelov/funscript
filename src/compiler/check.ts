@@ -88,9 +88,13 @@ export interface CheckOptions {
   /** Reject raw TypeScript escapes in all checked FunScript files. */
   noTs?: boolean;
   noGlobalThis?: boolean;
+  noOptional?: boolean;
+  barePipelines?: boolean;
   effectOnly?: string[];
   noTsPaths?: string[];
   noGlobalThisPaths?: string[];
+  noOptionalPaths?: string[];
+  barePipelinesPaths?: string[];
   compilerOptions?: ts.CompilerOptions;
   cwd?: string;
   highlightCode?: boolean;
@@ -795,13 +799,15 @@ export const typeCheckVirtualFiles = (
         const effectOnly = isEffectOnlyFile({ effectOnly: options?.effectOnly }, cwd, fullFunPath);
         const noTs = !!options?.noTs || isPathPolicyEnabled(options?.noTsPaths, cwd, fullFunPath);
         const noGlobalThis = !!options?.noGlobalThis || isPathPolicyEnabled(options?.noGlobalThisPaths, cwd, fullFunPath);
-        const cachedCompiled = (noTs || noGlobalThis || effectOnly) ? undefined : cache?.compiledFiles.get(fullFunPath);
+        const noOptional = !!options?.noOptional || isPathPolicyEnabled(options?.noOptionalPaths, cwd, fullFunPath);
+        const barePipelines = !!options?.barePipelines || isPathPolicyEnabled(options?.barePipelinesPaths, cwd, fullFunPath);
+        const cachedCompiled = (noTs || noGlobalThis || noOptional || barePipelines || effectOnly) ? undefined : cache?.compiledFiles.get(fullFunPath);
         if (cachedCompiled && cachedCompiled.source === source) {
           compiled = cachedCompiled.compiled;
         } else {
           try {
-            compiled = await Effect.runPromise(compileString(source, filePath, { sourcemap: true, sourcePath: fullFunPath, virtualSources, noTs, noGlobalThis, effectOnly, effectOnlyDirectories: options?.effectOnly, policyRoot: cwd }));
-            if (cache && !noTs && !noGlobalThis && !effectOnly) {
+            compiled = await Effect.runPromise(compileString(source, filePath, { sourcemap: true, sourcePath: fullFunPath, virtualSources, noTs, noGlobalThis, noOptional, barePipelines, effectOnly, effectOnlyDirectories: options?.effectOnly, policyRoot: cwd }));
+            if (cache && !noTs && !noGlobalThis && !noOptional && !barePipelines && !effectOnly) {
               cache.compiledFiles.set(fullFunPath, { source, compiled });
             }
           } catch (err: any) {
@@ -1288,11 +1294,63 @@ export const typeCheckVirtualFiles = (
             const isEntry = isEntryModule(meta.funPath, meta.ast, cwd);
             const INPLACE_MUTATING_METHODS = new Set(["push", "pop", "shift", "unshift", "splice", "sort", "reverse"]);
             const ERROR_CONSTRUCTORS = new Set(["Error", "TypeError", "RangeError", "SyntaxError", "ReferenceError", "EvalError", "URIError"]);
-            const walkAst = (node: any, parent?: any, inMutBlock = false) => {
+
+            // § Pit of Success: Module-scope Ref allocation
+            for (const decl of (meta.ast.body || [])) {
+              const binding = decl.kind === "ExportDeclaration" ? decl.declaration : decl;
+              if (binding && binding.kind === "BindingDeclaration" && binding.init) {
+                const isRefMake = (expr: any): boolean => {
+                  if (!expr) return false;
+                  if (expr.kind === "CallExpression") {
+                    const c = expr.callee;
+                    if (c?.kind === "MemberExpression") {
+                      const obj = c.object?.name;
+                      const prop = c.property?.name;
+                      if ((obj === "Ref" || obj === "SynchronizedRef" || obj === "SubscriptionRef") &&
+                          (prop === "make" || prop === "unsafeMake")) {
+                        return true;
+                      }
+                      if (obj === "Effect" && (prop === "runSync" || prop === "runPromise") && expr.args?.[0]) {
+                        return isRefMake(expr.args[0]);
+                      }
+                    } else if (c?.kind === "Identifier" && c.name === "unsafeMake") {
+                      return true;
+                    }
+                  } else if (expr.kind === "PipelineExpression") {
+                    return isRefMake(expr.right);
+                  }
+                  return false;
+                };
+                if (isRefMake(binding.init)) {
+                  const name = binding.id?.name ?? "binding";
+                  addAstDiag(
+                    binding.span || decl.span,
+                    "TOP_LEVEL_REF",
+                    `Top-level '${name}' allocates a mutable Ref at module scope. This creates ambient shared mutable state across concurrent fibers. Allocate Refs inside an effect block (e.g. 'ref <- Ref.make(...)') or provide them via a Layer service.`,
+                    "error",
+                    "Global mutable Refs introduce hidden shared state across fibers and requests, breaking concurrency isolation and testing.",
+                    "Allocate Refs inside an `effect { ... }` block or provide them via a `Layer` service.",
+                  );
+                }
+              }
+            }
+            const walkAst = (node: any, parent?: any, inMutBlock = false, inMatchArm = false) => {
               if (!node || typeof node !== "object") return;
               if (node.kind === "TsEscapeDeclaration" || node.kind === "TsEscapeExpression" || node.kind === "JsExpression") return;
 
               const currentInMut = inMutBlock || node.kind === "MutBlockExpression";
+              const currentInMatchArm = (node.kind === "FunctionExpression" || node.kind === "ArrowFunction") ? false : inMatchArm;
+
+              if (node.kind === "MatchExpression" && currentInMatchArm) {
+                addAstDiag(
+                  node.span,
+                  "NESTED_MATCH",
+                  "Nested 'match' expression detected. In FunScript, nested matching is an anti-pattern ('match abuse'). Flatten branching by computing local variables beforehand, using multi-value tuple matching (e.g. 'match (a, b)'), adding 'when' guards, or sequencing Options with Effect blocks ('x <- opt').",
+                  "error",
+                  "Nested pattern matching creates a pyramid of doom and procedural ladder branching, obscuring domain logic.",
+                  "Flatten the match: 1) extract local variables before the match, 2) match multiple values with tuples `match (a, b)`, 3) use `when` guard clauses, or 4) sequence Options inside `effect { x <- opt }`.",
+                );
+              }
 
               if (node.kind === "CallExpression") {
                 const callee = node.callee;
@@ -1677,6 +1735,42 @@ export const typeCheckVirtualFiles = (
                     }
                   }
                 }
+
+                // § Pit of Success: Untyped literal error in Effect.fail
+                if (node.kind === "CallExpression") {
+                  const callee = node.callee;
+                  const isFail =
+                    (callee?.kind === "MemberExpression" && callee.object?.name === "Effect" && callee.property?.name === "fail") ||
+                    (callee?.kind === "Identifier" && callee.name === "fail");
+                  if (isFail && node.args?.length > 0) {
+                    const arg = node.args[0];
+                    if (arg.kind === "StringLiteral" || arg.kind === "NumberLiteral") {
+                      addAstDiag(
+                        arg.span || node.span,
+                        "UNTYPED_ERROR",
+                        "`Effect.fail` with untyped literal. In FunScript, library domain errors should be tagged (using Schema.TaggedError or Data.TaggedError) to enable type-safe error discrimination with 'catchTag'.",
+                        "warning",
+                        "Failing with raw strings or numbers prevents callers from discriminating errors with catchTag or pattern matching.",
+                        "Define a tagged error schema or use `Data.TaggedError` to represent expected failures.",
+                      );
+                    }
+                  }
+                } else if (node.kind === "PipelineExpression") {
+                  const r = node.right;
+                  const isFail =
+                    (r?.kind === "MemberExpression" && r.object?.name === "Effect" && r.property?.name === "fail") ||
+                    (r?.kind === "Identifier" && r.name === "fail");
+                  if (isFail && (node.left?.kind === "StringLiteral" || node.left?.kind === "NumberLiteral")) {
+                    addAstDiag(
+                      node.left.span || node.span,
+                      "UNTYPED_ERROR",
+                      "`Effect.fail` with untyped literal. In FunScript, library domain errors should be tagged (using Schema.TaggedError or Data.TaggedError) to enable type-safe error discrimination with 'catchTag'.",
+                      "warning",
+                      "Failing with raw strings or numbers prevents callers from discriminating errors with catchTag or pattern matching.",
+                      "Define a tagged error schema or use `Data.TaggedError` to represent expected failures.",
+                    );
+                  }
+                }
               }
 
               if (node.kind === "RecordExpression" && Array.isArray(node.entries)) {
@@ -1694,6 +1788,59 @@ export const typeCheckVirtualFiles = (
                         "Specify a bounded concurrency number, e.g. `{ concurrency: 10 }`.",
                       );
                     }
+                  }
+                }
+              }
+
+              // § Pit of Success: Eager evaluation in Effect.succeed
+              const isPureDataConstructor = (expr: any): boolean => {
+                if (!expr || expr.kind !== "CallExpression") return false;
+                const c = expr.callee;
+                if (c?.kind === "MemberExpression") {
+                  const obj = c.object?.name;
+                  const prop = c.property?.name;
+                  if (obj === "Option" && (prop === "some" || prop === "none")) return true;
+                  if (obj === "Chunk" && (prop === "empty" || prop === "make")) return true;
+                  if (obj === "HashMap" && (prop === "empty" || prop === "make")) return true;
+                  if (obj === "HashSet" && (prop === "empty" || prop === "make")) return true;
+                }
+                return false;
+              };
+
+              if (node.kind === "CallExpression") {
+                const callee = node.callee;
+                const isSucceed =
+                  (callee?.kind === "MemberExpression" && callee.object?.name === "Effect" && callee.property?.name === "succeed") ||
+                  (callee?.kind === "Identifier" && callee.name === "succeed");
+                if (isSucceed && node.args?.length > 0) {
+                  const arg = node.args[0];
+                  if ((arg.kind === "CallExpression" && !isPureDataConstructor(arg)) || arg.kind === "NewExpression") {
+                    addAstDiag(
+                      arg.span || node.span,
+                      "EAGER_SUCCEED",
+                      "`Effect.succeed` evaluates its argument eagerly at construction time. If the expression contains function calls or side effects, use `Effect.sync(() => ...)` for deferred evaluation.",
+                      "warning",
+                      "Passing a function call or constructor to Effect.succeed executes it immediately upon effect construction, not when the effect runs.",
+                      "Use `Effect.sync(() => ...)` or `Effect.try(...)` to defer evaluation until the effect is executed.",
+                    );
+                  }
+                }
+              } else if (node.kind === "PipelineExpression") {
+                const r = node.right;
+                const isSucceed =
+                  (r?.kind === "MemberExpression" && r.object?.name === "Effect" && r.property?.name === "succeed") ||
+                  (r?.kind === "Identifier" && r.name === "succeed");
+                if (isSucceed) {
+                  const left = node.left;
+                  if ((left?.kind === "CallExpression" && !isPureDataConstructor(left)) || left?.kind === "NewExpression") {
+                    addAstDiag(
+                      left.span || node.span,
+                      "EAGER_SUCCEED",
+                      "`Effect.succeed` evaluates its argument eagerly at construction time. If the expression contains function calls or side effects, use `Effect.sync(() => ...)` for deferred evaluation.",
+                      "warning",
+                      "Passing a function call or constructor to Effect.succeed executes it immediately upon effect construction, not when the effect runs.",
+                      "Use `Effect.sync(() => ...)` or `Effect.try(...)` to defer evaluation until the effect is executed.",
+                    );
                   }
                 }
               }
@@ -1813,10 +1960,11 @@ export const typeCheckVirtualFiles = (
               for (const k of Object.keys(node)) {
                 if (k === "span") continue;
                 const child = node[k];
+                const nextInMatchArm = (node.kind === "MatchArm" && k === "body") ? true : currentInMatchArm;
                 if (Array.isArray(child)) {
-                  for (const c of child) walkAst(c, node, currentInMut);
+                  for (const c of child) walkAst(c, node, currentInMut, nextInMatchArm);
                 } else if (child && typeof child === "object") {
-                  walkAst(child, node, currentInMut);
+                  walkAst(child, node, currentInMut, nextInMatchArm);
                 }
               }
             };

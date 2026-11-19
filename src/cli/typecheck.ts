@@ -36,10 +36,10 @@ export const collectCliFiles = (entryFiles: string[], options?: { cwd?: string }
     return [...files];
   });
 
-export const checkCliFiles = (entryFiles: string[], options?: { cwd?: string; noTs?: boolean; noGlobalThis?: boolean; effectOnly?: string[]; noTsPaths?: string[]; noGlobalThisPaths?: string[] }) =>
+export const checkCliFiles = (entryFiles: string[], options?: { cwd?: string; noTs?: boolean; noGlobalThis?: boolean; noOptional?: boolean; barePipelines?: boolean; effectOnly?: string[]; noTsPaths?: string[]; noGlobalThisPaths?: string[]; noOptionalPaths?: string[]; barePipelinesPaths?: string[] }) =>
   Effect.gen(function* () {
     const files = yield* collectCliFiles(entryFiles, options);
-    const result = yield* typeCheckFiles(files, { cwd: options?.cwd, noTs: options?.noTs, noGlobalThis: options?.noGlobalThis, effectOnly: options?.effectOnly, noTsPaths: options?.noTsPaths, noGlobalThisPaths: options?.noGlobalThisPaths });
+    const result = yield* typeCheckFiles(files, { cwd: options?.cwd, noTs: options?.noTs, noGlobalThis: options?.noGlobalThis, noOptional: options?.noOptional, barePipelines: options?.barePipelines, effectOnly: options?.effectOnly, noTsPaths: options?.noTsPaths, noGlobalThisPaths: options?.noGlobalThisPaths, noOptionalPaths: options?.noOptionalPaths, barePipelinesPaths: options?.barePipelinesPaths });
     if (!result.success) {
       process.exitCode = 1;
       yield* Console.error(result.formattedOutput);

@@ -30,6 +30,8 @@ export interface FunscriptPluginOptions {
   /** Reject raw TypeScript escapes in compiled FunScript modules. */
   noTs?: boolean;
   noGlobalThis?: boolean;
+  noOptional?: boolean;
+  barePipelines?: boolean;
   /**
    * Filter pattern(s) for files to include. Defaults to [/\.fun$/, /\.funx$/].
    */
@@ -173,6 +175,8 @@ export function funscriptPlugin(options: FunscriptPluginOptions = {}): Plugin {
         compileString(code, cleanId, {
           noTs: options.noTs || isPathPolicyEnabled(projectPolicy.noTs, policyRoot, cleanId),
           noGlobalThis: options.noGlobalThis || isPathPolicyEnabled(projectPolicy.noGlobalThis, policyRoot, cleanId),
+          noOptional: options.noOptional || isPathPolicyEnabled(projectPolicy.noOptional, policyRoot, cleanId),
+          barePipelines: options.barePipelines || isPathPolicyEnabled(projectPolicy.barePipelines, policyRoot, cleanId),
           effectOnly: isEffectOnlyFile(projectPolicy, policyRoot, cleanId),
           effectOnlyDirectories: projectPolicy.effectOnly,
           policyRoot,

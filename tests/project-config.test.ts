@@ -13,8 +13,8 @@ describe("FunScript project policy", () => {
     const dir = mkdtempSync(path.join(tmpdir(), "funscript-config-"));
     expect(loadProjectConfig(dir)).toEqual({});
     const file = path.join(dir, "funscript.config.fun");
-    writeFileSync(file, 'export config = { noTs: true, noGlobalThis: true, effectOnly: ["src/domain"] }');
-    expect(loadProjectConfig(dir)).toEqual({ noTs: true, noGlobalThis: true, effectOnly: ["src/domain"] });
+    writeFileSync(file, 'export config = { noTs: true, noGlobalThis: true, noOptional: true, barePipelines: true, effectOnly: ["src/domain"] }');
+    expect(loadProjectConfig(dir)).toEqual({ noTs: true, noGlobalThis: true, noOptional: true, barePipelines: true, effectOnly: ["src/domain"] });
     expect(isEffectOnlyFile(loadProjectConfig(dir), dir, "src/domain/model.fun")).toBe(true);
     expect(isEffectOnlyFile(loadProjectConfig(dir), dir, "src/domain2/model.fun")).toBe(false);
     for (const input of ["export config = { noTs: unknown }", "export config = { typo: true }", 'export config = { effectOnly: ["../outside"] }', "export config = { noTs: true, noTs: false }", 'ts { console.log("bad") }']) {
@@ -37,6 +37,41 @@ describe("FunScript project policy", () => {
   it("allows ordinary properties and strings named globalThis", async () => {
     const source = 'export x = { globalThis: "globalThis" }\nexport read = (value: { globalThis: String }) => value.globalThis';
     await expect(Effect.runPromise(compileString(source, "test.fun", { noGlobalThis: true }))).resolves.toBeDefined();
+  });
+
+  it.each([
+    ['parameter', 'export f = (name?: String) => name'],
+    ['record type field', 'export f = (user: { name?: String }) => user'],
+    ['schema field', 'export schema User = { name?: String }'],
+  ])("rejects optional values when noOptional is enabled: %s", async (_, source) => {
+    await expect(Effect.runPromise(compileString(source, "test.fun", { noOptional: true }))).rejects.toThrow("Optional");
+  });
+
+  it("allows Option<T> and defaulted parameters when noOptional is enabled", async () => {
+    const source = 'import { Option } from "effect"\nexport f = (opt: Option<String>, port: Number = 8080) => port';
+    await expect(Effect.runPromise(compileString(source, "test.fun", { noOptional: true }))).resolves.toBeDefined();
+  });
+
+  it("allows optional values inside ts escape hatches when noOptional is enabled", async () => {
+    const source = 'export f = ts { (x?: string) => x }';
+    await expect(Effect.runPromise(compileString(source, "test.fun", { noOptional: true }))).resolves.toBeDefined();
+  });
+
+  it.each([
+    ['String.trim', 'sec = { name: "test" }\nexport cleanName = sec.name |> String.trim'],
+    ['String.replace', 'sec = { name: "test" }\nexport cleanName = sec.name |> String.replace("a", "b")'],
+    ['Array.map', 'export res = [1, 2] |> Array.map((x) => x * 2)'],
+    ['Option.getOrElse', 'import { Option } from "effect"\nexport res = Option.none() |> Option.getOrElse(() => 0)'],
+  ])("rejects redundant companion prefix in pipeline when barePipelines is enabled: %s", async (_, source) => {
+    await expect(Effect.runPromise(compileString(source, "test.fun", { barePipelines: true }))).rejects.toThrow("Redundant pipeline prefix");
+  });
+
+  it("allows bare pipeline stages and non-pipeline companion calls when barePipelines is enabled", async () => {
+    const pipeline = 'sec = { name: "test" }\nexport cleanName = sec.name |> replace("a", "b") |> trim |> toLowerCase';
+    await expect(Effect.runPromise(compileString(pipeline, "test.fun", { barePipelines: true }))).resolves.toBeDefined();
+
+    const directCall = 'export trimmed = String.trim("hello")';
+    await expect(Effect.runPromise(compileString(directCall, "test.fun", { barePipelines: true }))).resolves.toBeDefined();
   });
 
   it("loads folder policy from the Vite project root", async () => {

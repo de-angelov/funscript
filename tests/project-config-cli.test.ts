@@ -22,6 +22,18 @@ describe("project configuration CLI", () => {
     const result = run(dir, ["check", file]);
     expect(result.status).not.toBe(0);
     expect(result.stdout + result.stderr).toContain("TypeScript escapes are disabled by --no-ts");
+
+    writeFileSync(path.join(dir, "funscript.config.fun"), 'export config = { noOptional: true }');
+    writeFileSync(file, 'export f = (name?: String) => name');
+    const optResult = run(dir, ["check", file]);
+    expect(optResult.status).not.toBe(0);
+    expect(optResult.stdout + optResult.stderr).toContain("Optional parameters ('?') are disabled by project policy");
+
+    writeFileSync(path.join(dir, "funscript.config.fun"), 'export config = { barePipelines: true }');
+    writeFileSync(file, 'sec = { name: "test" }\nexport cleanName = sec.name |> String.trim');
+    const pipeResult = run(dir, ["check", file]);
+    expect(pipeResult.status).not.toBe(0);
+    expect(pipeResult.stdout + pipeResult.stderr).toContain("Redundant pipeline prefix 'String.trim'");
   });
 
   it("applies Effect-only rules within configured directories", () => {

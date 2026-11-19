@@ -723,8 +723,12 @@ Options:
 }
 
 if (import.meta.url === `file://${process.argv[1]}`) {
-  main().catch((err) => {
-    console.error("Benchmark runner failed:", err);
-    process.exit(1);
-  });
+  main()
+    .then(() => {
+      process.exit(0);
+    })
+    .catch((err) => {
+      console.error("Benchmark runner failed:", err);
+      process.exit(1);
+    });
 }

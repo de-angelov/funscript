@@ -18,6 +18,7 @@ import { resolveImportedSchemas } from "./compiler/imported-schemas.js";
 import { resolveImportedRecordFunctions } from "./compiler/imported-record-functions.js";
 import { resolvePackageRecordContracts } from "./compiler/package-record-contracts.js";
 import { resolveOptionalArguments } from "./compiler/optional-arguments.js";
+import { PIPELINE_COMPANION_CATALOG } from "./emitter/pipeline-catalog.js";
 
 export {
   TypeScriptCompilationContext,
@@ -30,6 +31,10 @@ export interface CompileOptions {
   noTs?: boolean;
   /** Reject authored references to globalThis. */
   noGlobalThis?: boolean;
+  /** Reject authored optional parameters and fields ('?'). */
+  noOptional?: boolean;
+  /** Enforce bare pipeline stages for known companions instead of redundant Module.method prefixes. */
+  barePipelines?: boolean;
   /** Restrict authored source to Effect ecosystem imports and explicit Effect APIs. */
   effectOnly?: boolean;
   /** Directories governed by the Effect-only policy, relative to policyRoot. */
@@ -101,6 +106,57 @@ function validateNoGlobalThis(ast: Program): void {
       throw new FunScriptError("globalThis is disabled by project policy; use explicit FunScript imports and interop", node.span as any);
     }
     for (const [key, child] of Object.entries(node)) if (key !== "span") visit(child, node, key);
+  };
+  visit(ast);
+}
+
+/** Block optional parameters and fields ('?') in authored AST when noOptional policy is active. */
+function validateNoOptional(ast: Program): void {
+  const visit = (value: unknown): void => {
+    if (!value || typeof value !== "object") return;
+    if (Array.isArray(value)) { for (const item of value) visit(item); return; }
+    const node = value as Record<string, unknown>;
+    if (node.kind === "Parameter" && node.optional) {
+      throw new FunScriptError("Optional parameters ('?') are disabled by project policy; use Option<T> or handle optionality at the TS interop edge", node.span as any);
+    }
+    if (node.kind === "RecordTypeField" && node.optional) {
+      throw new FunScriptError("Optional record fields ('?') are disabled by project policy; use Option<T> or handle optionality at the TS interop edge", node.span as any);
+    }
+    if (node.kind === "RecordFieldSchema" && node.optional) {
+      throw new FunScriptError("Optional schema fields ('?') are disabled by project policy; use Option<T> or handle optionality at the TS interop edge", node.span as any);
+    }
+    for (const [key, child] of Object.entries(node)) if (key !== "span") visit(child);
+  };
+  visit(ast);
+}
+
+/** Block redundant companion prefixes in pipeline stages when barePipelines policy is active. */
+function validateBarePipelines(ast: Program): void {
+  const visit = (value: unknown): void => {
+    if (!value || typeof value !== "object") return;
+    if (Array.isArray(value)) { for (const item of value) visit(item); return; }
+    const node = value as Record<string, any>;
+    if (node.kind === "PipelineExpression") {
+      const stage = node.right;
+      let target: any = null;
+      if (stage?.kind === "MemberExpression") {
+        target = stage;
+      } else if (stage?.kind === "CallExpression" && stage.callee?.kind === "MemberExpression") {
+        target = stage.callee;
+      }
+      if (target && target.object?.kind === "UpperIdentifier" && target.property?.kind === "Identifier") {
+        const modName = target.object.name;
+        const methodName = target.property.name;
+        const catalogEntries = (PIPELINE_COMPANION_CATALOG as Record<string, readonly string[]>)[modName];
+        if (catalogEntries && catalogEntries.includes(methodName)) {
+          throw new FunScriptError(
+            `Redundant pipeline prefix '${modName}.${methodName}'. FunScript infers the piped companion automatically; use '|> ${methodName}' instead to reduce noise`,
+            target.span,
+          );
+        }
+      }
+    }
+    for (const [key, child] of Object.entries(node)) if (key !== "span") visit(child);
   };
   visit(ast);
 }
@@ -196,6 +252,8 @@ export const compileString = (
       if (options?.effectOnly) validateEffectOnly(ast, options, filename);
       else if (options?.noTs) validateNoTs(ast);
       if (options?.noGlobalThis) validateNoGlobalThis(ast);
+      if (options?.noOptional) validateNoOptional(ast);
+      if (options?.barePipelines) validateBarePipelines(ast);
 
       // 3. Emit TypeScript
       const context = options?.context ?? new TypeScriptCompilationContext(options?.sourcePath ?? filename);
@@ -227,7 +285,11 @@ export const compileString = (
       emitterOptions.forwardOptionalProperties = optionalResolutions.properties;
       emitterOptions.forwardNullProperties = optionalResolutions.nullProperties;
       const emitter = new Emitter(ast, undefined, emitterOptions);
-      const typescript = applyJsInteropNullability(emitter.emit(), context);
+      const emitted = applyJsInteropNullability(emitter.emit(), context);
+      const shebang = source.startsWith("#!")
+        ? (source.includes("\n") ? source.slice(0, source.indexOf("\n") + 1) : `${source}\n`)
+        : "";
+      const typescript = shebang ? shebang + emitted : emitted;
       const targetExtension = filename.endsWith(".funx") ? ".tsx" : ".ts";
 
       const map = (options?.sourcemap ?? true)
@@ -252,7 +314,7 @@ export const compileString = (
 export const checkString = (
   source: string,
   filename: string = "<anonymous>",
-  options?: Pick<CompileOptions, "noTs" | "noGlobalThis" | "effectOnly">,
+  options?: Pick<CompileOptions, "noTs" | "noGlobalThis" | "noOptional" | "barePipelines" | "effectOnly">,
 ): Effect.Effect<Program, CompilerError> =>
   Effect.try({
     try: () => {
@@ -263,6 +325,8 @@ export const checkString = (
       if (options?.effectOnly) validateEffectOnly(ast, options, filename);
       else if (options?.noTs) validateNoTs(ast);
       if (options?.noGlobalThis) validateNoGlobalThis(ast);
+      if (options?.noOptional) validateNoOptional(ast);
+      if (options?.barePipelines) validateBarePipelines(ast);
       return ast;
     },
     catch: (error: any) => new CompilerError(error.message, error),

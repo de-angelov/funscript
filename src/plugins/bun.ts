@@ -9,6 +9,8 @@ export interface BunPluginOptions {
   /** Reject raw TypeScript escapes in compiled FunScript modules. */
   noTs?: boolean;
   noGlobalThis?: boolean;
+  noOptional?: boolean;
+  barePipelines?: boolean;
   /**
    * Filter pattern for files to compile.
    * Defaults to /\.funx?$/
@@ -98,6 +100,8 @@ export function funscriptBunPlugin(options: BunPluginOptions = {}): BunPlugin {
           compileString(text, args.path, {
             noTs: options.noTs || isPathPolicyEnabled(projectPolicy.noTs, process.cwd(), args.path),
             noGlobalThis: options.noGlobalThis || isPathPolicyEnabled(projectPolicy.noGlobalThis, process.cwd(), args.path),
+            noOptional: options.noOptional || isPathPolicyEnabled(projectPolicy.noOptional, process.cwd(), args.path),
+            barePipelines: options.barePipelines || isPathPolicyEnabled(projectPolicy.barePipelines, process.cwd(), args.path),
             effectOnly: isEffectOnlyFile(projectPolicy, process.cwd(), args.path),
             effectOnlyDirectories: projectPolicy.effectOnly,
             policyRoot: process.cwd(),

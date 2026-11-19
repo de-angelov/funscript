@@ -90,13 +90,14 @@ const checkNoTsPaths = (targets: string[], effectOnly = false) =>
 const buildCommand = (args: string[]) =>
   Effect.gen(function* () {
     const isSourcemap = args.includes("--sourcemap");
+    const isBin = args.includes("--bin");
     const outIndex = args.indexOf("--out");
     const outPath = outIndex !== -1 ? args[outIndex + 1] : undefined;
     const outDirIndex = args.indexOf("--outDir");
     const outDir = outDirIndex !== -1 ? args[outDirIndex + 1] : undefined;
 
     const rawFileArgs = args.filter((arg, i) => {
-      if (arg === "--sourcemap" || arg === "--no-check" || arg === "--no-ts" || arg === "--no-global-this") return false;
+      if (arg === "--sourcemap" || arg === "--no-check" || arg === "--no-ts" || arg === "--no-global-this" || arg === "--no-optional" || arg === "--bare-pipelines" || arg === "--bin") return false;
       if (arg === "--out" || (outIndex !== -1 && i === outIndex + 1)) return false;
       if (arg === "--outDir" || (outDirIndex !== -1 && i === outDirIndex + 1)) return false;
       return true;
@@ -141,7 +142,7 @@ const buildCommand = (args: string[]) =>
       return yield* Console.log("No .fun or .funx files found to build");
     }
 
-    if (!args.includes("--no-check") && !(yield* checkCliFiles(filesToBuild, { noTs: args.includes("--no-ts"), noGlobalThis: args.includes("--no-global-this"), effectOnly: projectPolicy.effectOnly, noTsPaths: Array.isArray(projectPolicy.noTs) ? projectPolicy.noTs : undefined, noGlobalThisPaths: Array.isArray(projectPolicy.noGlobalThis) ? projectPolicy.noGlobalThis : undefined }))) return;
+    if (!args.includes("--no-check") && !(yield* checkCliFiles(filesToBuild, { noTs: args.includes("--no-ts"), noGlobalThis: args.includes("--no-global-this"), noOptional: args.includes("--no-optional"), barePipelines: args.includes("--bare-pipelines"), effectOnly: projectPolicy.effectOnly, noTsPaths: Array.isArray(projectPolicy.noTs) ? projectPolicy.noTs : undefined, noGlobalThisPaths: Array.isArray(projectPolicy.noGlobalThis) ? projectPolicy.noGlobalThis : undefined, noOptionalPaths: Array.isArray(projectPolicy.noOptional) ? projectPolicy.noOptional : undefined, barePipelinesPaths: Array.isArray(projectPolicy.barePipelines) ? projectPolicy.barePipelines : undefined }))) return;
 
     for (const filePath of filesToBuild) {
       const source = yield* readFile(filePath);
@@ -163,6 +164,8 @@ const buildCommand = (args: string[]) =>
         sourcemap: isSourcemap,
         noTs: args.includes("--no-ts") || isPathPolicyEnabled(projectPolicy.noTs, process.cwd(), filePath),
         noGlobalThis: args.includes("--no-global-this") || isPathPolicyEnabled(projectPolicy.noGlobalThis, process.cwd(), filePath),
+        noOptional: args.includes("--no-optional") || isPathPolicyEnabled(projectPolicy.noOptional, process.cwd(), filePath),
+        barePipelines: args.includes("--bare-pipelines") || isPathPolicyEnabled(projectPolicy.barePipelines, process.cwd(), filePath),
         effectOnly: isEffectOnlyFile(projectPolicy, process.cwd(), filePath),
         effectOnlyDirectories: projectPolicy.effectOnly,
         policyRoot: process.cwd(),
@@ -170,6 +173,10 @@ const buildCommand = (args: string[]) =>
       });
 
       let tsCode = result.typescript;
+      const isExecutable = isBin || source.startsWith("#!");
+      if (isBin && !tsCode.startsWith("#!")) {
+        tsCode = `#!/usr/bin/env bun\n${tsCode}`;
+      }
       if (isSourcemap && result.map) {
         const mapFileName = `${path.basename(targetOut)}.map`;
         const mapPath = `${targetOut}.map`;
@@ -179,6 +186,12 @@ const buildCommand = (args: string[]) =>
       }
 
       yield* writeFile(targetOut, tsCode);
+      if (isExecutable) {
+        yield* Effect.tryPromise({
+          try: () => fs.chmod(targetOut, 0o755),
+          catch: (error: any) => new Error(`Failed to set executable permissions on '${targetOut}': ${error.message}`),
+        });
+      }
       yield* Console.log(`✓ Built ${targetOut}`);
     }
   });
@@ -186,17 +199,18 @@ const buildCommand = (args: string[]) =>
 const emitCommand = (args: string[]) =>
   Effect.gen(function* () {
     const isSourcemap = args.includes("--sourcemap");
+    const isBin = args.includes("--bin");
     const outIndex = args.indexOf("--out");
     const outPath = outIndex !== -1 ? args[outIndex + 1] : undefined;
     const fileArgs = args.filter((a, idx) => {
-      if (a === "--sourcemap" || a === "--no-ts" || a === "--no-global-this") return false;
+      if (a === "--sourcemap" || a === "--no-ts" || a === "--no-global-this" || a === "--no-optional" || a === "--bare-pipelines" || a === "--bin") return false;
       if (a === "--out" || (outIndex !== -1 && idx === outIndex + 1)) return false;
       return true;
     });
 
     const filePath = fileArgs[0];
     if (!filePath) {
-      return yield* Console.error("Usage: funscript emit <file.fun|file.funx> [--out <file.ts|file.tsx>] [--sourcemap] [--no-ts]");
+      return yield* Console.error("Usage: funscript emit <file.fun|file.funx> [--out <file.ts|file.tsx>] [--sourcemap] [--no-ts] [--bin]");
     }
 
     if ((args.includes("--no-ts") || projectPolicy.effectOnly?.length || Array.isArray(projectPolicy.noTs)) && !(yield* checkNoTsPaths([filePath], !args.includes("--no-ts")))) return;
@@ -205,6 +219,8 @@ const emitCommand = (args: string[]) =>
       sourcemap: isSourcemap,
       noTs: args.includes("--no-ts") || isPathPolicyEnabled(projectPolicy.noTs, process.cwd(), filePath),
       noGlobalThis: args.includes("--no-global-this") || isPathPolicyEnabled(projectPolicy.noGlobalThis, process.cwd(), filePath),
+      noOptional: args.includes("--no-optional") || isPathPolicyEnabled(projectPolicy.noOptional, process.cwd(), filePath),
+      barePipelines: args.includes("--bare-pipelines") || isPathPolicyEnabled(projectPolicy.barePipelines, process.cwd(), filePath),
       effectOnly: isEffectOnlyFile(projectPolicy, process.cwd(), filePath),
       effectOnlyDirectories: projectPolicy.effectOnly,
       policyRoot: process.cwd(),
@@ -212,6 +228,10 @@ const emitCommand = (args: string[]) =>
     });
 
     let tsCode = result.typescript;
+    const isExecutable = isBin || source.startsWith("#!");
+    if (isBin && !tsCode.startsWith("#!")) {
+      tsCode = `#!/usr/bin/env bun\n${tsCode}`;
+    }
     if (outPath) {
       if (isSourcemap && result.map) {
         const mapFileName = `${path.basename(outPath)}.map`;
@@ -221,6 +241,12 @@ const emitCommand = (args: string[]) =>
         yield* Console.log(`✓ Emitted ${mapPath}`);
       }
       yield* writeFile(outPath, tsCode);
+      if (isExecutable) {
+        yield* Effect.tryPromise({
+          try: () => fs.chmod(outPath, 0o755),
+          catch: (error: any) => new Error(`Failed to set executable permissions on '${outPath}': ${error.message}`),
+        });
+      }
       yield* Console.log(`✓ Emitted ${outPath}`);
     } else {
       if (isSourcemap && result.map) {
@@ -291,7 +317,7 @@ const checkCommand = (args: string[]) =>
     }
 
     const allFiles = yield* collectCliFiles(filesToCheck);
-    const result = yield* typeCheckFiles(allFiles, { noTs: args.includes("--no-ts"), noGlobalThis: args.includes("--no-global-this"), effectOnly: projectPolicy.effectOnly, noTsPaths: Array.isArray(projectPolicy.noTs) ? projectPolicy.noTs : undefined, noGlobalThisPaths: Array.isArray(projectPolicy.noGlobalThis) ? projectPolicy.noGlobalThis : undefined });
+    const result = yield* typeCheckFiles(allFiles, { noTs: args.includes("--no-ts"), noGlobalThis: args.includes("--no-global-this"), noOptional: args.includes("--no-optional"), barePipelines: args.includes("--bare-pipelines"), effectOnly: projectPolicy.effectOnly, noTsPaths: Array.isArray(projectPolicy.noTs) ? projectPolicy.noTs : undefined, noGlobalThisPaths: Array.isArray(projectPolicy.noGlobalThis) ? projectPolicy.noGlobalThis : undefined, noOptionalPaths: Array.isArray(projectPolicy.noOptional) ? projectPolicy.noOptional : undefined, barePipelinesPaths: Array.isArray(projectPolicy.barePipelines) ? projectPolicy.barePipelines : undefined });
     if (!result.success || !idiomaticPassed) {
       process.exitCode = 1;
       if (!result.success) {
@@ -353,17 +379,17 @@ const fmtCommand = (args: string[]) =>
 
 const runCommand = (args: string[]) =>
   Effect.gen(function* () {
-    const filePath = args.find((arg) => arg !== "--no-check" && arg !== "--no-ts" && arg !== "--no-global-this");
+    const filePath = args.find((arg) => arg !== "--no-check" && arg !== "--no-ts" && arg !== "--no-global-this" && arg !== "--no-optional" && arg !== "--bare-pipelines");
     if (!filePath) {
       process.exitCode = 1;
       return yield* Console.error("Usage: funscript run <file.fun|file.funx> [--no-check] [--no-ts]");
     }
 
     if ((args.includes("--no-ts") || projectPolicy.effectOnly?.length || Array.isArray(projectPolicy.noTs)) && !(yield* checkNoTsPaths([filePath], !args.includes("--no-ts")))) return;
-    if (!args.includes("--no-check") && !(yield* checkCliFiles([filePath], { noTs: args.includes("--no-ts"), noGlobalThis: args.includes("--no-global-this"), effectOnly: projectPolicy.effectOnly, noTsPaths: Array.isArray(projectPolicy.noTs) ? projectPolicy.noTs : undefined, noGlobalThisPaths: Array.isArray(projectPolicy.noGlobalThis) ? projectPolicy.noGlobalThis : undefined }))) return;
+    if (!args.includes("--no-check") && !(yield* checkCliFiles([filePath], { noTs: args.includes("--no-ts"), noGlobalThis: args.includes("--no-global-this"), noOptional: args.includes("--no-optional"), barePipelines: args.includes("--bare-pipelines"), effectOnly: projectPolicy.effectOnly, noTsPaths: Array.isArray(projectPolicy.noTs) ? projectPolicy.noTs : undefined, noGlobalThisPaths: Array.isArray(projectPolicy.noGlobalThis) ? projectPolicy.noGlobalThis : undefined, noOptionalPaths: Array.isArray(projectPolicy.noOptional) ? projectPolicy.noOptional : undefined, barePipelinesPaths: Array.isArray(projectPolicy.barePipelines) ? projectPolicy.barePipelines : undefined }))) return;
 
     const source = yield* readFile(filePath);
-    const result = yield* compileString(source, filePath, { sourcemap: false, noTs: args.includes("--no-ts") || isPathPolicyEnabled(projectPolicy.noTs, process.cwd(), filePath), noGlobalThis: args.includes("--no-global-this") || isPathPolicyEnabled(projectPolicy.noGlobalThis, process.cwd(), filePath), effectOnly: isEffectOnlyFile(projectPolicy, process.cwd(), filePath), effectOnlyDirectories: projectPolicy.effectOnly, policyRoot: process.cwd() });
+    const result = yield* compileString(source, filePath, { sourcemap: false, noTs: args.includes("--no-ts") || isPathPolicyEnabled(projectPolicy.noTs, process.cwd(), filePath), noGlobalThis: args.includes("--no-global-this") || isPathPolicyEnabled(projectPolicy.noGlobalThis, process.cwd(), filePath), noOptional: args.includes("--no-optional") || isPathPolicyEnabled(projectPolicy.noOptional, process.cwd(), filePath), barePipelines: args.includes("--bare-pipelines") || isPathPolicyEnabled(projectPolicy.barePipelines, process.cwd(), filePath), effectOnly: isEffectOnlyFile(projectPolicy, process.cwd(), filePath), effectOnlyDirectories: projectPolicy.effectOnly, policyRoot: process.cwd() });
 
     let tsCode = result.typescript;
     tsCode += `\nimport * as __effect from "effect";\nif (typeof main !== "undefined") {\n  if (__effect.Effect.isEffect(main)) {\n    await __effect.Effect.runPromise(main);\n  } else if (typeof main === "function") {\n    await main();\n  }\n}\n`;
@@ -411,6 +437,8 @@ const program = Effect.gen(function* () {
     projectPolicy = yield* Effect.try({ try: () => loadProjectConfig(process.cwd()), catch: (error) => error instanceof Error ? error : new Error(String(error)) });
     if (projectPolicy.noTs === true && !commandArgs.includes("--no-ts")) commandArgs.push("--no-ts");
     if (projectPolicy.noGlobalThis === true && !commandArgs.includes("--no-global-this")) commandArgs.push("--no-global-this");
+    if (projectPolicy.noOptional === true && !commandArgs.includes("--no-optional")) commandArgs.push("--no-optional");
+    if (projectPolicy.barePipelines === true && !commandArgs.includes("--bare-pipelines")) commandArgs.push("--bare-pipelines");
   }
 
   switch (command) {

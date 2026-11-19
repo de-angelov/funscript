@@ -9,7 +9,7 @@ FunScript 0.2.3. This page is generated from [the CLI command catalogue](../../s
 ### `funscript build`
 
 ```text
-funscript build <file.fun|file.funx...> [--out <file>] [--outDir <dir>] [--sourcemap] [--no-check] [--no-ts] [--no-global-this]
+funscript build <file.fun|file.funx...> [--out <file>] [--outDir <dir>] [--sourcemap] [--no-check] [--no-ts] [--no-global-this] [--no-optional] [--bare-pipelines] [--bin]
 ```
 
 Build FunScript files to TypeScript or TSX.
@@ -21,7 +21,7 @@ funscript build src/Button.funx --sourcemap
 ### `funscript emit`
 
 ```text
-funscript emit <file.fun|file.funx> [--out <file.ts|file.tsx>] [--sourcemap] [--no-ts] [--no-global-this]
+funscript emit <file.fun|file.funx> [--out <file.ts|file.tsx>] [--sourcemap] [--no-ts] [--no-global-this] [--no-optional] [--bare-pipelines] [--bin]
 ```
 
 Compile one FunScript file to TypeScript or TSX.
@@ -33,7 +33,7 @@ funscript emit src/main.fun --out src/main.ts --sourcemap
 ### `funscript check`
 
 ```text
-funscript check [file.fun|file.funx...] [--idiomatic] [--no-ts] [--no-global-this]
+funscript check [file.fun|file.funx...] [--idiomatic] [--no-ts] [--no-global-this] [--no-optional] [--bare-pipelines]
 ```
 
 Statically type-check files with the TypeScript API.
@@ -57,7 +57,7 @@ funscript tsc --noEmit
 ### `funscript run`
 
 ```text
-funscript run <file.fun|file.funx> [--no-check] [--no-ts] [--no-global-this]
+funscript run <file.fun|file.funx> [--no-check] [--no-ts] [--no-global-this] [--no-optional] [--bare-pipelines]
 ```
 
 Compile and run a FunScript program with Node.js.

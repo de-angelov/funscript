@@ -71,7 +71,7 @@ describe("optional fields in inline parameter records", () => {
     expect(read({})).toEqual(Option.none());
     expect(read({ label: undefined })).toEqual(Option.none());
     expect(read({ label: "hello" })).toEqual(Option.some("hello"));
-    expect(read({ label: null })).toEqual(Option.some(null));
+    expect(read({ label: null })).toEqual(Option.none());
     const checked = await typeCheck(source + '\nexport a = read({})\nexport b = read({ label: "hi" })', "record-option.fun");
     expect(checked.success, checked.formattedOutput).toBe(true);
   });

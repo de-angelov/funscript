@@ -606,6 +606,95 @@ export badIncrement = (counter: Ref) => effect {
       expect(race?.message).toContain("Insecure non-atomic Ref mutation");
     });
 
+    it("reports FS_TOP_LEVEL_REF on module-level mutable Ref allocations", async () => {
+      const result = await Effect.runPromise(
+        typeCheckSource(
+          `
+import { Ref } from "effect"
+
+export counter = Ref.unsafeMake(0)
+`.trim(),
+          "lib/counter.fun",
+        ),
+      );
+
+      const refDiag = result.diagnostics.find((d) => d.code === "TOP_LEVEL_REF");
+      expect(refDiag).toBeDefined();
+      expect(refDiag?.diagnosticCode).toBe("FS_TOP_LEVEL_REF");
+      expect(refDiag?.category).toBe("error");
+      expect(refDiag?.message).toContain("allocates a mutable Ref at module scope");
+    });
+
+    it("warns FS_EAGER_SUCCEED when calling functions inside Effect.succeed", async () => {
+      const result = await Effect.runPromise(
+        typeCheckSource(
+          `
+import { Effect } from "effect"
+
+compute = () => 42
+export task = Effect.succeed(compute())
+export literal = Effect.succeed(42)
+`.trim(),
+          "task.fun",
+        ),
+      );
+
+      const eager = result.diagnostics.find((d) => d.code === "EAGER_SUCCEED");
+      expect(eager).toBeDefined();
+      expect(eager?.diagnosticCode).toBe("FS_EAGER_SUCCEED");
+      expect(eager?.category).toBe("warning");
+      expect(eager?.message).toContain("Effect.succeed");
+      expect(eager?.message).toContain("evaluates its argument eagerly");
+    });
+
+    it("reports FS_UNTYPED_ERROR when failing with raw string or number literals in library code", async () => {
+      const result = await Effect.runPromise(
+        typeCheckSource(
+          `
+import { Effect } from "effect"
+
+export failStr = () => Effect.fail("Not found")
+export failNum = () => Effect.fail(404)
+`.trim(),
+          "lib/users.fun",
+        ),
+      );
+
+      const untyped = result.diagnostics.filter((d) => d.code === "UNTYPED_ERROR");
+      expect(untyped.length).toBe(2);
+      expect(untyped[0].diagnosticCode).toBe("FS_UNTYPED_ERROR");
+      expect(untyped[0].category).toBe("warning");
+      expect(untyped[0].message).toContain("Effect.fail");
+      expect(untyped[0].message).toContain("untyped literal");
+    });
+
+    it("reports FS_NESTED_MATCH on nested match expressions (match abuse)", async () => {
+      const result = await Effect.runPromise(
+        typeCheckSource(
+          `
+export checkLock = (pid: Number) => {
+  res = match
+    | pid > 0 =>
+      alive = true
+      match alive
+        | true => 1
+        | false => 2
+    | _ => 0
+  => res
+}
+`.trim(),
+          "lock.fun",
+        ),
+      );
+
+      const nested = result.diagnostics.find((d) => d.code === "NESTED_MATCH");
+      expect(nested).toBeDefined();
+      expect(nested?.diagnosticCode).toBe("FS_NESTED_MATCH");
+      expect(nested?.category).toBe("error");
+      expect(nested?.message).toContain("Nested 'match' expression detected");
+      expect(nested?.suggestedAction).toContain("Flatten the match");
+    });
+
     it("reports FS_CAPTURED_MUT when outer mut variables are captured in effect or par blocks", async () => {
       // 1. Top-level mut variable captured in effect block
       const res1 = await Effect.runPromise(

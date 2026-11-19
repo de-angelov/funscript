@@ -1363,9 +1363,10 @@ export class Emitter {
       return `{ ${fields.join(", ")} }`;
     }
     if (target.kind === "ArrayPattern") {
-      const elements = target.elements
-        .map((el) => this.emitBindingTarget(el))
-        .filter((el) => el.length > 0);
+      const elements = target.elements.map((el) => this.emitBindingTarget(el));
+      while (elements.length > 0 && elements[elements.length - 1] === "") {
+        elements.pop();
+      }
       return `[${elements.join(", ")}]`;
     }
     return "_";

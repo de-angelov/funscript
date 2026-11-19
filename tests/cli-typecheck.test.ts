@@ -66,6 +66,46 @@ describe("CLI static type-checking gates", () => {
     expect(error.stderr).toContain("TS2322");
     expect(error.stdout).toBe("");
   }, 20_000);
+
+  it("compiles executables with --bin, preserving/adding shebang and 0755 permissions", async () => {
+    const binFun = path.join(directory, "cli-tool.fun");
+    const binOut = path.join(directory, "cli-tool.ts");
+    await fs.writeFile(binFun, 'export run = () => console.log("CLI TOOL")\nresult = run()\n');
+
+    await exec(process.execPath, [cli, "build", binFun, "--out", binOut, "--bin", "--no-check"]);
+    const content = await fs.readFile(binOut, "utf8");
+    expect(content.startsWith("#!/usr/bin/env bun\n")).toBe(true);
+
+    const stat = await fs.stat(binOut);
+    // Verify executable permissions (0o755)
+    expect((stat.mode & 0o111) !== 0).toBe(true);
+  }, 20_000);
+
+  it("automatically preserves line 1 shebang and marks executable on build", async () => {
+    const shebangFun = path.join(directory, "script-tool.fun");
+    const shebangOut = path.join(directory, "script-tool.ts");
+    await fs.writeFile(shebangFun, '#!/usr/bin/env bun\nexport main = () => console.log("SHEBANG TOOL")\nresult = main()\n');
+
+    await exec(process.execPath, [cli, "build", shebangFun, "--out", shebangOut, "--no-check"]);
+    const content = await fs.readFile(shebangOut, "utf8");
+    expect(content.startsWith("#!/usr/bin/env bun\n")).toBe(true);
+
+    const stat = await fs.stat(shebangOut);
+    expect((stat.mode & 0o111) !== 0).toBe(true);
+  }, 20_000);
+
+  it("preserves/adds shebang and executable permissions with emit --bin", async () => {
+    const emitFun = path.join(directory, "emit-tool.fun");
+    const emitOut = path.join(directory, "emit-tool.ts");
+    await fs.writeFile(emitFun, 'export greet = () => console.log("EMIT TOOL")\nresult = greet()\n');
+
+    await exec(process.execPath, [cli, "emit", emitFun, "--out", emitOut, "--bin"]);
+    const content = await fs.readFile(emitOut, "utf8");
+    expect(content.startsWith("#!/usr/bin/env bun\n")).toBe(true);
+
+    const stat = await fs.stat(emitOut);
+    expect((stat.mode & 0o111) !== 0).toBe(true);
+  }, 20_000);
 });
 
 describe("REPL static checking", () => {

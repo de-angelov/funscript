@@ -47,6 +47,19 @@ export class Lexer {
   }
 
   public tokenize(): Token[] {
+    // Handle first-line shebang (e.g. `#!/usr/bin/env bun`)
+    if (this.offset === 0 && this.source.startsWith("#!")) {
+      while (!this.isAtEnd() && this.peek() !== "\n") {
+        this.advance();
+      }
+      if (!this.isAtEnd() && this.peek() === "\n") {
+        this.advance();
+        this.line++;
+        this.column = 1;
+        this.atLineStart = true;
+      }
+    }
+
     while (!this.isAtEnd()) {
       if (this.atLineStart) {
         this.handleIndentation();
