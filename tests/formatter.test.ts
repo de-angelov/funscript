@@ -211,7 +211,7 @@ describe("FunScript Code Formatter", () => {
   });
 
   it("formats Effect blocks and pipelines idempotently", () => {
-    const source = `result =\n  effect\n    value <- fetch()\n    => value |> normalize`;
+    const source = `result =\n  effect {\n    value <- fetch()\n    => value |> normalize\n  }`;
     const formatted = format(source);
     expect(formatted).toContain("effect {");
     expect(formatted).toContain("value |> normalize");
@@ -340,11 +340,12 @@ export checkNumber = (n: Number) =>
   it("formats effect blocks with bindings and discards", () => {
     const unformatted = `
 export program =
-  effect
+  effect {
       x <- fetchNumber()
       _ <- Console.log(x)
       y = x + 1
       => y
+  }
 `.trim();
     const formatted = format(unformatted);
     expect(formatted).toBe(

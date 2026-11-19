@@ -49,7 +49,7 @@ The design rule is simple:
 | Error                        | `error NotFound(id: String)`                                                                     |
 | Service                      | `service Greeter` newline `greet: (name: String) => Effect<String>`                              |
 | Layer (pure / effectful)     | `Layer.succeed(Greeter, { ... })` or `Layer.effect(Greeter, effect { ... })`                    |
-| Effect block                 | `effect { user <- UserRepo.find(id); => user }` (canonical; indentation form is implemented compatibility syntax) |
+| Effect block                 | `effect { user <- UserRepo.find(id); => user }` (braces required) |
 | Effect bind                  | `name <- effect`                                                                                 |
 | Discard effect               | `_ <- effect`                                                                                    |
 | Typed hole                   | `???` or `??? "todo: handle pagination"`                                                         |
@@ -1953,11 +1953,12 @@ In FunScript, `effect` blocks are **scoped by default** (`Effect.scoped(Effect.g
 
 ```funscript
 # Boundary (Consumer): opens and closes its own Scope
-export processFile = (path: String) => effect
+export processFile = (path: String) => effect {
   file <- acquireFile(path)
   data <- readFile(file)
   # 'file' is automatically closed here when the block exits!
   => data
+}
 ```
 
 ```ts
@@ -1986,19 +1987,21 @@ To build resource constructors that pass open resources and attach finalizers to
 
 ```funscript
 # Resource Constructor: attaches cleanup to caller's scope
-export spawnScopedProcess = (cmd: Array<String>, cwd: String) => effect (unscoped)
+export spawnScopedProcess = (cmd: Array<String>, cwd: String) => effect (unscoped) {
   proc = Bun.spawn(cmd, { cwd: cwd })
   _ <- Effect.addFinalizer(() => proc.kill("SIGTERM"))
   => proc
 
+}
 # Resource Consumer (Boundary): manages the lifetime
-export runAgentSession = (cmd: Array<String>, cwd: String) => effect
+export runAgentSession = (cmd: Array<String>, cwd: String) => effect {
   proc <- spawnScopedProcess(cmd, cwd) # Finalizer attaches to runAgentSession's scope
   outText <- js Bun.readableStreamToText(proc.stdout) # Stream reads successfully!
   code <- js proc.exited
   => { exitCode: code, output: outText }
   # Scope closes here when runAgentSession completes or is cancelled,
   # triggering the finalizer and guaranteeing zero orphan processes!
+}
 ```
 
 ```ts
@@ -2989,7 +2992,7 @@ matchArm       = "|" orPattern [ "when" expression ] "=>" ( expression | block )
 condArm        = "|" ( "_" | expression ) "=>" ( expression | block ) ;
 orPattern      = pattern { "|" pattern } ;
 
-effectExpr     = "effect" INDENT { effectStatement } DEDENT ;
+effectExpr     = "effect" [ "(" "unscoped" ")" ] "{" { effectStatement } "}" ;
 effectStatement = binding
                 | mutBinding
                 | assignStmt

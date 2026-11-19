@@ -67,7 +67,6 @@ export function isRecoverable(err: any): boolean {
     /expected '\}' to close effect block/i.test(msg) ||
     /expected indent/i.test(msg) ||
     /expected newline after/i.test(msg) ||
-    /expected newline or '\{' after 'effect'/i.test(msg) ||
     /unterminated string/i.test(msg) ||
     /unexpected token ''/i.test(msg) ||
     /expected unindent/i.test(msg) ||

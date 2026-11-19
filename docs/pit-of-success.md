@@ -114,10 +114,11 @@ Effect.gen(function* () {
 **The FunScript path:**
 
 ```funscript
-effect
+effect {
   user <- findUser(id)
   _ <- Console.log("loaded")
   user
+}
 ```
 
 **The mechanism:** inside an `effect` block, `<-` is the only way to execute an effect.
@@ -125,10 +126,11 @@ A bare expression is only allowed as the final expression. A non-final bare expr
 is a **syntax error**, not a silent no-op:
 
 ```funscript
-effect
+effect {
   user <- findUser(id)
   Console.log("loaded")      # error: non-final bare expression
   user
+}
 ```
 
 The compiler suggests `_ <- Console.log("loaded")`. The same rule applies inside the
@@ -138,7 +140,8 @@ branches of `match` statements in an effect block.
 
 ```text
 main.fun:12:3  error  non-final expression in effect block
-  this value is not executed; use `<-` to run an effect
+  this value is not executed; use `<-` to run an effect {
+  }
   try: _ <- Console.log("loaded")
 ```
 
@@ -162,9 +165,10 @@ export service UserRepo
   find: (id: String) => Effect<User, NotFound>
 
 export findUser = (id: String) =>
-  effect
+  effect {
     user <- UserRepo.find(id)
     user
+  }
 ```
 
 The requirement is in the type: `Effect<User, NotFound, UserRepo>`. Direct service calls
@@ -200,9 +204,10 @@ see it in the signature, `catch` is easy to forget, and the error channel is a l
 export error NotFound(id: String)
 
 export findUser = (id: String) =>
-  effect
+  effect {
     user <- UserRepo.find(id)
     user
+  }
   |> Effect.catchTag("NotFound", (e) => Effect.succeed(anonymous(e.id)))
 ```
 
@@ -250,10 +255,11 @@ bump = (c: Counter) =>
   draft.count = draft.count + 1
   draft
 
-effect
+effect {
   shared <- Ref.make(0)
   _ <- Ref.update(shared, (n) => n + 1)
   Ref.get(shared)
+}
 ```
 
 **The mechanism:** FunScript is **immutable-first, explicit copy-on-write**:
@@ -302,10 +308,11 @@ export schema User = {
 schema Lookup = (id: UUID) => Effect<User, NotFound>
 
 export lookup: Lookup = (id) =>
-  effect
+  effect {
     repo <- UserRepo
     raw <- repo.findRaw(id)
     raw |> Schema.decodeUnknown(User)
+  }
 ```
 
 **The mechanism:** declaring a data `schema` emits both `export const User = Schema.Struct(...)`
@@ -412,10 +419,11 @@ bugs cannot be replayed.
 import { Clock, DateTime, Effect, Random } from "effect"
 
 export isExpired = (token: Token) =>
-  effect
+  effect {
     now <- DateTime.now
     DateTime.greaterThan(now, token.expiresAt)
 
+  }
 export rollDice =
   Random.nextIntBetween(1, 7)
 ```
@@ -426,11 +434,12 @@ import { expect, it } from "@effect/vitest"
 import { Effect, TestClock } from "effect"
 
 it.effect("expires after one hour", () =>
-  effect
+  effect {
     token <- issueToken(user)
     _ <- TestClock.adjust("61 minutes")
     expired <- isExpired(token)
     expect(expired).toBe(true)
+  }
 )
 ```
 
@@ -524,10 +533,11 @@ export AppConfig =
   })
 
 export start =
-  effect
+  effect {
     config <- AppConfig
     _ <- Console.log("listening on {config.port}")
     startServer(config)
+  }
 ```
 
 **The mechanism:** `process.env`, `import.meta.env`, `Deno.env`, and `Bun.env` are
@@ -627,11 +637,12 @@ users <- ids |> Effect.forEach(fetchUser, { concurrency: 8 })
 
 # Long-running workers live exactly as long as their scope
 export pipeline =
-  effect
+  effect {
     jobs <- Queue.bounded<Job>(100)
     _ <- Effect.forkScoped(producer(jobs))
     _ <- Effect.forkScoped(worker(jobs))
     Effect.Never
+  }
   |> Effect.scoped
 ```
 

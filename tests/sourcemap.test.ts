@@ -136,9 +136,10 @@ export compute = (x: Number) =>
 
     it("maps effect blocks accurately", async () => {
       const code = `
-export main = effect
+export main = effect {
   _ <- Console.log("Hello")
   => "Done"
+}
 `.trim();
 
       const res = await Effect.runPromise(compileString(code, "effect.fun"));

@@ -643,10 +643,11 @@ export manageCollections = (map: Object, set: Object) =>
 
   it("supports optional parameters on export js entry bindings", async () => {
     const src = `
-export js greet = (name?: String) => effect
+export js greet = (name?: String) => effect {
   => match name
     | Some(n) => "Hello, " + n
     | None => "Hello, stranger"
+}
 `;
     const res = Effect.runSync(compileString(src));
     expect(res.typescript).toContain("($funscriptOptional0?: string)");
@@ -661,8 +662,9 @@ export js greet = (name?: String) => effect
 
   it("supports defaulted parameters on export js entry bindings", async () => {
     const src = `
-export js repeat = (n: Number = 3) => effect
+export js repeat = (n: Number = 3) => effect {
   => n * 2
+}
 `;
     const res = Effect.runSync(compileString(src));
     expect(res.typescript).toContain("(n: number = 3)");
@@ -680,11 +682,12 @@ ts {
   declare function updateRecord(req: { readonly deletedAt: string | null, readonly comment?: string }): void;
 }
 
-export callInterop = (optStr: Option<String>) => effect
+export callInterop = (optStr: Option<String>) => effect {
   _ <- js foreignOptional(optStr)
   _ <- js foreignNull("data", optStr, 2)
   _ <- js updateRecord({ deletedAt: optStr, comment: optStr })
   => "ok"
+}
 `;
     const res = Effect.runSync(compileString(src));
     expect(res.typescript).toContain("foreignOptional(Option.getOrUndefined(optStr))");

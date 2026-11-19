@@ -821,11 +821,12 @@ grade = match
 
     it("parses effect block with binds, discards, local bindings, and final return", () => {
       const ast = parse(`
-getUser = (id: String) => effect
+getUser = (id: String) => effect {
   user <- UserRepo.find(id)
   _ <- Console.log(user)
   prefix = "User: "
   => user
+}
 `);
       const fn = (ast.body[0] as BindingDeclaration).init as FunctionExpression;
       const eff = fn.body as EffectBlockExpression;
@@ -851,9 +852,10 @@ getUser = (id: String) => effect
     it("throws ParseError when non-final bare expression is placed in effect block", () => {
       const code = `
 run = () =>
-  effect
+  effect {
     Console.log("not bound with <-")
     "done"
+  }
 `;
       expect(() => parse(code)).toThrow(ParseError);
       expect(() => parse(code)).toThrow(/Non-final bare expression in effect block is not executed/);
@@ -862,8 +864,9 @@ run = () =>
     it("throws ParseError when effect block does not end with an expression", () => {
       const code = `
 run = () =>
-  effect
+  effect {
     user <- UserRepo.find("1")
+  }
 `;
       expect(() => parse(code)).toThrow(ParseError);
       expect(() => parse(code)).toThrow(/Effect block must end with an explicit/);

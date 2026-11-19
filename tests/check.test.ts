@@ -639,9 +639,10 @@ import { Effect } from "effect"
 
 export run = () =>
   mut count = 0
-  effect
+  effect {
     count = count + 1
     => count
+  }
 `.trim(),
           "bad_local.fun",
         ),
@@ -1247,10 +1248,11 @@ export agentName = state.agents[0] |> Option.map((a) => a.id)
           `
 import { Effect } from "effect"
 
-export spawnProcess = (cmd: Array<String>) => effect
+export spawnProcess = (cmd: Array<String>) => effect {
   proc = { pid: 1234, kill: () => Unit }
   _ <- Effect.addFinalizer(() => proc.kill())
   => proc
+}
 `.trim(),
           "lib/spawn-bad.fun",
         ),
@@ -1269,10 +1271,11 @@ export spawnProcess = (cmd: Array<String>) => effect
           `
 import { Effect } from "effect"
 
-export spawnProcess = (cmd: Array<String>) => effect (unscoped)
+export spawnProcess = (cmd: Array<String>) => effect (unscoped) {
   proc = { pid: 1234, kill: () => Unit }
   _ <- Effect.addFinalizer(() => proc.kill())
   => proc
+}
 `.trim(),
           "lib/spawn-good.fun",
         ),
@@ -1288,10 +1291,11 @@ export spawnProcess = (cmd: Array<String>) => effect (unscoped)
           `
 import { Effect } from "effect"
 
-export runTask = (cmd: Array<String>) => effect
+export runTask = (cmd: Array<String>) => effect {
   proc = { pid: 1234, kill: () => Unit }
   _ <- Effect.addFinalizer(() => proc.kill())
   => Unit
+}
 `.trim(),
           "lib/task-unit.fun",
         ),
@@ -1307,9 +1311,10 @@ export runTask = (cmd: Array<String>) => effect
           `
 import { Effect } from "effect"
 
-export openResource = effect
+export openResource = effect {
   res <- Effect.acquireRelease(Effect.succeed({ fd: 1 }), () => Effect.void)
   => res
+}
 `.trim(),
           "lib/acquire-bad.fun",
         ),

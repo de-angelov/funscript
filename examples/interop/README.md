@@ -32,9 +32,10 @@ UserSchema = fromZod(ThirdPartyUser)
 
 # Use in pipelines:
 processUser = (payload: Unknown) =>
-  effect
+  effect {
     user <- payload |> decode(UserSchema)
     => user
+  }
 ```
 
 `cache-success.ts` demonstrates a caller-owned Effect cache. A successful result is

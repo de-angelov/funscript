@@ -115,10 +115,11 @@ describe("FunScript Interactive REPL (TASK-020)", () => {
     it("evaluates multi-line effect blocks and returns computed result", async () => {
       const ctx = createTestContext();
       const effectBlock = [
-        "effect",
+        "effect {",
         "  a <- Effect.succeed(15)",
         "  b <- Effect.succeed(25)",
         "  => a + b",
+        "}",
       ].join("\n");
 
       const val = await evaluateReplLine(effectBlock, ctx);
@@ -136,7 +137,7 @@ describe("FunScript Interactive REPL (TASK-020)", () => {
       expect(isRecoverable(new Error("Expected ')' after parameters"))).toBe(true);
       expect(isRecoverable(new Error("Expected '}' after record schema"))).toBe(true);
       expect(isRecoverable(new Error("Expected '}' to close effect block"))).toBe(true);
-      expect(isRecoverable(new Error("Expected indent after 'effect'"))).toBe(true);
+      expect(isRecoverable(new Error("Expected '{' after 'effect' (effect blocks require braces)"))).toBe(false);
       expect(isRecoverable(new Error("Unexpected token '' (DEDENT)"))).toBe(true);
       expect(isRecoverable(new Error("Unterminated string literal at line 1"))).toBe(true);
       expect(isRecoverable(new Error("Banned keyword 'var'"))).toBe(false);
@@ -215,13 +216,13 @@ describe("FunScript Interactive REPL (TASK-020)", () => {
         showBanner: false,
       });
 
-      input.write("effect\n");
+      input.write("effect {\n");
       await new Promise((resolve) => setTimeout(resolve, 50));
       input.write("  val <- Effect.succeed(77)\n");
       await new Promise((resolve) => setTimeout(resolve, 50));
       input.write("  => val + 3\n");
       await new Promise((resolve) => setTimeout(resolve, 50));
-      input.write("\n");
+      input.write("}\n");
       await new Promise((resolve) => setTimeout(resolve, 100));
 
       expect(captured).toContain("80");

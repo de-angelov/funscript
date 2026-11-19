@@ -323,9 +323,10 @@ describe("JSX Parser (.funx mode)", () => {
     });
 
     it("parses JSX inside effect block as final expression", () => {
-      const code = `viewEffect = effect
+      const code = `viewEffect = effect {
   user <- fetchUser(userId)
-  => <Profile user={user} />`;
+  => <Profile user={user} />
+}`;
       const ast = parse(code);
 
       const decl = ast.body[0] as BindingDeclaration;

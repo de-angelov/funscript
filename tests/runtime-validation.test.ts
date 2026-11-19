@@ -28,8 +28,9 @@ describe("runtime boundary validation", () => {
   it("validates exported JavaScript function arguments before running the body", async () => {
     const { greet } = await evaluate(`
 export js greet = (name: String) =>
-  effect
+  effect {
     => "Hello, " + name
+  }
 `, ["greet"]);
 
     await expect(greet("Ada")).resolves.toBe("Hello, Ada");

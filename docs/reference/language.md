@@ -46,9 +46,10 @@ Extracts the success value from an Effect within an `effect` block, short-circui
 ### Syntax-checked example
 
 ```funscript
-getName = effect
+getName = effect {
   user <- UserRepo.find(id)
   => user.name
+}
 ```
 
 
@@ -309,10 +310,11 @@ See also: `Schedule`, `DateTime`.
 Introduces an effectful computation block with generator semantics.
 
 ```funscript
-effect
+effect {
   result <- effectfulCall
   _ <- logCall
   => result
+}
 ```
 
 Delimits an Effect workflow that compiles to `Effect.gen(function* () { ... })`. Bind effects with `<-`, discard results with `_ <-`, and finish with `=> value`. Early exits and errors use typed Effect operations.
@@ -320,10 +322,11 @@ Delimits an Effect workflow that compiles to `Effect.gen(function* () { ... })`.
 ### Syntax-checked example
 
 ```funscript
-getUserProfile = (id: String) => effect
+getUserProfile = (id: String) => effect {
   user <- UserRepo.find(id)
   _ <- Console.log("Found: " + user.name)
   => user.name
+}
 ```
 
 
@@ -826,10 +829,11 @@ Lifts JS Promises into Effects inside effect blocks (`res <- js promiseFn()`). N
 ### Syntax-checked example
 
 ```funscript
-fetchData = (url: String) => effect
+fetchData = (url: String) => effect {
   res <- js fetch(url)
   result <- js res.json()
   => result
+}
 ```
 
 

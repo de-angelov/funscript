@@ -314,11 +314,12 @@ export ts schema Config = { timeout: Number }
   it("compiles 'js' keyword for interop (export js, effect ingress, pipeline js)", async () => {
     const code = `
 export js fetchUser = (id: String) =>
-  effect
+  effect {
     res <- js fetch("https://api.com/users/" + id)
     payload <- js res.json()
     => payload
 
+  }
 export runPromiseTest = fetchUser("123") |> js
 `.trim();
 
@@ -491,10 +492,11 @@ export host = "localhost"
   it("compiles effect blocks with direct service calls", async () => {
     const code = `
 export getUser = (id: String) =>
-  effect
+  effect {
     user <- UserRepo.find(id)
     _ <- Console.log(user)
     => user
+  }
 `.trim();
 
     const res = await Effect.runPromise(compileString(code));
@@ -510,9 +512,10 @@ export getUser = (id: String) =>
 import { HttpClient } from "effect/http"
 
 export fetch =
-  effect
+  effect {
     response <- HttpClient.get("https://example.com")
     => response
+  }
 `.trim();
 
     const res = await Effect.runPromise(compileString(code));
@@ -535,21 +538,24 @@ export fetch =
   it("compiles when statements inside effect blocks", async () => {
     const code = `
 export earlyValue = (skip: Boolean) =>
-  effect
+  effect {
     when (skip) => "early"
     => "done"
 
+  }
 export failEarly = (shouldFail: Boolean) =>
-  effect
+  effect {
     when (shouldFail) => Effect.fail("failed")
     => "done"
 
+  }
 export conditionalBlock = (enabled: Boolean) =>
-  effect
+  effect {
     when (enabled) {
       selected = "inside"
     }
     => "done"
+  }
 `.trim();
 
     const res = await Effect.runPromise(compileString(code));
@@ -877,9 +883,10 @@ export unfinished = () => ??? "implement later"
     it("fails with CompilerError diagnostic for non-final bare expression in effect block", async () => {
       const code = `
 getUser = () =>
-  effect
+  effect {
     Console.log("test")
     "done"
+  }
 `;
       const failure = await Effect.runPromise(Effect.flip(compileString(code)));
       expect(failure).toBeInstanceOf(CompilerError);
@@ -889,8 +896,9 @@ getUser = () =>
     it("fails with CompilerError diagnostic when effect block misses return expression", async () => {
       const code = `
 getUser = () =>
-  effect
+  effect {
     user <- UserRepo.find("123")
+  }
 `;
       const failure = await Effect.runPromise(Effect.flip(compileString(code)));
       expect(failure).toBeInstanceOf(CompilerError);

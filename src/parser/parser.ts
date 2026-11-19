@@ -1920,28 +1920,24 @@ export class Parser {
       }
       this.consume(TokenType.RPAREN, "Expected ')' after effect options");
     }
-    const braced = this.match(TokenType.LBRACE);
-    if (braced) this.parsingBraceEffect = true;
-    if (!braced) {
-      this.consume(TokenType.NEWLINE, "Expected newline or '{' after 'effect'");
-      this.consume(TokenType.INDENT, "Expected indent after 'effect'");
-    }
+    this.consume(TokenType.LBRACE, "Expected '{' after 'effect' (effect blocks require braces)");
+    this.parsingBraceEffect = true;
 
     const body: EffectStatement[] = [];
     let finalExpression: Expression | undefined;
     let legacyReturnKind: "bare" | "missing" | undefined;
 
-    const atEnd = () => braced ? this.check(TokenType.RBRACE) : this.check(TokenType.DEDENT);
+    const atEnd = () => this.check(TokenType.RBRACE);
     while (!atEnd() && !this.isAtEnd()) {
       this.skipNewlines();
-      if (braced) while (this.match(TokenType.INDENT) || this.match(TokenType.DEDENT)) {}
+      while (this.match(TokenType.INDENT) || this.match(TokenType.DEDENT)) {}
       if (atEnd()) break;
 
       if (this.match(TokenType.ARROW)) {
         finalExpression = this.parseExpression();
         this.skipNewlines();
-        if (braced) while (this.match(TokenType.INDENT) || this.match(TokenType.DEDENT)) {}
-        if (!atEnd()) throw new ParseError("Effect block return must be the final statement", finalExpression.span);
+        while (this.match(TokenType.INDENT) || this.match(TokenType.DEDENT)) {}
+        if (!atEnd() && !this.isAtEnd()) throw new ParseError("Effect block return must be the final statement", finalExpression.span);
         break;
       } else if (this.check(TokenType.WHEN)) {
         body.push(this.parseWhenStatement());
@@ -2011,7 +2007,7 @@ export class Parser {
         // Expression - must be the final line or control flow
         const expr = this.parseExpression();
         this.skipNewlines();
-        if (braced) while (this.match(TokenType.INDENT) || this.match(TokenType.DEDENT)) {}
+        while (this.match(TokenType.INDENT) || this.match(TokenType.DEDENT)) {}
         if (atEnd()) {
           if (this.options.allowLegacyReturns) {
             finalExpression = expr;
@@ -2028,12 +2024,8 @@ export class Parser {
       }
     }
 
-    if (braced) {
-      this.consume(TokenType.RBRACE, "Expected '}' to close effect block");
-      this.parsingBraceEffect = false;
-    } else {
-      this.consume(TokenType.DEDENT, "Expected unindent after effect block");
-    }
+    this.consume(TokenType.RBRACE, "Expected '}' to close effect block");
+    this.parsingBraceEffect = false;
 
     if (!finalExpression) {
       if (this.options.allowLegacyReturns) {

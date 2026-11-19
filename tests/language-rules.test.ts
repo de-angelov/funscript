@@ -52,20 +52,14 @@ export program = effect {
         expect((effectBlock.finalExpression as Identifier).name).toBe("summary");
       });
 
-      it("accepts indented effect block compatibility form with explicit '=> returnValue'", () => {
-        const source = `
-export program = effect
-  user <- fetchUser()
-  => user
-`.trim();
+      it.each(["", " (unscoped)"])("rejects brace-less effect%s blocks", (option) => {
+        const source = `export program = effect${option}\n  user <- fetchUser()\n  => user`;
+        expect(() => parse(source)).toThrow("effect blocks require braces");
+      });
 
-        const ast = parse(source);
-        const exp = ast.body[0] as ExportDeclaration;
-        const binding = exp.declaration as BindingDeclaration;
-        const effectBlock = binding.init as EffectBlockExpression;
-        expect(effectBlock.kind).toBe("EffectBlockExpression");
-        expect(effectBlock.body).toHaveLength(1);
-        expect((effectBlock.finalExpression as Identifier).name).toBe("user");
+      it.each(["", " (unscoped)"])("accepts braced effect%s blocks", (option) => {
+        const source = `export program = effect${option} {\n  => 1\n}`;
+        expect(() => parse(source)).not.toThrow();
       });
 
       it("rejects braced effect block missing explicit '=>' on the final return expression", () => {

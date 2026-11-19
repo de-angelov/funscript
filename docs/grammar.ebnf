@@ -251,8 +251,8 @@ array_pattern        = "[", [ pattern_list ], "]" ;
 (* 6. Effect Blocks                                                          *)
 (* ========================================================================= *)
 
-effect_block         = "effect", NEWLINE, INDENT, effect_body, DEDENT ;
-effect_body          = { effect_statement, NEWLINE }, expression ;
+effect_block         = "effect", [ "(", "unscoped", ")" ], "{", effect_body, "}" ;
+effect_body          = { effect_statement, NEWLINE }, "=>", expression ;
 
 effect_statement     = effect_bind
                      | effect_discard

@@ -332,9 +332,10 @@ export renderStatus = (state) =>
 
     it("compiles effect block returning JSX with automatic Effect import", async () => {
       const code = `
-export viewEffect = effect
+export viewEffect = effect {
   user <- fetchUser(userId)
   => <Profile user={user} />
+}
 `.trim();
       const tsx = await compileFunx(code);
       expect(tsx).toContain('import { Effect } from "effect";');

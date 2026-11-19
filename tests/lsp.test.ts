@@ -683,8 +683,9 @@ describe("FunScript LSP Server", () => {
     it("validates FunScript effect block errors using validateFunScript helper", () => {
       const invalidEffectCode = `
 getUser = () =>
-  effect
+  effect {
     user <- UserRepo.find("123")
+  }
 `.trim();
 
       const diagnostics = validateFunScript(
@@ -1740,9 +1741,10 @@ export schema Config = {
       const uri = "file:///effect.fun";
       const source = [
         "getAccount = () =>",
-        "  effect",
+        "  effect {",
         '    user <- findUser("123")',
         "    => user",
+        "  }",
       ].join("\n");
 
       await server.handleMessage({
@@ -2240,12 +2242,13 @@ export schema Config = {
         "  find: (id: String) => Effect<User, NotFound>",
         "",
         "getUser = (id: String) =>",
-        "  effect",
+        "  effect {",
         "    mut count = 0",
         "    user <- UserRepo.find(id)",
-        "    match user",
+        "    => match user",
         "      | Some(u) => u",
         "      | None => fail(NotFound(id))",
+        "  }",
       ].join("\n");
 
       await server.handleMessage({
@@ -2311,7 +2314,7 @@ export schema Config = {
         method: "textDocument/hover",
         params: {
           textDocument: { uri },
-          position: { line: 7, character: 6 }, // 'match'
+          position: { line: 7, character: 9 }, // 'match'
         },
       })) as ResponseMessage;
       const matchHover = matchRes.result as Hover;
@@ -2347,9 +2350,10 @@ export schema Config = {
         "}",
         "",
         "fetchData = (url: String) =>",
-        "  effect",
+        "  effect {",
         "    res <- js fetch(url)",
-        "    res",
+        "    => res",
+        "  }",
       ].join("\n");
 
       await server.handleMessage({
@@ -2456,10 +2460,10 @@ export schema Config = {
         "  x |> double",
         "",
         "run = () =>",
-        "  effect",
+        "  effect {",
         "    v <- doWork()",
-        "    v",
-        "",
+        "    => v",
+        "  }",
         "stub = ???",
       ].join("\n");
 

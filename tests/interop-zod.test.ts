@@ -340,9 +340,10 @@ export CustomerZod = z.object({
 export CustomerSchema = fromZod(CustomerZod)
 
 export parseCustomer = (dict: Unknown) =>
-  effect
+  effect {
     payload <- dict |> decode(CustomerSchema)
     => payload
+  }
 `;
 
       const compiled = await Effect.runPromise(compileString(source));
