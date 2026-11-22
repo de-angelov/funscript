@@ -56,6 +56,7 @@ are not validated as runnable examples. When they disagree with the current docu
 current verified documentation wins.
 
 - [Interop ergonomics design exercise](design-interop-ergonomics.md) — candidate language changes grounded in Country Rank 2.
+- [Tooling review](tooling-review.md) — snapshot of the project toolchain with prioritized recommendations; not an implementation contract.
 - `proposal.md`, `pit-of-success.md`, `rejected-syntax.md`
 - `DOGFOODING.md`, `llm-first-audit.md`, `design-effect-comparison-functions.md`, `ast-spec.md`
 - [TypeScript schema conversion decision survey](design-typescript-schema.md) — historical decision brief preceding the implemented imported TypeScript schemas in [syntax.md](syntax.md#84-imported-typescript-schemas-schema-name--from-tstype).

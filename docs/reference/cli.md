@@ -9,13 +9,17 @@ FunScript 0.2.3. This page is generated from [the CLI command catalogue](../../s
 ### `funscript build`
 
 ```text
-funscript build <file.fun|file.funx...> [--out <file>] [--outDir <dir>] [--sourcemap] [--no-check] [--no-ts] [--no-global-this] [--no-optional] [--bare-pipelines] [--bin] [--watch]
+funscript build <file.fun|file.funx...> [--target bun] [--out <file>] [--outDir <dir>] [--sourcemap] [--no-check] [--no-ts] [--no-global-this] [--no-optional] [--bare-pipelines] [--bin] [--watch]
 ```
 
-Build FunScript files to TypeScript or TSX.
+Build FunScript files to TypeScript or TSX, or bundle one entry and its local modules as a Bun executable.
 
 ```sh
 funscript build src/Button.funx --sourcemap
+```
+
+```sh
+funscript build src/cli/bin.fun --target bun --out dist/cli/bin.js
 ```
 
 ### `funscript emit`

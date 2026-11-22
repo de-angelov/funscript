@@ -16,6 +16,20 @@ using the relevant ecosystem tool. Use Vite for web development and builds, Vite
 JavaScript/TypeScript tests, and npm, pnpm, or Bun to manage dependencies. These tools do not
 automatically discover `.fun` tests or start through a FunScript wrapper.
 
+### Bun executable builds
+
+Use `funscript build <entry.fun> --target bun --out <path.js>` to compile one entry and bundle
+its reachable local `.fun`/`.funx` imports into a Bun-runnable JavaScript executable. The bundle
+has a Bun shebang and is marked executable. npm package imports remain external, so install the
+application's runtime dependencies as usual; the built program does not invoke or require the
+FunScript compiler at runtime. `--sourcemap` writes a linked source map. The Bun target accepts
+one entry file and does not support `--watch`.
+
+```sh
+funscript build src/cli/bin.fun --target bun --out dist/cli/bin.js --sourcemap
+bun run dist/cli/bin.js
+```
+
 ## Navigation and rename
 
 Go to definition follows named re-exports, including aliases. Rename respects the

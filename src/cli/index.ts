@@ -21,6 +21,7 @@ import { startRepl } from "./repl.js";
 import { renderCliHelp } from "./commands.js";
 import { auditIdiomaticFunScript } from "../tooling/idiomatic.js";
 import { FUNSCRIPT_VERSION } from "../version.js";
+import { buildBunExecutable } from "./build-bun.js";
 
 const readFile = (filePath: string) =>
   Effect.tryPromise({
@@ -105,15 +106,24 @@ const buildCommand = (args: string[]) =>
     const outPath = outIndex !== -1 ? args[outIndex + 1] : undefined;
     const outDirIndex = args.indexOf("--outDir");
     const outDir = outDirIndex !== -1 ? args[outDirIndex + 1] : undefined;
+    const targetIndex = args.indexOf("--target");
+    const target = targetIndex !== -1 ? args[targetIndex + 1] : undefined;
+    if (target !== undefined && target !== "bun") {
+      process.exitCode = 1;
+      return yield* Console.error(`Unsupported build target '${target}'; supported target: bun.`);
+    }
+    const bunTarget = target === "bun";
 
     const rawFileArgs = args.filter((arg, i) => {
       if (arg === "--sourcemap" || arg === "--no-check" || arg === "--no-ts" || arg === "--no-global-this" || arg === "--no-optional" || arg === "--bare-pipelines" || arg === "--bin" || arg === "--watch") return false;
       if (arg === "--out" || (outIndex !== -1 && i === outIndex + 1)) return false;
       if (arg === "--outDir" || (outDirIndex !== -1 && i === outDirIndex + 1)) return false;
+      if (arg === "--target" || (targetIndex !== -1 && i === targetIndex + 1)) return false;
       return true;
     });
 
     let filesToBuild: string[] = [];
+    let sourceRoots: string[] = [];
 
     if (!args.includes("--watch")) {
       if (rawFileArgs.length === 0) {
@@ -125,6 +135,7 @@ const buildCommand = (args: string[]) =>
           catch: () => false,
         });
         const searchDir = hasSrc ? "src" : ".";
+        sourceRoots = [path.resolve(searchDir)];
         if ((args.includes("--no-ts") || projectPolicy.noTs === true || projectPolicy.effectOnly?.length || Array.isArray(projectPolicy.noTs)) && !(yield* checkNoTsPaths([searchDir], !(args.includes("--no-ts") || projectPolicy.noTs === true)))) return;
         filesToBuild = yield* Effect.tryPromise({
           try: () => findFunFiles(searchDir),
@@ -133,17 +144,22 @@ const buildCommand = (args: string[]) =>
       } else {
         if ((args.includes("--no-ts") || projectPolicy.noTs === true || projectPolicy.effectOnly?.length || Array.isArray(projectPolicy.noTs)) && !(yield* checkNoTsPaths(rawFileArgs, !(args.includes("--no-ts") || projectPolicy.noTs === true)))) return;
         for (const target of rawFileArgs) {
+          const absoluteTarget = path.resolve(target);
           const stat = yield* Effect.tryPromise({
             try: () => fs.stat(target),
             catch: (error: any) => new Error(`File or directory '${target}' not found: ${error.message}`),
           });
           if (stat.isDirectory()) {
+            sourceRoots.push(absoluteTarget);
             const nested = yield* Effect.tryPromise({
               try: () => findFunFiles(target),
               catch: (error: any) => new Error(`Failed to scan files in '${target}': ${error.message}`),
             });
             filesToBuild.push(...nested);
           } else {
+            const parts = absoluteTarget.split(path.sep);
+            const srcIndex = parts.lastIndexOf("src");
+            sourceRoots.push(srcIndex > 0 ? parts.slice(0, srcIndex + 1).join(path.sep) : path.dirname(absoluteTarget));
             filesToBuild.push(target);
           }
         }
@@ -151,6 +167,10 @@ const buildCommand = (args: string[]) =>
     }
 
     if (args.includes("--watch")) {
+      if (bunTarget) {
+        process.exitCode = 1;
+        return yield* Console.error("Watch mode does not support --target bun.");
+      }
       if (isSourcemap || isBin || args.includes("--no-check")) {
         process.exitCode = 1;
         return yield* Console.error("Watch mode does not yet support --sourcemap, --bin, or --no-check.");
@@ -186,6 +206,70 @@ const buildCommand = (args: string[]) =>
       return yield* Console.log("No .fun or .funx files found to build");
     }
 
+    if (bunTarget) {
+      const entryFiles = [...new Set(filesToBuild.map(file => path.resolve(file)))];
+      if (entryFiles.length !== 1) {
+        process.exitCode = 1;
+        return yield* Console.error("--target bun requires exactly one entry file; pass its path explicitly.");
+      }
+      const entryFile = entryFiles[0]!;
+      const entryRoot = sourceRoots[0] ?? path.dirname(entryFile);
+      const relativeEntry = path.relative(entryRoot, entryFile).replace(/\.funx?$/, ".js");
+      const targetOut = outPath ?? path.join(outDir ?? "dist", relativeEntry || `${path.basename(entryFile).replace(/\.funx?$/, "")}.js`);
+      if (!args.includes("--no-check") && !(yield* checkCliFiles([entryFile], { noTs: args.includes("--no-ts"), noGlobalThis: args.includes("--no-global-this"), noOptional: args.includes("--no-optional"), barePipelines: args.includes("--bare-pipelines"), effectOnly: projectPolicy.effectOnly, noTsPaths: Array.isArray(projectPolicy.noTs) ? projectPolicy.noTs : undefined, noGlobalThisPaths: Array.isArray(projectPolicy.noGlobalThis) ? projectPolicy.noGlobalThis : undefined, noOptionalPaths: Array.isArray(projectPolicy.noOptional) ? projectPolicy.noOptional : undefined, barePipelinesPaths: Array.isArray(projectPolicy.barePipelines) ? projectPolicy.barePipelines : undefined }))) return;
+      yield* Effect.tryPromise({
+        try: () => buildBunExecutable(entryFile, targetOut, {
+          sourcemap: isSourcemap,
+          noTs: args.includes("--no-ts"),
+          noGlobalThis: args.includes("--no-global-this"),
+          noOptional: args.includes("--no-optional"),
+          barePipelines: args.includes("--bare-pipelines"),
+        }),
+        catch: error => error instanceof Error ? error : new Error(String(error)),
+      });
+      yield* Console.log(`✓ Built executable ${targetOut}`);
+      return;
+    }
+
+    const entryFiles = [...new Set(filesToBuild.map(file => path.resolve(file)))];
+    filesToBuild = [...new Set(yield* collectCliFiles(entryFiles))];
+    if (outPath && filesToBuild.length > 1) {
+      process.exitCode = 1;
+      return yield* Console.error("--out requires a single file with no local FunScript imports; use --outDir to build a module graph.");
+    }
+
+    // Resolve every destination before compiling or writing, so a collision never
+    // leaves a partially overwritten build. With --outDir, preserve paths relative
+    // to the common input root (for example src/a/main.fun -> dist/a/main.ts).
+    const rootsForLayout = [...sourceRoots, ...filesToBuild.map(file => path.dirname(path.resolve(file)))];
+    const commonSourceRoot = rootsForLayout.length
+      ? rootsForLayout.map(root => root.split(path.sep)).reduce((common, parts) => {
+          let length = 0;
+          while (length < common.length && length < parts.length && common[length] === parts[length]) length++;
+          return common.slice(0, length);
+        }).join(path.sep) || path.parse(sourceRoots[0]!).root
+      : process.cwd();
+    const destinations = new Map<string, string[]>();
+    for (const filePath of filesToBuild) {
+      const ext = filePath.endsWith(".funx") ? ".tsx" : ".ts";
+      const baseName = path.basename(filePath, path.extname(filePath)) + ext;
+      const target = outPath && filesToBuild.length === 1
+        ? outPath
+        : outDir
+          ? path.join(outDir, path.relative(commonSourceRoot, path.resolve(filePath)).replace(/\.funx?$/, ext))
+          : path.join(path.dirname(filePath), baseName);
+      const key = path.resolve(target);
+      destinations.set(key, [...(destinations.get(key) ?? []), filePath]);
+    }
+    const collisions = [...destinations].filter(([, inputs]) => inputs.length > 1);
+    if (collisions.length) {
+      process.exitCode = 1;
+      for (const [destination, inputs] of collisions) {
+        yield* Console.error(`Build output collision at '${destination}': ${inputs.join(", ")}`);
+      }
+      return;
+    }
+
     if (!args.includes("--no-check") && !(yield* checkCliFiles(filesToBuild, { noTs: args.includes("--no-ts"), noGlobalThis: args.includes("--no-global-this"), noOptional: args.includes("--no-optional"), barePipelines: args.includes("--bare-pipelines"), effectOnly: projectPolicy.effectOnly, noTsPaths: Array.isArray(projectPolicy.noTs) ? projectPolicy.noTs : undefined, noGlobalThisPaths: Array.isArray(projectPolicy.noGlobalThis) ? projectPolicy.noGlobalThis : undefined, noOptionalPaths: Array.isArray(projectPolicy.noOptional) ? projectPolicy.noOptional : undefined, barePipelinesPaths: Array.isArray(projectPolicy.barePipelines) ? projectPolicy.barePipelines : undefined }))) return;
 
     for (const filePath of filesToBuild) {
@@ -198,7 +282,7 @@ const buildCommand = (args: string[]) =>
         const ext = filePath.endsWith(".funx") ? ".tsx" : ".ts";
         const baseName = path.basename(filePath, path.extname(filePath)) + ext;
         if (outDir) {
-          targetOut = path.join(outDir, baseName);
+          targetOut = path.join(outDir, path.relative(commonSourceRoot, path.resolve(filePath)).replace(/\.funx?$/, ext));
         } else {
           targetOut = path.join(path.dirname(filePath), baseName);
         }

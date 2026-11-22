@@ -21,6 +21,24 @@ export interface WatchBuildOptions {
   error?: (message: string) => void;
 }
 
+const sourceRootForFile = (filename: string): string => {
+  const parts = path.resolve(filename).split(path.sep);
+  const srcIndex = parts.lastIndexOf("src");
+  return srcIndex > 0 ? parts.slice(0, srcIndex + 1).join(path.sep) : path.dirname(filename);
+};
+
+const commonDirectory = (directories: string[]): string => {
+  const [first, ...rest] = directories.map(directory => path.resolve(directory));
+  if (!first) return process.cwd();
+  const commonParts = rest.reduce((common, directory) => {
+    const parts = directory.split(path.sep);
+    let length = 0;
+    while (length < common.length && length < parts.length && common[length] === parts[length]) length++;
+    return common.slice(0, length);
+  }, first.split(path.sep));
+  return commonParts.join(path.sep) || path.parse(first).root;
+};
+
 /** Poll complete source and dependency snapshots; never overlap builds. */
 export async function watchBuild(options: WatchBuildOptions, signal: AbortSignal): Promise<void> {
   const cwd = path.resolve(options.cwd ?? process.cwd());
@@ -82,7 +100,7 @@ export async function watchBuild(options: WatchBuildOptions, signal: AbortSignal
           session = new IncrementalBuildSession(cwd, checks);
           policyKey = nextPolicyKey;
         }
-        if (options.out && entries.length > 1) throw new Error("--out requires exactly one input file in watch mode");
+        if (options.out && all.length > 1) throw new Error("--out requires exactly one FunScript file with no local FunScript imports in watch mode");
         if (!policyValid) {
           previous = signature;
           volatileAt = Date.now();
@@ -108,10 +126,17 @@ export async function watchBuild(options: WatchBuildOptions, signal: AbortSignal
             const currentSignature = createHash("sha256").update(JSON.stringify([JSON.stringify(currentPolicy), currentEntries, Object.entries(currentSources), [...currentDependencies], currentPolicyValid])).digest("hex");
             if (currentSignature !== signature) { previous = ""; continue; }
             if (!currentPolicyValid) { auditFailed = true; throw new Error("Source policy audit failed"); }
+            const outputFiles = all;
+            const targetRoots = await Promise.all(roots.map(async root => {
+              const stat = await fs.stat(root).catch(() => undefined);
+              return stat?.isDirectory() ? root : sourceRootForFile(root);
+            }));
+            const commonRoot = commonDirectory([...targetRoots, ...outputFiles.map(file => path.dirname(file))]);
             const destinations = new Set<string>();
-            const writes = entries.map(file => {
+            const writes = outputFiles.map(file => {
               const ext = file.endsWith(".funx") ? ".tsx" : ".ts";
-              const destination = path.resolve(cwd, options.out && entries.length === 1 ? options.out : options.outDir ? path.join(options.outDir, path.basename(file, path.extname(file)) + ext) : file.replace(/\.funx?$/, ext));
+              const outputRelative = path.relative(commonRoot, file).replace(/\.funx?$/, ext);
+              const destination = path.resolve(cwd, options.out && outputFiles.length === 1 ? options.out : options.outDir ? path.join(options.outDir, outputRelative) : file.replace(/\.funx?$/, ext));
               if (destinations.has(destination) || sources.has(destination)) throw new Error(`Multiple inputs or an input would be overwritten by ${destination}`);
               destinations.add(destination);
               const content = result.outputs[file];
@@ -126,7 +151,7 @@ export async function watchBuild(options: WatchBuildOptions, signal: AbortSignal
             managedOutputs.clear();
             for (const { destination, content } of writes) managedOutputs.set(destination, content);
             process.exitCode = 0;
-            log(`Built ${entries.length} file(s); ${result.compiled} compiled, ${result.reused} reused.`);
+            log(`Built ${outputFiles.length} file(s); ${result.compiled} compiled, ${result.reused} reused.`);
             lastError = "";
           }
         }
