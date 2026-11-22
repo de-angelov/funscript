@@ -7,6 +7,7 @@ import { Effect } from "effect";
 import { TraceMap, originalPositionFor } from "@jridgewell/trace-mapping";
 import { codeFrameColumns } from "@babel/code-frame";
 import { compileString, CompilerError } from "../compiler.js";
+import { incrementalDependencyKeys } from "./incremental-dependencies.js";
 import { ImportedSchemaError } from "./imported-schemas.js";
 import {
   TS_RESET_DECLARATION,
@@ -62,6 +63,7 @@ export interface TypeCheckCache {
     string,
     {
       source: string;
+      dependencyKey?: string;
       compiled: {
         typescript: string;
         map?: any;
@@ -789,6 +791,7 @@ export const typeCheckVirtualFiles = (
       const virtualSources = new Map(Object.entries(virtualInputFiles).map(([file, content]) => [path.resolve(cwd, file), content]));
 
       const cache = options?.cache;
+      const dependencyKeys = cache ? incrementalDependencyKeys(virtualSources, cwd) : undefined;
 
       for (const [filePath, source] of Object.entries(virtualInputFiles)) {
         const fullFunPath = path.isAbsolute(filePath) ? path.normalize(filePath) : path.normalize(path.join(cwd, filePath));
@@ -801,14 +804,17 @@ export const typeCheckVirtualFiles = (
         const noGlobalThis = !!options?.noGlobalThis || isPathPolicyEnabled(options?.noGlobalThisPaths, cwd, fullFunPath);
         const noOptional = !!options?.noOptional || isPathPolicyEnabled(options?.noOptionalPaths, cwd, fullFunPath);
         const barePipelines = !!options?.barePipelines || isPathPolicyEnabled(options?.barePipelinesPaths, cwd, fullFunPath);
-        const cachedCompiled = (noTs || noGlobalThis || noOptional || barePipelines || effectOnly) ? undefined : cache?.compiledFiles.get(fullFunPath);
-        if (cachedCompiled && cachedCompiled.source === source) {
+        const dependencyKey = dependencyKeys?.get(fullFunPath);
+        const cachedCompiled = (noTs || noGlobalThis || noOptional || barePipelines || effectOnly || !dependencyKey) ? undefined : cache?.compiledFiles.get(fullFunPath);
+        if (cachedCompiled && cachedCompiled.source === source && cachedCompiled.dependencyKey === dependencyKey) {
           compiled = cachedCompiled.compiled;
         } else {
           try {
             compiled = await Effect.runPromise(compileString(source, filePath, { sourcemap: true, sourcePath: fullFunPath, virtualSources, noTs, noGlobalThis, noOptional, barePipelines, effectOnly, effectOnlyDirectories: options?.effectOnly, policyRoot: cwd }));
-            if (cache && !noTs && !noGlobalThis && !noOptional && !barePipelines && !effectOnly) {
-              cache.compiledFiles.set(fullFunPath, { source, compiled });
+            if (cache && dependencyKey && !noTs && !noGlobalThis && !noOptional && !barePipelines && !effectOnly) {
+              cache.compiledFiles.set(fullFunPath, { source, dependencyKey, compiled });
+            } else {
+              cache?.compiledFiles.delete(fullFunPath);
             }
           } catch (err: any) {
             if (cache) {
