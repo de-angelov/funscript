@@ -399,6 +399,23 @@ export y = 20
     expect(format(formatted)).toBe(formatted);
   });
 
+  it("keeps comments inside raw TypeScript blocks from escaping into FunScript declarations", () => {
+    const source = `ts {
+  // Preserve this as part of the TypeScript block.
+  export const React = {};
+}
+
+// Component declarations follow.
+export schema WidgetProps = {
+  title: String
+}`;
+
+    const formatted = format(source);
+    expect(formatted.match(/Preserve this as part of the TypeScript block/g)).toHaveLength(1);
+    expect(formatted).toContain("// Component declarations follow.");
+    expect(format(formatted)).toBe(formatted);
+  });
+
   it("respects operator precedence in binary expressions", () => {
     const unformatted = `export calc = (1 + 2) * 3 - (4 / 2)`;
     const formatted = format(unformatted);

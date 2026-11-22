@@ -204,8 +204,37 @@ export class Formatter {
 
   private attachComments(): void {
     const standaloneComments: Comment[] = [];
+    const rawCodeRanges: Array<{ start: number; end: number }> = [];
+    const collectRawCodeRanges = (value: unknown): void => {
+      if (!value || typeof value !== "object") return;
+      if (Array.isArray(value)) {
+        for (const item of value) collectRawCodeRanges(item);
+        return;
+      }
+
+      const node = value as Record<string, unknown>;
+      const kind = node.kind;
+      if (
+        (kind === "TsEscapeDeclaration" || kind === "TsEscapeExpression" || kind === "TsEscapeTypeNode" || kind === "AsDeclaration") &&
+        node.span && typeof node.span === "object"
+      ) {
+        const span = node.span as { start?: { line?: number }; end?: { line?: number } };
+        if (typeof span.start?.line === "number" && typeof span.end?.line === "number") {
+          rawCodeRanges.push({ start: span.start.line, end: span.end.line });
+        }
+        return;
+      }
+
+      for (const [key, child] of Object.entries(node)) {
+        if (key !== "span") collectRawCodeRanges(child);
+      }
+    };
+    collectRawCodeRanges(this.ast);
 
     for (const c of this.comments) {
+      // Comments in raw TypeScript escapes are already preserved verbatim by
+      // formatTsEscape; attaching them to surrounding FunScript nodes duplicates them.
+      if (rawCodeRanges.some(range => c.line >= range.start && c.line <= range.end)) continue;
       if (c.isTrailing) {
         this.trailingComments.set(c.line, c);
       } else {
