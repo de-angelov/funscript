@@ -26,7 +26,7 @@ the filepath selects the nearest formatting config.
 
 For CI, `funscript check src --json` emits a JSON object containing `success`, error and warning
 counts, and diagnostics with source locations, severity, code, message, explanation and help text.
-Add `--warnings-as-errors` to make warnings fail the command.
+Use `--sarif` for SARIF 2.1.0 output. Add `--warnings-as-errors` to make warnings fail the command.
 
 ### Bun executable builds
 
