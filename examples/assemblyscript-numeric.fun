@@ -2,7 +2,7 @@
 // The .effect companion validates numeric inputs and captures Wasm traps.
 
 as {
-  export function wilsonScore(ups: f64, downs: f64): f64 {
+export function wilsonScore(ups: f64, downs: f64): f64 {
     const total = ups + downs;
     if (total == 0.0) return 0.0;
     const z: f64 = 1.96;

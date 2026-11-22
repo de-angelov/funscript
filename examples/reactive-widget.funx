@@ -20,7 +20,6 @@ declare global {
     }
   }
 
-  // Lightweight standalone JSX element factory for Node execution
   export const React = {
     createElement: (tag: any, props: any, ...children: any[]) => ({
       tag,
@@ -29,6 +28,8 @@ declare global {
     })
   };
 }
+
+// Lightweight standalone JSX element factory for Node execution
 
 // --- Component Schemas & Tagged Unions ---
 

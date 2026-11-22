@@ -39,7 +39,12 @@ export fetchInitialTodos =
     todos: Array<Todo> = [
       { id: 1, title: "Learn SolidJS fine-grained reactivity", completed: true, priority: "high" },
       { id: 2, title: "Design FunScript state machine", completed: true, priority: "high" },
-      { id: 3, title: "Dogfood SolidJS + FunScript integration", completed: false, priority: "medium" }
+      {
+        id: 3
+        title: "Dogfood SolidJS + FunScript integration"
+        completed: false
+        priority: "medium"
+      }
     ]
     => todos
   }

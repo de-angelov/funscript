@@ -56,6 +56,28 @@ const findFunFiles = async (dir: string): Promise<string[]> => {
   return files;
 };
 
+const FORMATTER_IGNORES = [
+  "**/node_modules/**",
+  "**/.git/**",
+  "**/.funscript/**",
+  "**/dist/**",
+  "**/build/**",
+  "**/coverage/**",
+];
+
+const findFormatFiles = async (target: string, isDirectory: boolean): Promise<string[]> => {
+  const pattern = isDirectory ? "**/*.{fun,funx}" : target;
+  const matches = await fg.glob(pattern, {
+    cwd: isDirectory ? target : undefined,
+    onlyFiles: true,
+    dot: false,
+    ignore: FORMATTER_IGNORES,
+  });
+  return matches
+    .filter(file => /\.funx?$/i.test(file))
+    .map(file => isDirectory ? path.join(target, file) : file);
+};
+
 const readStdin = () => new Promise<string>((resolve, reject) => {
   let input = "";
   process.stdin.setEncoding("utf8");
@@ -573,11 +595,11 @@ const fmtCommand = (args: string[]) =>
       const stat = hasGlob ? undefined : yield* Effect.tryPromise({ try: () => fs.stat(target), catch: () => undefined });
       if (hasGlob) {
         const matches = yield* Effect.tryPromise({
-          try: () => fg.glob(target, { onlyFiles: true, ignore: ["**/node_modules/**", "**/.git/**", "**/.funscript/**", "**/dist/**", "**/build/**"] }),
+          try: () => findFormatFiles(target, false),
           catch: (error: any) => new Error(`Cannot expand '${target}': ${error.message}`),
         });
-        for (const file of matches.filter(file => /\.funx?$/i.test(file))) files.add(file);
-        if (!matches.some(file => /\.funx?$/i.test(file))) {
+        for (const file of matches) files.add(file);
+        if (!matches.length) {
           process.exitCode = 1;
           yield* Console.error(`No FunScript files matched '${target}'`);
         }
@@ -589,7 +611,7 @@ const fmtCommand = (args: string[]) =>
         continue;
       }
       if (stat.isDirectory()) {
-        const nested = yield* Effect.tryPromise({ try: () => findFunFiles(target), catch: (error: any) => new Error(`Failed to scan '${target}': ${error.message}`) });
+        const nested = yield* Effect.tryPromise({ try: () => findFormatFiles(target, true), catch: (error: any) => new Error(`Failed to scan '${target}': ${error.message}`) });
         for (const file of nested) files.add(file);
       } else {
         files.add(target);

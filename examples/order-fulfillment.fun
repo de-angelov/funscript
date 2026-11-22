@@ -206,7 +206,8 @@ export processOrderWorkflow = (order: Order, method: PaymentMethod, tier: Delive
 
     // 4. Process payment with automatic retry on transient failure
     _ <- Console.log("Step 3: Processing payment with retry policy...")
-    txId <- executePayment(discountedOrder.id, discountedOrder.total, method) |> Effect.retry(Schedule.recurs(2))
+    txId <- executePayment(discountedOrder.id, discountedOrder.total, method)
+    |> Effect.retry(Schedule.recurs(2))
 
     // 5. Mutative update of shipping record
     _ <- Console.log("Step 4: Dispatching package and updating tracking info...")
