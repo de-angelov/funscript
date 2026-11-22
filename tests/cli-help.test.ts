@@ -31,4 +31,10 @@ describe("CLI help contract", () => {
   it("prints help for an unknown command instead of dispatching it", () => {
     expect(runCli("unknown-command")).toContain("Usage:");
   });
+
+  it("reports the version declared in package.json", () => {
+    const { version } = JSON.parse(readFileSync(new URL("../package.json", import.meta.url), "utf8"));
+    expect(runCli("--version").trim()).toBe(`funscript ${version}`);
+    expect(runCli("--help")).toContain(`FunScript ${version}`);
+  });
 });

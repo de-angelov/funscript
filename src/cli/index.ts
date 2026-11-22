@@ -20,6 +20,7 @@ import { watchBuild } from "./build-watch.js";
 import { startRepl } from "./repl.js";
 import { renderCliHelp } from "./commands.js";
 import { auditIdiomaticFunScript } from "../tooling/idiomatic.js";
+import { FUNSCRIPT_VERSION } from "../version.js";
 
 const readFile = (filePath: string) =>
   Effect.tryPromise({
@@ -494,7 +495,7 @@ const replCommand = (args: string[]) =>
     });
   });
 
-const helpCommand = Console.log(renderCliHelp("0.1.0"));
+const helpCommand = Console.log(renderCliHelp(FUNSCRIPT_VERSION));
 
 const program = Effect.gen(function* () {
   const argv = process.argv.slice(2);
@@ -535,7 +536,7 @@ const program = Effect.gen(function* () {
     case "version":
     case "-v":
     case "--version":
-      return yield* Console.log("funscript 0.1.0");
+      return yield* Console.log(`funscript ${FUNSCRIPT_VERSION}`);
     case "help":
     case "-h":
     case "--help":

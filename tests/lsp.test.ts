@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeAll } from "vitest";
 import { PassThrough } from "node:stream";
 import { spawn } from "node:child_process";
+import { readFileSync } from "node:fs";
 import * as path from "node:path";
 import {
   FunScriptLspServer,
@@ -215,7 +216,7 @@ describe("FunScript LSP Server", () => {
         },
         serverInfo: {
           name: "funscript-lsp",
-          version: "0.1.0",
+          version: JSON.parse(readFileSync(new URL("../package.json", import.meta.url), "utf8")).version,
         },
       });
     });

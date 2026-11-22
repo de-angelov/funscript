@@ -6,6 +6,7 @@ import { transformSync } from "esbuild";
 import { Effect, Console, Option, Result, Duration, pipe } from "effect";
 import { compileString, type CompileResult } from "../compiler.js";
 import { typeCheckSource } from "../compiler/check.js";
+import { FUNSCRIPT_VERSION } from "../version.js";
 
 export interface ReplOptions {
   input?: NodeJS.ReadableStream;
@@ -274,7 +275,7 @@ export function startRepl(options: ReplOptions = {}): REPLServer {
 
   if (options.showBanner ?? isTty) {
     const outputStream = options.output ?? process.stdout;
-    outputStream.write("FunScript 0.1.0 Interactive REPL\nType expressions, pipelines, or declarations. Press Ctrl+C or Ctrl+D to exit.\n\n");
+    outputStream.write(`FunScript ${FUNSCRIPT_VERSION} Interactive REPL\nType expressions, pipelines, or declarations. Press Ctrl+C or Ctrl+D to exit.\n\n`);
   }
 
   const server = repl.start({

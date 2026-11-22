@@ -55,6 +55,7 @@ import { documentSymbols, workspaceSymbols, references, prepareRename, rename, f
 import { InteropRenameSession, renameInterop } from "./interop-rename.js";
 import { ParsedDocumentCache } from "./parsed-documents.js";
 import { validateFunScript, validateSyntax } from "./validation.js";
+import { FUNSCRIPT_VERSION } from "../version.js";
 export { toDiagnostic, validateFunScript } from "./validation.js";
 
 type InteropDocumentNotification = { kind: "upsert"; textDocument: TextDocumentItem } | { kind: "close"; uri: string };
@@ -191,7 +192,7 @@ export class FunScriptLspServer extends EventEmitter {
       },
       serverInfo: {
         name: "funscript-lsp",
-        version: "0.1.0",
+        version: FUNSCRIPT_VERSION,
       },
     };
   }
