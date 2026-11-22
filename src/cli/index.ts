@@ -125,6 +125,9 @@ const buildCommand = (args: string[]) =>
       return yield* Console.error(`Unsupported build target '${target}'; supported target: bun.`);
     }
     const bunTarget = target === "bun";
+    // `build` defaults to a project output directory. `--out` remains the
+    // explicit single-file escape hatch for callers that need another layout.
+    const buildOutDir = outDir ?? (outPath ? undefined : "dist");
 
     const rawFileArgs = args.filter((arg, i) => {
       if (arg === "--sourcemap" || arg === "--no-check" || arg === "--no-ts" || arg === "--no-global-this" || arg === "--no-optional" || arg === "--bare-pipelines" || arg === "--bin" || arg === "--watch") return false;
@@ -227,7 +230,7 @@ const buildCommand = (args: string[]) =>
       const entryFile = entryFiles[0]!;
       const entryRoot = sourceRoots[0] ?? path.dirname(entryFile);
       const relativeEntry = path.relative(entryRoot, entryFile).replace(/\.funx?$/, ".js");
-      const targetOut = outPath ?? path.join(outDir ?? "dist", relativeEntry || `${path.basename(entryFile).replace(/\.funx?$/, "")}.js`);
+      const targetOut = outPath ?? path.join(buildOutDir ?? "dist", relativeEntry || `${path.basename(entryFile).replace(/\.funx?$/, "")}.js`);
       if (!args.includes("--no-check") && !(yield* checkCliFiles([entryFile], { noTs: args.includes("--no-ts"), noGlobalThis: args.includes("--no-global-this"), noOptional: args.includes("--no-optional"), barePipelines: args.includes("--bare-pipelines"), effectOnly: projectPolicy.effectOnly, noTsPaths: Array.isArray(projectPolicy.noTs) ? projectPolicy.noTs : undefined, noGlobalThisPaths: Array.isArray(projectPolicy.noGlobalThis) ? projectPolicy.noGlobalThis : undefined, noOptionalPaths: Array.isArray(projectPolicy.noOptional) ? projectPolicy.noOptional : undefined, barePipelinesPaths: Array.isArray(projectPolicy.barePipelines) ? projectPolicy.barePipelines : undefined }))) return;
       yield* Effect.tryPromise({
         try: () => buildBunExecutable(entryFile, targetOut, {
@@ -267,8 +270,8 @@ const buildCommand = (args: string[]) =>
       const baseName = path.basename(filePath, path.extname(filePath)) + ext;
       const target = outPath && filesToBuild.length === 1
         ? outPath
-        : outDir
-          ? path.join(outDir, path.relative(commonSourceRoot, path.resolve(filePath)).replace(/\.funx?$/, ext))
+        : buildOutDir
+          ? path.join(buildOutDir, path.relative(commonSourceRoot, path.resolve(filePath)).replace(/\.funx?$/, ext))
           : path.join(path.dirname(filePath), baseName);
       const key = path.resolve(target);
       destinations.set(key, [...(destinations.get(key) ?? []), filePath]);
@@ -293,8 +296,8 @@ const buildCommand = (args: string[]) =>
       } else {
         const ext = filePath.endsWith(".funx") ? ".tsx" : ".ts";
         const baseName = path.basename(filePath, path.extname(filePath)) + ext;
-        if (outDir) {
-          targetOut = path.join(outDir, path.relative(commonSourceRoot, path.resolve(filePath)).replace(/\.funx?$/, ext));
+        if (buildOutDir) {
+          targetOut = path.join(buildOutDir, path.relative(commonSourceRoot, path.resolve(filePath)).replace(/\.funx?$/, ext));
         } else {
           targetOut = path.join(path.dirname(filePath), baseName);
         }

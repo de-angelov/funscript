@@ -102,7 +102,7 @@ Add scripts that point to files or directories explicitly:
     "format": "funscript fmt src/main.fun",
     "format:check": "funscript fmt src/main.fun --check",
     "run": "funscript run src/main.fun",
-    "build": "funscript build src/main.fun --outDir dist",
+    "build": "funscript build src/main.fun",
     "dev": "vite",
     "test": "vitest run"
   }
