@@ -10,7 +10,7 @@ Use the package manager and ecosystem tools directly when you need those feature
 `funscript --help` and the generated [CLI reference](reference/cli.md) are the source of
 truth for command syntax.
 
-The CLI does not currently provide `new`, `dev`, `preview`, `test`, `add`, or `doctor`.
+The CLI does not currently provide `new`, `dev`, `preview`, `test`, or `add`.
 For project creation, create ordinary `package.json`, `tsconfig.json`, and tool config files
 using the relevant ecosystem tool. Use Vite for web development and builds, Vitest for
 JavaScript/TypeScript tests, and npm, pnpm, or Bun to manage dependencies. These tools do not
@@ -29,6 +29,10 @@ config. Use `--check` with stdin to check without writing formatted text to stdo
 For CI, `funscript check src --json` emits a JSON object containing `success`, error and warning
 counts, and diagnostics with source locations, severity, code, message, explanation and help text.
 Use `--sarif` for SARIF 2.1.0 output. Add `--warnings-as-errors` to make warnings fail the command.
+
+Run `funscript doctor` to check the Node version, package module mode, compiler dependencies,
+FunScript config, source files, duplicate `.fun`/`.funx` stems, and generated type-view manifest.
+`--json` returns the same checks in machine-readable form; required failures exit nonzero.
 
 ### Bun executable builds
 

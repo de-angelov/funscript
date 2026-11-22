@@ -118,6 +118,18 @@ funscript fmt 'src/**/*.fun' --diff
 funscript fmt --stdin --stdin-filepath src/main.fun
 ```
 
+### `funscript doctor`
+
+```text
+funscript doctor [--json]
+```
+
+Check project prerequisites and FunScript configuration.
+
+```sh
+funscript doctor --json
+```
+
 ### `funscript pipeline-style`
 
 ```text
