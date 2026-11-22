@@ -80,6 +80,9 @@ export class FunScriptLspServer extends EventEmitter {
   private workspaceRoots: string[] = [];
   private readonly interopRenameSession = new InteropRenameSession();
   private readonly parsedDocuments = new ParsedDocumentCache();
+  private codeActionWorker?: Worker;
+  private codeActionWorkerId = 0;
+  private readonly pendingCodeActions = new Map<number, { version: number; text: string; uri: string; resolve: (result: CodeAction[]) => void }>();
   private renameWorker?: Worker;
   private renameWorkerId = 0;
   private documentRevision = 0;
@@ -138,6 +141,7 @@ export class FunScriptLspServer extends EventEmitter {
     });
     connection.onNotification("funscript/interopDocument", params => this.onInteropDocument(params as InteropDocumentNotification));
 
+    connection.onCodeAction((params) => this.codeActionInWorker(params));
     connection.onDocumentFormatting((params) =>
       this.onFormattingHandler(params),
     );
@@ -158,6 +162,7 @@ export class FunScriptLspServer extends EventEmitter {
     this.isInitialized = true;
     this.clientCapabilities = params?.capabilities;
     this.stopRenameWorker();
+    this.stopCodeActionWorker();
     this.stopDiagnosticWorker();
     this.documentRevision++;
     this.interopDocuments.clear();
@@ -194,6 +199,7 @@ export class FunScriptLspServer extends EventEmitter {
   public onShutdownHandler(): null {
     this.isShutdown = true;
     this.stopRenameWorker();
+    this.stopCodeActionWorker();
     this.stopDiagnosticWorker();
     return null;
   }
@@ -206,6 +212,7 @@ export class FunScriptLspServer extends EventEmitter {
   public onDidOpenHandler(params: DidOpenTextDocumentParams): void {
     if (params?.textDocument) {
       this.documentRevision++;
+      this.cancelCodeActionsFor(params.textDocument.uri);
       this.documents.set(params.textDocument.uri, params.textDocument);
       const diagnostics = validateSyntax(
         params.textDocument.text,
@@ -225,6 +232,7 @@ export class FunScriptLspServer extends EventEmitter {
   public onDidChangeHandler(params: DidChangeTextDocumentParams): void {
     if (params?.textDocument && Array.isArray(params.contentChanges)) {
       this.documentRevision++;
+      this.cancelCodeActionsFor(params.textDocument.uri);
       const doc = this.documents.get(params.textDocument.uri);
       const lastChange =
         params.contentChanges[params.contentChanges.length - 1];
@@ -253,6 +261,7 @@ export class FunScriptLspServer extends EventEmitter {
   public onDidCloseHandler(params: DidCloseTextDocumentParams): void {
     if (params?.textDocument) {
       this.documentRevision++;
+      this.cancelCodeActionsFor(params.textDocument.uri);
       this.documents.delete(params.textDocument.uri);
       this.syntaxErrors.delete(params.textDocument.uri);
       this.scheduleTypeDiagnostics();
@@ -303,6 +312,51 @@ export class FunScriptLspServer extends EventEmitter {
     } catch {
       return null;
     }
+  }
+
+  private codeActionInWorker(params: CodeActionParams): Promise<CodeAction[]> {
+    const doc = this.documents.get(params.textDocument.uri);
+    if (!doc) return Promise.resolve([]);
+    if (!this.codeActionWorker) {
+      try {
+        const worker = new Worker(new URL("./code-action-worker.js", import.meta.url), { execArgv: [] });
+        worker.unref();
+        this.codeActionWorker = worker;
+        worker.on("message", (message: { id: number; result: CodeAction[] }) => {
+          const pending = this.pendingCodeActions.get(message.id);
+          if (!pending) return;
+          this.pendingCodeActions.delete(message.id);
+          const current = this.documents.get(pending.uri);
+          pending.resolve(current?.version === pending.version && current.text === pending.text ? message.result : []);
+        });
+        const failed = () => {
+          if (this.codeActionWorker !== worker) return;
+          this.codeActionWorker = undefined;
+          for (const pending of this.pendingCodeActions.values()) pending.resolve([]);
+          this.pendingCodeActions.clear();
+        };
+        worker.on("error", failed);
+        worker.on("exit", failed);
+      } catch { return Promise.resolve([]); }
+    }
+    const id = ++this.codeActionWorkerId;
+    return new Promise(resolve => {
+      this.pendingCodeActions.set(id, { version: doc.version, text: doc.text, uri: doc.uri, resolve });
+      try { this.codeActionWorker!.postMessage({ id, doc, params }); }
+      catch { this.pendingCodeActions.delete(id); resolve([]); }
+    });
+  }
+
+  private cancelCodeActionsFor(uri: string): void {
+    if ([...this.pendingCodeActions.values()].some(pending => pending.uri === uri)) this.stopCodeActionWorker();
+  }
+
+  private stopCodeActionWorker(): void {
+    const worker = this.codeActionWorker;
+    this.codeActionWorker = undefined;
+    for (const pending of this.pendingCodeActions.values()) pending.resolve([]);
+    this.pendingCodeActions.clear();
+    if (worker) void worker.terminate();
   }
 
   public onCodeActionHandler(params: CodeActionParams): CodeAction[] {
@@ -616,7 +670,7 @@ export class FunScriptLspServer extends EventEmitter {
     }
 
     if (req.method === "textDocument/codeAction") {
-      return { jsonrpc: "2.0", id: req.id, result: this.onCodeActionHandler(req.params as CodeActionParams) };
+      return { jsonrpc: "2.0", id: req.id, result: await this.codeActionInWorker(req.params as CodeActionParams) };
     }
 
     if (req.method === "textDocument/definition") {
@@ -800,6 +854,7 @@ export class FunScriptLspServer extends EventEmitter {
 
   public dispose(): void {
     this.stopDiagnosticWorker();
+    this.stopCodeActionWorker();
     this.interopRenameSession.dispose();
     this.parsedDocuments.clear();
     this.stopRenameWorker();

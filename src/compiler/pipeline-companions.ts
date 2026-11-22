@@ -85,7 +85,7 @@ function collectPipelines(node: any, pipelines: PipelineExpression[] = []): Pipe
     return pipelines;
   }
   for (const key of Object.keys(node)) {
-    if (key === "left" || key === "right") continue;
+    if (key === "span") continue;
     const child = node[key];
     if (Array.isArray(child)) {
       for (const item of child) collectPipelines(item, pipelines);
@@ -141,6 +141,7 @@ export function inferPipelineCompanions(
   importedGenericDataSchemas?: ReadonlyMap<string, number>,
   importedIdentitySchemas?: ReadonlySet<string>,
   importedDataSchemas?: ReadonlySet<string>,
+  tolerateUnresolvedStages = false,
 ): PipelineCompanionMap {
   const schemaNames = new Set<string>();
   const localBindings = new Set<string>();
@@ -383,6 +384,7 @@ export function inferPipelineCompanions(
         }
         if (currentType && !(currentType.flags & (ts.TypeFlags.Any | ts.TypeFlags.Unknown))) {
           const typeStr = checker.typeToString(currentType);
+          if (tolerateUnresolvedStages) { currentCompanion = undefined; continue; }
           throw new PipelineResolutionError(
             `< or comparison '${fnName}' is only available for supported ordered types (Number, DateTime); this operand has type ${typeStr}. Use Order.isLessThan(...) or an explicit domain Order. See docs/syntax.md#42-equality-and-comparisons.`,
             stage.span,
@@ -481,6 +483,7 @@ export function inferPipelineCompanions(
           }
         }
         if (!localBindings.has(fnName)) {
+          if (tolerateUnresolvedStages) { currentCompanion = undefined; continue; }
           throw new PipelineResolutionError(
             `${fnName} cannot be resolved for ${currentCompanion}. Explicit Module.${fnName} qualification is available.`,
             stage.span,
@@ -497,6 +500,7 @@ export function inferPipelineCompanions(
         }
         const candidates = pipelineCompanionCandidates(fnName);
         if (candidates.length > 1) {
+          if (tolerateUnresolvedStages) continue;
           throw new PipelineResolutionError(
             `${fnName} is ambiguous for this pipeline; write ${candidates.map((m) => `${m}.${fnName}(...)`).join(" or ")}`,
             stage.span,

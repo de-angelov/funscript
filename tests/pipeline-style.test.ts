@@ -20,6 +20,15 @@ describe("pipeline style conversion", () => {
     expect(result.skipped).toBe(1);
   }, 60000);
 
+  it("converts safe nested stages while preserving ambiguous or shadowed ones", () => {
+    const source = 'import { String } from "effect"\nstartsWith = (s: String) => false\nexport test = (value: String) => (value |> String.startsWith("a")) or (value |> String.includes("b"))\n';
+    const result = convertPipelineStyle(source, filename, "bare");
+    expect(result.text).toContain('String.startsWith("a")');
+    expect(result.text).toContain('|> includes("b")');
+    expect(result.changed).toBe(1);
+    expect(result.skipped).toBe(1);
+  }, 60000);
+
   it("offers a selection-based editor action", () => {
     const server = new FunScriptLspServer();
     const uri = `file://${filename}`;
