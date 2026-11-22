@@ -101,13 +101,17 @@ funscript lsp --stdio
 ### `funscript fmt`
 
 ```text
-funscript fmt <file.fun...> [--check]
+funscript fmt <file.fun|directory...> [--check] | fmt --stdin [--stdin-filepath <path>]
 ```
 
-Format FunScript source code or check its formatting.
+Format FunScript source files or directories, check formatting, or format source read from standard input.
 
 ```sh
-funscript fmt examples/hello.fun --check
+funscript fmt src --check
+```
+
+```sh
+funscript fmt --stdin --stdin-filepath src/main.fun
 ```
 
 ### `funscript pipeline-style`

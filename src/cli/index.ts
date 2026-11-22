@@ -52,6 +52,15 @@ const findFunFiles = async (dir: string): Promise<string[]> => {
   return files;
 };
 
+const readStdin = () => new Promise<string>((resolve, reject) => {
+  let input = "";
+  process.stdin.setEncoding("utf8");
+  process.stdin.on("data", chunk => { input += chunk; });
+  process.stdin.once("end", () => resolve(input));
+  process.stdin.once("error", reject);
+  process.stdin.resume();
+});
+
 /** Audit source paths for standalone JS/TS, including declarations and symlinks. */
 const findNonFunScriptSources = async (targets: string[]): Promise<string[]> => {
   const found = new Set<string>();
@@ -462,15 +471,46 @@ const checkCommand = (args: string[]) =>
 const fmtCommand = (args: string[]) =>
   Effect.gen(function* () {
     const isCheck = args.includes("--check");
-    const fileArgs = args.filter((a) => a !== "--check");
+    const isStdin = args.includes("--stdin");
+    const stdinPathIndex = args.indexOf("--stdin-filepath");
+    const stdinFilepath = stdinPathIndex >= 0 ? args[stdinPathIndex + 1] : undefined;
+    const fileArgs = args.filter((arg, index) => arg !== "--check" && arg !== "--stdin" && arg !== "--stdin-filepath" && !(stdinPathIndex >= 0 && index === stdinPathIndex + 1));
+
+    if (isStdin) {
+      if (fileArgs.length || isCheck) {
+        process.exitCode = 1;
+        return yield* Console.error("Usage: funscript fmt --stdin [--stdin-filepath <path>]");
+      }
+      const source = yield* Effect.tryPromise({ try: readStdin, catch: error => error instanceof Error ? error : new Error(String(error)) });
+      const filename = stdinFilepath ? path.resolve(stdinFilepath) : path.resolve("stdin.fun");
+      try {
+        const formatted = format(source, { ...loadFormatConfigForFile(filename), filename });
+        process.stdout.write(formatted);
+      } catch (error: any) {
+        process.exitCode = 1;
+        yield* Console.error(`Format error in '${filename}': ${error.message}`);
+      }
+      return;
+    }
 
     if (fileArgs.length === 0) {
       process.exitCode = 1;
-      return yield* Console.error("Usage: funscript fmt <file.fun...> [--check]");
+      return yield* Console.error("Usage: funscript fmt <file.fun|directory...> [--check] | funscript fmt --stdin [--stdin-filepath <path>]");
+    }
+
+    const files = new Set<string>();
+    for (const target of fileArgs) {
+      const stat = yield* Effect.tryPromise({ try: () => fs.stat(target), catch: (error: any) => new Error(`Cannot read '${target}': ${error.message}`) });
+      if (stat.isDirectory()) {
+        const nested = yield* Effect.tryPromise({ try: () => findFunFiles(target), catch: (error: any) => new Error(`Failed to scan '${target}': ${error.message}`) });
+        for (const file of nested) files.add(file);
+      } else {
+        files.add(target);
+      }
     }
 
     let hasDiff = false;
-    for (const filePath of fileArgs) {
+    for (const filePath of files) {
       const source = yield* readFile(filePath);
       let formatted: string;
       try {

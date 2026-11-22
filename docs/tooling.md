@@ -20,6 +20,10 @@ automatically discover `.fun` tests or start through a FunScript wrapper.
 The command bundles local FunScript imports before starting Node, so imported modules do
 not need separate build steps.
 
+`funscript fmt src --check` formats or checks every `.fun` and `.funx` file below a directory.
+For editor integrations, pipe source through `funscript fmt --stdin --stdin-filepath src/main.fun`;
+the filepath selects the nearest formatting config.
+
 ### Bun executable builds
 
 Use `funscript build <entry.fun> --target bun --out <path.js>` to compile one entry and bundle

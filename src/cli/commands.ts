@@ -15,7 +15,7 @@ export const CLI_COMMANDS: readonly CliCommand[] = [
   { name: "run", usage: "run <file.fun|file.funx> [--no-check] [--no-ts] [--no-global-this] [--no-optional] [--bare-pipelines] [-- arg... ]", description: "Bundle and run a FunScript program and its local imports with Node.js.", examples: ["funscript run examples/hello.fun", "funscript run src/main.fun -- --verbose"] },
   { name: "repl", usage: "repl", description: "Start the interactive REPL.", examples: ["funscript repl"] },
   { name: "lsp", usage: "lsp [--stdio]", description: "Start the Language Server Protocol server.", examples: ["funscript lsp --stdio"] },
-  { name: "fmt", usage: "fmt <file.fun...> [--check]", description: "Format FunScript source code or check its formatting.", examples: ["funscript fmt examples/hello.fun --check"] },
+  { name: "fmt", usage: "fmt <file.fun|directory...> [--check] | fmt --stdin [--stdin-filepath <path>]", description: "Format FunScript source files or directories, check formatting, or format source read from standard input.", examples: ["funscript fmt src --check", "funscript fmt --stdin --stdin-filepath src/main.fun"] },
   { name: "pipeline-style", usage: "pipeline-style <bare|qualified> <file or directory...>", description: "Convert pipeline stages while preserving compiler output.", examples: ["funscript pipeline-style bare src/"] },
   { name: "version", aliases: ["-v", "--version"], usage: "version", description: "Display the FunScript version.", examples: ["funscript version"] },
 ];
