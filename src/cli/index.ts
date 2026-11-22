@@ -17,7 +17,7 @@ import { format } from "../formatter/index.js";
 import { convertPipelineStyle } from "../tooling/pipeline-style.js";
 import { watchBuild } from "./build-watch.js";
 import { startRepl } from "./repl.js";
-import { renderCliHelp } from "./commands.js";
+import { renderCliHelp, validateCliArgs } from "./commands.js";
 import { auditIdiomaticFunScript } from "../tooling/idiomatic.js";
 import { FUNSCRIPT_VERSION } from "../version.js";
 import { buildBunExecutable, buildRunBundle } from "./build-bun.js";
@@ -625,6 +625,20 @@ const program = Effect.gen(function* () {
   const argv = process.argv.slice(2);
   const command = argv[0];
   const commandArgs = argv.slice(1);
+  if (command === "help") {
+    const helpTarget = commandArgs.find(arg => !arg.startsWith("-"));
+    return yield* Console.log(renderCliHelp(FUNSCRIPT_VERSION, helpTarget));
+  }
+  if (command && commandArgs.some(arg => arg === "--help" || arg === "-h")) {
+    return yield* Console.log(renderCliHelp(FUNSCRIPT_VERSION, command));
+  }
+  if (command && !["help", "-h", "--help", "--version", "-v"].includes(command)) {
+    const validationError = validateCliArgs(command, commandArgs);
+    if (validationError) {
+      process.exitCode = 1;
+      return yield* Console.error(validationError);
+    }
+  }
   if (command && ["check", "build", "emit", "run"].includes(command)) {
     projectPolicy = yield* Effect.try({ try: () => loadProjectConfig(process.cwd()), catch: (error) => error instanceof Error ? error : new Error(String(error)) });
     if (!(command === "build" && commandArgs.includes("--watch"))) {
