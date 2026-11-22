@@ -105,13 +105,17 @@ for (let i = 0; i < 6; i++) {
 The language server's in-memory typecheck cache fingerprints the complete local
 FunScript import and re-export graph for each cached file. Editing a dependency
 invalidates its transitive importers; unrelated cached files remain reusable.
-Dependencies outside the in-memory snapshot, package imports, JavaScript or
-TypeScript interop, JSX, and strict policy checks currently fall back to
-recompilation. This is a correctness-first foundation, not yet a persistent or
-CLI incremental build cache. `IncrementalBuildSession` exposes repeated, checked
+Resolvable installed packages and their declared runtime dependencies are
+fingerprinted from their package metadata, declarations, and relevant source
+files. Unresolvable packages, dependencies outside the in-memory snapshot,
+JavaScript or TypeScript interop, and JSX fall back to recompilation. Policy
+checks are cached separately for each effective policy. This is an in-memory
+cache, not a persistent cross-process build cache. `IncrementalBuildSession` exposes repeated, checked
 in-memory builds to watch or editor integrations, returning generated TypeScript
 and compiled/reused counts; callers provide the complete source snapshot and
-choose how to write outputs. Measure project-scale effects before broadening it.
+choose how to write outputs. `funscript build --watch` uses this session to
+rebuild while the process is running. Measure project-scale effects before
+broadening it.
 
 ```ts
 import { Effect } from "effect";
@@ -129,4 +133,4 @@ if (result.check.success) {
 Pass all project source files again on each build. Use a separate session per
 project, and call `clear()` to discard its cache. A session performs one build
 at a time. It currently provides TypeScript text, rather than writing files or
-producing source maps, and does not change the behavior of `funscript build`.
+producing source maps. A one-shot `funscript build` is unchanged.

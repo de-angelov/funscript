@@ -8,7 +8,7 @@ export type CliCommand = {
 
 /** Canonical public CLI contract: both help output and reference docs use this data. */
 export const CLI_COMMANDS: readonly CliCommand[] = [
-  { name: "build", usage: "build <file.fun|file.funx...> [--out <file>] [--outDir <dir>] [--sourcemap] [--no-check] [--no-ts] [--no-global-this] [--no-optional] [--bare-pipelines] [--bin]", description: "Build FunScript files to TypeScript or TSX.", examples: ["funscript build src/Button.funx --sourcemap"] },
+  { name: "build", usage: "build <file.fun|file.funx...> [--out <file>] [--outDir <dir>] [--sourcemap] [--no-check] [--no-ts] [--no-global-this] [--no-optional] [--bare-pipelines] [--bin] [--watch]", description: "Build FunScript files to TypeScript or TSX.", examples: ["funscript build src/Button.funx --sourcemap"] },
   { name: "emit", usage: "emit <file.fun|file.funx> [--out <file.ts|file.tsx>] [--sourcemap] [--no-ts] [--no-global-this] [--no-optional] [--bare-pipelines] [--bin]", description: "Compile one FunScript file to TypeScript or TSX.", examples: ["funscript emit src/main.fun --out src/main.ts --sourcemap"] },
   { name: "check", usage: "check [file.fun|file.funx...] [--idiomatic] [--no-ts] [--no-global-this] [--no-optional] [--bare-pipelines]", description: "Statically type-check files with the TypeScript API.", examples: ["funscript check examples/shapes.fun"] },
   { name: "tsc", usage: "tsc [TypeScript options]", description: "Run the project's TypeScript compiler and map type-view diagnostics to FunScript sources.", examples: ["funscript tsc --noEmit"] },

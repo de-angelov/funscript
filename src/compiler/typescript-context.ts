@@ -1,5 +1,6 @@
 import ts from "typescript";
 import path from "node:path";
+import * as fs from "node:fs";
 
 // Declaration files are immutable for the lifetime of a process in the common
 // case. Share parsed ASTs between compilation contexts, while checking file
@@ -90,11 +91,13 @@ export class TypeScriptCompilationContext {
         return sf;
       }
       if (/\.d\.(?:ts|mts|cts)$/.test(name)) {
-        const modified = ts.sys.getModifiedTime?.(name)?.getTime() ?? 0;
-        // Avoid reading the declaration just to validate its cache entry. The
-        // compiler host exposes a cheap filesystem size lookup for this.
-        const size = ts.sys.getFileSize?.(name) ?? -1;
-        const stamp = `${modified}:${size}`;
+        // ctime also changes when a file is replaced or edited and its mtime
+        // is restored; mtime and size alone can reuse stale declarations.
+        let stamp: string;
+        try {
+          const stat = fs.statSync(name, { bigint: true });
+          stamp = `${stat.dev}:${stat.ino}:${stat.size}:${stat.mtimeNs}:${stat.ctimeNs}`;
+        } catch { stamp = "missing"; }
         const cached = declarationFiles.get(norm);
         if (cached?.stamp === stamp && !shouldCreateNewSourceFile) return cached.sourceFile;
         const sf = getSourceFile(name, version, onError, shouldCreateNewSourceFile);

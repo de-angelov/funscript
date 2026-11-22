@@ -1,7 +1,8 @@
 import * as path from "node:path";
 import { Effect } from "effect";
 import { compileString } from "../compiler.js";
-import { createTypeCheckCache, typeCheckVirtualFiles, type TypeCheckResult } from "./check.js";
+import { createTypeCheckCache, typeCheckVirtualFiles, type TypeCheckResult, type CheckOptions } from "./check.js";
+import { isEffectOnlyFile, isPathPolicyEnabled } from "./project-config.js";
 
 export interface IncrementalBuildResult {
   check: TypeCheckResult;
@@ -19,7 +20,7 @@ export class IncrementalBuildSession {
   private readonly cache = createTypeCheckCache();
   private busy = false;
 
-  constructor(private readonly cwd: string = process.cwd()) {}
+  constructor(private readonly cwd: string = process.cwd(), private readonly options: Omit<CheckOptions, "cwd" | "cache"> = {}) {}
 
   clear(): void {
     if (this.busy) throw new Error("Cannot clear an incremental build while it is running");
@@ -35,7 +36,7 @@ export class IncrementalBuildSession {
           const cwd = path.resolve(this.cwd);
           const snapshot = { ...files };
           const before = new Map(this.cache.compiledFiles);
-          const check = await Effect.runPromise(typeCheckVirtualFiles(snapshot, { cwd, cache: this.cache }));
+          const check = await Effect.runPromise(typeCheckVirtualFiles(snapshot, { ...this.options, cwd, cache: this.cache }));
           if (!check.success) return { check, outputs: {}, compiled: 0, reused: 0 };
           const virtualSources = new Map(Object.entries(snapshot).map(([file, source]) => [path.resolve(cwd, file), source]));
           const outputs: Record<string, string> = {};
@@ -49,7 +50,15 @@ export class IncrementalBuildSession {
               if (before.get(absolute) === cached) reused++;
               else compiled++;
             } else {
-              const result = await Effect.runPromise(compileString(source, filename, { sourcePath: absolute, virtualSources, sourcemap: false }));
+              const result = await Effect.runPromise(compileString(source, filename, {
+                sourcePath: absolute, virtualSources, sourcemap: false,
+                noTs: !!this.options.noTs || isPathPolicyEnabled(this.options.noTsPaths, cwd, absolute),
+                noGlobalThis: !!this.options.noGlobalThis || isPathPolicyEnabled(this.options.noGlobalThisPaths, cwd, absolute),
+                noOptional: !!this.options.noOptional || isPathPolicyEnabled(this.options.noOptionalPaths, cwd, absolute),
+                barePipelines: !!this.options.barePipelines || isPathPolicyEnabled(this.options.barePipelinesPaths, cwd, absolute),
+                effectOnly: isEffectOnlyFile({ effectOnly: this.options.effectOnly }, cwd, absolute),
+                effectOnlyDirectories: this.options.effectOnly, policyRoot: cwd,
+              }));
               outputs[filename] = result.typescript;
               compiled++;
             }

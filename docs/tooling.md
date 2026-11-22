@@ -299,3 +299,8 @@ export config = {
 `indentSize` is an integer from 1 to 8 (default 2); `lineWidth` is an integer from 40 to 240 (default 100). The width is a target used when formatting records, lists, and pipelines; it is not a hard limit for every expression. The `fmt` command and language server use the closest config above each file. Project indentation overrides the editor's tab size. Leading `and` and `or` continuations are not currently supported.
 
 To measure conversion on a representative file without changing it, build FunScript and run `node scripts/benchmark-pipeline-style.mjs path/to/file.fun bare`. The report includes elapsed time, converted and skipped stages, and peak process memory; compare results on the same machine and input.
+
+
+### Incremental watch builds
+
+Run `funscript build --watch` to typecheck and rebuild while source or tracked package dependencies change. It watches `src/` by default, writes TypeScript into `dist/` by default, and accepts source files or directories and `--outDir` or `--out`. The cache exists only while the watch process runs. Stop it with Ctrl+C. Existing project policies and strict flags still apply; generated outputs are written only after a successful, current check. Removing an input does not delete an existing output file. Untracked dependencies—including Node built-ins, unresolved packages, TypeScript interop, JSX, and extended TypeScript configs—are rechecked periodically rather than cached. Watch mode currently rejects `--sourcemap`, `--bin`, and `--no-check`.

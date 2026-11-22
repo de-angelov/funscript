@@ -2,6 +2,7 @@
 
 import { Effect, Console } from "effect";
 import * as fs from "node:fs/promises";
+import { existsSync } from "node:fs";
 import * as path from "node:path";
 import { fork } from "node:child_process";
 import { transformSync } from "esbuild";
@@ -15,6 +16,7 @@ import { runTsc } from "./tsc.js";
 import { startLspServer } from "../lsp/index.js";
 import { format } from "../formatter/index.js";
 import { convertPipelineStyle } from "../tooling/pipeline-style.js";
+import { watchBuild } from "./build-watch.js";
 import { startRepl } from "./repl.js";
 import { renderCliHelp } from "./commands.js";
 import { auditIdiomaticFunScript } from "../tooling/idiomatic.js";
@@ -73,16 +75,22 @@ const findNonFunScriptSources = async (targets: string[]): Promise<string[]> => 
   return [...found].sort();
 };
 
-const checkNoTsPaths = (targets: string[], effectOnly = false) =>
+const checkNoTsPaths = (targets: string[], effectOnly = false, ownedOutputs?: ReadonlyMap<string, string>, quiet = false) =>
   Effect.gen(function* () {
     const files = yield* Effect.tryPromise({
       try: () => findNonFunScriptSources(targets),
       catch: (error: any) => new Error(`Cannot audit source paths: ${error.message}`),
     });
-    const rejected = effectOnly ? files.filter(file => isEffectOnlyFile(projectPolicy, process.cwd(), file) || isPathPolicyEnabled(projectPolicy.noTs, process.cwd(), file)) : files;
+    const candidates = effectOnly ? files.filter(file => isEffectOnlyFile(projectPolicy, process.cwd(), file) || isPathPolicyEnabled(projectPolicy.noTs, process.cwd(), file)) : files;
+    const rejected: string[] = [];
+    for (const file of candidates) {
+      const expected = ownedOutputs?.get(path.resolve(file));
+      if (expected !== undefined && (yield* Effect.promise(() => fs.readFile(file, "utf8").catch(() => undefined))) === expected) continue;
+      rejected.push(file);
+    }
     if (rejected.length) {
       process.exitCode = 1;
-      for (const file of rejected) yield* Console.error(`${file}: error: JavaScript, TypeScript and AssemblyScript source files are disabled by ${effectOnly ? "project policy" : "--no-ts"}; write this code in FunScript`);
+      if (!quiet) for (const file of rejected) yield* Console.error(`${file}: error: JavaScript, TypeScript and AssemblyScript source files are disabled by ${effectOnly ? "project policy" : "--no-ts"}; write this code in FunScript`);
       return false;
     }
     return true;
@@ -98,7 +106,7 @@ const buildCommand = (args: string[]) =>
     const outDir = outDirIndex !== -1 ? args[outDirIndex + 1] : undefined;
 
     const rawFileArgs = args.filter((arg, i) => {
-      if (arg === "--sourcemap" || arg === "--no-check" || arg === "--no-ts" || arg === "--no-global-this" || arg === "--no-optional" || arg === "--bare-pipelines" || arg === "--bin") return false;
+      if (arg === "--sourcemap" || arg === "--no-check" || arg === "--no-ts" || arg === "--no-global-this" || arg === "--no-optional" || arg === "--bare-pipelines" || arg === "--bin" || arg === "--watch") return false;
       if (arg === "--out" || (outIndex !== -1 && i === outIndex + 1)) return false;
       if (arg === "--outDir" || (outDirIndex !== -1 && i === outDirIndex + 1)) return false;
       return true;
@@ -106,37 +114,71 @@ const buildCommand = (args: string[]) =>
 
     let filesToBuild: string[] = [];
 
-    if (rawFileArgs.length === 0) {
-      const hasSrc = yield* Effect.tryPromise({
-        try: async () => {
-          const s = await fs.stat("src");
-          return s.isDirectory();
-        },
-        catch: () => false,
-      });
-      const searchDir = hasSrc ? "src" : ".";
-      if ((args.includes("--no-ts") || projectPolicy.effectOnly?.length || Array.isArray(projectPolicy.noTs)) && !(yield* checkNoTsPaths([searchDir], !args.includes("--no-ts")))) return;
-      filesToBuild = yield* Effect.tryPromise({
-        try: () => findFunFiles(searchDir),
-        catch: (error: any) => new Error(`Failed to scan files in '${searchDir}': ${error.message}`),
-      });
-    } else {
-      if ((args.includes("--no-ts") || projectPolicy.effectOnly?.length || Array.isArray(projectPolicy.noTs)) && !(yield* checkNoTsPaths(rawFileArgs, !args.includes("--no-ts")))) return;
-      for (const target of rawFileArgs) {
-        const stat = yield* Effect.tryPromise({
-          try: () => fs.stat(target),
-          catch: (error: any) => new Error(`File or directory '${target}' not found: ${error.message}`),
+    if (!args.includes("--watch")) {
+      if (rawFileArgs.length === 0) {
+        const hasSrc = yield* Effect.tryPromise({
+          try: async () => {
+            const s = await fs.stat("src");
+            return s.isDirectory();
+          },
+          catch: () => false,
         });
-        if (stat.isDirectory()) {
-          const nested = yield* Effect.tryPromise({
-            try: () => findFunFiles(target),
-            catch: (error: any) => new Error(`Failed to scan files in '${target}': ${error.message}`),
+        const searchDir = hasSrc ? "src" : ".";
+        if ((args.includes("--no-ts") || projectPolicy.noTs === true || projectPolicy.effectOnly?.length || Array.isArray(projectPolicy.noTs)) && !(yield* checkNoTsPaths([searchDir], !(args.includes("--no-ts") || projectPolicy.noTs === true)))) return;
+        filesToBuild = yield* Effect.tryPromise({
+          try: () => findFunFiles(searchDir),
+          catch: (error: any) => new Error(`Failed to scan files in '${searchDir}': ${error.message}`),
+        });
+      } else {
+        if ((args.includes("--no-ts") || projectPolicy.noTs === true || projectPolicy.effectOnly?.length || Array.isArray(projectPolicy.noTs)) && !(yield* checkNoTsPaths(rawFileArgs, !(args.includes("--no-ts") || projectPolicy.noTs === true)))) return;
+        for (const target of rawFileArgs) {
+          const stat = yield* Effect.tryPromise({
+            try: () => fs.stat(target),
+            catch: (error: any) => new Error(`File or directory '${target}' not found: ${error.message}`),
           });
-          filesToBuild.push(...nested);
-        } else {
-          filesToBuild.push(target);
+          if (stat.isDirectory()) {
+            const nested = yield* Effect.tryPromise({
+              try: () => findFunFiles(target),
+              catch: (error: any) => new Error(`Failed to scan files in '${target}': ${error.message}`),
+            });
+            filesToBuild.push(...nested);
+          } else {
+            filesToBuild.push(target);
+          }
         }
       }
+    }
+
+    if (args.includes("--watch")) {
+      if (isSourcemap || isBin || args.includes("--no-check")) {
+        process.exitCode = 1;
+        return yield* Console.error("Watch mode does not yet support --sourcemap, --bin, or --no-check.");
+      }
+      const controller = new AbortController();
+      const ownedOutputs = new Map<string, string>();
+      let auditFailed = false;
+      const stop = () => controller.abort();
+      process.once("SIGINT", stop);
+      process.once("SIGTERM", stop);
+      try {
+        yield* Effect.tryPromise({
+          try: () => watchBuild({
+            targets: rawFileArgs, out: outPath, outDir: outDir ?? (outPath ? undefined : "dist"),
+            flags: { noTs: args.includes("--no-ts"), noGlobalThis: args.includes("--no-global-this"), noOptional: args.includes("--no-optional"), barePipelines: args.includes("--bare-pipelines") },
+            onOutput: (file, content) => ownedOutputs.set(file, content),
+            audit: async (targets, policy) => {
+              projectPolicy = policy;
+              const active = targets.filter(target => existsSync(target));
+              if (!active.length || (!args.includes("--no-ts") && policy.noTs !== true && !policy.effectOnly?.length && !Array.isArray(policy.noTs))) return true;
+              const valid = await Effect.runPromise(checkNoTsPaths(active, !(args.includes("--no-ts") || policy.noTs === true), ownedOutputs, auditFailed));
+              auditFailed = !valid;
+              return valid;
+            },
+          }, controller.signal),
+          catch: error => error instanceof Error ? error : new Error(String(error)),
+        });
+      } finally { process.removeListener("SIGINT", stop); process.removeListener("SIGTERM", stop); }
+      return;
     }
 
     if (filesToBuild.length === 0) {
@@ -214,7 +256,7 @@ const emitCommand = (args: string[]) =>
       return yield* Console.error("Usage: funscript emit <file.fun|file.funx> [--out <file.ts|file.tsx>] [--sourcemap] [--no-ts] [--bin]");
     }
 
-    if ((args.includes("--no-ts") || projectPolicy.effectOnly?.length || Array.isArray(projectPolicy.noTs)) && !(yield* checkNoTsPaths([filePath], !args.includes("--no-ts")))) return;
+    if ((args.includes("--no-ts") || projectPolicy.noTs === true || projectPolicy.effectOnly?.length || Array.isArray(projectPolicy.noTs)) && !(yield* checkNoTsPaths([filePath], !(args.includes("--no-ts") || projectPolicy.noTs === true)))) return;
     const source = yield* readFile(filePath);
     const result = yield* compileString(source, filePath, {
       sourcemap: isSourcemap,
@@ -273,7 +315,7 @@ const checkCommand = (args: string[]) =>
         catch: () => false,
       });
       const searchDir = hasSrc ? "src" : ".";
-      if ((args.includes("--no-ts") || projectPolicy.effectOnly?.length || Array.isArray(projectPolicy.noTs)) && !(yield* checkNoTsPaths([searchDir], !args.includes("--no-ts")))) return;
+      if ((args.includes("--no-ts") || projectPolicy.noTs === true || projectPolicy.effectOnly?.length || Array.isArray(projectPolicy.noTs)) && !(yield* checkNoTsPaths([searchDir], !(args.includes("--no-ts") || projectPolicy.noTs === true)))) return;
       filesToCheck = yield* Effect.tryPromise({
         try: () => findFunFiles(searchDir),
         catch: (error: any) => new Error(`Failed to scan files in '${searchDir}': ${error.message}`),
@@ -282,7 +324,7 @@ const checkCommand = (args: string[]) =>
         return yield* Console.error("Usage: funscript check [file.fun|file.funx...] [--idiomatic] [--no-ts]");
       }
     } else {
-      if ((args.includes("--no-ts") || projectPolicy.effectOnly?.length || Array.isArray(projectPolicy.noTs)) && !(yield* checkNoTsPaths(rawFileArgs, !args.includes("--no-ts")))) return;
+      if ((args.includes("--no-ts") || projectPolicy.noTs === true || projectPolicy.effectOnly?.length || Array.isArray(projectPolicy.noTs)) && !(yield* checkNoTsPaths(rawFileArgs, !(args.includes("--no-ts") || projectPolicy.noTs === true)))) return;
       for (const target of rawFileArgs) {
         const stat = yield* Effect.tryPromise({
           try: () => fs.stat(target),
@@ -410,7 +452,7 @@ const runCommand = (args: string[]) =>
       return yield* Console.error("Usage: funscript run <file.fun|file.funx> [--no-check] [--no-ts]");
     }
 
-    if ((args.includes("--no-ts") || projectPolicy.effectOnly?.length || Array.isArray(projectPolicy.noTs)) && !(yield* checkNoTsPaths([filePath], !args.includes("--no-ts")))) return;
+    if ((args.includes("--no-ts") || projectPolicy.noTs === true || projectPolicy.effectOnly?.length || Array.isArray(projectPolicy.noTs)) && !(yield* checkNoTsPaths([filePath], !(args.includes("--no-ts") || projectPolicy.noTs === true)))) return;
     if (!args.includes("--no-check") && !(yield* checkCliFiles([filePath], { noTs: args.includes("--no-ts"), noGlobalThis: args.includes("--no-global-this"), noOptional: args.includes("--no-optional"), barePipelines: args.includes("--bare-pipelines"), effectOnly: projectPolicy.effectOnly, noTsPaths: Array.isArray(projectPolicy.noTs) ? projectPolicy.noTs : undefined, noGlobalThisPaths: Array.isArray(projectPolicy.noGlobalThis) ? projectPolicy.noGlobalThis : undefined, noOptionalPaths: Array.isArray(projectPolicy.noOptional) ? projectPolicy.noOptional : undefined, barePipelinesPaths: Array.isArray(projectPolicy.barePipelines) ? projectPolicy.barePipelines : undefined }))) return;
 
     const source = yield* readFile(filePath);
@@ -460,10 +502,12 @@ const program = Effect.gen(function* () {
   const commandArgs = argv.slice(1);
   if (command && ["check", "build", "emit", "run"].includes(command)) {
     projectPolicy = yield* Effect.try({ try: () => loadProjectConfig(process.cwd()), catch: (error) => error instanceof Error ? error : new Error(String(error)) });
-    if (projectPolicy.noTs === true && !commandArgs.includes("--no-ts")) commandArgs.push("--no-ts");
-    if (projectPolicy.noGlobalThis === true && !commandArgs.includes("--no-global-this")) commandArgs.push("--no-global-this");
-    if (projectPolicy.noOptional === true && !commandArgs.includes("--no-optional")) commandArgs.push("--no-optional");
-    if (projectPolicy.barePipelines === true && !commandArgs.includes("--bare-pipelines")) commandArgs.push("--bare-pipelines");
+    if (!(command === "build" && commandArgs.includes("--watch"))) {
+      if (projectPolicy.noTs === true && !commandArgs.includes("--no-ts")) commandArgs.push("--no-ts");
+      if (projectPolicy.noGlobalThis === true && !commandArgs.includes("--no-global-this")) commandArgs.push("--no-global-this");
+      if (projectPolicy.noOptional === true && !commandArgs.includes("--no-optional")) commandArgs.push("--no-optional");
+      if (projectPolicy.barePipelines === true && !commandArgs.includes("--bare-pipelines")) commandArgs.push("--bare-pipelines");
+    }
   }
 
   switch (command) {

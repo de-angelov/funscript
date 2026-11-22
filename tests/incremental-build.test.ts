@@ -29,14 +29,14 @@ describe("incremental build session", () => {
     expect((await Effect.runPromise(session.build(updated))).reused).toBe(0);
   }, 60000);
 
-  it("recompiles package-dependent sources when no dependency fingerprint is available", async () => {
+  it("reuses output when its package dependencies are unchanged", async () => {
     const session = new IncrementalBuildSession(process.cwd());
     const files = { "incremental-package-example.fun": 'import { String } from "effect"\nexport value = String.trim(" hello ")' };
     const first = await Effect.runPromise(session.build(files));
     const second = await Effect.runPromise(session.build(files));
     expect(first.check.success, first.check.formattedOutput).toBe(true);
     expect(second.outputs).toEqual(first.outputs);
-    expect([second.compiled, second.reused]).toEqual([1, 0]);
+    expect([second.compiled, second.reused]).toEqual([0, 1]);
   }, 60000);
 
   it("does not return output for a failing typecheck", async () => {

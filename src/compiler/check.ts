@@ -53,6 +53,7 @@ export interface TypeCheckResult {
 
 export interface CachedSourceFile {
   mtime?: number;
+  stamp?: string;
   sourceFile: ts.SourceFile;
 }
 
@@ -804,14 +805,22 @@ export const typeCheckVirtualFiles = (
         const noGlobalThis = !!options?.noGlobalThis || isPathPolicyEnabled(options?.noGlobalThisPaths, cwd, fullFunPath);
         const noOptional = !!options?.noOptional || isPathPolicyEnabled(options?.noOptionalPaths, cwd, fullFunPath);
         const barePipelines = !!options?.barePipelines || isPathPolicyEnabled(options?.barePipelinesPaths, cwd, fullFunPath);
-        const dependencyKey = dependencyKeys?.get(fullFunPath);
-        const cachedCompiled = (noTs || noGlobalThis || noOptional || barePipelines || effectOnly || !dependencyKey) ? undefined : cache?.compiledFiles.get(fullFunPath);
+        const graphKey = dependencyKeys?.get(fullFunPath);
+        const dependencyKey = graphKey && JSON.stringify([graphKey, noTs, noGlobalThis, noOptional, barePipelines, effectOnly, options?.effectOnly ?? [], compilerOptions]);
+        const existing = cache?.compiledFiles.get(fullFunPath);
+        if (cache && existing && existing.source === source && existing.dependencyKey !== dependencyKey) {
+          // TypeScript's old program can retain module-resolution and package
+          // metadata after a dependency changes. Recreate it before checking.
+          cache.oldProgram = undefined;
+          cache.sourceFiles.clear();
+        }
+        const cachedCompiled = !dependencyKey ? undefined : existing;
         if (cachedCompiled && cachedCompiled.source === source && cachedCompiled.dependencyKey === dependencyKey) {
           compiled = cachedCompiled.compiled;
         } else {
           try {
             compiled = await Effect.runPromise(compileString(source, filePath, { sourcemap: true, sourcePath: fullFunPath, virtualSources, noTs, noGlobalThis, noOptional, barePipelines, effectOnly, effectOnlyDirectories: options?.effectOnly, policyRoot: cwd }));
-            if (cache && dependencyKey && !noTs && !noGlobalThis && !noOptional && !barePipelines && !effectOnly) {
+            if (cache && dependencyKey) {
               cache.compiledFiles.set(fullFunPath, { source, dependencyKey, compiled });
             } else {
               cache?.compiledFiles.delete(fullFunPath);
@@ -968,30 +977,23 @@ export const typeCheckVirtualFiles = (
           if (cache) {
             const cached = cache.sourceFiles.get(norm);
             if (cached) {
-              if (norm.includes("node_modules") || norm.includes("typescript/lib") || norm.includes("@types")) {
-                return cached.sourceFile;
-              }
               try {
-                const stat = syncFs.statSync(fileName);
-                if (cached.mtime !== undefined && stat.mtimeMs === cached.mtime) {
-                  return cached.sourceFile;
-                }
+                const stat = syncFs.statSync(fileName, { bigint: true });
+                const stamp = `${stat.dev}:${stat.ino}:${stat.size}:${stat.mtimeNs}:${stat.ctimeNs}`;
+                if (cached.stamp === stamp) return cached.sourceFile;
               } catch {
-                // fall through on stat failure
+                // A removed file must not reuse its old source.
               }
             }
 
             const sf = defaultHost.getSourceFile(fileName, languageVersion, onError, shouldCreateNewSourceFile);
             if (sf) {
-              let mtime: number | undefined;
-              if (!norm.includes("node_modules") && !norm.includes("typescript/lib")) {
-                try {
-                  mtime = syncFs.statSync(fileName).mtimeMs;
-                } catch {
-                  // ignore
-                }
-              }
-              cache.sourceFiles.set(norm, { sourceFile: sf, mtime });
+              let stamp: string | undefined;
+              try {
+                const stat = syncFs.statSync(fileName, { bigint: true });
+                stamp = `${stat.dev}:${stat.ino}:${stat.size}:${stat.mtimeNs}:${stat.ctimeNs}`;
+              } catch { /* Missing files are never reused. */ }
+              cache.sourceFiles.set(norm, { sourceFile: sf, stamp });
             }
             return sf;
           }

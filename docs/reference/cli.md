@@ -9,7 +9,7 @@ FunScript 0.2.3. This page is generated from [the CLI command catalogue](../../s
 ### `funscript build`
 
 ```text
-funscript build <file.fun|file.funx...> [--out <file>] [--outDir <dir>] [--sourcemap] [--no-check] [--no-ts] [--no-global-this] [--no-optional] [--bare-pipelines] [--bin]
+funscript build <file.fun|file.funx...> [--out <file>] [--outDir <dir>] [--sourcemap] [--no-check] [--no-ts] [--no-global-this] [--no-optional] [--bare-pipelines] [--bin] [--watch]
 ```
 
 Build FunScript files to TypeScript or TSX.
