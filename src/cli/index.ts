@@ -691,9 +691,9 @@ const program = Effect.gen(function* () {
       return yield* Console.error(validationError);
     }
   }
-  if (command && ["check", "build", "emit", "run"].includes(command)) {
+  if (command && ["check", "build", "emit", "run", "tsc"].includes(command)) {
     projectPolicy = yield* Effect.try({ try: () => loadProjectConfig(process.cwd()), catch: (error) => error instanceof Error ? error : new Error(String(error)) });
-    if (!(command === "build" && commandArgs.includes("--watch"))) {
+    if (command !== "tsc" && !(command === "build" && commandArgs.includes("--watch"))) {
       if (projectPolicy.noTs === true && !commandArgs.includes("--no-ts")) commandArgs.push("--no-ts");
       if (projectPolicy.noGlobalThis === true && !commandArgs.includes("--no-global-this")) commandArgs.push("--no-global-this");
       if (projectPolicy.noOptional === true && !commandArgs.includes("--no-optional")) commandArgs.push("--no-optional");
@@ -713,6 +713,23 @@ const program = Effect.gen(function* () {
     case "check":
       return yield* checkCommand(commandArgs);
     case "tsc": {
+      const hasSourcePolicy = projectPolicy.noTs === true || (Array.isArray(projectPolicy.noTs) && projectPolicy.noTs.length > 0) || projectPolicy.noGlobalThis === true || (Array.isArray(projectPolicy.noGlobalThis) && projectPolicy.noGlobalThis.length > 0) || projectPolicy.noOptional === true || (Array.isArray(projectPolicy.noOptional) && projectPolicy.noOptional.length > 0) || projectPolicy.barePipelines === true || (Array.isArray(projectPolicy.barePipelines) && projectPolicy.barePipelines.length > 0) || !!projectPolicy.effectOnly?.length;
+      if (hasSourcePolicy) {
+        const hasSrc = yield* Effect.tryPromise({ try: async () => (await fs.stat("src")).isDirectory(), catch: () => false });
+        const sourceRoot = hasSrc ? "src" : ".";
+        const files = yield* Effect.tryPromise({ try: () => findFunFiles(sourceRoot), catch: (error: any) => new Error(`Failed to scan files in '${sourceRoot}': ${error.message}`) });
+        if (files.length && !(yield* checkCliFiles(files, {
+          noTs: projectPolicy.noTs === true,
+          noGlobalThis: projectPolicy.noGlobalThis === true,
+          noOptional: projectPolicy.noOptional === true,
+          barePipelines: projectPolicy.barePipelines === true,
+          effectOnly: projectPolicy.effectOnly,
+          noTsPaths: Array.isArray(projectPolicy.noTs) ? projectPolicy.noTs : undefined,
+          noGlobalThisPaths: Array.isArray(projectPolicy.noGlobalThis) ? projectPolicy.noGlobalThis : undefined,
+          noOptionalPaths: Array.isArray(projectPolicy.noOptional) ? projectPolicy.noOptional : undefined,
+          barePipelinesPaths: Array.isArray(projectPolicy.barePipelines) ? projectPolicy.barePipelines : undefined,
+        }))) return;
+      }
       const code = yield* Effect.tryPromise({ try: () => runTsc(commandArgs), catch: (error) => error instanceof Error ? error : new Error(String(error)) });
       process.exitCode = code;
       return;

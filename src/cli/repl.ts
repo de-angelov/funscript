@@ -6,7 +6,23 @@ import { transformSync } from "esbuild";
 import { Effect, Console, Option, Result, Duration, pipe } from "effect";
 import { compileString, type CompileResult } from "../compiler.js";
 import { typeCheckSource } from "../compiler/check.js";
+import { isEffectOnlyFile, isPathPolicyEnabled, loadProjectConfig } from "../compiler/project-config.js";
 import { FUNSCRIPT_VERSION } from "../version.js";
+
+const replProjectRoot = process.cwd();
+const replProjectConfig = loadProjectConfig(replProjectRoot);
+const replFile = path.join(replProjectRoot, "repl.fun");
+const replPolicyOptions = {
+  noTs: isPathPolicyEnabled(replProjectConfig.noTs, replProjectRoot, replFile),
+  noGlobalThis: isPathPolicyEnabled(replProjectConfig.noGlobalThis, replProjectRoot, replFile),
+  noOptional: isPathPolicyEnabled(replProjectConfig.noOptional, replProjectRoot, replFile),
+  barePipelines: isPathPolicyEnabled(replProjectConfig.barePipelines, replProjectRoot, replFile),
+  effectOnly: isEffectOnlyFile(replProjectConfig, replProjectRoot, replFile),
+  effectOnlyDirectories: replProjectConfig.effectOnly,
+  policyRoot: replProjectRoot,
+};
+
+const compileReplSource = (source: string) => compileString(source, replFile, { sourcemap: false, ...replPolicyOptions });
 
 export interface ReplOptions {
   input?: NodeJS.ReadableStream;
@@ -110,13 +126,13 @@ export async function compileReplCode(
 
   if (isLikelyDecl) {
     try {
-      const res = await Effect.runPromise(compileString(trimmed, "repl.fun", { sourcemap: false }));
+      const res = await Effect.runPromise(compileReplSource(trimmed));
       compiled = res;
       tsCode = res.typescript;
       isExpression = false;
     } catch (declErr: any) {
       try {
-        const res = await Effect.runPromise(compileString(wrapExpression(trimmed), "repl.fun", { sourcemap: false }));
+        const res = await Effect.runPromise(compileReplSource(wrapExpression(trimmed)));
         compiled = res;
         tsCode = res.typescript;
         isExpression = true;
@@ -126,13 +142,13 @@ export async function compileReplCode(
     }
   } else {
     try {
-      const res = await Effect.runPromise(compileString(wrapExpression(trimmed), "repl.fun", { sourcemap: false }));
+      const res = await Effect.runPromise(compileReplSource(wrapExpression(trimmed)));
       compiled = res;
       tsCode = res.typescript;
       isExpression = true;
     } catch (exprErr: any) {
       try {
-        const res = await Effect.runPromise(compileString(trimmed, "repl.fun", { sourcemap: false }));
+        const res = await Effect.runPromise(compileReplSource(trimmed));
         compiled = res;
         tsCode = res.typescript;
         isExpression = false;
@@ -155,7 +171,8 @@ export async function compileReplCode(
   const globals = `ts { declare global { ${["Effect", "Console", "Option", "Result", "Duration", "pipe"]
     .map((name) => `const ${name}: typeof import('effect').${name};`).join(" ")} } export {}; }`;
   const result = await Effect.runPromise(typeCheckSource(
-    [globals, ...nextDeclarations.values()].join("\n"), "repl.fun",
+    [globals, ...nextDeclarations.values()].join("\n"), replFile,
+    { noGlobalThis: replPolicyOptions.noGlobalThis, noOptional: replPolicyOptions.noOptional, barePipelines: replPolicyOptions.barePipelines, cwd: replProjectRoot },
   ));
   if (!result.success) throw new Error(result.formattedOutput);
 
