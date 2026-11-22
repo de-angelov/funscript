@@ -15,8 +15,12 @@ export interface BunExecutableOptions {
   barePipelines?: boolean;
 }
 
-/** Bundle a FunScript entry and its local modules as a Bun-runnable executable. */
-export async function buildBunExecutable(entryFile: string, outfile: string, options: BunExecutableOptions = {}): Promise<void> {
+interface BundleOptions extends BunExecutableOptions {
+  executable: boolean;
+  runMain?: boolean;
+}
+
+async function bundleFunScriptEntry(entryFile: string, outfile: string, options: BundleOptions): Promise<void> {
   const cwd = path.resolve(options.cwd ?? process.cwd());
   const entry = path.resolve(cwd, entryFile);
   const projectPolicy = loadProjectConfig(cwd);
@@ -34,7 +38,7 @@ export async function buildBunExecutable(entryFile: string, outfile: string, opt
     target: "esnext",
     packages: "external",
     sourcemap: options.sourcemap ? "linked" : false,
-    banner: { js: "#!/usr/bin/env bun" },
+    banner: options.executable ? { js: "#!/usr/bin/env bun" } : undefined,
     plugins: [{
       name: "funscript-bun-executable",
       setup(builder) {
@@ -68,11 +72,24 @@ export async function buildBunExecutable(entryFile: string, outfile: string, opt
             policyRoot: cwd,
             virtualSources,
           }));
-          return { contents: result.typescript, loader: filename.endsWith(".funx") ? "tsx" : "ts", resolveDir: path.dirname(filename) };
+          const contents = options.runMain && filename === entry
+            ? `${result.typescript}\nimport * as __funscript_effect from "effect";\nif (typeof main !== "undefined") {\n  if (__funscript_effect.Effect.isEffect(main)) await __funscript_effect.Effect.runPromise(main);\n  else if (typeof main === "function") await main();\n}\n`
+            : result.typescript;
+          return { contents, loader: filename.endsWith(".funx") ? "tsx" : "ts", resolveDir: path.dirname(filename) };
         });
       },
     }],
   });
 
-  await fs.chmod(path.resolve(cwd, outfile), 0o755);
+  if (options.executable) await fs.chmod(path.resolve(cwd, outfile), 0o755);
+}
+
+/** Bundle a FunScript entry and its local modules as a Bun-runnable executable. */
+export async function buildBunExecutable(entryFile: string, outfile: string, options: BunExecutableOptions = {}): Promise<void> {
+  return bundleFunScriptEntry(entryFile, outfile, { ...options, executable: true });
+}
+
+/** Bundle a runnable FunScript entry and its local modules for the Node-based run command. */
+export async function buildRunBundle(entryFile: string, outfile: string, options: BunExecutableOptions = {}): Promise<void> {
+  return bundleFunScriptEntry(entryFile, outfile, { ...options, executable: false, runMain: true });
 }

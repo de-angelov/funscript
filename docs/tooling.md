@@ -16,6 +16,10 @@ using the relevant ecosystem tool. Use Vite for web development and builds, Vite
 JavaScript/TypeScript tests, and npm, pnpm, or Bun to manage dependencies. These tools do not
 automatically discover `.fun` tests or start through a FunScript wrapper.
 
+`funscript run src/main.fun -- --verbose` passes arguments after `--` to the program.
+The command bundles local FunScript imports before starting Node, so imported modules do
+not need separate build steps.
+
 ### Bun executable builds
 
 Use `funscript build <entry.fun> --target bun --out <path.js>` to compile one entry and bundle

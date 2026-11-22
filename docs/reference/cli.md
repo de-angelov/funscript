@@ -61,13 +61,17 @@ funscript tsc --noEmit
 ### `funscript run`
 
 ```text
-funscript run <file.fun|file.funx> [--no-check] [--no-ts] [--no-global-this] [--no-optional] [--bare-pipelines]
+funscript run <file.fun|file.funx> [--no-check] [--no-ts] [--no-global-this] [--no-optional] [--bare-pipelines] [-- arg... ]
 ```
 
-Compile and run a FunScript program with Node.js.
+Bundle and run a FunScript program and its local imports with Node.js.
 
 ```sh
 funscript run examples/hello.fun
+```
+
+```sh
+funscript run src/main.fun -- --verbose
 ```
 
 ### `funscript repl`

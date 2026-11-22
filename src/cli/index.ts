@@ -5,7 +5,6 @@ import * as fs from "node:fs/promises";
 import { existsSync } from "node:fs";
 import * as path from "node:path";
 import { fork } from "node:child_process";
-import { transformSync } from "esbuild";
 import { compileString, checkString } from "../compiler.js";
 import { typeCheckFiles } from "../compiler/check.js";
 import { loadProjectConfig, loadFormatConfigForFile, isEffectOnlyFile, isPathPolicyEnabled, type FunScriptProjectConfig } from "../compiler/project-config.js";
@@ -21,7 +20,7 @@ import { startRepl } from "./repl.js";
 import { renderCliHelp } from "./commands.js";
 import { auditIdiomaticFunScript } from "../tooling/idiomatic.js";
 import { FUNSCRIPT_VERSION } from "../version.js";
-import { buildBunExecutable } from "./build-bun.js";
+import { buildBunExecutable, buildRunBundle } from "./build-bun.js";
 
 const readFile = (filePath: string) =>
   Effect.tryPromise({
@@ -531,32 +530,33 @@ const pipelineStyleCommand = (args: string[]) => Effect.gen(function* () {
 
 const runCommand = (args: string[]) =>
   Effect.gen(function* () {
-    const filePath = args.find((arg) => arg !== "--no-check" && arg !== "--no-ts" && arg !== "--no-global-this" && arg !== "--no-optional" && arg !== "--bare-pipelines");
+    const separator = args.indexOf("--");
+    const commandArgs = separator < 0 ? args : args.slice(0, separator);
+    const programArgs = separator < 0 ? [] : args.slice(separator + 1);
+    const filePath = commandArgs.find((arg) => arg !== "--no-check" && arg !== "--no-ts" && arg !== "--no-global-this" && arg !== "--no-optional" && arg !== "--bare-pipelines");
     if (!filePath) {
       process.exitCode = 1;
       return yield* Console.error("Usage: funscript run <file.fun|file.funx> [--no-check] [--no-ts]");
     }
 
-    if ((args.includes("--no-ts") || projectPolicy.noTs === true || projectPolicy.effectOnly?.length || Array.isArray(projectPolicy.noTs)) && !(yield* checkNoTsPaths([filePath], !(args.includes("--no-ts") || projectPolicy.noTs === true)))) return;
-    if (!args.includes("--no-check") && !(yield* checkCliFiles([filePath], { noTs: args.includes("--no-ts"), noGlobalThis: args.includes("--no-global-this"), noOptional: args.includes("--no-optional"), barePipelines: args.includes("--bare-pipelines"), effectOnly: projectPolicy.effectOnly, noTsPaths: Array.isArray(projectPolicy.noTs) ? projectPolicy.noTs : undefined, noGlobalThisPaths: Array.isArray(projectPolicy.noGlobalThis) ? projectPolicy.noGlobalThis : undefined, noOptionalPaths: Array.isArray(projectPolicy.noOptional) ? projectPolicy.noOptional : undefined, barePipelinesPaths: Array.isArray(projectPolicy.barePipelines) ? projectPolicy.barePipelines : undefined }))) return;
+    if ((commandArgs.includes("--no-ts") || projectPolicy.noTs === true || projectPolicy.effectOnly?.length || Array.isArray(projectPolicy.noTs)) && !(yield* checkNoTsPaths([filePath], !(commandArgs.includes("--no-ts") || projectPolicy.noTs === true)))) return;
+    if (!commandArgs.includes("--no-check") && !(yield* checkCliFiles([filePath], { noTs: commandArgs.includes("--no-ts"), noGlobalThis: commandArgs.includes("--no-global-this"), noOptional: commandArgs.includes("--no-optional"), barePipelines: commandArgs.includes("--bare-pipelines"), effectOnly: projectPolicy.effectOnly, noTsPaths: Array.isArray(projectPolicy.noTs) ? projectPolicy.noTs : undefined, noGlobalThisPaths: Array.isArray(projectPolicy.noGlobalThis) ? projectPolicy.noGlobalThis : undefined, noOptionalPaths: Array.isArray(projectPolicy.noOptional) ? projectPolicy.noOptional : undefined, barePipelinesPaths: Array.isArray(projectPolicy.barePipelines) ? projectPolicy.barePipelines : undefined }))) return;
 
-    const source = yield* readFile(filePath);
-    const result = yield* compileString(source, filePath, { sourcemap: false, noTs: args.includes("--no-ts") || isPathPolicyEnabled(projectPolicy.noTs, process.cwd(), filePath), noGlobalThis: args.includes("--no-global-this") || isPathPolicyEnabled(projectPolicy.noGlobalThis, process.cwd(), filePath), noOptional: args.includes("--no-optional") || isPathPolicyEnabled(projectPolicy.noOptional, process.cwd(), filePath), barePipelines: args.includes("--bare-pipelines") || isPathPolicyEnabled(projectPolicy.barePipelines, process.cwd(), filePath), effectOnly: isEffectOnlyFile(projectPolicy, process.cwd(), filePath), effectOnlyDirectories: projectPolicy.effectOnly, policyRoot: process.cwd() });
-
-    let tsCode = result.typescript;
-    tsCode += `\nimport * as __effect from "effect";\nif (typeof main !== "undefined") {\n  if (__effect.Effect.isEffect(main)) {\n    await __effect.Effect.runPromise(main);\n  } else if (typeof main === "function") {\n    await main();\n  }\n}\n`;
-
-    const isFunx = filePath.endsWith(".funx");
-    const loader = isFunx ? "tsx" : "ts";
-    const transformed = transformSync(tsCode, { loader, format: "esm" });
     const cacheDir = path.resolve(".funscript-cache");
     const ext = path.extname(filePath);
     const targetFile = path.join(cacheDir, `${path.basename(filePath, ext)}.mjs`);
-
-    yield* writeFile(targetFile, transformed.code);
+    yield* Effect.tryPromise({
+      try: () => buildRunBundle(filePath, targetFile, {
+        noTs: commandArgs.includes("--no-ts"),
+        noGlobalThis: commandArgs.includes("--no-global-this"),
+        noOptional: commandArgs.includes("--no-optional"),
+        barePipelines: commandArgs.includes("--bare-pipelines"),
+      }),
+      catch: error => error instanceof Error ? error : new Error(String(error)),
+    });
 
     yield* Effect.callback<void, Error>((resume) => {
-      const child = fork(targetFile, { stdio: "inherit" });
+      const child = fork(targetFile, programArgs, { stdio: "inherit" });
       child.on("exit", (code) => {
         if (code === 0) resume(Effect.void);
         else resume(Effect.fail(new Error(`Program exited with code ${code}`)));
