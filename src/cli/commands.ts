@@ -11,7 +11,7 @@ const commandOptions: Record<string, ReadonlySet<string>> = {
   emit: new Set(["--out", "--sourcemap", "--no-ts", "--no-global-this", "--no-optional", "--bare-pipelines", "--bin"]),
   check: new Set(["--idiomatic", "--json", "--sarif", "--warnings-as-errors", "--no-ts", "--no-global-this", "--no-optional", "--bare-pipelines"]),
   run: new Set(["--no-check", "--no-ts", "--no-global-this", "--no-optional", "--bare-pipelines"]),
-  fmt: new Set(["--check", "--stdin", "--stdin-filepath"]),
+  fmt: new Set(["--check", "--diff", "--stdin", "--stdin-filepath"]),
   lsp: new Set(["--stdio"]),
 };
 
@@ -45,7 +45,7 @@ export const CLI_COMMANDS: readonly CliCommand[] = [
   { name: "run", usage: "run <file.fun|file.funx> [--no-check] [--no-ts] [--no-global-this] [--no-optional] [--bare-pipelines] [-- arg... ]", description: "Bundle and run a FunScript program and its local imports with Node.js.", examples: ["funscript run examples/hello.fun", "funscript run src/main.fun -- --verbose"] },
   { name: "repl", usage: "repl", description: "Start the interactive REPL.", examples: ["funscript repl"] },
   { name: "lsp", usage: "lsp [--stdio]", description: "Start the Language Server Protocol server.", examples: ["funscript lsp --stdio"] },
-  { name: "fmt", usage: "fmt <file.fun|directory...> [--check] | fmt --stdin [--stdin-filepath <path>]", description: "Format FunScript source files or directories, check formatting, or format source read from standard input.", examples: ["funscript fmt src --check", "funscript fmt --stdin --stdin-filepath src/main.fun"] },
+  { name: "fmt", usage: "fmt <file|directory|glob...> [--check|--diff] | fmt --stdin [--check|--diff] [--stdin-filepath <path>]", description: "Format FunScript files, directories or globs; check formatting, show a unified diff, or format source from standard input.", examples: ["funscript fmt 'src/**/*.fun' --diff", "funscript fmt --stdin --stdin-filepath src/main.fun"] },
   { name: "pipeline-style", usage: "pipeline-style <bare|qualified> <file or directory...>", description: "Convert pipeline stages while preserving compiler output.", examples: ["funscript pipeline-style bare src/"] },
   { name: "version", aliases: ["-v", "--version"], usage: "version", description: "Display the FunScript version.", examples: ["funscript version"] },
 ];

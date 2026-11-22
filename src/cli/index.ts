@@ -6,6 +6,8 @@ import { existsSync } from "node:fs";
 import * as path from "node:path";
 import { fork } from "node:child_process";
 import { pathToFileURL } from "node:url";
+import fg from "fast-glob";
+import { createTwoFilesPatch } from "diff";
 import { compileString, checkString } from "../compiler.js";
 import { typeCheckFiles } from "../compiler/check.js";
 import { loadProjectConfig, loadFormatConfigForFile, isEffectOnlyFile, isPathPolicyEnabled, type FunScriptProjectConfig } from "../compiler/project-config.js";
@@ -523,21 +525,32 @@ const checkCommand = (args: string[]) =>
 const fmtCommand = (args: string[]) =>
   Effect.gen(function* () {
     const isCheck = args.includes("--check");
+    const isDiff = args.includes("--diff");
     const isStdin = args.includes("--stdin");
     const stdinPathIndex = args.indexOf("--stdin-filepath");
     const stdinFilepath = stdinPathIndex >= 0 ? args[stdinPathIndex + 1] : undefined;
-    const fileArgs = args.filter((arg, index) => arg !== "--check" && arg !== "--stdin" && arg !== "--stdin-filepath" && !(stdinPathIndex >= 0 && index === stdinPathIndex + 1));
+    const fileArgs = args.filter((arg, index) => arg !== "--check" && arg !== "--diff" && arg !== "--stdin" && arg !== "--stdin-filepath" && !(stdinPathIndex >= 0 && index === stdinPathIndex + 1));
 
     if (isStdin) {
-      if (fileArgs.length || isCheck) {
+      if (fileArgs.length) {
         process.exitCode = 1;
-        return yield* Console.error("Usage: funscript fmt --stdin [--stdin-filepath <path>]");
+        return yield* Console.error("Usage: funscript fmt --stdin [--check|--diff] [--stdin-filepath <path>]");
       }
       const source = yield* Effect.tryPromise({ try: readStdin, catch: error => error instanceof Error ? error : new Error(String(error)) });
       const filename = stdinFilepath ? path.resolve(stdinFilepath) : path.resolve("stdin.fun");
       try {
         const formatted = format(source, { ...loadFormatConfigForFile(filename), filename });
-        process.stdout.write(formatted);
+        if (isDiff && source !== formatted) {
+          process.stdout.write(createTwoFilesPatch(stdinFilepath ?? "stdin.fun", stdinFilepath ?? "stdin.fun", source, formatted));
+          process.exitCode = 1;
+        } else if (isCheck) {
+          if (source !== formatted) {
+            process.exitCode = 1;
+            yield* Console.error(`✗ '${stdinFilepath ?? "stdin"}' is not formatted`);
+          }
+        } else {
+          process.stdout.write(formatted);
+        }
       } catch (error: any) {
         process.exitCode = 1;
         yield* Console.error(`Format error in '${filename}': ${error.message}`);
@@ -547,12 +560,30 @@ const fmtCommand = (args: string[]) =>
 
     if (fileArgs.length === 0) {
       process.exitCode = 1;
-      return yield* Console.error("Usage: funscript fmt <file.fun|directory...> [--check] | funscript fmt --stdin [--stdin-filepath <path>]");
+      return yield* Console.error("Usage: funscript fmt <file|directory|glob...> [--check|--diff] | funscript fmt --stdin [--check|--diff] [--stdin-filepath <path>]");
     }
 
     const files = new Set<string>();
     for (const target of fileArgs) {
-      const stat = yield* Effect.tryPromise({ try: () => fs.stat(target), catch: (error: any) => new Error(`Cannot read '${target}': ${error.message}`) });
+      const hasGlob = /[*?{}[\]()!]/.test(target);
+      const stat = hasGlob ? undefined : yield* Effect.tryPromise({ try: () => fs.stat(target), catch: () => undefined });
+      if (hasGlob) {
+        const matches = yield* Effect.tryPromise({
+          try: () => fg.glob(target, { onlyFiles: true, ignore: ["**/node_modules/**", "**/.git/**", "**/.funscript/**", "**/dist/**", "**/build/**"] }),
+          catch: (error: any) => new Error(`Cannot expand '${target}': ${error.message}`),
+        });
+        for (const file of matches.filter(file => /\.funx?$/i.test(file))) files.add(file);
+        if (!matches.some(file => /\.funx?$/i.test(file))) {
+          process.exitCode = 1;
+          yield* Console.error(`No FunScript files matched '${target}'`);
+        }
+        continue;
+      }
+      if (!stat) {
+        process.exitCode = 1;
+        yield* Console.error(`Cannot read '${target}': no such file or directory`);
+        continue;
+      }
       if (stat.isDirectory()) {
         const nested = yield* Effect.tryPromise({ try: () => findFunFiles(target), catch: (error: any) => new Error(`Failed to scan '${target}': ${error.message}`) });
         for (const file of nested) files.add(file);
@@ -574,7 +605,12 @@ const fmtCommand = (args: string[]) =>
         continue;
       }
 
-      if (isCheck) {
+      if (isDiff) {
+        if (source !== formatted) {
+          hasDiff = true;
+          process.stdout.write(createTwoFilesPatch(filePath, filePath, source, formatted));
+        }
+      } else if (isCheck) {
         if (source !== formatted) {
           hasDiff = true;
           yield* Console.error(`✗ '${filePath}' is not formatted`);
@@ -591,7 +627,7 @@ const fmtCommand = (args: string[]) =>
       }
     }
 
-    if (isCheck && hasDiff) {
+    if ((isCheck || isDiff) && hasDiff) {
       process.exitCode = 1;
     }
   });

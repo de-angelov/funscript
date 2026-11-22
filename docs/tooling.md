@@ -21,8 +21,10 @@ The command bundles local FunScript imports before starting Node, so imported mo
 not need separate build steps.
 
 `funscript fmt src --check` formats or checks every `.fun` and `.funx` file below a directory.
-For editor integrations, pipe source through `funscript fmt --stdin --stdin-filepath src/main.fun`;
-the filepath selects the nearest formatting config.
+Quoted globs work too: `funscript fmt 'src/**/*.fun' --diff` prints a unified patch and exits
+nonzero when formatting changes are needed. For editor integrations, pipe source through
+`funscript fmt --stdin --stdin-filepath src/main.fun`; the filepath selects the nearest formatting
+config. Use `--check` with stdin to check without writing formatted text to stdout.
 
 For CI, `funscript check src --json` emits a JSON object containing `success`, error and warning
 counts, and diagnostics with source locations, severity, code, message, explanation and help text.

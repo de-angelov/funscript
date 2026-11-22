@@ -105,13 +105,13 @@ funscript lsp --stdio
 ### `funscript fmt`
 
 ```text
-funscript fmt <file.fun|directory...> [--check] | fmt --stdin [--stdin-filepath <path>]
+funscript fmt <file|directory|glob...> [--check|--diff] | fmt --stdin [--check|--diff] [--stdin-filepath <path>]
 ```
 
-Format FunScript source files or directories, check formatting, or format source read from standard input.
+Format FunScript files, directories or globs; check formatting, show a unified diff, or format source from standard input.
 
 ```sh
-funscript fmt src --check
+funscript fmt 'src/**/*.fun' --diff
 ```
 
 ```sh
