@@ -4,6 +4,7 @@ import { Lexer } from "../lexer/lexer.js";
 import { Parser } from "../parser/parser.js";
 
 export interface FunScriptProjectConfig {
+  format?: { indentSize?: number; lineWidth?: number };
   noTs?: boolean | string[];
   noGlobalThis?: boolean | string[];
   noOptional?: boolean | string[];
@@ -27,13 +28,24 @@ export function loadProjectConfig(cwd: string): FunScriptProjectConfig {
     const config: FunScriptProjectConfig = {};
     const seen = new Set<string>();
     for (const entry of binding.init.entries) {
-      if (entry.kind !== "FieldEntry" || !["noTs", "noGlobalThis", "noOptional", "barePipelines", "effectOnly"].includes(entry.key.name)) {
-        throw new Error("config accepts only 'noTs', 'noGlobalThis', 'noOptional', 'barePipelines', and 'effectOnly'");
+      if (entry.kind !== "FieldEntry" || !["noTs", "noGlobalThis", "noOptional", "barePipelines", "effectOnly", "format"].includes(entry.key.name)) {
+        throw new Error("config accepts only 'noTs', 'noGlobalThis', 'noOptional', 'barePipelines', 'effectOnly', and 'format'");
       }
       const name = entry.key.name;
       if (seen.has(name)) throw new Error(`duplicate config field '${name}'`);
       seen.add(name);
-      if (entry.value.kind === "ArrayExpression") {
+      if (name === "format") {
+        if (entry.value.kind !== "RecordExpression") throw new Error("format must be a literal record");
+        const format: NonNullable<FunScriptProjectConfig["format"]> = {};
+        for (const field of entry.value.entries) {
+          if (field.kind !== "FieldEntry" || !["indentSize", "lineWidth"].includes(field.key.name)) throw new Error("format accepts only indentSize and lineWidth");
+          const key = field.key.name as "indentSize" | "lineWidth";
+          if (format[key] !== undefined) throw new Error(`duplicate format field '${key}'`);
+          if (field.value.kind !== "NumberLiteral" || !Number.isInteger(field.value.value) || field.value.value < (key === "indentSize" ? 1 : 40) || field.value.value > (key === "indentSize" ? 8 : 240)) throw new Error(`${key} must be an integer between ${key === "indentSize" ? "1 and 8" : "40 and 240"}`);
+          format[key] = field.value.value;
+        }
+        config.format = format;
+      } else if (entry.value.kind === "ArrayExpression") {
         const directories: string[] = [];
         for (const item of entry.value.elements) {
           if (!item || item.kind !== "StringLiteral" || item.parts.some(part => part.kind !== "StringRawPart")) throw new Error(`${name} must contain literal directory paths`);
@@ -66,4 +78,15 @@ export function isPathPolicyEnabled(value: boolean | readonly string[] | undefin
 
 export function isEffectOnlyFile(config: FunScriptProjectConfig, cwd: string, filename: string): boolean {
   return isPathPolicyEnabled(config.effectOnly, cwd, filename);
+}
+
+/** Find the nearest project config for an editor document. */
+export function loadFormatConfigForFile(filename: string): FunScriptProjectConfig["format"] {
+  let dir = path.dirname(path.resolve(filename));
+  for (;;) {
+    if (fs.existsSync(path.join(dir, "funscript.config.fun"))) return loadProjectConfig(dir).format;
+    const parent = path.dirname(dir);
+    if (parent === dir) return undefined;
+    dir = parent;
+  }
 }

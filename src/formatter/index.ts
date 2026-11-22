@@ -87,6 +87,7 @@ import {
 
 export interface FormatOptions {
   indentSize?: number;
+  lineWidth?: number;
   filename?: string;
 }
 
@@ -184,6 +185,7 @@ export function extractComments(source: string): Comment[] {
 
 export class Formatter {
   private indentSize: number;
+  private lineWidth: number;
   private comments: Comment[];
   private leadingComments = new Map<any, Comment[]>();
   private trailingComments = new Map<number, Comment>();
@@ -195,6 +197,7 @@ export class Formatter {
     options?: FormatOptions
   ) {
     this.indentSize = options?.indentSize ?? 2;
+    this.lineWidth = options?.lineWidth ?? 100;
     this.comments = extractComments(source);
     this.attachComments();
   }
@@ -576,7 +579,7 @@ export class Formatter {
 
     if (init.kind === "PipelineExpression") {
       const chain = this.unrollPipeline(init);
-      if (chain.length > 2 || (chain.length === 2 && chain[0].span.end.line < chain[1].span.start.line)) {
+      if (this.shouldExpandPipeline(chain, indent + this.indentSize)) {
         return `\n${this.spaces(indent + this.indentSize)}${this.formatPipelineExpression(init, indent + this.indentSize)}`;
       }
     }
@@ -610,10 +613,16 @@ export class Formatter {
     return chain;
   }
 
+  private shouldExpandPipeline(chain: Expression[], indent: number): boolean {
+    if (chain.length > 2) return true;
+    if (chain[0].span.end.line < chain[1].span.start.line || chain[0].kind === "EffectBlockExpression") return true;
+    const text = `${this.formatExpression(chain[0], indent)} |> ${this.formatExpression(chain[1], indent)}`;
+    return !text.includes("\n") && indent + text.length > this.lineWidth;
+  }
+
   private formatPipelineExpression(expr: PipelineExpression, indent = 0): string {
     const chain = this.unrollPipeline(expr);
-    const isMulti = chain.length > 2 ||
-      (chain.length === 2 && (chain[0].span.end.line < chain[1].span.start.line || chain[0].kind === "EffectBlockExpression"));
+    const isMulti = this.shouldExpandPipeline(chain, indent);
 
     if (!isMulti) {
       return `${this.formatExpression(chain[0], indent)} |> ${this.formatExpression(chain[1], indent)}`;
@@ -863,8 +872,8 @@ export class Formatter {
       (expr.entries[0].span.start.line > expr.span.start.line ||
        expr.entries.some(e => e.span.end.line > e.span.start.line));
 
-    if (!isMultiline) {
-      const entriesStr = expr.entries.map(e => this.formatRecordEntry(e, indent)).join(", ");
+    const entriesStr = expr.entries.map(e => this.formatRecordEntry(e, indent)).join(", ");
+    if (!isMultiline && indent + entriesStr.length + 4 <= this.lineWidth && !entriesStr.includes("\n")) {
       return `{ ${entriesStr} }`;
     }
 
@@ -905,8 +914,9 @@ export class Formatter {
     const isMultiline = expr.elements.some(e => e.span.end.line > e.span.start.line) ||
       (expr.elements.length > 0 && expr.elements[0].span.start.line > expr.span.start.line);
 
-    if (!isMultiline) {
-      return `[${expr.elements.map(e => this.formatExpression(e, indent)).join(", ")}]`;
+    const elements = expr.elements.map(e => this.formatExpression(e, indent)).join(", ");
+    if (!isMultiline && indent + elements.length + 2 <= this.lineWidth && !elements.includes("\n")) {
+      return `[${elements}]`;
     }
 
     const elemIndent = this.spaces(indent + this.indentSize);

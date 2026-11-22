@@ -7,7 +7,7 @@ import { fork } from "node:child_process";
 import { transformSync } from "esbuild";
 import { compileString, checkString } from "../compiler.js";
 import { typeCheckFiles } from "../compiler/check.js";
-import { loadProjectConfig, isEffectOnlyFile, isPathPolicyEnabled, type FunScriptProjectConfig } from "../compiler/project-config.js";
+import { loadProjectConfig, loadFormatConfigForFile, isEffectOnlyFile, isPathPolicyEnabled, type FunScriptProjectConfig } from "../compiler/project-config.js";
 
 let projectPolicy: FunScriptProjectConfig = {};
 import { checkCliFiles, collectCliFiles } from "./typecheck.js";
@@ -348,7 +348,7 @@ const fmtCommand = (args: string[]) =>
       const source = yield* readFile(filePath);
       let formatted: string;
       try {
-        formatted = format(source, { filename: filePath });
+        formatted = format(source, { ...loadFormatConfigForFile(path.resolve(filePath)), filename: filePath });
       } catch (err: any) {
         process.exitCode = 1;
         hasDiff = true;

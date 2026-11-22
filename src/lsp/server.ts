@@ -47,6 +47,7 @@ import {
   SymbolKind,
 } from "vscode-languageserver/node";
 import { format } from "../formatter/index.js";
+import { loadFormatConfigForFile } from "../compiler/project-config.js";
 import { convertPipelineStyle } from "../tooling/pipeline-style.js";
 import { findHoverAsync } from "./hover.js";
 import { complete } from "./completion.js";
@@ -279,8 +280,10 @@ export class FunScriptLspServer extends EventEmitter {
           ? params.options.tabSize
           : undefined;
       const filename = uri ? new URL(uri).pathname : undefined;
+      const projectFormat = filename ? loadFormatConfigForFile(filename) : undefined;
       const formatted = format(doc.text, {
         ...(indentSize !== undefined ? { indentSize } : {}),
+        ...projectFormat,
         ...(filename ? { filename } : {}),
       });
 
@@ -311,7 +314,8 @@ export class FunScriptLspServer extends EventEmitter {
     const wholeRange = { start: { line: 0, character: 0 }, end: { line: lines.length - 1, character: lines.at(-1)!.length } };
     const offset = (position: { line: number; character: number }) => lines.slice(0, position.line).reduce((n, line) => n + line.length + 1, 0) + position.character;
     try {
-      const formatted = format(doc.text, { filename: uri ? new URL(uri).pathname : undefined });
+      const filename = uri ? fileURLToPath(uri) : undefined;
+      const formatted = format(doc.text, { ...(filename ? loadFormatConfigForFile(filename) : {}), filename });
       if (formatted !== doc.text) actions.push({ title: "Format document", kind: "source", edit: { changes: { [uri!]: [{ range: wholeRange, newText: formatted }] } } });
     } catch { /* Invalid source has no formatting action. */ }
     if (!doc.text.includes("|>")) return actions;

@@ -287,3 +287,13 @@ These are source-level discipline checks, not a proof of purity or a security bo
 ### Pipeline style conversion
 
 Use `funscript pipeline-style bare src/` to shorten eligible companion stages in files or directories, or `funscript pipeline-style qualified src/` to make inferred companion stages explicit. The command reports converted and skipped stages per file. The language server also offers **Use bare pipeline stages** and **Qualify pipeline stages** as refactoring actions for the stage at the cursor or stages in a selection. The conversion checks generated TypeScript and leaves ambiguous, shadowed, or otherwise behavior-changing stages untouched. Files that cannot compile are reported and left unchanged.
+
+Formatter preferences can be set in `funscript.config.fun`:
+
+```funscript
+export config = {
+  format: { indentSize: 2, lineWidth: 100 }
+}
+```
+
+`indentSize` is an integer from 1 to 8 (default 2); `lineWidth` is an integer from 40 to 240 (default 100). The width is a target used when formatting records, lists, and pipelines; it is not a hard limit for every expression. The `fmt` command and language server use the closest config above each file. Project indentation overrides the editor's tab size. Leading `and` and `or` continuations are not currently supported.
