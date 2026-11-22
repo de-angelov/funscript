@@ -2,8 +2,8 @@ import { EventEmitter } from "node:events";
 import { Worker } from "node:worker_threads";
 import type { Readable, Writable } from "node:stream";
 import { fileURLToPath, pathToFileURL } from "node:url";
-import { existsSync, readdirSync, readFileSync } from "node:fs";
-import { isAbsolute, join, relative, resolve } from "node:path";
+import { existsSync, readdirSync, readFileSync, watch as watchDirectory, type FSWatcher } from "node:fs";
+import { dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import {
   createConnection,
   type Connection,
@@ -47,7 +47,7 @@ import {
   SymbolKind,
 } from "vscode-languageserver/node";
 import { format } from "../formatter/index.js";
-import { loadFormatConfigForFile } from "../compiler/project-config.js";
+import { loadFormatConfigForFile, loadProjectConfigForFile } from "../compiler/project-config.js";
 import { convertPipelineStyle } from "../tooling/pipeline-style.js";
 import { findHoverAsync } from "./hover.js";
 import { complete } from "./completion.js";
@@ -79,6 +79,7 @@ export class FunScriptLspServer extends EventEmitter {
   private isShutdown = false;
   private clientCapabilities: any = null;
   private workspaceRoots: string[] = [];
+  private readonly projectConfigWatchers = new Map<string, FSWatcher>();
   private readonly interopRenameSession = new InteropRenameSession();
   private readonly parsedDocuments = new ParsedDocumentCache();
   private codeActionWorker?: Worker;
@@ -173,6 +174,7 @@ export class FunScriptLspServer extends EventEmitter {
     this.workspaceRoots = roots.flatMap(uri => {
       try { return [resolve(fileURLToPath(uri))]; } catch { return []; }
     });
+    this.syncProjectConfigWatchers();
     return {
       capabilities: {
         textDocumentSync: TextDocumentSyncKind.Full,
@@ -202,6 +204,7 @@ export class FunScriptLspServer extends EventEmitter {
     this.stopRenameWorker();
     this.stopCodeActionWorker();
     this.stopDiagnosticWorker();
+    this.stopProjectConfigWatchers();
     return null;
   }
 
@@ -215,6 +218,7 @@ export class FunScriptLspServer extends EventEmitter {
       this.documentRevision++;
       this.cancelCodeActionsFor(params.textDocument.uri);
       this.documents.set(params.textDocument.uri, params.textDocument);
+      this.syncProjectConfigWatchers();
       const diagnostics = validateSyntax(
         params.textDocument.text,
         params.textDocument.uri,
@@ -247,6 +251,7 @@ export class FunScriptLspServer extends EventEmitter {
         text: newText,
       };
       this.documents.set(params.textDocument.uri, updatedDoc);
+      this.syncProjectConfigWatchers();
       const diagnostics = validateSyntax(newText, params.textDocument.uri).diagnostics;
       if (diagnostics.length) this.syntaxErrors.add(updatedDoc.uri);
       else this.syntaxErrors.delete(updatedDoc.uri);
@@ -264,6 +269,7 @@ export class FunScriptLspServer extends EventEmitter {
       this.documentRevision++;
       this.cancelCodeActionsFor(params.textDocument.uri);
       this.documents.delete(params.textDocument.uri);
+      this.syncProjectConfigWatchers();
       this.syntaxErrors.delete(params.textDocument.uri);
       this.scheduleTypeDiagnostics();
       this.publishDiagnostics(params.textDocument.uri, undefined, []);
@@ -818,6 +824,56 @@ export class FunScriptLspServer extends EventEmitter {
     if (worker) void worker.terminate();
   }
 
+  private syncProjectConfigWatchers(): void {
+    const directories = new Set(this.workspaceRoots);
+    for (const document of this.documents.values()) {
+      try {
+        const filename = fileURLToPath(document.uri);
+        const workspaceRoot = this.workspaceRoots
+          .filter(root => {
+            const rel = relative(root, filename);
+            return rel === "" || (rel !== ".." && !rel.startsWith(`..${sep}`) && !isAbsolute(rel));
+          })
+          .sort((a, b) => b.length - a.length)[0];
+        const cwd = resolve(process.cwd());
+        const cwdRelative = relative(cwd, filename);
+        const watchRoot = workspaceRoot ?? (cwdRelative === "" || (cwdRelative !== ".." && !cwdRelative.startsWith(`..${sep}`) && !isAbsolute(cwdRelative)) ? cwd : dirname(filename));
+        let directory = dirname(filename);
+        for (;;) {
+          directories.add(directory);
+          if (directory === watchRoot || dirname(directory) === directory) break;
+          directory = dirname(directory);
+        }
+        const policyRoot = loadProjectConfigForFile(filename).root;
+        if (existsSync(join(policyRoot, "funscript.config.fun"))) directories.add(policyRoot);
+      } catch { /* Non-file documents do not have project config files. */ }
+    }
+
+    for (const [directory, watcher] of this.projectConfigWatchers) {
+      if (directories.has(directory)) continue;
+      watcher.close();
+      this.projectConfigWatchers.delete(directory);
+    }
+    for (const directory of directories) {
+      if (this.projectConfigWatchers.has(directory) || !existsSync(directory)) continue;
+      try {
+        const watcher = watchDirectory(directory, (_event, filename) => {
+          if (filename?.toString() === "funscript.config.fun") this.scheduleTypeDiagnostics();
+        });
+        watcher.on("error", () => {
+          watcher.close();
+          this.projectConfigWatchers.delete(directory);
+        });
+        this.projectConfigWatchers.set(directory, watcher);
+      } catch { /* Some virtual or restricted workspaces cannot be watched. */ }
+    }
+  }
+
+  private stopProjectConfigWatchers(): void {
+    for (const watcher of this.projectConfigWatchers.values()) watcher.close();
+    this.projectConfigWatchers.clear();
+  }
+
   public publishDiagnostics(
     uri: string,
     version: number | undefined,
@@ -855,6 +911,7 @@ export class FunScriptLspServer extends EventEmitter {
 
   public dispose(): void {
     this.stopDiagnosticWorker();
+    this.stopProjectConfigWatchers();
     this.stopCodeActionWorker();
     this.interopRenameSession.dispose();
     this.parsedDocuments.clear();
