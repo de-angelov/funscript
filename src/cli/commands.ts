@@ -9,7 +9,7 @@ export type CliCommand = {
 const commandOptions: Record<string, ReadonlySet<string>> = {
   build: new Set(["--target", "--out", "--outDir", "--sourcemap", "--no-check", "--no-ts", "--no-global-this", "--no-optional", "--bare-pipelines", "--bin", "--watch"]),
   emit: new Set(["--out", "--sourcemap", "--no-ts", "--no-global-this", "--no-optional", "--bare-pipelines", "--bin"]),
-  check: new Set(["--idiomatic", "--no-ts", "--no-global-this", "--no-optional", "--bare-pipelines"]),
+  check: new Set(["--idiomatic", "--json", "--warnings-as-errors", "--no-ts", "--no-global-this", "--no-optional", "--bare-pipelines"]),
   run: new Set(["--no-check", "--no-ts", "--no-global-this", "--no-optional", "--bare-pipelines"]),
   fmt: new Set(["--check", "--stdin", "--stdin-filepath"]),
   lsp: new Set(["--stdio"]),
@@ -40,7 +40,7 @@ export function validateCliArgs(command: string, args: string[]): string | undef
 export const CLI_COMMANDS: readonly CliCommand[] = [
   { name: "build", usage: "build <file.fun|file.funx...> [--target bun] [--out <file>] [--outDir <dir>] [--sourcemap] [--no-check] [--no-ts] [--no-global-this] [--no-optional] [--bare-pipelines] [--bin] [--watch]", description: "Build FunScript files to TypeScript or TSX, or bundle one entry and its local modules as a Bun executable.", examples: ["funscript build src/Button.funx --sourcemap", "funscript build src/cli/bin.fun --target bun --out dist/cli/bin.js"] },
   { name: "emit", usage: "emit <file.fun|file.funx> [--out <file.ts|file.tsx>] [--sourcemap] [--no-ts] [--no-global-this] [--no-optional] [--bare-pipelines] [--bin]", description: "Compile one FunScript file to TypeScript or TSX.", examples: ["funscript emit src/main.fun --out src/main.ts --sourcemap"] },
-  { name: "check", usage: "check [file.fun|file.funx...] [--idiomatic] [--no-ts] [--no-global-this] [--no-optional] [--bare-pipelines]", description: "Statically type-check files with the TypeScript API.", examples: ["funscript check examples/shapes.fun"] },
+  { name: "check", usage: "check [file.fun|file.funx...] [--idiomatic] [--json] [--warnings-as-errors] [--no-ts] [--no-global-this] [--no-optional] [--bare-pipelines]", description: "Statically type-check files with the TypeScript API and optionally emit machine-readable diagnostics.", examples: ["funscript check examples/shapes.fun", "funscript check src --json --warnings-as-errors"] },
   { name: "tsc", usage: "tsc [TypeScript options]", description: "Run the project's TypeScript compiler and map type-view diagnostics to FunScript sources.", examples: ["funscript tsc --noEmit"] },
   { name: "run", usage: "run <file.fun|file.funx> [--no-check] [--no-ts] [--no-global-this] [--no-optional] [--bare-pipelines] [-- arg... ]", description: "Bundle and run a FunScript program and its local imports with Node.js.", examples: ["funscript run examples/hello.fun", "funscript run src/main.fun -- --verbose"] },
   { name: "repl", usage: "repl", description: "Start the interactive REPL.", examples: ["funscript repl"] },

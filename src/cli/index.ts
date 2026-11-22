@@ -396,7 +396,9 @@ const emitCommand = (args: string[]) =>
 const checkCommand = (args: string[]) =>
   Effect.gen(function* () {
     const isIdiomatic = args.includes("--idiomatic");
-    const rawFileArgs = args.filter((a) => !a.startsWith("--"));
+    const jsonOutput = args.includes("--json");
+    const warningsAsErrors = args.includes("--warnings-as-errors");
+    const rawFileArgs = args.filter((arg) => !arg.startsWith("--"));
 
     let filesToCheck: string[] = [];
     if (rawFileArgs.length === 0) {
@@ -436,6 +438,7 @@ const checkCommand = (args: string[]) =>
     }
 
     let idiomaticPassed = true;
+    const idiomaticDiagnostics: Array<{ file: string; line: number; column: number; message: string }> = [];
     if (isIdiomatic) {
       for (const target of filesToCheck) {
         const source = yield* Effect.tryPromise({
@@ -446,7 +449,8 @@ const checkCommand = (args: string[]) =>
         if (!audit.success) {
           idiomaticPassed = false;
           for (const d of audit.diagnostics) {
-            yield* Console.error(`${d.file}:${d.line}:${d.column} - error: ${d.message}`);
+            idiomaticDiagnostics.push({ file: d.file, line: d.line, column: d.column, message: d.message });
+            if (!jsonOutput) yield* Console.error(`${d.file}:${d.line}:${d.column} - error: ${d.message}`);
           }
         }
       }
@@ -454,16 +458,40 @@ const checkCommand = (args: string[]) =>
 
     const allFiles = yield* collectCliFiles(filesToCheck);
     const result = yield* typeCheckFiles(allFiles, { noTs: args.includes("--no-ts"), noGlobalThis: args.includes("--no-global-this"), noOptional: args.includes("--no-optional"), barePipelines: args.includes("--bare-pipelines"), effectOnly: projectPolicy.effectOnly, noTsPaths: Array.isArray(projectPolicy.noTs) ? projectPolicy.noTs : undefined, noGlobalThisPaths: Array.isArray(projectPolicy.noGlobalThis) ? projectPolicy.noGlobalThis : undefined, noOptionalPaths: Array.isArray(projectPolicy.noOptional) ? projectPolicy.noOptional : undefined, barePipelinesPaths: Array.isArray(projectPolicy.barePipelines) ? projectPolicy.barePipelines : undefined });
-    if (!result.success || !idiomaticPassed) {
+    const success = result.success && idiomaticPassed && !(warningsAsErrors && result.warningCount > 0);
+    if (warningsAsErrors && result.warningCount > 0) process.exitCode = 1;
+    if (jsonOutput) {
+      const diagnostics = result.diagnostics.map(diagnostic => ({
+        file: diagnostic.file,
+        line: diagnostic.line,
+        column: diagnostic.column,
+        endLine: diagnostic.endLine,
+        endColumn: diagnostic.endColumn,
+        severity: diagnostic.category,
+        code: diagnostic.diagnosticCode ?? diagnostic.code,
+        message: diagnostic.message,
+        explanation: diagnostic.explanation,
+        help: diagnostic.suggestedAction,
+      })).concat(idiomaticDiagnostics.map(diagnostic => ({
+        ...diagnostic,
+        severity: "error",
+        code: "FS_IDIOMATIC",
+        explanation: undefined,
+        help: undefined,
+        endLine: undefined,
+        endColumn: undefined,
+      })));
+      yield* Console.log(JSON.stringify({ success, errorCount: result.errorCount, warningCount: result.warningCount, diagnostics }));
+    } else if (!success) {
       process.exitCode = 1;
-      if (!result.success) {
+      if (!result.success || (warningsAsErrors && result.warningCount > 0)) {
         yield* Console.error(result.formattedOutput);
       }
     } else {
       if (filesToCheck.length === 1) {
-        yield* Console.log(`✓ ${filesToCheck[0]} checked successfully (0 errors)`);
+        yield* Console.log(`✓ ${filesToCheck[0]} checked successfully (${result.errorCount} errors, ${result.warningCount} warnings)`);
       } else {
-        yield* Console.log(`✓ Checked ${filesToCheck.length} files successfully (0 errors)`);
+        yield* Console.log(`✓ Checked ${filesToCheck.length} files successfully (${result.errorCount} errors, ${result.warningCount} warnings)`);
       }
     }
   });

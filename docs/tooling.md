@@ -24,6 +24,10 @@ not need separate build steps.
 For editor integrations, pipe source through `funscript fmt --stdin --stdin-filepath src/main.fun`;
 the filepath selects the nearest formatting config.
 
+For CI, `funscript check src --json` emits a JSON object containing `success`, error and warning
+counts, and diagnostics with source locations, severity, code, message, explanation and help text.
+Add `--warnings-as-errors` to make warnings fail the command.
+
 ### Bun executable builds
 
 Use `funscript build <entry.fun> --target bun --out <path.js>` to compile one entry and bundle
