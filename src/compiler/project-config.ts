@@ -66,6 +66,17 @@ export function loadProjectConfig(cwd: string): FunScriptProjectConfig {
   }
 }
 
+/** Find and load the nearest project policy for a source file. */
+export function loadProjectConfigForFile(filename: string): { root: string; config: FunScriptProjectConfig } {
+  let dir = path.dirname(path.resolve(filename));
+  for (;;) {
+    if (fs.existsSync(path.join(dir, "funscript.config.fun"))) return { root: dir, config: loadProjectConfig(dir) };
+    const parent = path.dirname(dir);
+    if (parent === dir) return { root: process.cwd(), config: {} };
+    dir = parent;
+  }
+}
+
 /** Whether a policy applies globally or to a directory containing the source. */
 export function isPathPolicyEnabled(value: boolean | readonly string[] | undefined, cwd: string, filename: string): boolean {
   if (typeof value === "boolean") return value;

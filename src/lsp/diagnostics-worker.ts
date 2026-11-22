@@ -2,15 +2,16 @@ import { parentPort } from "node:worker_threads";
 import { fileURLToPath } from "node:url";
 import { DiagnosticSeverity, type Diagnostic, type PublishDiagnosticsParams, type TextDocumentItem } from "vscode-languageserver/node";
 import type { TypeCheckCache, TypeCheckResult } from "../compiler/check.js";
+import { loadProjectConfigForFile } from "../compiler/project-config.js";
 import { validateFunScript } from "./validation.js";
 
 type Request = { revision: number; documents: TextDocumentItem[] };
-let cache: TypeCheckCache | undefined;
+const caches = new Map<string, TypeCheckCache>();
 let previousFiles = new Set<string>();
 
 parentPort?.on("message", async (request: Request) => {
   try {
-    const files: Record<string, string> = {};
+    const groups = new Map<string, { files: Record<string, string>; config: ReturnType<typeof loadProjectConfigForFile>["config"] }>();
     const filenames = new Map<string, string>();
     const semantic = new Map<string, Diagnostic[]>();
     for (const doc of request.documents) {
@@ -20,27 +21,49 @@ parentPort?.on("message", async (request: Request) => {
       if (!doc.uri.startsWith("file:")) continue;
       try {
         const filename = fileURLToPath(doc.uri);
-        files[filename] = doc.text;
+        const policy = loadProjectConfigForFile(filename);
+        const group = groups.get(policy.root) ?? { files: {}, config: policy.config };
+        group.files[filename] = doc.text;
+        groups.set(policy.root, group);
         filenames.set(doc.uri, filename);
       } catch { /* Non-file documents still receive semantic diagnostics. */ }
     }
-    const currentFiles = new Set(Object.keys(files));
+    const currentFiles = new Set([...groups.values()].flatMap(group => Object.keys(group.files)));
     for (const filename of previousFiles) if (!currentFiles.has(filename)) {
-      cache?.compiledFiles.delete(filename);
-      cache?.sourceFiles.delete(filename.replace(/\.(fun|funx)$/, filename.endsWith(".funx") ? ".tsx" : ".ts"));
+      for (const cache of caches.values()) {
+        cache.compiledFiles.delete(filename);
+        cache.sourceFiles.delete(filename.replace(/\.(fun|funx)$/, filename.endsWith(".funx") ? ".tsx" : ".ts"));
+      }
     }
     previousFiles = currentFiles;
-    let checked: TypeCheckResult | undefined;
+    const checkedDiagnostics = new Map<string, TypeCheckResult["diagnostics"]>();
     if (currentFiles.size) {
       const [{ Effect }, { createTypeCheckCache, typeCheckVirtualFiles }] = await Promise.all([import("effect"), import("../compiler/check.js")]);
-      cache ??= createTypeCheckCache();
-      checked = await Effect.runPromise(typeCheckVirtualFiles(files, { cache }));
+      for (const [root, group] of groups) {
+        let cache = caches.get(root);
+        if (!cache) { cache = createTypeCheckCache(); caches.set(root, cache); }
+        const policy = group.config;
+        const checked = await Effect.runPromise(typeCheckVirtualFiles(group.files, {
+          cwd: root,
+          cache,
+          noTs: policy.noTs === true,
+          noGlobalThis: policy.noGlobalThis === true,
+          noOptional: policy.noOptional === true,
+          barePipelines: policy.barePipelines === true,
+          noTsPaths: Array.isArray(policy.noTs) ? policy.noTs : undefined,
+          noGlobalThisPaths: Array.isArray(policy.noGlobalThis) ? policy.noGlobalThis : undefined,
+          noOptionalPaths: Array.isArray(policy.noOptional) ? policy.noOptional : undefined,
+          barePipelinesPaths: Array.isArray(policy.barePipelines) ? policy.barePipelines : undefined,
+          effectOnly: policy.effectOnly,
+        }));
+        for (const filename of Object.keys(group.files)) checkedDiagnostics.set(filename, checked.diagnostics.filter(item => item.file === filename));
+      }
     }
     const diagnostics: PublishDiagnosticsParams[] = request.documents.flatMap(doc => {
       const direct = semantic.get(doc.uri) ?? [];
       const filename = filenames.get(doc.uri);
       if (direct.length || !filename) return [];
-      const mapped: Diagnostic[] = (checked?.diagnostics ?? []).filter(item => item.file === filename).map(item => ({
+      const mapped: Diagnostic[] = (checkedDiagnostics.get(filename) ?? []).map(item => ({
         range: {
           start: { line: Math.max(0, item.line - 1), character: Math.max(0, item.column - 1) },
           end: { line: Math.max(0, (item.endLine ?? item.line) - 1), character: Math.max(0, (item.endColumn ?? item.column + 1) - 1) },
