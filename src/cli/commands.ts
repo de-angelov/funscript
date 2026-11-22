@@ -16,6 +16,7 @@ export const CLI_COMMANDS: readonly CliCommand[] = [
   { name: "repl", usage: "repl", description: "Start the interactive REPL.", examples: ["funscript repl"] },
   { name: "lsp", usage: "lsp [--stdio]", description: "Start the Language Server Protocol server.", examples: ["funscript lsp --stdio"] },
   { name: "fmt", usage: "fmt <file.fun...> [--check]", description: "Format FunScript source code or check its formatting.", examples: ["funscript fmt examples/hello.fun --check"] },
+  { name: "pipeline-style", usage: "pipeline-style <bare|qualified> <file or directory...>", description: "Convert pipeline stages while preserving compiler output.", examples: ["funscript pipeline-style bare src/"] },
   { name: "version", aliases: ["-v", "--version"], usage: "version", description: "Display the FunScript version.", examples: ["funscript version"] },
 ];
 

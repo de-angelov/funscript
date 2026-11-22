@@ -14,6 +14,7 @@ import { checkCliFiles, collectCliFiles } from "./typecheck.js";
 import { runTsc } from "./tsc.js";
 import { startLspServer } from "../lsp/index.js";
 import { format } from "../formatter/index.js";
+import { convertPipelineStyle } from "../tooling/pipeline-style.js";
 import { startRepl } from "./repl.js";
 import { renderCliHelp } from "./commands.js";
 import { auditIdiomaticFunScript } from "../tooling/idiomatic.js";
@@ -377,6 +378,30 @@ const fmtCommand = (args: string[]) =>
     }
   });
 
+const pipelineStyleCommand = (args: string[]) => Effect.gen(function* () {
+  const style = args[0];
+  const targets = args.slice(1);
+  if ((style !== "bare" && style !== "qualified") || !targets.length) {
+    process.exitCode = 1;
+    return yield* Console.error("Usage: funscript pipeline-style <bare|qualified> <file or directory...>");
+  }
+  for (const target of targets) {
+    const stat = yield* Effect.tryPromise({ try: () => fs.stat(target), catch: (error: any) => new Error(error.message) });
+    const files = stat.isDirectory() ? yield* Effect.tryPromise({ try: () => findFunFiles(target), catch: (error: any) => new Error(error.message) }) : [target];
+    for (const file of files) {
+      try {
+        const source = yield* readFile(file);
+        const result = convertPipelineStyle(source, path.resolve(file), style);
+        if (result.changed) yield* writeFile(file, result.text);
+        yield* Console.log(`${file}: ${result.changed} converted, ${result.skipped} skipped`);
+      } catch (error: any) {
+        process.exitCode = 1;
+        yield* Console.error(`${file}: ${error.message}`);
+      }
+    }
+  }
+});
+
 const runCommand = (args: string[]) =>
   Effect.gen(function* () {
     const filePath = args.find((arg) => arg !== "--no-check" && arg !== "--no-ts" && arg !== "--no-global-this" && arg !== "--no-optional" && arg !== "--bare-pipelines");
@@ -459,6 +484,8 @@ const program = Effect.gen(function* () {
     }
     case "lsp":
       return yield* lspCommand(commandArgs);
+    case "pipeline-style":
+      return yield* pipelineStyleCommand(commandArgs);
     case "fmt":
       return yield* fmtCommand(commandArgs);
     case "version":

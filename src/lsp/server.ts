@@ -47,6 +47,7 @@ import {
   SymbolKind,
 } from "vscode-languageserver/node";
 import { format } from "../formatter/index.js";
+import { convertPipelineStyle } from "../tooling/pipeline-style.js";
 import { findHoverAsync } from "./hover.js";
 import { complete } from "./completion.js";
 import { documentSymbols, workspaceSymbols, references, prepareRename, rename, findWorkspaceDefinition } from "./navigation.js";
@@ -305,21 +306,27 @@ export class FunScriptLspServer extends EventEmitter {
     const uri = params?.textDocument?.uri;
     const doc = uri ? this.documents.get(uri) : undefined;
     if (!doc || !doc.text.trim()) return [];
+    const actions: CodeAction[] = [];
+    const lines = doc.text.split("\n");
+    const wholeRange = { start: { line: 0, character: 0 }, end: { line: lines.length - 1, character: lines.at(-1)!.length } };
+    const offset = (position: { line: number; character: number }) => lines.slice(0, position.line).reduce((n, line) => n + line.length + 1, 0) + position.character;
     try {
       const formatted = format(doc.text, { filename: uri ? new URL(uri).pathname : undefined });
-      if (formatted === doc.text) return [];
-      const lines = doc.text.split("\n");
-      return [{
-        title: "Format document",
-        kind: "source",
-        edit: { changes: { [uri!]: [{
-          range: { start: { line: 0, character: 0 }, end: { line: lines.length - 1, character: lines.at(-1)!.length } },
-          newText: formatted,
-        }] } },
-      }];
-    } catch {
-      return [];
+      if (formatted !== doc.text) actions.push({ title: "Format document", kind: "source", edit: { changes: { [uri!]: [{ range: wholeRange, newText: formatted }] } } });
+    } catch { /* Invalid source has no formatting action. */ }
+    if (!doc.text.includes("|>")) return actions;
+    const filename = uri!.startsWith("file:") ? fileURLToPath(uri!) : uri!;
+    for (const style of ["bare", "qualified"] as const) {
+      try {
+        const result = convertPipelineStyle(doc.text, filename, style, { start: offset(params.range.start), end: offset(params.range.end) });
+        if (result.changed) actions.push({
+          title: style === "bare" ? "Use bare pipeline stages" : "Qualify pipeline stages",
+          kind: "refactor.rewrite",
+          edit: { changes: { [uri!]: [{ range: wholeRange, newText: result.text }] } },
+        });
+      } catch { /* Incomplete or ambiguous source cannot safely be rewritten. */ }
     }
+    return actions;
   }
 
   public onRangeFormattingHandler(

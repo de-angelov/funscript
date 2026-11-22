@@ -102,6 +102,18 @@ Format FunScript source code or check its formatting.
 funscript fmt examples/hello.fun --check
 ```
 
+### `funscript pipeline-style`
+
+```text
+funscript pipeline-style <bare|qualified> <file or directory...>
+```
+
+Convert pipeline stages while preserving compiler output.
+
+```sh
+funscript pipeline-style bare src/
+```
+
 ### `funscript version`
 
 ```text

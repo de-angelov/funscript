@@ -283,3 +283,7 @@ export config = {
 `check`, `build`, `emit`, and `run` load this policy automatically. Vite and Bun plugin compilation also applies it. Use `funscript check app/` in CI to audit standalone source files in the selected tree; plugin transforms inspect FunScript source but do not audit all files on disk. `tsc`, the REPL, and the language server do not currently load this policy. Programmatic compiler and type-checker users can pass policy options explicitly.
 
 These are source-level discipline checks, not a proof of purity or a security boundary. Effect packages and allowed code can still perform side effects (including inside callbacks), indirect behavior is not exhaustively analyzed, and files outside audited paths are not policed. Protect the config and run the check in CI if the policy must be enforced against code changes.
+
+### Pipeline style conversion
+
+Use `funscript pipeline-style bare src/` to shorten eligible companion stages in files or directories, or `funscript pipeline-style qualified src/` to make inferred companion stages explicit. The command reports converted and skipped stages per file. The language server also offers **Use bare pipeline stages** and **Qualify pipeline stages** as refactoring actions for the stage at the cursor or stages in a selection. The conversion checks generated TypeScript and leaves ambiguous, shadowed, or otherwise behavior-changing stages untouched. Files that cannot compile are reported and left unchanged.
