@@ -63,6 +63,10 @@ import { convertPipelineStyle } from "../tooling/pipeline-style.js";
 import { findHoverAsync } from "./hover.js";
 import { findInlayHints } from "./inlay-hints.js";
 import { findFillMatchArmsCodeActions } from "./match-arms.js";
+import {
+  findAutoImportCodeActions,
+  findRemoveUnusedImportsCodeActions,
+} from "./imports.js";
 import { complete } from "./completion.js";
 import {
   documentSymbols,
@@ -502,6 +506,28 @@ export class FunScriptLspServer extends EventEmitter {
       actions.push(...matchActions);
     } catch {
       /* Code actions gracefully decline on invalid syntax. */
+    }
+
+    try {
+      const autoImportActions = findAutoImportCodeActions(
+        doc.text,
+        uri,
+        params.range,
+      );
+      actions.push(...autoImportActions);
+    } catch {
+      /* Auto import gracefully declines. */
+    }
+
+    try {
+      const unusedImportActions = findRemoveUnusedImportsCodeActions(
+        doc.text,
+        uri,
+        params.range,
+      );
+      actions.push(...unusedImportActions);
+    } catch {
+      /* Remove unused imports gracefully declines. */
     }
 
     if (!doc.text.includes("|>")) return actions;
