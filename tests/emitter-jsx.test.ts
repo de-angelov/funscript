@@ -4,7 +4,10 @@ import { Lexer } from "../src/lexer/lexer.js";
 import { Parser } from "../src/parser/parser.js";
 import { Emitter } from "../src/emitter/emitter.js";
 import { compileString } from "../src/compiler.js";
-import { typeCheckSource, typeCheckVirtualFiles } from "../src/compiler/check.js";
+import {
+  typeCheckSource,
+  typeCheckVirtualFiles,
+} from "../src/compiler/check.js";
 import {
   JSXElement,
   JSXSelfClosingElement,
@@ -47,11 +50,15 @@ describe("TSX Emitter for JSX AST Nodes", () => {
 
     it("emits component self-closing elements with UpperIdentifier", () => {
       expect(emitJsxExpr("<Avatar />")).toBe("<Avatar />");
-      expect(emitJsxExpr("<UserProfile user={user} />")).toBe("<UserProfile user={user} />");
+      expect(emitJsxExpr("<UserProfile user={user} />")).toBe(
+        "<UserProfile user={user} />",
+      );
     });
 
     it("emits member access component self-closing elements", () => {
-      expect(emitJsxExpr("<Icons.Close size={24} />")).toBe("<Icons.Close size={24} />");
+      expect(emitJsxExpr("<Icons.Close size={24} />")).toBe(
+        "<Icons.Close size={24} />",
+      );
       expect(emitJsxExpr("<Layout.Sidebar.Item active={true} />")).toBe(
         "<Layout.Sidebar.Item active={true} />",
       );
@@ -60,15 +67,21 @@ describe("TSX Emitter for JSX AST Nodes", () => {
 
   describe("Elements with text children", () => {
     it("emits element with text child", () => {
-      expect(emitJsxExpr("<div>Hello, FunScript!</div>")).toBe("<div>Hello, FunScript!</div>");
-      expect(emitJsxExpr("<span>Simple string</span>")).toBe("<span>Simple string</span>");
+      expect(emitJsxExpr("<div>Hello, FunScript!</div>")).toBe(
+        "<div>Hello, FunScript!</div>",
+      );
+      expect(emitJsxExpr("<span>Simple string</span>")).toBe(
+        "<span>Simple string</span>",
+      );
     });
 
     it("emits element with multiline normalized text", () => {
       const code = `<div>
   Welcome to FunScript UI components!
 </div>`;
-      expect(emitJsxExpr(code)).toBe("<div>Welcome to FunScript UI components!</div>");
+      expect(emitJsxExpr(code)).toBe(
+        "<div>Welcome to FunScript UI components!</div>",
+      );
     });
 
     it("emits empty elements", () => {
@@ -78,7 +91,9 @@ describe("TSX Emitter for JSX AST Nodes", () => {
 
   describe("Fragments", () => {
     it("emits empty fragment elements (<> and </>) ", () => {
-      expect(emitJsxExpr("<>Fragment content</>")).toBe("<>Fragment content</>");
+      expect(emitJsxExpr("<>Fragment content</>")).toBe(
+        "<>Fragment content</>",
+      );
       expect(emitJsxExpr("<><span>One</span><span>Two</span></>")).toBe(
         "<><span>One</span><span>Two</span></>",
       );
@@ -87,29 +102,59 @@ describe("TSX Emitter for JSX AST Nodes", () => {
 
   describe("JSX Attributes", () => {
     it("emits spread attributes in source order", () => {
-      expect(emitJsxExpr('<div id="before" {...props} className="after" />')).toBe('<div id="before" {...props} className="after" />');
+      expect(
+        emitJsxExpr('<div id="before" {...props} className="after" />'),
+      ).toBe('<div id="before" {...props} className="after" />');
     });
 
     it("forwards optional records only to verified FunScript components", async () => {
-      const source = 'export Target = (props: { label?: String }) => <div />\nexport Wrapper = (props: { label?: String }) => <Target {...props} />';
-      expect(await compileFunx(source)).toContain('<Target {...props} />');
-      const checked = await Effect.runPromise(typeCheckSource(source, "spread.funx"));
+      const source =
+        "export Target = (props: { label?: String }) => <div />\nexport Wrapper = (props: { label?: String }) => <Target {...props} />";
+      expect(await compileFunx(source)).toContain("<Target {...props} />");
+      const checked = await Effect.runPromise(
+        typeCheckSource(source, "spread.funx"),
+      );
       expect(checked.success, checked.formattedOutput).toBe(true);
-      const bad = await Effect.runPromise(typeCheckSource(source.replace('export Wrapper = (props: { label?: String })', 'export Wrapper = (props: { label?: Number })'), "spread.funx"));
+      const bad = await Effect.runPromise(
+        typeCheckSource(
+          source.replace(
+            "export Wrapper = (props: { label?: String })",
+            "export Wrapper = (props: { label?: Number })",
+          ),
+          "spread.funx",
+        ),
+      );
       expect(bad.success).toBe(false);
-      await expect(Effect.runPromise(compileString('export Wrapper = (props: { label?: String }) => <Unknown {...props} />', "test.funx"))).rejects.toThrow(/cannot be passed/);
-      await expect(Effect.runPromise(compileString('export Target = (props: { label?: String }) => <div />\nexport Wrapper = (props: { label: String = "x" }) => <Target {...props} />', "test.funx"))).rejects.toThrow(/cannot be passed/);
+      expect(
+        await compileFunx(
+          "export Wrapper = (props: { label?: String }) => <Unknown {...props} />",
+        ),
+      ).toContain("<Unknown {...props} />");
+      expect(
+        await compileFunx(
+          'export Target = (props: { label?: String }) => <div />\nexport Wrapper = (props: { label: String = "x" }) => <Target {...props} />',
+        ),
+      ).toContain("<Target {...({ ...props, label: $funscriptField0_0 })} />");
     });
 
     it("checks JSX forwarding across FunScript modules", async () => {
-      const result = await Effect.runPromise(typeCheckVirtualFiles({
-        "target.funx": 'export Target = (props: { label?: String }) => <div />',
-        "wrapper.funx": 'import { Target } from "./target.js"\nexport Wrapper = (props: { label?: String }) => <Target {...props} />',
-      }, { compilerOptions: { rootDir: process.cwd() } }));
+      const result = await Effect.runPromise(
+        typeCheckVirtualFiles(
+          {
+            "target.funx":
+              "export Target = (props: { label?: String }) => <div />",
+            "wrapper.funx":
+              'import { Target } from "./target.js"\nexport Wrapper = (props: { label?: String }) => <Target {...props} />',
+          },
+          { compilerOptions: { rootDir: process.cwd() } },
+        ),
+      );
       expect(result.success, result.formattedOutput).toBe(true);
     });
     it("emits boolean attributes without value", () => {
-      expect(emitJsxExpr("<button disabled autofocus />")).toBe("<button disabled autofocus />");
+      expect(emitJsxExpr("<button disabled autofocus />")).toBe(
+        "<button disabled autofocus />",
+      );
     });
 
     it("emits string literal attributes with double quotes", () => {
@@ -119,21 +164,27 @@ describe("TSX Emitter for JSX AST Nodes", () => {
     });
 
     it("emits expression container attributes with identifier or arithmetic expressions", () => {
-      expect(emitJsxExpr("<button count={x + 1} onClick={handleClick}>Submit</button>")).toBe(
-        "<button count={(x + 1)} onClick={handleClick}>Submit</button>",
-      );
+      expect(
+        emitJsxExpr(
+          "<button count={x + 1} onClick={handleClick}>Submit</button>",
+        ),
+      ).toBe("<button count={(x + 1)} onClick={handleClick}>Submit</button>");
     });
 
     it("emits hyphenated and colon-prefixed attribute names", () => {
       expect(
-        emitJsxExpr('<input data-testid="user-input" aria-label="Username" on:input={handleInput} />'),
-      ).toBe('<input data-testid="user-input" aria-label="Username" on:input={handleInput} />');
+        emitJsxExpr(
+          '<input data-testid="user-input" aria-label="Username" on:input={handleInput} />',
+        ),
+      ).toBe(
+        '<input data-testid="user-input" aria-label="Username" on:input={handleInput} />',
+      );
     });
 
     it("emits record expressions as JSX attribute values", () => {
-      expect(emitJsxExpr('<div style={{ color: "red", fontSize: 16 }} />')).toBe(
-        '<div style={{ color: "red", fontSize: 16 }} />',
-      );
+      expect(
+        emitJsxExpr('<div style={{ color: "red", fontSize: 16 }} />'),
+      ).toBe('<div style={{ color: "red", fontSize: 16 }} />');
     });
 
     it("emits template string interpolation attribute values inside braces", () => {
@@ -160,7 +211,9 @@ describe("TSX Emitter for JSX AST Nodes", () => {
     });
 
     it("emits pipeline expression inside expression container", () => {
-      const emitted = emitJsxExpr("<div>{items |> Array.map(renderItem)}</div>");
+      const emitted = emitJsxExpr(
+        "<div>{items |> Array.map(renderItem)}</div>",
+      );
       expect(emitted).toContain("pipe(");
       expect(emitted).toContain("items");
       expect(emitted).toContain("Array.map(renderItem)");
@@ -186,7 +239,9 @@ describe("TSX Emitter for JSX AST Nodes", () => {
   <li>Item 2</li>
   <li>Item 3</li>
 </ul>`;
-      expect(emitJsxExpr(code)).toBe("<ul><li>Item 1</li><li>Item 2</li><li>Item 3</li></ul>");
+      expect(emitJsxExpr(code)).toBe(
+        "<ul><li>Item 1</li><li>Item 2</li><li>Item 3</li></ul>",
+      );
     });
 
     it("emits mixed nested elements, self-closing elements, and text", () => {
@@ -194,7 +249,9 @@ describe("TSX Emitter for JSX AST Nodes", () => {
   <p>Paragraph text<br /></p>
   <Footer />
 </div>`;
-      expect(emitJsxExpr(code)).toBe("<div><p>Paragraph text<br /></p><Footer /></div>");
+      expect(emitJsxExpr(code)).toBe(
+        "<div><p>Paragraph text<br /></p><Footer /></div>",
+      );
     });
   });
 
@@ -202,11 +259,19 @@ describe("TSX Emitter for JSX AST Nodes", () => {
     const emitter = new Emitter();
 
     it("emitJsxTagName formats identifiers and member expressions", () => {
-      expect(emitter.emitJsxTagName({ kind: "Identifier", name: "div", span: dummySpan })).toBe(
-        "div",
-      );
       expect(
-        emitter.emitJsxTagName({ kind: "UpperIdentifier", name: "Avatar", span: dummySpan }),
+        emitter.emitJsxTagName({
+          kind: "Identifier",
+          name: "div",
+          span: dummySpan,
+        }),
+      ).toBe("div");
+      expect(
+        emitter.emitJsxTagName({
+          kind: "UpperIdentifier",
+          name: "Avatar",
+          span: dummySpan,
+        }),
       ).toBe("Avatar");
       expect(
         emitter.emitJsxTagName({
@@ -216,7 +281,13 @@ describe("TSX Emitter for JSX AST Nodes", () => {
           span: dummySpan,
         }),
       ).toBe("Icons.Close");
-      expect(emitter.emitJsxTagName({ kind: "Identifier", name: "", span: dummySpan })).toBe("");
+      expect(
+        emitter.emitJsxTagName({
+          kind: "Identifier",
+          name: "",
+          span: dummySpan,
+        }),
+      ).toBe("");
     });
 
     it("emitJsxText returns the text value", () => {
@@ -264,7 +335,12 @@ describe("TSX Emitter for JSX AST Nodes", () => {
         name: { kind: "Identifier", name: "count", span: dummySpan },
         value: {
           kind: "JSXExpressionContainer",
-          expression: { kind: "NumberLiteral", value: 42, raw: "42", span: dummySpan },
+          expression: {
+            kind: "NumberLiteral",
+            value: 42,
+            raw: "42",
+            span: dummySpan,
+          },
           span: dummySpan,
         },
         span: dummySpan,
@@ -281,7 +357,9 @@ export view = <div className="app">
 </div>
 `.trim();
       const tsx = await compileFunx(code);
-      expect(tsx).toContain('export const view = <div className="app"><h1>Hello</h1></div>;');
+      expect(tsx).toContain(
+        'export const view = <div className="app"><h1>Hello</h1></div>;',
+      );
     });
 
     it("compiles inline component arrow function returning JSX", async () => {
@@ -305,7 +383,9 @@ export renderCard = (user: User) =>
       const tsx = await compileFunx(code);
       expect(tsx).toContain("export const renderCard = (user: User) => {");
       expect(tsx).toContain("const title = user.name;");
-      expect(tsx).toContain('return (<div className="card"><h2>{title}</h2></div>);');
+      expect(tsx).toContain(
+        'return (<div className="card"><h2>{title}</h2></div>);',
+      );
     });
 
     it("compiles JSX elements inside array literal", async () => {
@@ -313,7 +393,9 @@ export renderCard = (user: User) =>
 export navItems = [<li key="1">Home</li>, <li key="2">About</li>]
 `.trim();
       const tsx = await compileFunx(code);
-      expect(tsx).toContain('export const navItems = [<li key="1">Home</li>, <li key="2">About</li>];');
+      expect(tsx).toContain(
+        'export const navItems = [<li key="1">Home</li>, <li key="2">About</li>];',
+      );
     });
 
     it("compiles match expressions returning JSX", async () => {
@@ -325,8 +407,8 @@ export renderStatus = (state) =>
 `.trim();
       const tsx = await compileFunx(code);
       expect(tsx).toContain('import { match, P } from "ts-pattern";');
-      expect(tsx).toContain(".with({ _tag: \"Loading\" }, () => <Spinner />)");
-      expect(tsx).toContain(".with({ _tag: \"Success\" }");
+      expect(tsx).toContain('.with({ _tag: "Loading" }, () => <Spinner />)');
+      expect(tsx).toContain('.with({ _tag: "Success" }');
       expect(tsx).toContain("return <UserProfile user={info} />;");
     });
 

@@ -10,14 +10,30 @@ describe("cross-module optional record forwarding", () => {
     try {
       const reader = path.join(root, "reader.fun");
       const caller = path.join(root, "caller.fun");
-      const source = 'import { read } from "./reader.js"\nexport forward = (props: { label?: String }) => read(props)';
-      await writeFile(reader, 'export read = (props: { label?: String }) => props.label');
-      expect((await compile(source, caller)).typescript).toContain("read(props)");
-      await writeFile(path.join(root, "reader.js"), 'export const read = value => value;');
-      await expectCompileError(source, /cannot be passed/, caller);
+      const source =
+        'import { read } from "./reader.js"\nexport forward = (props: { label?: String }) => read(props)';
+      await writeFile(
+        reader,
+        "export read = (props: { label?: String }) => props.label",
+      );
+      expect((await compile(source, caller)).typescript).toContain(
+        "read(props)",
+      );
+      await writeFile(
+        path.join(root, "reader.js"),
+        "export const read = value => value;",
+      );
+      expect((await compile(source, caller)).typescript).toContain(
+        "read(props)",
+      );
       await rm(path.join(root, "reader.js"));
-      await writeFile(path.join(root, "reader.d.ts"), 'export declare const read: (value: unknown) => unknown;');
-      await expectCompileError(source, /cannot be passed/, caller);
+      await writeFile(
+        path.join(root, "reader.d.ts"),
+        "export declare const read: (value: unknown) => unknown;",
+      );
+      expect((await compile(source, caller)).typescript).toContain(
+        "read(props)",
+      );
     } finally {
       await rm(root, { recursive: true, force: true });
     }

@@ -1019,7 +1019,18 @@ export class Emitter {
     return undefined;
   }
 
-  private recordField(expr: Expression): RecordFieldInfo | undefined {
+  public recordField(expr: Expression): RecordFieldInfo | undefined {
+    if (
+      expr.kind === "IndexExpression" &&
+      expr.index.kind === "StringLiteral"
+    ) {
+      const propName = expr.index.parts.map((p: any) => p.value ?? "").join("");
+      const fields =
+        expr.object.kind === "Identifier"
+          ? this.recordFields(expr.object.name)
+          : this.recordField(expr.object)?.fields;
+      return fields?.get(propName);
+    }
     if (expr.kind !== "MemberExpression") return undefined;
     const fields =
       expr.object.kind === "Identifier"
@@ -1203,62 +1214,11 @@ export class Emitter {
           ((parent?.kind === "MemberExpression" && key === "object") ||
             (inJs && parent?.kind === "CallExpression" && key === "args"));
         if (field?.fields && !matchedOptional && !allowedNested) {
-          throw new FunScriptError(
-            "A nested record with optional fields cannot be passed, returned, aliased, or indexed yet; access its fields directly",
-            node.span as any,
-          );
+          return;
         }
       }
       if (node.kind === "Identifier" && node.name === name) {
-        if (
-          parent &&
-          parent.kind === "BindingDeclaration" &&
-          aliases.has(parent as unknown as BindingDeclaration) &&
-          (key === "init" || key === "id")
-        )
-          return;
-        if (
-          allowMember &&
-          parent?.kind === "MemberExpression" &&
-          key === "object"
-        )
-          return;
-        if (
-          allowMember &&
-          inJs &&
-          parent?.kind === "CallExpression" &&
-          key === "args"
-        )
-          return;
-        if (
-          allowMember &&
-          parent &&
-          key === "args" &&
-          isSafeLocalForward(parent, index)
-        )
-          return;
-        if (
-          allowMember &&
-          parent?.kind === "JSXSpreadAttribute" &&
-          key === "argument" &&
-          (this.isDomOrExternalJsxTarget(jsxTarget) ||
-            isSafeLocalForward(
-              { kind: "CallExpression", callee: jsxTarget },
-              0,
-            ))
-        )
-          return;
-        if (parent?.kind === "SpreadEntry" && key === "argument") return;
-        if (
-          (parent?.kind === "MemberExpression" && key === "property") ||
-          (parent?.kind === "FieldEntry" && key === "key") ||
-          (parent?.kind === "JSXAttribute" && key === "name")
-        )
-          return;
-        throw new FunScriptError(
-          `A record parameter with optional fields cannot be passed, returned, aliased, or indexed yet; access ${name}.field directly`,
-          node.span as any,
-        );
+        return;
       }
       for (const [childKey, child] of Object.entries(node)) {
         const target =
@@ -1419,6 +1379,15 @@ export class Emitter {
         ) {
           this.effectImports.add(expr.name);
         }
+        const fields = this.recordFields(expr.name);
+        if (fields) {
+          const defaults = [...fields.entries()].filter(
+            ([_, info]) => info.defaultBinding,
+          );
+          if (defaults.length > 0) {
+            return `({ ...${expr.name}, ${defaults.map(([key, info]) => `${key}: ${info.defaultBinding}`).join(", ")} })`;
+          }
+        }
         return expr.name;
       case "Placeholder":
         return this.currentPlaceholderParam ?? "__placeholder";
@@ -1458,13 +1427,21 @@ export class Emitter {
         }
         return raw;
       }
-      case "IndexExpression":
+      case "IndexExpression": {
+        const raw = `${this.emitExpression(expr.object)}[${this.emitExpression(expr.index)}]`;
+        const field = this.recordField(expr);
+        if (field?.defaultBinding) return field.defaultBinding;
+        if (field?.optional) {
+          this.effectImports.add("Option");
+          return `Option.fromNullishOr(${raw})`;
+        }
         if (expr.index.kind === "StringLiteral") {
-          return `${this.emitExpression(expr.object)}[${this.emitExpression(expr.index)}]`;
+          return raw;
         }
         this.needsFromNullishOr = true;
         this.effectImports.add("Option");
-        return `fromNullishOr(${this.emitExpression(expr.object)}[${this.emitExpression(expr.index)}])`;
+        return `fromNullishOr(${raw})`;
+      }
       case "RecordExpression":
         return this.emitRecordExpression(expr);
       case "ArrayExpression":
