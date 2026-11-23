@@ -469,8 +469,6 @@ export interface EffectBlockExpression extends NodeBase {
   body: EffectStatement[];
   finalExpression: Expression;
   unscoped?: boolean;
-  /** Legacy return syntax that requires manual migration. */
-  legacyReturnKind?: "bare" | "missing";
 }
 
 export interface ParBlockExpression extends NodeBase {

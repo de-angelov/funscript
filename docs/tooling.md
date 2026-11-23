@@ -227,7 +227,7 @@ export process = (data) => data |> Array.map((x) => x + 1)
 
 ## Explicit-return migration decision
 
-Under the human-approved decision for TASK-104 and TASK-166, FunScript has **declined automatic CLI codemod commands** (such as `funscript migrate`) that perform unattended rewrites. Instead, the language provides compiler diagnostics alongside a safe programmatic migration utility in `src/tooling/migrate.ts`.
+Under the human-approved decision for TASK-104 and TASK-166, FunScript has **declined automatic CLI codemod commands** (such as `funscript migrate`) that perform unattended rewrites. Instead, the language enforces immediate, actionable compiler diagnostics for explicit returns.
 
 ### Decision rationale and compatibility policy
 
@@ -235,7 +235,7 @@ In alignment with FunScript's [Strict Zero-Alias compatibility policy](#language
 
 - FunScript is in early active development with zero external production consumers.
 - No automated CLI command (such as `funscript migrate`) performs automatic silent rewrites on build.
-- Programmatic safe migration functions (`migrateSource`, `migrateFile`, `migrateFiles`, `formatMigrationReport`) are available in `src/tooling/migrate.ts` to convert unambiguous function blocks while leaving ambiguous constructs untouched for developer review.
+- Historical migration shims and legacy return AST properties have been retired in accordance with the Strict Zero-Alias Policy.
 - Codebases rely strictly on immediate, actionable compiler diagnostics (`ParseError: Function block must end with an explicit '=> returnValue'` and `ParseError: Effect block must end with an explicit '=> returnValue'`) to guide developers during manual updates.
 
 ### Ambiguous cases and safety risks
