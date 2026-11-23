@@ -103,6 +103,7 @@
     "react": "^19.3.1",
     "solid-js": "^1.9.18",
     "typescript-eslint": "^8.73.0",
+    "typescript71": "npm:typescript@^7.1.0-beta",
     "vite": "^5.4.21",
     "vitest": "^2.1.3"
   },

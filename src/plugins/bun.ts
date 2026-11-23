@@ -1,11 +1,11 @@
-import { Effect } from "effect";
+import * as Effect from "effect/Effect";
 import * as fs from "node:fs";
 import * as path from "node:path";
 import { compileString } from "../compiler.js";
 import {
-  loadProjectConfig,
   isEffectOnlyFile,
   isPathPolicyEnabled,
+  loadProjectConfig,
 } from "../compiler/project-config.js";
 import { TypeScriptCompilationContext } from "../compiler/typescript-context.js";
 import { TypeView, type TypeViewOptions } from "./type-view.js";

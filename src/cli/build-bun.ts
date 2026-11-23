@@ -1,9 +1,9 @@
+import * as Effect from "effect/Effect";
+import { build } from "esbuild";
 import { spawnSync } from "node:child_process";
 import * as fs from "node:fs/promises";
 import * as path from "node:path";
 import { fileURLToPath } from "node:url";
-import { build } from "esbuild";
-import { Effect } from "effect";
 import { funscriptEsbuildPlugin } from "../plugins/esbuild.js";
 import { collectCliFiles } from "./typecheck.js";
 
@@ -64,12 +64,20 @@ async function buildWithNativeBun(
           noGlobalThis: options.noGlobalThis,
           noOptional: options.noOptional,
           barePipelines: options.barePipelines,
-        }) as any,
+        }) as unknown as NonNullable<
+          Parameters<typeof Bun.build>[0]["plugins"]
+        >[number],
       ],
     });
     if (!result.success) {
       const messages = result.logs
-        .map((log: any) => log.message || String(log))
+        .map((log: { message?: string } | string) =>
+          typeof log === "string"
+            ? log
+            : log && typeof log === "object" && typeof log.message === "string"
+              ? log.message
+              : JSON.stringify(log),
+        )
         .join("\n");
       throw new Error(`Bun build failed: ${messages}`);
     }

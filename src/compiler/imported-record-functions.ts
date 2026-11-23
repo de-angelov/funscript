@@ -1,16 +1,16 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
-import { Lexer } from "../lexer/lexer.js";
-import { Parser } from "../parser/parser.js";
 import type {
   BindingDeclaration,
+  ExportFromDeclaration,
   FunctionExpression,
   ImportDeclaration,
-  ExportFromDeclaration,
   Program,
   RecordTypeNode,
   TypeNode,
 } from "../ast/types.js";
+import { Lexer } from "../lexer/lexer.js";
+import { Parser } from "../parser/parser.js";
 import { isRecordContract, recordContractType } from "./record-contracts.js";
 
 /** Resolve only unambiguous FunScript functions; unknown targets remain restricted. */

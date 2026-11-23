@@ -1,7 +1,7 @@
+import * as Effect from "effect/Effect";
+import { createHash } from "node:crypto";
 import * as fs from "node:fs/promises";
 import * as path from "node:path";
-import { createHash } from "node:crypto";
-import { Effect } from "effect";
 import ts from "typescript";
 import { compileString } from "../compiler.js";
 import { TypeScriptCompilationContext } from "../compiler/typescript-context.js";

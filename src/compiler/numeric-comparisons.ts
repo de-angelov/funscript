@@ -1,5 +1,5 @@
 import ts from "typescript";
-import { type Program, type Span, type RecordTypeNode } from "../ast/types.js";
+import { type Program, type RecordTypeNode, type Span } from "../ast/types.js";
 import { Emitter } from "../emitter/emitter.js";
 import { type TypeScriptCompilationContext } from "./typescript-context.js";
 

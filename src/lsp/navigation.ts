@@ -1,24 +1,24 @@
-import { fileURLToPath } from "node:url";
 import { dirname, resolve } from "node:path";
-import { DefinitionFinder, findDefinition, spanToRange } from "./definition.js";
+import { fileURLToPath } from "node:url";
+import type {
+  DocumentSymbol,
+  Location,
+  LocationLink,
+  PrepareRenameResult,
+  SymbolInformation,
+  TextDocumentItem,
+  TextEdit,
+  WorkspaceEdit,
+} from "vscode-languageserver/node";
+import type { Program } from "../ast/types.js";
 import { Lexer } from "../lexer/lexer.js";
 import { Parser } from "../parser/parser.js";
+import { DefinitionFinder, findDefinition, spanToRange } from "./definition.js";
 import {
   ParsedDocumentCache,
   type Occurrence,
   type ParsedDocument,
 } from "./parsed-documents.js";
-import type { Program } from "../ast/types.js";
-import type {
-  TextDocumentItem,
-  Location,
-  LocationLink,
-  DocumentSymbol,
-  SymbolInformation,
-  PrepareRenameResult,
-  WorkspaceEdit,
-  TextEdit,
-} from "vscode-languageserver/node";
 
 type Doc = Pick<TextDocumentItem, "uri" | "text">;
 type AnalyzedDocument = ParsedDocument;

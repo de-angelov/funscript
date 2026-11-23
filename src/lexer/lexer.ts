@@ -1,11 +1,11 @@
 import { type Position, type Span } from "../ast/types.js";
 import { FunScriptError } from "../errors.js";
 import {
-  type Token,
-  TokenType,
-  KEYWORDS,
   BANNED_KEYWORDS,
   BANNED_SYMBOLS,
+  KEYWORDS,
+  type Token,
+  TokenType,
 } from "./tokens.js";
 
 export class LexerError extends FunScriptError {

@@ -1,21 +1,21 @@
+import * as Effect from "effect/Effect";
+import { fileURLToPath } from "node:url";
+import ts from "typescript";
 import {
   type InlayHint,
   InlayHintKind,
   type Position,
   type Range,
 } from "vscode-languageserver/node";
-import { Lexer } from "../lexer/lexer.js";
-import { Parser } from "../parser/parser.js";
-import { TypeScriptCompilationContext } from "../compiler/typescript-context.js";
-import { compileString } from "../compiler.js";
-import { fileURLToPath } from "node:url";
-import { Effect } from "effect";
-import ts from "typescript";
 import type {
-  Program,
   BindingDeclaration,
   EffectBindStatement,
+  Program,
 } from "../ast/types.js";
+import { compileString } from "../compiler.js";
+import { TypeScriptCompilationContext } from "../compiler/typescript-context.js";
+import { Lexer } from "../lexer/lexer.js";
+import { Parser } from "../parser/parser.js";
 
 function offsetToPosition(source: string, offset: number): Position {
   let line = 0;

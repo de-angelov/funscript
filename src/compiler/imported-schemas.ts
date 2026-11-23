@@ -1,14 +1,14 @@
-import { renderImport } from "../emitter/imports.js";
-import ts from "typescript";
 import { existsSync } from "node:fs";
 import { isAbsolute } from "node:path";
+import ts from "typescript";
 import {
   type Program,
   type SchemaDeclaration,
   type Span,
 } from "../ast/types.js";
-import { type TypeScriptCompilationContext } from "./typescript-context.js";
+import { renderImport } from "../emitter/imports.js";
 import { FunScriptError } from "../errors.js";
+import { type TypeScriptCompilationContext } from "./typescript-context.js";
 
 export class ImportedSchemaError extends FunScriptError {
   readonly _tag = "ImportedSchemaError";
@@ -115,13 +115,13 @@ function convertUnionMembers(
   // Merge boolean literals into boolean
   const hasTrue = nonNullish.some(
     (t) =>
-      t.flags & ts.TypeFlags.BooleanLiteral &&
-      (t as any).intrinsicName === "true",
+      Boolean(t.flags & ts.TypeFlags.BooleanLiteral) &&
+      (t as ts.Type & { intrinsicName?: string }).intrinsicName === "true",
   );
   const hasFalse = nonNullish.some(
     (t) =>
-      t.flags & ts.TypeFlags.BooleanLiteral &&
-      (t as any).intrinsicName === "false",
+      Boolean(t.flags & ts.TypeFlags.BooleanLiteral) &&
+      (t as ts.Type & { intrinsicName?: string }).intrinsicName === "false",
   );
   let filteredNonNullish = nonNullish;
   if (hasTrue && hasFalse) {
@@ -233,7 +233,7 @@ function convertType(
 
   if (
     Boolean(type.symbol?.flags & ts.SymbolFlags.Class) ||
-    (type as any).isClass?.()
+    Boolean((type as ts.Type & { isClass?: () => boolean }).isClass?.())
   ) {
     const name = type.symbol?.name || checker.typeToString(type);
     const target = path.length > 1 ? ` in '${formatPath(path)}'` : "";
@@ -266,7 +266,11 @@ function convertType(
   if (type.flags & ts.TypeFlags.Number) return "Schema.Number";
   if (type.flags & ts.TypeFlags.Boolean) return "Schema.Boolean";
   if (type.flags & ts.TypeFlags.BooleanLiteral) {
-    return `Schema.Literal(${(type as any).intrinsicName === "true" ? "true" : "false"})`;
+    return `Schema.Literal(${
+      (type as ts.Type & { intrinsicName?: string }).intrinsicName === "true"
+        ? "true"
+        : "false"
+    })`;
   }
   if (type.flags & ts.TypeFlags.Null) return "Schema.Null";
   if (type.flags & ts.TypeFlags.Undefined) return "Schema.Undefined";
@@ -335,8 +339,9 @@ function convertType(
     if (checker.isArrayType(type)) {
       elemType = checker.getTypeArguments(type as ts.TypeReference)[0];
     } else {
-      elemType = (checker.getTypeArguments(type as any) ||
-        (type as any).typeArguments)?.[0];
+      elemType = (checker.getTypeArguments(type as ts.TypeReference) ||
+        (type as ts.Type & { typeArguments?: readonly ts.Type[] })
+          .typeArguments)?.[0];
     }
     if (!elemType) {
       throw new ImportedSchemaError(
@@ -482,11 +487,11 @@ export function resolveImportedSchemas(
         tsSchemas.push({ decl: item, rhsName: item.body.targetType.name.name });
       } else if (
         item.body.kind === "ImportedTsSchema" &&
-        (item.body as any).typeNode?.kind === "TypeReferenceNode"
+        item.body.typeNode.kind === "TypeReferenceNode"
       ) {
         tsSchemas.push({
           decl: item,
-          rhsName: (item.body as any).typeNode.name.name,
+          rhsName: item.body.typeNode.name.name,
         });
       }
     } else if (
@@ -502,11 +507,11 @@ export function resolveImportedSchemas(
         tsSchemas.push({ decl, rhsName: decl.body.targetType.name.name });
       } else if (
         decl.body.kind === "ImportedTsSchema" &&
-        (decl.body as any).typeNode?.kind === "TypeReferenceNode"
+        decl.body.typeNode.kind === "TypeReferenceNode"
       ) {
         tsSchemas.push({
           decl,
-          rhsName: (decl.body as any).typeNode.name.name,
+          rhsName: decl.body.typeNode.name.name,
         });
       }
     }

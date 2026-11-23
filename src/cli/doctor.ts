@@ -1,11 +1,12 @@
-import { Effect, Console } from "effect";
-import * as fs from "node:fs/promises";
+import * as Console from "effect/Console";
+import * as Effect from "effect/Effect";
 import { existsSync } from "node:fs";
-import * as path from "node:path";
+import * as fs from "node:fs/promises";
 import { createRequire } from "node:module";
+import * as path from "node:path";
 import { loadProjectConfig } from "../compiler/project-config.js";
+import { toErrorMessage } from "../errors.js";
 import { findFunFiles } from "./io.js";
-import { FUNSCRIPT_VERSION } from "../version.js";
 
 export const doctorCommand = (args: string[]) =>
   Effect.gen(function* () {
@@ -33,7 +34,7 @@ export const doctorCommand = (args: string[]) =>
       add("Bun config", "pass", "Found bunfig.toml");
     }
 
-    let packageJson: Record<string, any> | undefined;
+    let packageJson: Record<string, unknown> | undefined;
     const packageText = yield* Effect.promise(() =>
       fs.readFile("package.json", "utf8").catch(() => undefined),
     );
@@ -41,8 +42,12 @@ export const doctorCommand = (args: string[]) =>
       if (packageText === undefined) throw new Error("file not found");
       packageJson = JSON.parse(packageText);
       add("package.json", "pass", "Found and parsed package.json");
-    } catch (error: any) {
-      add("package.json", "fail", `Cannot read package.json: ${error.message}`);
+    } catch (error: unknown) {
+      add(
+        "package.json",
+        "fail",
+        `Cannot read package.json: ${toErrorMessage(error)}`,
+      );
     }
     if (packageJson) {
       add(
@@ -72,8 +77,8 @@ export const doctorCommand = (args: string[]) =>
           ? "funscript.config.fun is valid"
           : "No funscript.config.fun; defaults are active",
       );
-    } catch (error: any) {
-      add("FunScript config", "fail", error.message);
+    } catch (error: unknown) {
+      add("FunScript config", "fail", toErrorMessage(error));
     }
 
     const hasSrc = yield* Effect.tryPromise({
@@ -83,8 +88,8 @@ export const doctorCommand = (args: string[]) =>
     const sourceRoot = hasSrc ? "src" : ".";
     const files: string[] = yield* Effect.tryPromise({
       try: () => findFunFiles(sourceRoot),
-      catch: (error: any) =>
-        new Error(`Failed to scan '${sourceRoot}': ${error.message}`),
+      catch: (error: unknown) =>
+        new Error(`Failed to scan '${sourceRoot}': ${toErrorMessage(error)}`),
     });
     add(
       "FunScript sources",
@@ -142,13 +147,14 @@ export const doctorCommand = (args: string[]) =>
           ? `Stale entries in ${manifestPath}: ${stale.join(", ")}`
           : "Generated type view manifest is current",
       );
-    } catch (error: any) {
+    } catch (error: unknown) {
+      const errCode = (error as { code?: string })?.code;
       add(
         "Generated type view",
-        error?.code === "ENOENT" ? "pass" : "warning",
-        error?.code === "ENOENT"
+        errCode === "ENOENT" ? "pass" : "warning",
+        errCode === "ENOENT"
           ? "No generated type view"
-          : `Cannot read type view manifest: ${error.message}`,
+          : `Cannot read type view manifest: ${toErrorMessage(error)}`,
       );
     }
 

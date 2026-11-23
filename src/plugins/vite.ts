@@ -1,16 +1,15 @@
-import { type Plugin, createFilter } from "vite";
-import { Effect } from "effect";
+import * as Effect from "effect/Effect";
+import * as path from "node:path";
+import { createFilter, type Plugin } from "vite";
 import { compileString } from "../compiler.js";
 import {
-  loadProjectConfig,
   isEffectOnlyFile,
   isPathPolicyEnabled,
+  loadProjectConfig,
   type FunScriptProjectConfig,
 } from "../compiler/project-config.js";
-import { TypeView, type TypeViewOptions } from "./type-view.js";
-import * as path from "node:path";
-import * as fs from "node:fs";
 import { TypeScriptCompilationContext } from "../compiler/typescript-context.js";
+import { TypeView, type TypeViewOptions } from "./type-view.js";
 
 export interface ServerBoundaryOptions {
   /**

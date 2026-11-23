@@ -1,42 +1,42 @@
 import type { Readable, Writable } from "node:stream";
 import { FunScriptLspServer } from "./server.js";
 
-export * from "./server.js";
-export * from "./docs.js";
 export * from "./definition.js";
+export * from "./docs.js";
 export * from "./hover.js";
+export * from "./imports.js";
 export * from "./inlay-hints.js";
 export * from "./match-arms.js";
-export * from "./imports.js";
+export * from "./server.js";
 
 export {
   DiagnosticSeverity,
   ErrorCodes,
-  TextDocumentSyncKind,
+  InlayHintKind,
   MarkupKind,
   StreamMessageReader,
   StreamMessageWriter,
-  type Message,
-  type RequestMessage,
-  type ResponseMessage,
-  type NotificationMessage,
-  type Diagnostic,
-  type TextDocumentItem,
-  type TextDocumentPositionParams,
-  type TextDocumentIdentifier,
-  type PublishDiagnosticsParams,
-  type DocumentFormattingParams,
-  type TextEdit,
-  type Location,
-  type LocationLink,
+  TextDocumentSyncKind,
   type DefinitionParams,
+  type Diagnostic,
+  type DocumentFormattingParams,
   type Hover,
   type HoverParams,
-  type Position,
-  type Range,
   type InlayHint,
   type InlayHintParams,
-  InlayHintKind,
+  type Location,
+  type LocationLink,
+  type Message,
+  type NotificationMessage,
+  type Position,
+  type PublishDiagnosticsParams,
+  type Range,
+  type RequestMessage,
+  type ResponseMessage,
+  type TextDocumentIdentifier,
+  type TextDocumentItem,
+  type TextDocumentPositionParams,
+  type TextEdit,
 } from "vscode-languageserver/node";
 
 export interface StartLspServerOptions {

@@ -1,18 +1,19 @@
-import { Effect, Console } from "effect";
+import * as Console from "effect/Console";
+import * as Effect from "effect/Effect";
+import { existsSync } from "node:fs";
 import * as fs from "node:fs/promises";
 import * as path from "node:path";
-import { existsSync } from "node:fs";
 import { compileString } from "../compiler.js";
-import { checkCliFiles, collectCliFiles } from "./typecheck.js";
-import { watchBuild } from "./build-watch.js";
-import { buildBunExecutable, isBunAvailable } from "./build-bun.js";
+import { toErrorMessage } from "../errors.js";
 import {
-  loadProjectConfig,
   isEffectOnlyFile,
   isPathPolicyEnabled,
   type FunScriptProjectConfig,
 } from "../compiler/project-config.js";
-import { findFunFiles, checkNoTsPaths, readFile, writeFile } from "./io.js";
+import { buildBunExecutable } from "./build-bun.js";
+import { watchBuild } from "./build-watch.js";
+import { checkNoTsPaths, findFunFiles, readFile, writeFile } from "./io.js";
+import { checkCliFiles, collectCliFiles } from "./typecheck.js";
 
 let projectPolicy: FunScriptProjectConfig = {};
 const checkNoTsPathsProxy = (
@@ -104,9 +105,9 @@ export const buildCommand = (
           return;
         filesToBuild = yield* Effect.tryPromise({
           try: () => findFunFiles(searchDir),
-          catch: (error: any) =>
+          catch: (error: unknown) =>
             new Error(
-              `Failed to scan files in '${searchDir}': ${error.message}`,
+              `Failed to scan files in '${searchDir}': ${toErrorMessage(error)}`,
             ),
         });
       } else {
@@ -125,18 +126,18 @@ export const buildCommand = (
           const absoluteTarget = path.resolve(target);
           const stat = yield* Effect.tryPromise({
             try: () => fs.stat(target),
-            catch: (error: any) =>
+            catch: (error: unknown) =>
               new Error(
-                `File or directory '${target}' not found: ${error.message}`,
+                `File or directory '${target}' not found: ${toErrorMessage(error)}`,
               ),
           });
           if (stat.isDirectory()) {
             sourceRoots.push(absoluteTarget);
             const nested = yield* Effect.tryPromise({
               try: () => findFunFiles(target),
-              catch: (error: any) =>
+              catch: (error: unknown) =>
                 new Error(
-                  `Failed to scan files in '${target}': ${error.message}`,
+                  `Failed to scan files in '${target}': ${toErrorMessage(error)}`,
                 ),
             });
             filesToBuild.push(...nested);
@@ -447,9 +448,9 @@ export const buildCommand = (
       if (isExecutable) {
         yield* Effect.tryPromise({
           try: () => fs.chmod(targetOut, 0o755),
-          catch: (error: any) =>
+          catch: (error: unknown) =>
             new Error(
-              `Failed to set executable permissions on '${targetOut}': ${error.message}`,
+              `Failed to set executable permissions on '${targetOut}': ${toErrorMessage(error)}`,
             ),
         });
       }

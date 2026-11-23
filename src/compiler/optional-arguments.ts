@@ -1,11 +1,11 @@
-import ts from "typescript";
-import path from "node:path";
 import fs from "node:fs";
+import path from "node:path";
+import ts from "typescript";
 import type { Program, Span } from "../ast/types.js";
 import { Emitter, type EmitterOptions } from "../emitter/emitter.js";
+import { FunScriptError } from "../errors.js";
 import { Lexer } from "../lexer/lexer.js";
 import { Parser } from "../parser/parser.js";
-import { FunScriptError } from "../errors.js";
 import { type TypeScriptCompilationContext } from "./typescript-context.js";
 
 /** Determine optional argument conversions from types, never from runtime shape. */
@@ -22,16 +22,19 @@ export function resolveOptionalArguments(
   nullProperties: ReadonlySet<number>;
 } {
   const spans = new Map<number, Span>();
-  const collect = (value: any): void => {
+  const collect = (value: unknown): void => {
     if (!value || typeof value !== "object") return;
     if (Array.isArray(value)) {
       value.forEach(collect);
       return;
     }
-    if (value.span?.start) spans.set(value.span.start.offset, value.span);
-    if (value.kind === "CallExpression")
-      for (const arg of value.args) spans.set(arg.span.start.offset, arg.span);
-    for (const [key, child] of Object.entries(value))
+    const node = value as Record<string, unknown>;
+    const span = node.span as Span | undefined;
+    if (span?.start) spans.set(span.start.offset, span);
+    if (node.kind === "CallExpression" && Array.isArray(node.args))
+      for (const arg of node.args as Array<{ span: Span }>)
+        spans.set(arg.span.start.offset, arg.span);
+    for (const [key, child] of Object.entries(node))
       if (key !== "span") collect(child);
   };
   collect(ast);
@@ -255,7 +258,12 @@ export function resolveOptionalArguments(
             parameter.name.startsWith("$funscriptOptional");
           const declaredOptional =
             Boolean(parameter.flags & ts.SymbolFlags.Optional) ||
-            Boolean((parameter.valueDeclaration as any)?.questionToken);
+            Boolean(
+              (
+                parameter.valueDeclaration as
+                  ts.ParameterDeclaration | undefined
+              )?.questionToken,
+            );
           const target = checker.getTypeOfSymbolAtLocation(parameter, node);
           const includesUndefined = target.isUnion()
             ? target.types.some((t) =>

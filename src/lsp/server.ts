@@ -1,7 +1,4 @@
 import { EventEmitter } from "node:events";
-import { Worker } from "node:worker_threads";
-import type { Readable, Writable } from "node:stream";
-import { fileURLToPath, pathToFileURL } from "node:url";
 import {
   existsSync,
   readdirSync,
@@ -10,76 +7,78 @@ import {
   type FSWatcher,
 } from "node:fs";
 import { dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
+import type { Readable, Writable } from "node:stream";
+import { fileURLToPath, pathToFileURL } from "node:url";
+import { Worker } from "node:worker_threads";
 import {
   createConnection,
-  type Connection,
+  ErrorCodes,
   StreamMessageReader,
   StreamMessageWriter,
-  ErrorCodes,
   TextDocumentSyncKind,
+  type CodeAction,
+  type CodeActionParams,
+  type CompletionItem,
+  type CompletionParams,
+  type Connection,
+  type DefinitionParams,
   type Diagnostic,
-  type DidCloseTextDocumentParams,
   type DidChangeTextDocumentParams,
+  type DidCloseTextDocumentParams,
   type DidOpenTextDocumentParams,
   type DocumentFormattingParams,
   type DocumentRangeFormattingParams,
-  type DefinitionParams,
-  type HoverParams,
+  type DocumentSymbol,
+  type DocumentSymbolParams,
   type Hover,
+  type HoverParams,
   type InitializeParams,
   type InitializeResult,
-  type Message,
-  type NotificationMessage,
-  type PublishDiagnosticsParams,
-  type RequestMessage,
-  type ResponseMessage,
-  type TextDocumentItem,
-  type TextEdit,
-  type Location,
-  type LocationLink,
-  type CompletionParams,
-  type CompletionItem,
-  type DocumentSymbolParams,
-  type WorkspaceSymbolParams,
-  type ReferenceParams,
-  type PrepareRenameParams,
-  type RenameParams,
-  type WorkspaceEdit,
-  type CodeActionParams,
-  type CodeAction,
-  type DocumentSymbol,
-  type SymbolInformation,
-  type PrepareRenameResult,
   type InlayHint,
   type InlayHintParams,
-  SymbolKind,
+  type Location,
+  type LocationLink,
+  type Message,
+  type NotificationMessage,
+  type PrepareRenameParams,
+  type PrepareRenameResult,
+  type PublishDiagnosticsParams,
+  type ReferenceParams,
+  type RenameParams,
+  type RequestMessage,
+  type ResponseMessage,
+  type SymbolInformation,
+  type TextDocumentItem,
+  type TextEdit,
+  type WorkspaceEdit,
+  type WorkspaceSymbolParams,
 } from "vscode-languageserver/node";
-import { format } from "../formatter/index.js";
 import {
   loadFormatConfigForFile,
   loadProjectConfigForFile,
 } from "../compiler/project-config.js";
+import { format } from "../formatter/index.js";
 import { convertPipelineStyle } from "../tooling/pipeline-style.js";
+import { FUNSCRIPT_VERSION } from "../version.js";
+import { complete } from "./completion.js";
 import { findHoverAsync } from "./hover.js";
-import { findInlayHints } from "./inlay-hints.js";
-import { findFillMatchArmsCodeActions } from "./match-arms.js";
 import {
   findAutoImportCodeActions,
   findRemoveUnusedImportsCodeActions,
 } from "./imports.js";
-import { complete } from "./completion.js";
+import { findInlayHints } from "./inlay-hints.js";
+import { InteropRenameSession, renameInterop } from "./interop-rename.js";
+import { findFillMatchArmsCodeActions } from "./match-arms.js";
 import {
   documentSymbols,
-  workspaceSymbols,
-  references,
-  prepareRename,
-  rename,
   findWorkspaceDefinition,
+  prepareRename,
+  references,
+  rename,
+  workspaceSymbols,
 } from "./navigation.js";
-import { InteropRenameSession, renameInterop } from "./interop-rename.js";
 import { ParsedDocumentCache } from "./parsed-documents.js";
 import { validateFunScript, validateSyntax } from "./validation.js";
-import { FUNSCRIPT_VERSION } from "../version.js";
 export { toDiagnostic, validateFunScript } from "./validation.js";
 
 type InteropDocumentNotification =

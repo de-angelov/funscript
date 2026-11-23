@@ -1,6 +1,8 @@
+import * as Console from "effect/Console";
+import * as Effect from "effect/Effect";
 import * as fs from "node:fs/promises";
 import * as path from "node:path";
-import { Effect, Console } from "effect";
+import { toErrorMessage } from "../errors.js";
 
 export type TemplateType =
   "effect-cli" | "bun-server" | "vite-react" | "vite-solid";
@@ -462,8 +464,8 @@ export function initProject(targetDir: string, options: InitOptions = {}) {
           await fs.writeFile(fullPath, content, "utf8");
         }
       },
-      catch: (error: any) =>
-        new Error(`Failed to initialize project: ${error.message}`),
+      catch: (error: unknown) =>
+        new Error(`Failed to initialize project: ${toErrorMessage(error)}`),
     });
 
     yield* Console.log(

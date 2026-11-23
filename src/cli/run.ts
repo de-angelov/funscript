@@ -1,17 +1,12 @@
-import { Effect, Console } from "effect";
-import * as fs from "node:fs/promises";
-import * as path from "node:path";
+import * as Console from "effect/Console";
+import * as Effect from "effect/Effect";
 import { fork, spawn } from "node:child_process";
-import { pathToFileURL, fileURLToPath } from "node:url";
-import { compileString } from "../compiler.js";
-import { checkCliFiles } from "./typecheck.js";
+import * as path from "node:path";
+import { fileURLToPath } from "node:url";
+import { type FunScriptProjectConfig } from "../compiler/project-config.js";
 import { buildRunBundle, isBunAvailable } from "./build-bun.js";
-import {
-  isEffectOnlyFile,
-  isPathPolicyEnabled,
-  type FunScriptProjectConfig,
-} from "../compiler/project-config.js";
-import { findFunFiles, checkNoTsPaths, readFile, writeFile } from "./io.js";
+import { checkNoTsPaths } from "./io.js";
+import { checkCliFiles } from "./typecheck.js";
 
 let projectPolicy: FunScriptProjectConfig = {};
 const checkNoTsPathsProxy = (
@@ -105,7 +100,7 @@ export const runCommand = (
               noGlobalThis: commandArgs.includes("--no-global-this"),
               noOptional: commandArgs.includes("--no-optional"),
               barePipelines: commandArgs.includes("--bare-pipelines"),
-            }) as any,
+            }) as unknown as { name: string; setup: (build: unknown) => void },
           );
           const fullPath = path.resolve(filePath);
           const originalArgv = process.argv;
@@ -141,7 +136,7 @@ export const runCommand = (
         const runnerScript = `
 import { plugin } from "bun";
 import { funscriptBunPlugin } from ${JSON.stringify(bunPluginPath)};
-import { Effect } from "effect";
+import * as Effect from "effect/Effect";
 
 plugin(funscriptBunPlugin({
   noTs: ${Boolean(commandArgs.includes("--no-ts"))},
@@ -161,14 +156,14 @@ if (mod && mod.main) {
 }
 `;
         const child = spawn("bun", ["-e", runnerScript], { stdio: "inherit" });
-        child.on("exit", (code: any) => {
+        child.on("exit", (code: number | null) => {
           if (code === 0) resume(Effect.void);
           else {
             process.exitCode = code ?? 1;
             resume(Effect.void);
           }
         });
-        child.on("error", (err: any) => resume(Effect.fail(err)));
+        child.on("error", (err: Error) => resume(Effect.fail(err)));
       });
       return;
     }

@@ -1,18 +1,20 @@
-import { Effect, Console } from "effect";
+import * as Console from "effect/Console";
+import * as Effect from "effect/Effect";
+import fg from "fast-glob";
 import * as fs from "node:fs/promises";
 import * as path from "node:path";
-import fg from "fast-glob";
 import {
   isEffectOnlyFile,
   isPathPolicyEnabled,
   type FunScriptProjectConfig,
 } from "../compiler/project-config.js";
+import { toErrorMessage } from "../errors.js";
 
 export const readFile = (filePath: string) =>
   Effect.tryPromise({
     try: () => fs.readFile(filePath, "utf-8"),
-    catch: (error: any) =>
-      new Error(`Failed to read file '${filePath}': ${error.message}`),
+    catch: (error: unknown) =>
+      new Error(`Failed to read file '${filePath}': ${toErrorMessage(error)}`),
   });
 
 export const writeFile = (filePath: string, content: string) =>
@@ -21,8 +23,8 @@ export const writeFile = (filePath: string, content: string) =>
       await fs.mkdir(path.dirname(filePath), { recursive: true });
       await fs.writeFile(filePath, content, "utf-8");
     },
-    catch: (error: any) =>
-      new Error(`Failed to write file '${filePath}': ${error.message}`),
+    catch: (error: unknown) =>
+      new Error(`Failed to write file '${filePath}': ${toErrorMessage(error)}`),
   });
 
 export const findFunFiles = async (dir: string): Promise<string[]> => {
@@ -126,8 +128,8 @@ export const checkNoTsPaths = (
   Effect.gen(function* () {
     const files = yield* Effect.tryPromise({
       try: () => findNonFunScriptSources(targets),
-      catch: (error: any) =>
-        new Error(`Cannot audit source paths: ${error.message}`),
+      catch: (error: unknown) =>
+        new Error(`Cannot audit source paths: ${toErrorMessage(error)}`),
     });
     const candidates = effectOnly
       ? files.filter(

@@ -1,28 +1,29 @@
+import * as Effect from "effect/Effect";
+import type { SourceMap } from "magic-string";
+export type { SourceMap };
 import * as fs from "node:fs";
 import * as path from "node:path";
+import { type Program, type RecordTypeNode, type Span } from "./ast/types.js";
+import { resolveImportedRecordFunctions } from "./compiler/imported-record-functions.js";
+import { resolveImportedSchemas } from "./compiler/imported-schemas.js";
+import { applyJsInteropNullability } from "./compiler/js-interop-nullability.js";
+import { validateNumericComparisons } from "./compiler/numeric-comparisons.js";
+import { resolveOptionalArguments } from "./compiler/optional-arguments.js";
+import { resolvePackageRecordContracts } from "./compiler/package-record-contracts.js";
+import { inferPipelineCompanions } from "./compiler/pipeline-companions.js";
 import { isPathPolicyEnabled } from "./compiler/project-config.js";
-import { prepareAssemblyScript } from "./emitter/assemblyscript.js";
-import { Effect } from "effect";
-import type { SourceMap } from "magic-string";
 import { generateSourceMap } from "./compiler/source-map.js";
+import { TypeScriptCompilationContext } from "./compiler/typescript-context.js";
+import { prepareAssemblyScript } from "./emitter/assemblyscript.js";
+import { Emitter, type EmitterOptions } from "./emitter/emitter.js";
+import { PIPELINE_COMPANION_CATALOG } from "./emitter/pipeline-catalog.js";
+import { FunScriptError, toErrorMessage } from "./errors.js";
 import { Lexer, type LexerError } from "./lexer/lexer.js";
 import { Parser, type ParseError } from "./parser/parser.js";
-import { Emitter, type EmitterOptions } from "./emitter/emitter.js";
-import { type Program, type RecordTypeNode } from "./ast/types.js";
-import { FunScriptError } from "./errors.js";
-import { TypeScriptCompilationContext } from "./compiler/typescript-context.js";
-import { validateNumericComparisons } from "./compiler/numeric-comparisons.js";
-import { inferPipelineCompanions } from "./compiler/pipeline-companions.js";
-import { applyJsInteropNullability } from "./compiler/js-interop-nullability.js";
-import { resolveImportedSchemas } from "./compiler/imported-schemas.js";
-import { resolveImportedRecordFunctions } from "./compiler/imported-record-functions.js";
-import { resolvePackageRecordContracts } from "./compiler/package-record-contracts.js";
-import { resolveOptionalArguments } from "./compiler/optional-arguments.js";
-import { PIPELINE_COMPANION_CATALOG } from "./emitter/pipeline-catalog.js";
 
 export {
-  TypeScriptCompilationContext,
   TYPE_FEST_DECLARATION,
+  TypeScriptCompilationContext,
 } from "./compiler/typescript-context.js";
 
 export interface CompileOptions {
@@ -77,7 +78,7 @@ export class CompilerError extends FunScriptError {
     public readonly message: string,
     public readonly error: LexerError | ParseError | Error,
   ) {
-    const span = "span" in error ? (error as any).span : undefined;
+    const span = "span" in error ? (error as { span?: Span }).span : undefined;
     super(message, span);
     this.name = "CompilerError";
   }
@@ -99,13 +100,13 @@ function validateNoTs(ast: Program): void {
     ) {
       throw new FunScriptError(
         "TypeScript escapes are disabled by --no-ts; write this code in FunScript",
-        node.span as any,
+        node.span as Span | undefined,
       );
     }
     if (node.kind === "AsDeclaration") {
       throw new FunScriptError(
         "AssemblyScript blocks are disabled by --no-ts; write this code in FunScript",
-        node.span as any,
+        node.span as Span | undefined,
       );
     }
     for (const [key, child] of Object.entries(node))
@@ -129,22 +130,33 @@ function validateNoGlobalThis(ast: Program): void {
     const node = value as Record<string, unknown>;
     if (
       (node.kind === "MemberExpression" || node.kind === "IndexExpression") &&
-      ["window", "self", "global"].includes((node.object as any)?.name)
+      ["window", "self", "global"].includes(
+        (node.object as { name?: string } | undefined)?.name ?? "",
+      )
     ) {
       const member =
         node.kind === "MemberExpression"
-          ? (node.property as any)?.name
-          : (node.index as any)?.kind === "StringLiteral"
-            ? (node.index as any).parts
-                ?.map((part: any) =>
-                  part.kind === "StringRawPart" ? part.value : "",
+          ? (node.property as { name?: string } | undefined)?.name
+          : (
+                node.index as
+                  | {
+                      kind?: string;
+                      parts?: { kind?: string; value?: string }[];
+                    }
+                  | undefined
+              )?.kind === "StringLiteral"
+            ? (
+                node.index as { parts?: { kind?: string; value?: string }[] }
+              ).parts
+                ?.map((part) =>
+                  part.kind === "StringRawPart" ? (part.value ?? "") : "",
                 )
                 .join("")
             : undefined;
       if (member === "globalThis")
         throw new FunScriptError(
           "globalThis is disabled by project policy; use explicit FunScript imports and interop",
-          node.span as any,
+          node.span as Span | undefined,
         );
     }
     const isPropertyName =
@@ -159,7 +171,7 @@ function validateNoGlobalThis(ast: Program): void {
     ) {
       throw new FunScriptError(
         "globalThis is disabled by project policy; use explicit FunScript imports and interop",
-        node.span as any,
+        node.span as Span | undefined,
       );
     }
     for (const [key, child] of Object.entries(node))
@@ -180,19 +192,19 @@ function validateNoOptional(ast: Program): void {
     if (node.kind === "Parameter" && node.optional) {
       throw new FunScriptError(
         "Optional parameters ('?') are disabled by project policy; use Option<T> or handle optionality at the TS interop edge",
-        node.span as any,
+        node.span as Span | undefined,
       );
     }
     if (node.kind === "RecordTypeField" && node.optional) {
       throw new FunScriptError(
         "Optional record fields ('?') are disabled by project policy; use Option<T> or handle optionality at the TS interop edge",
-        node.span as any,
+        node.span as Span | undefined,
       );
     }
     if (node.kind === "RecordFieldSchema" && node.optional) {
       throw new FunScriptError(
         "Optional schema fields ('?') are disabled by project policy; use Option<T> or handle optionality at the TS interop edge",
-        node.span as any,
+        node.span as Span | undefined,
       );
     }
     for (const [key, child] of Object.entries(node))
@@ -209,22 +221,37 @@ function validateBarePipelines(ast: Program): void {
       for (const item of value) visit(item);
       return;
     }
-    const node = value as Record<string, any>;
+    const node = value as Record<string, unknown>;
     if (node.kind === "PipelineExpression") {
-      const stage = node.right;
-      let target: any = null;
+      const stage = node.right as
+        { kind?: string; callee?: { kind?: string } } | undefined;
+      let target: {
+        object?: { kind?: string; name?: string };
+        property?: { kind?: string; name?: string };
+        span?: Span;
+      } | null = null;
       if (stage?.kind === "MemberExpression") {
-        target = stage;
+        target = stage as {
+          object?: { kind?: string; name?: string };
+          property?: { kind?: string; name?: string };
+          span?: Span;
+        };
       } else if (
         stage?.kind === "CallExpression" &&
         stage.callee?.kind === "MemberExpression"
       ) {
-        target = stage.callee;
+        target = stage.callee as {
+          object?: { kind?: string; name?: string };
+          property?: { kind?: string; name?: string };
+          span?: Span;
+        };
       }
       if (
         target &&
         target.object?.kind === "UpperIdentifier" &&
-        target.property?.kind === "Identifier"
+        target.property?.kind === "Identifier" &&
+        target.object.name &&
+        target.property.name
       ) {
         const modName = target.object.name;
         const methodName = target.property.name;
@@ -283,14 +310,20 @@ function validateEffectOnly(
       for (const item of value) visit(item, parent, property);
       return;
     }
-    const node = value as Record<string, any>;
+    const node = value as Record<string, unknown>;
     if (
       node.kind === "ImportDeclaration" ||
       node.kind === "ExportFromDeclaration"
     ) {
-      const parts = node.source?.parts ?? [];
+      const parts =
+        (
+          node.source as
+            { parts?: { kind?: string; value?: string }[] } | undefined
+        )?.parts ?? [];
       const name = parts
-        .map((part: any) => (part.kind === "StringRawPart" ? part.value : ""))
+        .map((part) =>
+          part.kind === "StringRawPart" ? (part.value ?? "") : "",
+        )
         .join("");
       if (
         !name.startsWith("./") &&
@@ -301,7 +334,7 @@ function validateEffectOnly(
       ) {
         throw new FunScriptError(
           `Effect-only policy disallows import '${name}'; use an Effect ecosystem package or a local module`,
-          node.span,
+          node.span as Span | undefined,
         );
       }
       if (
@@ -318,7 +351,7 @@ function validateEffectOnly(
         if (!isPathPolicyEnabled(options.effectOnlyDirectories, root, target)) {
           throw new FunScriptError(
             `Effect-only local import '${name}' must remain within an Effect-only directory`,
-            node.span,
+            node.span as Span | undefined,
           );
         }
         const nonFunSources = [
@@ -337,7 +370,7 @@ function validateEffectOnly(
         ) {
           throw new FunScriptError(
             `Effect-only local import '${name}' resolves to a JavaScript or TypeScript file`,
-            node.span,
+            node.span as Span | undefined,
           );
         }
         const funSources = [
@@ -353,7 +386,7 @@ function validateEffectOnly(
         if (!resolved)
           throw new FunScriptError(
             `Effect-only local import '${name}' must resolve to a FunScript source file`,
-            node.span,
+            node.span as Span | undefined,
           );
         if (fs.existsSync(resolved)) {
           const real = fs.realpathSync(resolved);
@@ -369,7 +402,7 @@ function validateEffectOnly(
           ) {
             throw new FunScriptError(
               `Effect-only local import '${name}' must resolve to FunScript inside an Effect-only directory`,
-              node.span,
+              node.span as Span | undefined,
             );
           }
         }
@@ -381,12 +414,12 @@ function validateEffectOnly(
     )
       throw new FunScriptError(
         "Effect-only policy disallows 'js' interop; use Effect ecosystem APIs",
-        node.span,
+        node.span as Span | undefined,
       );
     if (node.kind === "SchemaDeclaration" && node.isTs)
       throw new FunScriptError(
         "Effect-only policy disallows TypeScript-derived schemas",
-        node.span,
+        node.span as Span | undefined,
       );
     const isPropertyName =
       (parent?.kind === "MemberExpression" && property === "property") ||
@@ -395,12 +428,12 @@ function validateEffectOnly(
       (parent?.kind === "RecordFieldSchema" && property === "name");
     if (
       (node.kind === "Identifier" || node.kind === "UpperIdentifier") &&
-      forbiddenGlobals.has(node.name) &&
+      forbiddenGlobals.has(node.name as string) &&
       !isPropertyName
     ) {
       throw new FunScriptError(
-        `Effect-only policy disallows '${node.name}'; use an Effect ecosystem API`,
-        node.span,
+        `Effect-only policy disallows '${String(node.name)}'; use an Effect ecosystem API`,
+        node.span as Span | undefined,
       );
     }
     for (const [key, child] of Object.entries(node))
@@ -433,7 +466,11 @@ export const compileString = (
               else if (options?.noTs) validateNoTs(ast);
               return ast;
             },
-            catch: (error: any) => new CompilerError(error.message, error),
+            catch: (error: unknown) =>
+              new CompilerError(
+                toErrorMessage(error),
+                error instanceof Error ? error : new Error(String(error)),
+              ),
           }),
           (ast) => {
             const blocks = ast.body.filter(
@@ -447,8 +484,11 @@ export const compileString = (
                       await prepareAssemblyScript(decl);
                     return ast;
                   },
-                  catch: (error: any) =>
-                    new CompilerError(error.message, error),
+                  catch: (error: unknown) =>
+                    new CompilerError(
+                      toErrorMessage(error),
+                      error instanceof Error ? error : new Error(String(error)),
+                    ),
                 });
           },
         )
@@ -597,7 +637,11 @@ export const compileString = (
             sourcemap: map,
           };
         },
-        catch: (error: any) => new CompilerError(error.message, error),
+        catch: (error: unknown) =>
+          new CompilerError(
+            toErrorMessage(error),
+            error instanceof Error ? error : new Error(String(error)),
+          ),
       }),
   );
 
@@ -625,5 +669,9 @@ export const checkString = (
       if (options?.barePipelines) validateBarePipelines(ast);
       return ast;
     },
-    catch: (error: any) => new CompilerError(error.message, error),
+    catch: (error: unknown) =>
+      new CompilerError(
+        toErrorMessage(error),
+        error instanceof Error ? error : new Error(String(error)),
+      ),
   });

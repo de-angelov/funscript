@@ -1,6 +1,6 @@
-import ts from "typescript";
-import path from "node:path";
 import * as fs from "node:fs";
+import path from "node:path";
+import ts from "typescript";
 
 // Declaration files are immutable for the lifetime of a process in the common
 // case. Share parsed ASTs between compilation contexts, while checking file

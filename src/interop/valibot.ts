@@ -1,5 +1,8 @@
+import * as Effect from "effect/Effect";
+import * as Schema from "effect/Schema";
+import type * as SchemaAST from "effect/SchemaAST";
+import * as SchemaIssue from "effect/SchemaIssue";
 import * as v from "valibot";
-import { Effect, Schema, type SchemaAST, SchemaIssue } from "effect";
 
 type AnySchema = any;
 

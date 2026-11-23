@@ -1,5 +1,4 @@
 import type {
-  AssignmentStatement,
   BindingDeclaration,
   BindingTarget,
   BlockStatement,

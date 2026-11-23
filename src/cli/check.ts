@@ -1,18 +1,19 @@
-import { Effect, Console } from "effect";
+import * as Console from "effect/Console";
+import * as Effect from "effect/Effect";
 import * as fs from "node:fs/promises";
 import * as path from "node:path";
 import { pathToFileURL } from "node:url";
-import { typeCheckFiles } from "../compiler/check.js";
-import { checkString } from "../compiler.js";
-import { checkCliFiles, collectCliFiles } from "./typecheck.js";
-import { auditIdiomaticFunScript } from "../tooling/idiomatic.js";
-import { convertPipelineStyle } from "../tooling/pipeline-style.js";
-import { format } from "../formatter/index.js";
+import { typeCheckFiles, type TypeCheckDiagnostic } from "../compiler/check.js";
+import { toErrorMessage } from "../errors.js";
 import {
   loadFormatConfigForFile,
   type FunScriptProjectConfig,
 } from "../compiler/project-config.js";
-import { findFunFiles, checkNoTsPaths, readFile, writeFile } from "./io.js";
+import { format } from "../formatter/index.js";
+import { auditIdiomaticFunScript } from "../tooling/idiomatic.js";
+import { convertPipelineStyle } from "../tooling/pipeline-style.js";
+import { checkNoTsPaths, findFunFiles } from "./io.js";
+import { collectCliFiles } from "./typecheck.js";
 
 let projectPolicy: FunScriptProjectConfig = {};
 const checkNoTsPathsProxy = (
@@ -64,8 +65,10 @@ export const checkCommand = (
         return;
       filesToCheck = yield* Effect.tryPromise({
         try: () => findFunFiles(searchDir),
-        catch: (error: any) =>
-          new Error(`Failed to scan files in '${searchDir}': ${error.message}`),
+        catch: (error: unknown) =>
+          new Error(
+            `Failed to scan files in '${searchDir}': ${toErrorMessage(error)}`,
+          ),
       });
       if (filesToCheck.length === 0) {
         return yield* Console.error(
@@ -87,17 +90,17 @@ export const checkCommand = (
       for (const target of rawFileArgs) {
         const stat = yield* Effect.tryPromise({
           try: () => fs.stat(target),
-          catch: (error: any) =>
+          catch: (error: unknown) =>
             new Error(
-              `File or directory '${target}' not found: ${error.message}`,
+              `File or directory '${target}' not found: ${toErrorMessage(error)}`,
             ),
         });
         if (stat.isDirectory()) {
           const nested = yield* Effect.tryPromise({
             try: () => findFunFiles(target),
-            catch: (error: any) =>
+            catch: (error: unknown) =>
               new Error(
-                `Failed to scan files in '${target}': ${error.message}`,
+                `Failed to scan files in '${target}': ${toErrorMessage(error)}`,
               ),
           });
           filesToCheck.push(...nested);
@@ -141,8 +144,8 @@ export const checkCommand = (
           if (formatted !== original) {
             yield* Effect.tryPromise({
               try: () => fs.writeFile(target, formatted, "utf-8"),
-              catch: (err: any) =>
-                new Error(`Failed writing '${target}': ${err.message}`),
+              catch: (err: unknown) =>
+                new Error(`Failed writing '${target}': ${toErrorMessage(err)}`),
             });
             fixedCount++;
             if (!jsonOutput && !sarifOutput) {
@@ -217,8 +220,10 @@ export const checkCommand = (
       idiomaticPassed &&
       !(warningsAsErrors && result.warningCount > 0);
     if (warningsAsErrors && result.warningCount > 0) process.exitCode = 1;
-    const diagnostics = result.diagnostics
-      .map((diagnostic: any) => ({
+    const diagnostics = (
+      result.diagnostics as (TypeCheckDiagnostic & { code?: string | number })[]
+    )
+      .map((diagnostic) => ({
         file: diagnostic.file,
         line: diagnostic.line,
         column: diagnostic.column,
@@ -253,7 +258,7 @@ export const checkCommand = (
     } else if (sarifOutput) {
       const rules = [
         ...new Map(
-          diagnostics.map((diagnostic: any) => [
+          diagnostics.map((diagnostic) => [
             diagnostic.code ?? "FS_DIAGNOSTIC",
             {
               id: diagnostic.code ?? "FS_DIAGNOSTIC",
@@ -266,7 +271,7 @@ export const checkCommand = (
           ]),
         ).values(),
       ];
-      const results = diagnostics.map((diagnostic: any) => ({
+      const results = diagnostics.map((diagnostic) => ({
         ruleId: diagnostic.code ?? "FS_DIAGNOSTIC",
         level:
           diagnostic.severity === "error"

@@ -1,7 +1,7 @@
-import ts from "typescript";
 import { createHash } from "node:crypto";
 import { dirname, relative, resolve } from "node:path";
-import { fileURLToPath, pathToFileURL } from "node:url";
+import { fileURLToPath } from "node:url";
+import ts from "typescript";
 import type {
   TextDocumentItem,
   TextEdit,

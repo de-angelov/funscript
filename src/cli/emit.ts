@@ -1,13 +1,15 @@
-import { Effect, Console } from "effect";
-import * as path from "node:path";
+import * as Console from "effect/Console";
+import * as Effect from "effect/Effect";
 import * as fs from "node:fs/promises";
+import * as path from "node:path";
 import { compileString } from "../compiler.js";
+import { toErrorMessage } from "../errors.js";
 import {
-  isPathPolicyEnabled,
   isEffectOnlyFile,
+  isPathPolicyEnabled,
   type FunScriptProjectConfig,
 } from "../compiler/project-config.js";
-import { readFile, writeFile, checkNoTsPaths } from "./io.js";
+import { checkNoTsPaths, readFile, writeFile } from "./io.js";
 
 export const emitCommand = (
   args: string[],
@@ -100,9 +102,9 @@ export const emitCommand = (
       if (isExecutable) {
         yield* Effect.tryPromise({
           try: () => fs.chmod(outPath, 0o755),
-          catch: (error: any) =>
+          catch: (error: unknown) =>
             new Error(
-              `Failed to set executable permissions on '${outPath}': ${error.message}`,
+              `Failed to set executable permissions on '${outPath}': ${toErrorMessage(error)}`,
             ),
         });
       }

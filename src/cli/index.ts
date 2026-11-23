@@ -1,29 +1,31 @@
 #!/usr/bin/env node
 
-import { Effect, Console } from "effect";
+import * as Console from "effect/Console";
+import * as Effect from "effect/Effect";
 import * as fs from "node:fs/promises";
 import {
   loadProjectConfig,
   type FunScriptProjectConfig,
 } from "../compiler/project-config.js";
-import { checkCliFiles } from "./typecheck.js";
-import { runTsc } from "./tsc.js";
 import { startLspServer } from "../lsp/index.js";
-import { startRepl } from "./repl.js";
-import { renderCliHelp, validateCliArgs } from "./commands.js";
 import { FUNSCRIPT_VERSION } from "../version.js";
-import { initProject } from "./init.js";
-import { findFunFiles } from "./io.js";
 import { buildCommand } from "./build.js";
-import { emitCommand } from "./emit.js";
 import { checkCommand } from "./check.js";
-import { fmtCommand } from "./fmt.js";
-import { doctorCommand } from "./doctor.js";
-import { explainCommand } from "./explain.js";
+import { renderCliHelp, validateCliArgs } from "./commands.js";
 import { docCommand } from "./doc.js";
+import { doctorCommand } from "./doctor.js";
+import { emitCommand } from "./emit.js";
+import { explainCommand } from "./explain.js";
+import { fmtCommand } from "./fmt.js";
+import { initProject } from "./init.js";
+import { toErrorMessage } from "../errors.js";
+import { findFunFiles } from "./io.js";
 import { pipelineStyleCommand } from "./pipeline-style.js";
+import { startRepl } from "./repl.js";
 import { runCommand } from "./run.js";
 import { testCommand } from "./test.js";
+import { runTsc } from "./tsc.js";
+import { checkCliFiles } from "./typecheck.js";
 
 let projectPolicy: FunScriptProjectConfig = {};
 
@@ -151,9 +153,9 @@ const program = Effect.gen(function* () {
         const sourceRoot = hasSrc ? "src" : ".";
         const files = yield* Effect.tryPromise({
           try: () => findFunFiles(sourceRoot),
-          catch: (error: any) =>
+          catch: (error: unknown) =>
             new Error(
-              `Failed to scan files in '${sourceRoot}': ${error.message}`,
+              `Failed to scan files in '${sourceRoot}': ${toErrorMessage(error)}`,
             ),
         });
         if (
@@ -211,9 +213,9 @@ const program = Effect.gen(function* () {
       return yield* helpCommand;
   }
 }).pipe(
-  Effect.catch((err: any) => {
+  Effect.catch((err: unknown) => {
     process.exitCode = 1;
-    return Console.error(`\x1b[31merror\x1b[0m: ${err.message || err}`);
+    return Console.error(`\x1b[31merror\x1b[0m: ${toErrorMessage(err)}`);
   }),
 );
 

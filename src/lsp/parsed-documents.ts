@@ -1,7 +1,7 @@
-import { Lexer } from "../lexer/lexer.js";
-import { Parser } from "../parser/parser.js";
-import { TokenType } from "../lexer/tokens.js";
 import type { Program } from "../ast/types.js";
+import { Lexer } from "../lexer/lexer.js";
+import { TokenType } from "../lexer/tokens.js";
+import { Parser } from "../parser/parser.js";
 
 export type NavigationDocument = { uri: string; text: string };
 export type Occurrence = {

@@ -10,11 +10,10 @@ import type {
   JSXOpeningElement,
   JSXSelfClosingElement,
   JSXTagName,
-  StringLiteral,
   UpperIdentifier,
 } from "../ast/types.js";
-import { ParseError } from "./errors.js";
 import { TokenType, type Token } from "../lexer/tokens.js";
+import { ParseError } from "./errors.js";
 import type { Parser } from "./parser.js";
 
 export type JsxParserContext = Parser;

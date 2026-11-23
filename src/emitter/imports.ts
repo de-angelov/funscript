@@ -1,4 +1,4 @@
-import type { ImportDeclaration, ExportFromDeclaration } from "../ast/types.js";
+import type { ExportFromDeclaration, ImportDeclaration } from "../ast/types.js";
 
 /** Render an import while preserving the distinction between `import {}` and a bare import. */
 export function renderImport(

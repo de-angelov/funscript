@@ -1,5 +1,6 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
+import { toErrorMessage } from "../errors.js";
 import { Lexer } from "../lexer/lexer.js";
 import { Parser } from "../parser/parser.js";
 
@@ -18,8 +19,8 @@ export function loadProjectConfig(cwd: string): FunScriptProjectConfig {
   let source: string;
   try {
     source = fs.readFileSync(file, "utf8");
-  } catch (error: any) {
-    if (error?.code === "ENOENT") return {};
+  } catch (error: unknown) {
+    if ((error as { code?: string })?.code === "ENOENT") return {};
     throw error;
   }
   try {
@@ -121,8 +122,10 @@ export function loadProjectConfig(cwd: string): FunScriptProjectConfig {
       }
     }
     return config;
-  } catch (error: any) {
-    throw new Error(`${file}: invalid FunScript config: ${error.message}`);
+  } catch (error: unknown) {
+    throw new Error(
+      `${file}: invalid FunScript config: ${toErrorMessage(error)}`,
+    );
   }
 }
 

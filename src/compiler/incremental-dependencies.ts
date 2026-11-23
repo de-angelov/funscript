@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
 import * as fs from "node:fs";
-import * as path from "node:path";
 import { createRequire } from "node:module";
+import * as path from "node:path";
 import { Lexer } from "../lexer/lexer.js";
 import { Parser } from "../parser/parser.js";
 import { packageFingerprint } from "./package-fingerprint.js";
@@ -74,8 +74,10 @@ export function incrementalDependencyKeys(
         filename,
         source,
       ).parse();
-      const inspect = (node: any): void => {
+      const inspect = (node: unknown): void => {
         if (!node || typeof node !== "object") return;
+        const n = node as Record<string, unknown>;
+        const kind = typeof n.kind === "string" ? n.kind : "";
         if (
           [
             "TsEscapeDeclaration",
@@ -83,7 +85,7 @@ export function incrementalDependencyKeys(
             "TsEscapeTypeNode",
             "AsDeclaration",
             "JsExpression",
-          ].includes(node.kind)
+          ].includes(kind)
         )
           safe = false;
         if (
@@ -94,7 +96,7 @@ export function incrementalDependencyKeys(
             "ErrorDeclaration",
             "ServiceDeclaration",
             "EffectBlockExpression",
-          ].includes(node.kind)
+          ].includes(kind)
         )
           usesImplicitEffect = true;
         if (Array.isArray(node)) {

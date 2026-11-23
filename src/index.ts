@@ -1,31 +1,16 @@
-export * from "./errors.js";
 export * from "./ast/types.js";
-export * from "./lexer/tokens.js";
-export * from "./lexer/lexer.js";
-export * from "./parser/parser.js";
-export * from "./emitter/emitter.js";
 export * from "./compiler.js";
 export * from "./compiler/check.js";
 export * from "./compiler/incremental-build.js";
-export * as lsp from "./lsp/index.js";
-export {
-  FunScriptLspServer,
-  startLspServer,
-  validateFunScript,
-} from "./lsp/index.js";
+export * from "./emitter/emitter.js";
+export * from "./errors.js";
 export * from "./formatter/index.js";
 export * as prettierPlugin from "./formatter/prettier.js";
-export { default as prettierPluginFunscript } from "./formatter/prettier.js";
-export * as vitePlugin from "./plugins/vite.js";
-export { funscriptPlugin } from "./plugins/vite.js";
-export * as bunPlugin from "./plugins/bun.js";
-export { funscriptBunPlugin } from "./plugins/bun.js";
-export * as doc from "./tooling/doc.js";
-export {
-  generateDocs,
-  extractModuleDoc,
-  renderHtmlDoc,
-  renderMarkdownDoc,
-} from "./tooling/doc.js";
 export * as zodInterop from "./interop/zod.js";
-export { fromZod, toZod } from "./interop/zod.js";
+export * from "./lexer/lexer.js";
+export * from "./lexer/tokens.js";
+export * as lsp from "./lsp/index.js";
+export * from "./parser/parser.js";
+export * as bunPlugin from "./plugins/bun.js";
+export * as vitePlugin from "./plugins/vite.js";
+export * as doc from "./tooling/doc.js";

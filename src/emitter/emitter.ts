@@ -1,147 +1,105 @@
 import ts from "typescript";
-import { MatchEmitter, type RecordFieldInfo } from "./match.js";
-import { emitRuntimeHelpers } from "./runtime-helpers.js";
-import { FunScriptError } from "../errors.js";
 import {
-  emitTopLevelDeclaration,
-  emitErrorDeclaration,
-  emitServiceDeclaration,
-  emitBindingDeclaration,
-  isPrimitiveType,
-  collectBindingNames,
-} from "./declarations.js";
-import {
-  emitJsxElement,
-  emitJsxSelfClosingElement,
-  emitJsxTagName,
-  emitJsxAttribute,
-  emitJsxExpressionContainer,
-  emitJsxText,
-  emitJsxChild,
-} from "./jsx.js";
-import {
-  PRIMITIVE_TYPES,
-  EFFECT_TYPE_MODULES,
-  EFFECT_BUILTIN_MODULES,
-  emitPropertyKey,
-  emitTypeParameters,
-  emitTypeNode,
-} from "./types.js";
-import {
-  emitArrowExpression,
-  emitIndexTarget,
-  emitStatement,
-  emitWhenStatement,
-  emitEffectCall,
-  emitEffectBlockExpression,
-  emitParBlockExpression,
-  emitMutativeRecipe,
-} from "./statements.js";
-import {
-  emitSchemaDeclaration,
-  emitGenericDataSchema,
-  emitCheckedRecordDecoder,
-  emitSchemaTypeField,
-  emitGenericSchemaArgument,
-  emitRefinementStage,
-  flattenPipelineStages,
-  extractBrandNames,
-  getBrandNameFromStage,
-} from "./schemas.js";
+  type BinaryExpression,
+  type BindingDeclaration,
+  type BindingTarget,
+  type CallExpression,
+  type EffectBlockExpression,
+  type ErrorDeclaration,
+  type Expression,
+  type FunctionBody,
+  type FunctionExpression,
+  type Identifier,
+  type IndexExpression,
+  type JsExpression,
+  type JSXAttribute,
+  type JSXChild,
+  type JSXElement,
+  type JSXExpressionContainer,
+  type JSXSelfClosingElement,
+  type JSXTagName,
+  type JSXText,
+  type MatchExpression,
+  type MemberExpression,
+  type MutBlockExpression,
+  type ParBlockExpression,
+  type Pattern,
+  type PipelineExpression,
+  type Program,
+  type RecordExpression,
+  type SchemaDeclaration,
+  type ServiceDeclaration,
+  type Statement,
+  type StringLiteral,
+  type TaggedTemplateExpression,
+  type TaggedUnionSchema,
+  type TemplateLiteral,
+  type TopLevelDeclaration,
+  type TypeNode,
+  type TypeParameter,
+  type UnaryExpression,
+  type UpperIdentifier,
+  type WhenStatement,
+} from "../ast/types.js";
 import {
   isRecordContract,
   recordContractType,
-  RECORD_CONTRACT_BRAND,
 } from "../compiler/record-contracts.js";
+import { FunScriptError } from "../errors.js";
 import {
-  type Program,
-  type TopLevelDeclaration,
-  type ImportDeclaration,
-  ExportDeclaration,
-  ExportDefaultDeclaration,
-  type BindingDeclaration,
-  type BindingTarget,
-  type SchemaDeclaration,
-  RecordSchema,
-  type TaggedUnionSchema,
-  RefinementSchema,
-  TypeSignatureSchema,
-  TsDerivedSchema,
-  type ErrorDeclaration,
-  type ServiceDeclaration,
-  type Expression,
-  Literal,
-  NumberLiteral,
-  type StringLiteral,
-  type TemplateLiteral,
-  type TaggedTemplateExpression,
-  type Identifier,
-  type UpperIdentifier,
-  Placeholder,
-  TypedHole,
-  type PipelineExpression,
-  type BinaryExpression,
-  type UnaryExpression,
-  type CallExpression,
-  type MemberExpression,
-  type IndexExpression,
-  type RecordExpression,
-  DotPathEntry,
-  ArrayExpression,
-  type FunctionExpression,
-  type FunctionBody,
-  type BlockStatement,
-  type Statement,
-  AssignmentStatement,
-  ExpressionStatement,
-  ReturnStatement,
-  type WhenStatement,
-  type MutBlockExpression,
-  type MatchExpression,
-  type Pattern,
-  type EffectBlockExpression,
-  type ParBlockExpression,
-  EffectStatement,
-  EffectBindStatement,
-  EffectDiscardStatement,
-  type TypeNode,
-  type TypeReferenceNode,
-  type TypeParameter,
-  type FunctionTypeNode,
-  type EffectTypeNode,
-  IntersectionTypeNode,
-  TsEscapeDeclaration,
-  type JsExpression,
-  TsEscapeExpression,
-  TsEscapeTypeNode,
-  type JSXElement,
-  type JSXSelfClosingElement,
-  JSXOpeningElement,
-  JSXClosingElement,
-  type JSXAttribute,
-  type JSXExpressionContainer,
-  type JSXText,
-  type JSXChild,
-  type JSXTagName,
-} from "../ast/types.js";
+  collectBindingNames,
+  emitBindingDeclaration,
+  emitErrorDeclaration,
+  emitServiceDeclaration,
+  emitTopLevelDeclaration,
+  isPrimitiveType,
+} from "./declarations.js";
+import {
+  emitJsxAttribute,
+  emitJsxChild,
+  emitJsxElement,
+  emitJsxExpressionContainer,
+  emitJsxSelfClosingElement,
+  emitJsxTagName,
+  emitJsxText,
+} from "./jsx.js";
+import { MatchEmitter, type RecordFieldInfo } from "./match.js";
 import {
   EFFECT_PIPELINE_COMPATIBILITY_ALIASES,
   type PipelineCompanionModule,
 } from "./pipeline-catalog.js";
 import {
-  PipelineResolver,
   COMPARISON_METHOD_MAP,
   ES_TOOLKIT_METHODS,
+  PipelineResolver,
 } from "./pipeline-resolution.js";
+import { emitRuntimeHelpers } from "./runtime-helpers.js";
+import { emitSchemaDeclaration, emitSchemaTypeField } from "./schemas.js";
+import {
+  emitArrowExpression,
+  emitEffectBlockExpression,
+  emitEffectCall,
+  emitIndexTarget,
+  emitMutativeRecipe,
+  emitParBlockExpression,
+  emitStatement,
+  emitWhenStatement,
+} from "./statements.js";
+import {
+  EFFECT_BUILTIN_MODULES,
+  emitPropertyKey,
+  emitTypeNode,
+  emitTypeParameters,
+} from "./types.js";
 export {
   COMPARISON_METHOD_MAP,
-  PipelineResolutionError,
+  ES_TOOLKIT_DATA_LAST_CALLS,
+  ES_TOOLKIT_MATH_COLLECTION,
+  ES_TOOLKIT_MATH_DATA_LAST,
   ES_TOOLKIT_METHODS,
   ES_TOOLKIT_STRING_METHODS,
-  ES_TOOLKIT_MATH_DATA_LAST,
-  ES_TOOLKIT_MATH_COLLECTION,
   ES_TOOLKIT_TIMING_DATA_LAST,
-  ES_TOOLKIT_DATA_LAST_CALLS,
+  PipelineResolutionError,
 } from "./pipeline-resolution.js";
 
 export interface StageResolution {
@@ -1268,7 +1226,7 @@ export class Emitter {
   private validateRecordParameterUse(
     expr: FunctionExpression,
     name: string,
-    aliases: Set<BindingDeclaration>,
+    _aliases: Set<BindingDeclaration>,
   ): void {
     const shadowed = new Set(
       expr.params.flatMap((param) => this.collectBindingNames(param.name)),
@@ -1310,7 +1268,7 @@ export class Emitter {
     const hasDefaults =
       source?.kind === "RecordTypeNode" &&
       source.fields.some((field) => field.defaultValue);
-    const isSafeLocalForward = (
+    const _isSafeLocalForward = (
       parent: Record<string, unknown>,
       index: number | undefined,
     ): boolean => {

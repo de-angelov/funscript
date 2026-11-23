@@ -1,9 +1,9 @@
-import { spawn } from "node:child_process";
-import { createRequire } from "node:module";
-import * as fs from "node:fs/promises";
-import * as path from "node:path";
 import { TraceMap } from "@jridgewell/trace-mapping";
-import { Effect } from "effect";
+import * as Effect from "effect/Effect";
+import { spawn } from "node:child_process";
+import * as fs from "node:fs/promises";
+import { createRequire } from "node:module";
+import * as path from "node:path";
 import ts from "typescript";
 import { compileString } from "../compiler.js";
 import { mapDiagnosticLocation } from "../compiler/check.js";

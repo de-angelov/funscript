@@ -1,4 +1,4 @@
-import type { Plugin, SupportLanguage, Parser, Printer } from "prettier";
+import type { Parser, Plugin, Printer, SupportLanguage } from "prettier";
 import { Lexer } from "../lexer/lexer.js";
 import { Parser as FunScriptParser } from "../parser/parser.js";
 import { format, type FormatOptions } from "./index.js";

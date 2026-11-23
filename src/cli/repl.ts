@@ -1,9 +1,14 @@
-import repl, { type REPLServer, Recoverable } from "node:repl";
-import vm from "node:vm";
+import * as Console from "effect/Console";
+import * as Duration from "effect/Duration";
+import * as Effect from "effect/Effect";
+import { pipe } from "effect/Function";
+import * as Option from "effect/Option";
+import * as Result from "effect/Result";
+import { transformSync } from "esbuild";
 import { createRequire } from "node:module";
 import * as path from "node:path";
-import { transformSync } from "esbuild";
-import { Effect, Console, Option, Result, Duration, pipe } from "effect";
+import repl, { Recoverable, type REPLServer } from "node:repl";
+import vm from "node:vm";
 import { compileString, type CompileResult } from "../compiler.js";
 import { typeCheckSource } from "../compiler/check.js";
 import {
@@ -54,26 +59,38 @@ export interface ReplOptions {
 /**
  * Extracts a clean error message from an Effect/Compiler failure.
  */
-export function extractErrorMessage(err: any): string {
+export function extractErrorMessage(err: unknown): string {
   if (!err) return "Unknown error";
-  const causeSymbol = Symbol.for("effect/Runtime/FiberFailure/Cause");
-  const cause = err[causeSymbol];
-  if (cause?.error?.message) {
-    return cause.error.message;
-  }
-  if (err.error?.message) {
-    return err.error.message;
-  }
-  if (typeof err.message === "string") {
-    if (err.message.startsWith("{") && err.message.endsWith("}")) {
-      try {
-        const parsed = JSON.parse(err.message);
-        if (parsed.message) return parsed.message;
-      } catch {}
+  if (typeof err === "object") {
+    const causeSymbol = Symbol.for("effect/Runtime/FiberFailure/Cause");
+    const cause = (err as Record<symbol | string, unknown>)[causeSymbol] as
+      { error?: { message?: string } } | undefined;
+    if (cause?.error?.message) {
+      return cause.error.message;
     }
-    return err.message;
+    const errObj = err as { error?: { message?: string }; message?: unknown };
+    if (errObj.error?.message) {
+      return errObj.error.message;
+    }
+    if (typeof errObj.message === "string") {
+      if (errObj.message.startsWith("{") && errObj.message.endsWith("}")) {
+        try {
+          const parsed = JSON.parse(errObj.message);
+          if (parsed.message) return parsed.message;
+        } catch {}
+      }
+      return errObj.message;
+    }
   }
-  return String(err);
+  if (typeof err === "string") return err;
+  if (
+    typeof err === "number" ||
+    typeof err === "boolean" ||
+    typeof err === "bigint"
+  ) {
+    return String(err);
+  }
+  return JSON.stringify(err) ?? "Unknown error";
 }
 
 /**
@@ -91,7 +108,7 @@ export function adjustErrorLocation(message: string): string {
 /**
  * Determines whether an error indicates that more lines of input are expected.
  */
-export function isRecoverable(err: any): boolean {
+export function isRecoverable(err: unknown): boolean {
   const msg = extractErrorMessage(err);
   return (
     /unexpected end of input/i.test(msg) ||
@@ -148,7 +165,7 @@ export async function compileReplCode(
       compiled = res;
       tsCode = res.typescript;
       isExpression = false;
-    } catch (declErr: any) {
+    } catch (declErr: unknown) {
       try {
         const res = await Effect.runPromise(
           compileReplSource(wrapExpression(trimmed)),
@@ -168,7 +185,7 @@ export async function compileReplCode(
       compiled = res;
       tsCode = res.typescript;
       isExpression = true;
-    } catch (exprErr: any) {
+    } catch (exprErr: unknown) {
       try {
         const res = await Effect.runPromise(compileReplSource(trimmed));
         compiled = res;
@@ -245,7 +262,7 @@ export async function compileReplCode(
 export async function evaluateReplLine(
   input: string,
   context: vm.Context,
-): Promise<any> {
+): Promise<unknown> {
   const trimmed = input.trim();
   if (!trimmed) {
     return undefined;
@@ -258,11 +275,11 @@ export async function evaluateReplLine(
     compiled = await compileReplCode(trimmed, declarations);
     // Keep types only after evaluation succeeds.
     pendingDeclarations = declarations;
-  } catch (err: any) {
+  } catch (err: unknown) {
     const rawMsg = extractErrorMessage(err);
     const msg = adjustErrorLocation(rawMsg);
     const error = new Error(msg);
-    (error as any).raw = err;
+    (error as Error & { raw?: unknown }).raw = err;
     throw error;
   }
 
@@ -272,7 +289,9 @@ export async function evaluateReplLine(
 
   let value = vm.runInContext(compiled.jsCode, context);
   if (Effect.isEffect(value)) {
-    value = await Effect.runPromise(value as Effect.Effect<any, any, never>);
+    value = await Effect.runPromise(
+      value as Effect.Effect<unknown, unknown, never>,
+    );
   } else if (value != null && typeof value.then === "function") {
     value = await value;
   }
@@ -313,7 +332,7 @@ export function createReplEvaluator(): repl.REPLEval {
     cmd: string,
     context: vm.Context,
     _filename: string,
-    callback: (err: Error | null, result?: any) => void,
+    callback: (err: Error | null, result?: unknown) => void,
   ) {
     const trimmed = cmd.trim();
     if (!trimmed) {
@@ -324,11 +343,16 @@ export function createReplEvaluator(): repl.REPLEval {
       try {
         const result = await evaluateReplLine(cmd, context);
         callback(null, result);
-      } catch (err: any) {
-        if (isRecoverable(err.raw || err)) {
-          return callback(new Recoverable(err));
+      } catch (err: unknown) {
+        const raw = (err as { raw?: unknown })?.raw;
+        if (isRecoverable(raw || err)) {
+          return callback(
+            new Recoverable(
+              err instanceof Error ? err : new Error(String(err)),
+            ),
+          );
         }
-        callback(err);
+        callback(err instanceof Error ? err : new Error(String(err)));
       }
     });
     pendingEvaluations = evaluation.then(

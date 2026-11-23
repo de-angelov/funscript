@@ -3,16 +3,15 @@ import {
   CodeActionKind,
   type Range,
 } from "vscode-languageserver/node";
+import type {
+  BindingDeclaration,
+  FunctionExpression,
+  MatchExpression,
+  Pattern,
+  Program,
+} from "../ast/types.js";
 import { Lexer } from "../lexer/lexer.js";
 import { Parser } from "../parser/parser.js";
-import type {
-  Program,
-  SchemaDeclaration,
-  MatchExpression,
-  FunctionExpression,
-  BindingDeclaration,
-  Pattern,
-} from "../ast/types.js";
 
 interface VariantInfo {
   name: string;

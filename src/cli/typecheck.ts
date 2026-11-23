@@ -1,9 +1,10 @@
-import { Console, Effect } from "effect";
+import * as Console from "effect/Console";
+import * as Effect from "effect/Effect";
 import * as fs from "node:fs/promises";
 import * as path from "node:path";
+import { typeCheckFiles } from "../compiler/check.js";
 import { Lexer } from "../lexer/lexer.js";
 import { Parser } from "../parser/parser.js";
-import { typeCheckFiles } from "../compiler/check.js";
 
 /** Include local FunScript modules in the checker's virtual TypeScript program. */
 export const collectCliFiles = (

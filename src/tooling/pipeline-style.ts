@@ -1,12 +1,12 @@
-import { Effect } from "effect";
-import { Lexer } from "../lexer/lexer.js";
-import { Parser } from "../parser/parser.js";
+import * as Effect from "effect/Effect";
 import { compileString } from "../compiler.js";
 import { TypeScriptCompilationContext } from "../compiler/typescript-context.js";
 import {
   PIPELINE_COMPANION_CATALOG,
   pipelineCompanionCandidates,
 } from "../emitter/pipeline-catalog.js";
+import { Lexer } from "../lexer/lexer.js";
+import { Parser } from "../parser/parser.js";
 
 export type PipelineStyle = "bare" | "qualified";
 type Edit = {
@@ -91,7 +91,7 @@ export function convertPipelineStyle(
       const stage = node.right;
       const target = stage.kind === "CallExpression" ? stage.callee : stage;
       const start = target.span.start.offset;
-      const end = target.span.end.offset;
+      const _end = target.span.end.offset;
       const stageEnd = stage.span.end.offset;
       const selected =
         !range ||

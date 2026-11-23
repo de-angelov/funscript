@@ -1,11 +1,11 @@
+import * as Effect from "effect/Effect";
 import * as path from "node:path";
-import { Effect } from "effect";
 import { compileString } from "../compiler.js";
 import {
   createTypeCheckCache,
   typeCheckVirtualFiles,
-  type TypeCheckResult,
   type CheckOptions,
+  type TypeCheckResult,
 } from "./check.js";
 import { isEffectOnlyFile, isPathPolicyEnabled } from "./project-config.js";
 

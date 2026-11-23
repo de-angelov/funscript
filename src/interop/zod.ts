@@ -1,5 +1,9 @@
+import * as Effect from "effect/Effect";
+import * as Result from "effect/Result";
+import * as Schema from "effect/Schema";
+import type * as SchemaAST from "effect/SchemaAST";
+import * as SchemaIssue from "effect/SchemaIssue";
 import { z } from "zod";
-import { Schema, SchemaIssue, type SchemaAST, Effect, Result } from "effect";
 
 /**
  * Callable Effect schema wrapping a Zod validator.

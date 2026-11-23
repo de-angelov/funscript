@@ -1,9 +1,11 @@
-import { Effect, Console } from "effect";
+import * as Console from "effect/Console";
+import * as Effect from "effect/Effect";
 import * as fs from "node:fs/promises";
 import * as path from "node:path";
-import { findFunFiles, readFile, writeFile } from "./io.js";
-import { convertPipelineStyle } from "../tooling/pipeline-style.js";
 import { TypeScriptCompilationContext } from "../compiler/typescript-context.js";
+import { toErrorMessage } from "../errors.js";
+import { convertPipelineStyle } from "../tooling/pipeline-style.js";
+import { findFunFiles, readFile, writeFile } from "./io.js";
 
 export const pipelineStyleCommand = (args: string[]) =>
   Effect.gen(function* () {
@@ -18,12 +20,12 @@ export const pipelineStyleCommand = (args: string[]) =>
     for (const target of targets) {
       const stat = yield* Effect.tryPromise({
         try: () => fs.stat(target),
-        catch: (error: any) => new Error(error.message),
+        catch: (error: unknown) => new Error(toErrorMessage(error)),
       });
       const files = stat.isDirectory()
         ? yield* Effect.tryPromise({
             try: () => findFunFiles(target),
-            catch: (error: any) => new Error(error.message),
+            catch: (error: unknown) => new Error(toErrorMessage(error)),
           })
         : [target];
       const compilationContext =
@@ -44,9 +46,9 @@ export const pipelineStyleCommand = (args: string[]) =>
           yield* Console.log(
             `${file}: ${result.changed} converted, ${result.skipped} skipped`,
           );
-        } catch (error: any) {
+        } catch (error: unknown) {
           process.exitCode = 1;
-          yield* Console.error(`${file}: ${error.message}`);
+          yield* Console.error(`${file}: ${toErrorMessage(error)}`);
         }
       }
     }

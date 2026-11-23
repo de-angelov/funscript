@@ -1,13 +1,13 @@
 import {
-  type CodeAction,
   CodeActionKind,
+  type CodeAction,
   type Range,
   type TextEdit,
 } from "vscode-languageserver/node";
+import type { ImportDeclaration, Program } from "../ast/types.js";
 import { Lexer } from "../lexer/lexer.js";
-import { Parser } from "../parser/parser.js";
 import { TokenType, type Token } from "../lexer/tokens.js";
-import type { Program, ImportDeclaration } from "../ast/types.js";
+import { Parser } from "../parser/parser.js";
 
 export const EFFECT_MODULE_EXPORTS = new Set([
   "Array",

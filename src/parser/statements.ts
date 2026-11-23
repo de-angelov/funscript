@@ -1,7 +1,6 @@
 import type {
   BlockStatement,
   DotPathExpression,
-  EffectBindStatement,
   EffectBlockExpression,
   EffectStatement,
   Expression,

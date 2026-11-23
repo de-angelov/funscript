@@ -3,15 +3,15 @@ import {
   DiagnosticSeverity,
   type Diagnostic,
 } from "vscode-languageserver/node";
-import { Lexer } from "../lexer/lexer.js";
-import { Parser } from "../parser/parser.js";
-import { TypeScriptCompilationContext } from "../compiler/typescript-context.js";
-import { validateNumericComparisons } from "../compiler/numeric-comparisons.js";
+import type { Span } from "../ast/types.js";
 import {
   ImportedSchemaError,
   resolveImportedSchemas,
 } from "../compiler/imported-schemas.js";
-import type { Span } from "../ast/types.js";
+import { validateNumericComparisons } from "../compiler/numeric-comparisons.js";
+import { TypeScriptCompilationContext } from "../compiler/typescript-context.js";
+import { Lexer } from "../lexer/lexer.js";
+import { Parser } from "../parser/parser.js";
 
 export function toDiagnostic(error: any): Diagnostic {
   const span: Span | undefined = error.span;

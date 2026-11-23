@@ -1,30 +1,33 @@
 import ts from "typescript";
 import {
-  Emitter,
+  type BindingTarget,
+  type CallExpression,
+  type Expression,
+  type FunctionExpression,
+  type Pattern,
+  type PipelineExpression,
+  type Program,
+  type Span,
+} from "../ast/types.js";
+import {
   type StageResolution,
   COMPARISON_METHOD_MAP,
-  PipelineResolutionError,
-  isEffectModule,
+  ES_TOOLKIT_MATH_COLLECTION,
+  ES_TOOLKIT_MATH_DATA_LAST,
   ES_TOOLKIT_METHODS,
   ES_TOOLKIT_STRING_METHODS,
-  ES_TOOLKIT_MATH_DATA_LAST,
-  ES_TOOLKIT_MATH_COLLECTION,
   ES_TOOLKIT_TIMING_DATA_LAST,
+  Emitter,
+  PipelineResolutionError,
 } from "../emitter/emitter.js";
 import {
   type PipelineCompanionModule,
+  EFFECT_PIPELINE_COMPATIBILITY_ALIASES,
   PIPELINE_COMPANION_CATALOG,
   pipelineCompanionCandidates,
-  EFFECT_PIPELINE_COMPATIBILITY_ALIASES,
 } from "../emitter/pipeline-catalog.js";
-import {
-  type Program,
-  type Expression,
-  type PipelineExpression,
-  type CallExpression,
-  type BindingTarget,
-  type Pattern,
-} from "../ast/types.js";
+import { FunScriptError } from "../errors.js";
+import { type TypeScriptCompilationContext } from "./typescript-context.js";
 
 function addPatternNames(pat: Pattern, names: Set<string>): void {
   if (pat.kind === "VariablePattern") names.add(pat.name.name);
@@ -52,8 +55,6 @@ function addBindingNames(target: BindingTarget, names: Set<string>): void {
     for (const el of target.elements) addPatternNames(el, names);
   }
 }
-import { type TypeScriptCompilationContext } from "./typescript-context.js";
-import { FunScriptError } from "../errors.js";
 
 export interface PipelineCompanionMap extends ReadonlyMap<
   number,
@@ -82,7 +83,7 @@ const DURATION_COMPANION_METHODS = new Set([
   "hours",
   "days",
 ]);
-const NUMBER_COMPANION_METHODS = new Set([
+const _NUMBER_COMPANION_METHODS = new Set([
   "isGreaterThan",
   "isGreaterThanOrEqualTo",
   "isLessThan",
@@ -96,7 +97,7 @@ const NUMBER_COMPANION_METHODS = new Set([
   "increment",
   "decrement",
 ]);
-const DATETIME_COMPANION_METHODS = new Set([
+const _DATETIME_COMPANION_METHODS = new Set([
   "lessThan",
   "lessThanOrEqualTo",
   "greaterThan",
@@ -120,23 +121,25 @@ function unrollPipeline(expr: PipelineExpression): Expression[] {
 }
 
 function collectPipelines(
-  node: any,
+  node: unknown,
   pipelines: PipelineExpression[] = [],
 ): PipelineExpression[] {
   if (!node || typeof node !== "object") return pipelines;
-  if (node.kind === "PipelineExpression") {
-    pipelines.push(node);
-    let curr = node;
+  const n = node as Record<string, unknown>;
+  if (n.kind === "PipelineExpression") {
+    const pipeNode = n as unknown as PipelineExpression;
+    pipelines.push(pipeNode);
+    let curr = pipeNode;
     while (curr.kind === "PipelineExpression") {
       collectPipelines(curr.right, pipelines);
-      curr = curr.left;
+      curr = curr.left as PipelineExpression;
     }
     collectPipelines(curr, pipelines);
     return pipelines;
   }
-  for (const key of Object.keys(node)) {
+  for (const key of Object.keys(n)) {
     if (key === "span") continue;
-    const child = node[key];
+    const child = n[key];
     if (Array.isArray(child)) {
       for (const item of child) collectPipelines(item, pipelines);
     } else if (child && typeof child === "object") {
@@ -147,17 +150,18 @@ function collectPipelines(
 }
 
 function collectDirectCalls(
-  node: any,
+  node: unknown,
   inPipeline = false,
   calls: CallExpression[] = [],
 ): CallExpression[] {
   if (!node || typeof node !== "object") return calls;
-  if (node.kind === "PipelineExpression") {
-    let curr = node;
-    const stages: any[] = [];
+  const n = node as Record<string, unknown>;
+  if (n.kind === "PipelineExpression") {
+    let curr = n as unknown as PipelineExpression;
+    const stages: Expression[] = [];
     while (curr.kind === "PipelineExpression") {
       stages.unshift(curr.right);
-      curr = curr.left;
+      curr = curr.left as PipelineExpression;
     }
     stages.unshift(curr);
     collectDirectCalls(stages[0], inPipeline, calls);
@@ -166,14 +170,15 @@ function collectDirectCalls(
     }
     return calls;
   }
-  if (node.kind === "CallExpression") {
-    if (!inPipeline) calls.push(node);
-    collectDirectCalls(node.callee, inPipeline, calls);
-    for (const arg of node.args) collectDirectCalls(arg, inPipeline, calls);
+  if (n.kind === "CallExpression") {
+    const callNode = n as unknown as CallExpression;
+    if (!inPipeline) calls.push(callNode);
+    collectDirectCalls(callNode.callee, inPipeline, calls);
+    for (const arg of callNode.args) collectDirectCalls(arg, inPipeline, calls);
     return calls;
   }
-  for (const key of Object.keys(node)) {
-    const child = node[key];
+  for (const key of Object.keys(n)) {
+    const child = n[key];
     if (Array.isArray(child)) {
       for (const item of child) collectDirectCalls(item, inPipeline, calls);
     } else if (child && typeof child === "object") {
@@ -392,43 +397,53 @@ export function inferPipelineCompanions(
   // companion we already know from the pipeline initializer for later uses of
   // that local binding instead of losing it to the checker’s intermediate type.
   const pipelineBindingNames = new Map<number, string>();
-  const collectPipelineBindings = (node: any): void => {
+  const collectPipelineBindings = (node: unknown): void => {
     if (!node || typeof node !== "object") return;
     if (Array.isArray(node)) {
       for (const child of node) collectPipelineBindings(child);
       return;
     }
+    const n = node as Record<string, unknown>;
     if (
-      node.kind === "BindingDeclaration" &&
-      node.id?.kind === "Identifier" &&
-      node.init?.kind === "PipelineExpression"
+      n.kind === "BindingDeclaration" &&
+      (n.id as { kind?: string; name?: string })?.kind === "Identifier" &&
+      (n.init as { kind?: string; span?: Span })?.kind === "PipelineExpression"
     ) {
-      pipelineBindingNames.set(node.init.span.start.offset, node.id.name);
+      pipelineBindingNames.set(
+        (n.init as { span: Span }).span.start.offset,
+        (n.id as { name: string }).name,
+      );
     } else if (
-      node.kind === "AssignmentStatement" &&
-      node.target?.kind === "Identifier" &&
-      node.value?.kind === "PipelineExpression"
+      n.kind === "AssignmentStatement" &&
+      (n.target as { kind?: string; name?: string })?.kind === "Identifier" &&
+      (n.value as { kind?: string; span?: Span })?.kind === "PipelineExpression"
     ) {
-      pipelineBindingNames.set(node.value.span.start.offset, node.target.name);
+      pipelineBindingNames.set(
+        (n.value as { span: Span }).span.start.offset,
+        (n.target as { name: string }).name,
+      );
     }
-    for (const [key, child] of Object.entries(node))
+    for (const [key, child] of Object.entries(n))
       if (key !== "span") collectPipelineBindings(child);
   };
   collectPipelineBindings(ast);
   const bindingCompanions = new Map<string, PipelineCompanionModule>();
   const pipelineScopeBindings = new Map<number, Set<string>>();
-  const functionBindings = (fn: any): Set<string> => {
+  const functionBindings = (fn: FunctionExpression): Set<string> => {
     const names = new Set<string>();
     for (const param of fn.params ?? []) addBindingNames(param.name, names);
-    const visitScope = (node: any): void => {
+    const visitScope = (node: unknown): void => {
       if (
         !node ||
         typeof node !== "object" ||
-        (node !== fn && node.kind === "FunctionExpression")
+        (node !== fn &&
+          (node as { kind?: string }).kind === "FunctionExpression")
       )
         return;
-      if (node.kind === "BindingDeclaration") addBindingNames(node.id, names);
-      for (const [key, child] of Object.entries(node)) {
+      const n = node as Record<string, unknown>;
+      if (n.kind === "BindingDeclaration")
+        addBindingNames(n.id as BindingTarget, names);
+      for (const [key, child] of Object.entries(n)) {
         if (key === "span") continue;
         if (Array.isArray(child)) child.forEach(visitScope);
         else if (child && typeof child === "object") visitScope(child);
@@ -438,7 +453,7 @@ export function inferPipelineCompanions(
     return names;
   };
   const collectPipelineScopes = (
-    node: any,
+    node: unknown,
     inherited: ReadonlySet<string> = new Set(),
   ): void => {
     if (!node || typeof node !== "object") return;
@@ -446,12 +461,18 @@ export function inferPipelineCompanions(
       node.forEach((child) => collectPipelineScopes(child, inherited));
       return;
     }
+    const n = node as Record<string, unknown>;
     let scope = inherited;
-    if (node.kind === "FunctionExpression") {
-      scope = new Set([...inherited, ...functionBindings(node)]);
+    if (n.kind === "FunctionExpression") {
+      scope = new Set([
+        ...inherited,
+        ...functionBindings(n as unknown as FunctionExpression),
+      ]);
     }
-    if (node.kind === "PipelineExpression") {
-      for (const stage of unrollPipeline(node).slice(1)) {
+    if (n.kind === "PipelineExpression") {
+      for (const stage of unrollPipeline(
+        n as unknown as PipelineExpression,
+      ).slice(1)) {
         const names =
           pipelineScopeBindings.get(stage.span.start.offset) ??
           new Set<string>();
@@ -459,7 +480,7 @@ export function inferPipelineCompanions(
         pipelineScopeBindings.set(stage.span.start.offset, names);
       }
     }
-    for (const [key, child] of Object.entries(node)) {
+    for (const [key, child] of Object.entries(n)) {
       if (key === "span") continue;
       if (Array.isArray(child))
         child.forEach((item) => collectPipelineScopes(item, scope));

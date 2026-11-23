@@ -3,21 +3,16 @@ import type {
   EffectTypeNode,
   Expression,
   FunctionExpression,
-  FunctionTypeNode,
   Identifier,
   Parameter,
-  RecordPattern,
-  ArrayPattern,
-  Pattern,
   RecordTypeField,
-  RecordTypeNode,
   Span,
   TypeNode,
   TypeParameter,
   UpperIdentifier,
 } from "../ast/types.js";
+import { TokenType } from "../lexer/tokens.js";
 import { ParseError } from "./errors.js";
-import { TokenType, type Token } from "../lexer/tokens.js";
 import type { Parser } from "./parser.js";
 
 export type TypesParserContext = Parser;

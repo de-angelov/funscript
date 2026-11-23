@@ -1,4 +1,5 @@
-import { Effect, Schema } from "effect";
+import * as Effect from "effect/Effect";
+import * as Schema from "effect/Schema";
 
 /** A failure at an explicitly checked foreign callback boundary. */
 export class CallbackBoundaryError extends Error {
@@ -91,13 +92,11 @@ export function checkedEffect<A extends SyncArgs, B extends SyncResult, E, R>(
           (cause) => new CallbackBoundaryError("arguments", cause),
         ),
       );
-      const effect = yield* Effect.try({
-        try: () =>
-          Reflect.apply(callback, receiver, encoded) as Effect.Effect<
-            unknown,
-            E,
-            R
-          >,
+      const effect = yield* Effect.try<
+        Effect.Effect<unknown, E, R>,
+        CallbackBoundaryError
+      >({
+        try: () => Reflect.apply(callback, receiver, encoded),
         catch: (cause) => new CallbackBoundaryError("invocation", cause),
       });
       if (!Effect.isEffect(effect))

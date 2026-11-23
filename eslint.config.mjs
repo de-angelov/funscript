@@ -35,6 +35,12 @@ export default tseslint.config(
       "no-useless-escape": "error",
       "no-case-declarations": "off",
 
+      // Effect rules
+      "@effect/no-import-from-barrel-package": [
+        "error",
+        { packageNames: ["effect"] },
+      ],
+
       // TypeScript type-safety rules
       "@typescript-eslint/no-floating-promises": "error",
       "@typescript-eslint/no-misused-promises": [

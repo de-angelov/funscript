@@ -1,6 +1,5 @@
 import type {
   BindingDeclaration,
-  CallExpression,
   Expression,
   Identifier,
   RecordEntry,

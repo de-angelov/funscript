@@ -4,11 +4,11 @@ import {
   type Position,
   type Range,
 } from "vscode-languageserver/node";
-import { DOC_CATALOG, getAllDocKeywords } from "./docs.js";
 import {
   PIPELINE_COMPANION_CATALOG,
   pipelineCompanionCandidates,
 } from "../emitter/pipeline-catalog.js";
+import { DOC_CATALOG, getAllDocKeywords } from "./docs.js";
 
 export interface IndexedDocument {
   uri: string;

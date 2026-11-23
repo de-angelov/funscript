@@ -1,10 +1,12 @@
-import { Effect, Console } from "effect";
+import { createTwoFilesPatch } from "diff";
+import * as Console from "effect/Console";
+import * as Effect from "effect/Effect";
 import * as fs from "node:fs/promises";
 import * as path from "node:path";
-import { createTwoFilesPatch } from "diff";
-import { format } from "../formatter/index.js";
 import { loadFormatConfigForFile } from "../compiler/project-config.js";
-import { findFormatFiles, readFile, writeFile, readStdin } from "./io.js";
+import { format } from "../formatter/index.js";
+import { toErrorMessage } from "../errors.js";
+import { findFormatFiles, readFile, readStdin, writeFile } from "./io.js";
 
 export const fmtCommand = (args: string[]) =>
   Effect.gen(function* () {
@@ -63,9 +65,11 @@ export const fmtCommand = (args: string[]) =>
         } else {
           process.stdout.write(formatted);
         }
-      } catch (error: any) {
+      } catch (error: unknown) {
         process.exitCode = 1;
-        yield* Console.error(`Format error in '${filename}': ${error.message}`);
+        yield* Console.error(
+          `Format error in '${filename}': ${toErrorMessage(error)}`,
+        );
       }
       return;
     }
@@ -89,8 +93,8 @@ export const fmtCommand = (args: string[]) =>
       if (hasGlob) {
         const matches = yield* Effect.tryPromise({
           try: () => findFormatFiles(target, false),
-          catch: (error: any) =>
-            new Error(`Cannot expand '${target}': ${error.message}`),
+          catch: (error: unknown) =>
+            new Error(`Cannot expand '${target}': ${toErrorMessage(error)}`),
         });
         for (const file of matches) files.add(file);
         if (!matches.length) {
@@ -109,8 +113,8 @@ export const fmtCommand = (args: string[]) =>
       if (stat.isDirectory()) {
         const nested = yield* Effect.tryPromise({
           try: () => findFormatFiles(target, true),
-          catch: (error: any) =>
-            new Error(`Failed to scan '${target}': ${error.message}`),
+          catch: (error: unknown) =>
+            new Error(`Failed to scan '${target}': ${toErrorMessage(error)}`),
         });
         for (const file of nested) files.add(file);
       } else {
@@ -127,10 +131,12 @@ export const fmtCommand = (args: string[]) =>
           ...loadFormatConfigForFile(path.resolve(filePath)),
           filename: filePath,
         });
-      } catch (err: any) {
+      } catch (err: unknown) {
         process.exitCode = 1;
         hasDiff = true;
-        yield* Console.error(`Format error in '${filePath}': ${err.message}`);
+        yield* Console.error(
+          `Format error in '${filePath}': ${toErrorMessage(err)}`,
+        );
         continue;
       }
 

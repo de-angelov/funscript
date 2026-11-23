@@ -1,89 +1,46 @@
-import { renderImport, renderExportFrom } from "../emitter/imports.js";
+import {
+  type ArrayExpression,
+  type BinaryExpression,
+  type BindingDeclaration,
+  type BindingTarget,
+  type BlockStatement,
+  type CallExpression,
+  type EffectBlockExpression,
+  type EffectStatement,
+  type ErrorDeclaration,
+  type Expression,
+  type FunctionBody,
+  type FunctionExpression,
+  type Identifier,
+  type ImportDeclaration,
+  type Literal,
+  type MatchArm,
+  type MatchExpression,
+  type ParBlockExpression,
+  type Pattern,
+  type PipelineExpression,
+  type Program,
+  type RecordEntry,
+  type RecordExpression,
+  type RecordSchema,
+  type SchemaBody,
+  type SchemaDeclaration,
+  type ServiceDeclaration,
+  type Statement,
+  type StringLiteral,
+  type TaggedTemplateExpression,
+  type TaggedUnionSchema,
+  type TemplateLiteral,
+  type TopLevelDeclaration,
+  type TypeNode,
+  type TypeParameter,
+  type UnaryExpression,
+  type WhenStatement,
+} from "../ast/types.js";
+import { renderExportFrom, renderImport } from "../emitter/imports.js";
 import { Lexer } from "../lexer/lexer.js";
 import { Parser } from "../parser/parser.js";
 import { ASSOCIATIVITY, PRECEDENCE } from "./operator-precedence.js";
-import {
-  type Program,
-  type TopLevelDeclaration,
-  type ImportDeclaration,
-  ImportSpecifier,
-  ExportDeclaration,
-  ExportDefaultDeclaration,
-  type BindingDeclaration,
-  type BindingTarget,
-  type SchemaDeclaration,
-  type SchemaBody,
-  type RecordSchema,
-  RecordFieldSchema,
-  type TaggedUnionSchema,
-  VariantDeclaration,
-  VariantField,
-  RefinementSchema,
-  TypeSignatureSchema,
-  TsDerivedSchema,
-  ImportedTsSchema,
-  type ErrorDeclaration,
-  ErrorField,
-  type ServiceDeclaration,
-  ServiceMember,
-  type Expression,
-  type PipelineExpression,
-  type BinaryExpression,
-  type UnaryExpression,
-  type CallExpression,
-  MemberExpression,
-  IndexExpression,
-  type RecordExpression,
-  type RecordEntry,
-  SpreadEntry,
-  FieldEntry,
-  DotPathEntry,
-  ShorthandEntry,
-  type ArrayExpression,
-  type FunctionExpression,
-  type FunctionBody,
-  type BlockStatement,
-  type Statement,
-  AssignmentStatement,
-  ExpressionStatement,
-  MutBlockExpression,
-  type MatchExpression,
-  type MatchArm,
-  type Pattern,
-  ConstructorPattern,
-  RecordPattern,
-  ArrayPattern,
-  RestPattern,
-  OrPattern,
-  type EffectBlockExpression,
-  type ParBlockExpression,
-  type EffectStatement,
-  EffectBindStatement,
-  EffectDiscardStatement,
-  EffectControlFlowStatement,
-  type WhenStatement,
-  type TypeNode,
-  TypeReferenceNode,
-  type TypeParameter,
-  Parameter,
-  FunctionTypeNode,
-  EffectTypeNode,
-  RecordTypeNode,
-  RecordTypeField,
-  ArrayTypeNode,
-  UnionTypeNode,
-  IntersectionTypeNode,
-  type Literal,
-  NumberLiteral,
-  type StringLiteral,
-  type TemplateLiteral,
-  type TaggedTemplateExpression,
-  BooleanLiteral,
-  type Identifier,
-  UpperIdentifier,
-  Placeholder,
-  TypedHole,
-} from "../ast/types.js";
 
 export interface FormatOptions {
   indentSize?: number;
@@ -1023,7 +980,7 @@ export class Formatter {
     }
   }
 
-  private getMatchArmArrow(arm: MatchArm): string {
+  private getMatchArmArrow(_arm: MatchArm): string {
     return "=>";
   }
 
@@ -1092,7 +1049,7 @@ export class Formatter {
     return `| ${pat}${guard} ${arrow} ${body}`;
   }
 
-  private formatPattern(pat: Pattern, isSubjectless = false): string {
+  private formatPattern(pat: Pattern, _isSubjectless = false): string {
     switch (pat.kind) {
       case "WildcardPattern":
         return "_";

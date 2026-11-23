@@ -1,7 +1,7 @@
 import ts from "typescript";
+import type { Program } from "../ast/types.js";
 import { Lexer } from "../lexer/lexer.js";
 import { Parser } from "../parser/parser.js";
-import type { Program, TopLevelDeclaration, Expression } from "../ast/types.js";
 
 export type IdiomaticViolationKind =
   | "non-ambient-function-declaration"

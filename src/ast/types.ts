@@ -729,3 +729,27 @@ export interface JSXElement extends NodeBase {
   children: JSXChild[];
   closingElement: JSXClosingElement;
 }
+
+export type ASTNode =
+  | Program
+  | BlockStatement
+  | TopLevelDeclaration
+  | Statement
+  | Expression
+  | Pattern
+  | EffectStatement
+  | RecordEntry
+  | StringPart
+  | TypeNode
+  | MatchArm
+  | Parameter
+  | TypeParameter
+  | JSXChild
+  | JSXAttribute
+  | RecordPatternField
+  | VariantDeclaration
+  | VariantField
+  | ErrorField
+  | ServiceMember
+  | ImportSpecifier
+  | RecordFieldSchema;

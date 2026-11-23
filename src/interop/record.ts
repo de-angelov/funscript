@@ -1,4 +1,4 @@
-import { Option } from "effect";
+import * as Option from "effect/Option";
 
 /** Convert an optional value to an own property, preserving Some(undefined). */
 export function optionalProperty<K extends PropertyKey, V>(

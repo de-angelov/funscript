@@ -14,7 +14,7 @@ import type {
 } from "../ast/types.js";
 import { FunScriptError } from "../errors.js";
 import { emitAssemblyScript } from "./assemblyscript.js";
-import { renderImport, renderExportFrom } from "./imports.js";
+import { renderExportFrom, renderImport } from "./imports.js";
 import type { RecordFieldInfo } from "./match.js";
 
 export interface DeclarationEmitterContext {

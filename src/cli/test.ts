@@ -1,4 +1,4 @@
-import { Effect } from "effect";
+import * as Effect from "effect/Effect";
 import { spawn } from "node:child_process";
 import { existsSync } from "node:fs";
 import * as path from "node:path";

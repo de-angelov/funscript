@@ -1,7 +1,9 @@
-import { Effect, Console } from "effect";
+import * as Console from "effect/Console";
+import * as Effect from "effect/Effect";
 import * as fs from "node:fs/promises";
-import { findFunFiles } from "./io.js";
 import { generateDocs } from "../tooling/doc.js";
+import { toErrorMessage } from "../errors.js";
+import { findFunFiles } from "./io.js";
 
 export const docCommand = (args: string[]) =>
   Effect.gen(function* () {
@@ -45,14 +47,14 @@ export const docCommand = (args: string[]) =>
     for (const target of targets) {
       const stat = yield* Effect.tryPromise({
         try: () => fs.stat(target),
-        catch: (err: any) =>
-          new Error(`Target '${target}' not found: ${err.message}`),
+        catch: (err: unknown) =>
+          new Error(`Target '${target}' not found: ${toErrorMessage(err)}`),
       });
       if (stat.isDirectory()) {
         const found = yield* Effect.tryPromise({
           try: () => findFunFiles(target),
-          catch: (err: any) =>
-            new Error(`Failed scanning '${target}': ${err.message}`),
+          catch: (err: unknown) =>
+            new Error(`Failed scanning '${target}': ${toErrorMessage(err)}`),
         });
         files.push(...found);
       } else {
@@ -69,8 +71,8 @@ export const docCommand = (args: string[]) =>
 
     const res = yield* Effect.tryPromise({
       try: () => generateDocs(files, { outDir, format, open }),
-      catch: (err: any) =>
-        new Error(`Failed generating documentation: ${err.message}`),
+      catch: (err: unknown) =>
+        new Error(`Failed generating documentation: ${toErrorMessage(err)}`),
     });
 
     yield* Console.log(

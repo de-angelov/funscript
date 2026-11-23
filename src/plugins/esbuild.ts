@@ -1,5 +1,5 @@
+import * as Effect from "effect/Effect";
 import type { Plugin, PluginBuild } from "esbuild";
-import { Effect } from "effect";
 import * as fs from "node:fs/promises";
 import * as path from "node:path";
 import { compileString } from "../compiler.js";
@@ -8,10 +8,10 @@ import {
   isPathPolicyEnabled,
   loadProjectConfig,
 } from "../compiler/project-config.js";
-import { TypeView, type TypeViewOptions } from "./type-view.js";
 import type { ServerBoundaryOptions } from "./bun.js";
+import { TypeView, type TypeViewOptions } from "./type-view.js";
 
-export { TypeView, type TypeViewOptions, type ServerBoundaryOptions };
+export { TypeView, type ServerBoundaryOptions, type TypeViewOptions };
 
 export interface EsbuildPluginOptions {
   /** Reject raw TypeScript escapes in compiled FunScript modules. */

@@ -3,12 +3,14 @@ import ts from "typescript";
 import * as path from "node:path";
 import * as fs from "node:fs/promises";
 import * as syncFs from "node:fs";
-import { Effect } from "effect";
+import * as Effect from "effect/Effect";
 import { TraceMap, originalPositionFor } from "@jridgewell/trace-mapping";
 import { codeFrameColumns } from "@babel/code-frame";
-import { compileString, CompilerError } from "../compiler.js";
+import { compileString, CompilerError, type SourceMap } from "../compiler.js";
 import { incrementalDependencyKeys } from "./incremental-dependencies.js";
 import { ImportedSchemaError } from "./imported-schemas.js";
+import { toErrorMessage } from "../errors.js";
+import type { ASTNode, Program, Span } from "../ast/types.js";
 import {
   TS_RESET_DECLARATION,
   JSX_INTRINSICS_DECLARATION,
@@ -67,8 +69,8 @@ export interface TypeCheckCache {
       dependencyKey?: string;
       compiled: {
         typescript: string;
-        map?: any;
-        ast?: any;
+        map?: SourceMap;
+        ast?: Program;
         pipelineStageInputCompanions?: ReadonlyMap<number, string>;
       };
     }
@@ -334,7 +336,7 @@ export function formatDiagnostics(diagnostics: TypeCheckDiagnostic[]): string {
 
 export function isEntryModule(
   funPath: string,
-  ast?: any,
+  ast?: Program,
   cwd: string = process.cwd(),
 ): boolean {
   const normPath = path.normalize(funPath);
@@ -342,24 +344,31 @@ export function isEntryModule(
   if (baseName === "main.fun" || baseName === "main.funx") return true;
 
   if (ast?.body && Array.isArray(ast.body)) {
-    for (const stmt of ast.body) {
+    for (const stmt of ast.body as unknown as Array<Record<string, unknown>>) {
       if (
         stmt.kind === "ExportDeclaration" &&
-        stmt.declaration?.id?.name === "main"
+        (stmt.declaration as { id?: { name?: string } } | undefined)?.id
+          ?.name === "main"
       ) {
         return true;
       }
-      if (stmt.kind === "BindingDeclaration" && stmt.id?.name === "main") {
+      if (
+        stmt.kind === "BindingDeclaration" &&
+        (stmt.id as { name?: string } | undefined)?.name === "main"
+      ) {
         return true;
       }
       if (
-        stmt.kind === "ExportNamedDeclaration" &&
+        stmt.kind === "ExportFromDeclaration" &&
         Array.isArray(stmt.specifiers)
       ) {
         if (
-          stmt.specifiers.some(
-            (s: any) => s.exported?.name === "main" || s.local?.name === "main",
-          )
+          (
+            stmt.specifiers as Array<{
+              exported?: { name?: string };
+              local?: { name?: string };
+            }>
+          ).some((s) => s.exported?.name === "main" || s.local?.name === "main")
         ) {
           return true;
         }
@@ -405,19 +414,31 @@ const EFFECT_RUNNER_MODULES = new Set([
   "BunRuntime",
 ]);
 
-function getEffectRunnerName(node: any): string | null {
+function getEffectRunnerName(
+  node:
+    | {
+        kind?: string;
+        object?: { name?: string };
+        property?: { name?: string };
+        name?: string;
+      }
+    | null
+    | undefined,
+): string | null {
   if (!node) return null;
   if (node.kind === "MemberExpression") {
     const objName = node.object?.name;
     const propName = node.property?.name;
     if (
+      objName &&
+      propName &&
       EFFECT_RUNNER_MODULES.has(objName) &&
       EFFECT_RUNNER_FUNCTIONS.has(propName)
     ) {
       return `${objName}.${propName}`;
     }
   } else if (node.kind === "Identifier") {
-    if (EFFECT_RUNNER_FUNCTIONS.has(node.name)) {
+    if (node.name && EFFECT_RUNNER_FUNCTIONS.has(node.name)) {
       return node.name;
     }
   }
@@ -430,55 +451,69 @@ interface CheckScope {
   bindings: Map<string, { isMut: boolean }>;
 }
 
-function collectPatternVars(pat: any): string[] {
-  if (!pat) return [];
-  if (pat.kind === "Identifier" || pat.kind === "UpperIdentifier") {
-    return [pat.name];
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+type AstAny = any;
+interface AstInspectNode {
+  kind: string;
+  span?: Span;
+  [key: string]: AstAny;
+}
+
+function collectPatternVars(pat: unknown): string[] {
+  if (!pat || typeof pat !== "object") return [];
+  const p = pat as Record<string, unknown>;
+  if (p.kind === "Identifier" || p.kind === "UpperIdentifier") {
+    return typeof p.name === "string" ? [p.name] : [];
   }
-  if (pat.kind === "VariablePattern") {
-    return [pat.name?.name || pat.name];
+  if (p.kind === "VariablePattern") {
+    const n =
+      typeof p.name === "object" && p.name
+        ? (p.name as { name?: string }).name
+        : p.name;
+    return typeof n === "string" ? [n] : [];
   }
-  if (pat.kind === "RecordPattern") {
+  if (p.kind === "RecordPattern") {
     const vars: string[] = [];
-    for (const f of pat.fields || []) {
+    const fields = Array.isArray(p.fields) ? p.fields : [];
+    for (const f of fields as Array<Record<string, unknown>>) {
       if (!f.pattern) {
-        if (f.key?.name) vars.push(f.key.name);
+        const key = f.key as { name?: string } | undefined;
+        if (key?.name) vars.push(key.name);
       } else {
         vars.push(...collectPatternVars(f.pattern));
       }
     }
     return vars;
   }
-  if (pat.kind === "ArrayPattern") {
+  if (p.kind === "ArrayPattern") {
     const vars: string[] = [];
-    for (const el of pat.elements || []) {
+    const elements = Array.isArray(p.elements) ? p.elements : [];
+    for (const el of elements) {
       vars.push(...collectPatternVars(el));
     }
     return vars;
   }
-  if (pat.kind === "ConstructorPattern") {
+  if (p.kind === "ConstructorPattern") {
     const vars: string[] = [];
-    for (const arg of pat.args || []) {
+    const args = Array.isArray(p.args) ? p.args : [];
+    for (const arg of args) {
       vars.push(...collectPatternVars(arg));
     }
     return vars;
   }
-  if (pat.kind === "OrPattern") {
-    return [...collectPatternVars(pat.left), ...collectPatternVars(pat.right)];
+  if (p.kind === "OrPattern") {
+    return [...collectPatternVars(p.left), ...collectPatternVars(p.right)];
   }
-  if (pat.kind === "RestPattern") {
-    return collectPatternVars(pat.argument);
+  if (p.kind === "RestPattern") {
+    return collectPatternVars(p.argument);
   }
   return [];
 }
 
 function checkCapturedMutInEffect(
-  ast: any,
+  ast: Program | null | undefined,
   addAstDiag: (
-    span: {
-      start: { line: number; column: number };
-      end: { line: number; column: number };
-    },
+    span: Span | undefined,
     code: string,
     customMsg: string,
     category: DiagnosticCategory,
@@ -525,7 +560,10 @@ function checkCapturedMutInEffect(
     return null;
   };
 
-  const checkIdent = (node: any, scope: CheckScope) => {
+  const checkIdent = (
+    node: { name?: string; span?: Span } | null | undefined,
+    scope: CheckScope,
+  ) => {
     if (!node || !node.name || !node.span) return;
     const res = lookup(scope, node.name);
     if (res && res.isMut && res.crossedEffectBoundary) {
@@ -540,7 +578,7 @@ function checkCapturedMutInEffect(
     }
   };
 
-  const visit = (node: any, scope: CheckScope): void => {
+  const visit = (node: ASTNode | null | undefined, scope: CheckScope): void => {
     if (!node || typeof node !== "object") return;
     if (
       node.kind === "TsEscapeDeclaration" ||
@@ -588,10 +626,7 @@ function checkCapturedMutInEffect(
 
       case "AssignmentStatement": {
         if (node.target) {
-          if (
-            node.target.kind === "Identifier" ||
-            node.target.kind === "UpperIdentifier"
-          ) {
+          if (node.target.kind === "Identifier") {
             checkIdent(node.target, scope);
           } else if (node.target.kind === "DotPathExpression") {
             if (node.target.path?.length > 0) {
@@ -641,7 +676,7 @@ function checkCapturedMutInEffect(
 
       case "EffectBlockExpression":
       case "ParBlockExpression": {
-        if (node.concurrency) {
+        if ("concurrency" in node && node.concurrency) {
           visit(node.concurrency, scope);
         }
         const effectScope: CheckScope = {
@@ -775,7 +810,7 @@ function checkCapturedMutInEffect(
           isEffectBoundary: false,
           bindings: new Map(),
         };
-        const draftName = node.draftParam?.name || node.draft?.name;
+        const draftName = node.draftParam?.name;
         if (draftName) {
           mutScope.bindings.set(draftName, { isMut: false });
         }
@@ -813,9 +848,8 @@ function checkCapturedMutInEffect(
         break;
       }
 
-      case "JSXElement":
-      case "JSXSelfClosingElement": {
-        const opening = node.openingElement || node;
+      case "JSXElement": {
+        const opening = node.openingElement;
         if (
           opening.name?.kind === "Identifier" ||
           opening.name?.kind === "UpperIdentifier"
@@ -846,6 +880,28 @@ function checkCapturedMutInEffect(
         break;
       }
 
+      case "JSXSelfClosingElement": {
+        if (
+          node.name?.kind === "Identifier" ||
+          node.name?.kind === "UpperIdentifier"
+        ) {
+          checkIdent(node.name, scope);
+        } else if (node.name?.kind === "MemberExpression") {
+          visit(node.name.object, scope);
+        }
+        for (const attr of node.attributes || []) {
+          if (attr.kind === "JSXSpreadAttribute") visit(attr.argument, scope);
+          else if (attr.value?.kind === "JSXExpressionContainer")
+            visit(attr.value.expression, scope);
+          else if (
+            attr.value?.kind === "Identifier" ||
+            attr.value?.kind === "UpperIdentifier"
+          )
+            checkIdent(attr.value, scope);
+        }
+        break;
+      }
+
       default:
         break;
     }
@@ -871,7 +927,7 @@ export const typeCheckVirtualFiles = (
           funSource: string;
           traceMap: TraceMap;
           tsCode: string;
-          ast?: any;
+          ast?: Program;
         }
       >();
 
@@ -970,7 +1026,7 @@ export const typeCheckVirtualFiles = (
             } else {
               cache?.compiledFiles.delete(fullFunPath);
             }
-          } catch (err: any) {
+          } catch (err: unknown) {
             if (cache) {
               cache.compiledFiles.delete(fullFunPath);
               cache.sourceFiles.delete(virtualTsPath);
@@ -978,7 +1034,10 @@ export const typeCheckVirtualFiles = (
             const compErr =
               err instanceof CompilerError
                 ? err
-                : new CompilerError(err.message, err);
+                : new CompilerError(
+                    toErrorMessage(err),
+                    err instanceof Error ? err : new Error(toErrorMessage(err)),
+                  );
             let errLine = 1;
             let errCol = 1;
             if ("span" in compErr.error && compErr.error.span?.start) {
@@ -1384,23 +1443,27 @@ export const typeCheckVirtualFiles = (
           });
         }
 
-        const getFunScriptUnannotatedBindings = (ast?: any): Set<string> => {
+        const getFunScriptUnannotatedBindings = (
+          ast?: Program,
+        ): Set<string> => {
           const names = new Set<string>();
-          const walk = (node: any) => {
+          const walk = (node: unknown) => {
             if (!node || typeof node !== "object") return;
+            const n = node as Record<string, unknown>;
             if (
-              node.kind === "TsEscapeDeclaration" ||
-              node.kind === "TsEscapeExpression"
+              n.kind === "TsEscapeDeclaration" ||
+              n.kind === "TsEscapeExpression"
             )
               return;
-            if (node.kind === "BindingDeclaration" && node.id?.name) {
-              if (!node.typeAnnotation) {
-                names.add(node.id.name);
+            if (n.kind === "BindingDeclaration") {
+              const id = n.id as { name?: string } | undefined;
+              if (id?.name && !n.typeAnnotation) {
+                names.add(id.name);
               }
             }
-            for (const key of Object.keys(node)) {
+            for (const key of Object.keys(n)) {
               if (key === "span") continue;
-              const child = node[key];
+              const child = n[key];
               if (Array.isArray(child)) {
                 for (const c of child) walk(c);
               } else if (child && typeof child === "object") {
@@ -1412,21 +1475,25 @@ export const typeCheckVirtualFiles = (
           return names;
         };
 
-        const getFunScriptMemberAccesses = (ast?: any): Set<string> => {
+        const getFunScriptMemberAccesses = (ast?: Program): Set<string> => {
           const names = new Set<string>();
-          const walk = (node: any) => {
+          const walk = (node: unknown) => {
             if (!node || typeof node !== "object") return;
+            const n = node as Record<string, unknown>;
             if (
-              node.kind === "TsEscapeDeclaration" ||
-              node.kind === "TsEscapeExpression"
+              n.kind === "TsEscapeDeclaration" ||
+              n.kind === "TsEscapeExpression"
             )
               return;
-            if (node.kind === "MemberExpression" && node.property?.name) {
-              names.add(node.property.name);
+            if (n.kind === "MemberExpression") {
+              const prop = n.property as { name?: string } | undefined;
+              if (prop?.name) {
+                names.add(prop.name);
+              }
             }
-            for (const key of Object.keys(node)) {
+            for (const key of Object.keys(n)) {
               if (key === "span") continue;
-              const child = node[key];
+              const child = n[key];
               if (Array.isArray(child)) {
                 for (const c of child) walk(c);
               } else if (child && typeof child === "object") {
@@ -1527,16 +1594,19 @@ export const typeCheckVirtualFiles = (
 
           const reportedSpans = new Set<string>();
           const addAstDiag = (
-            span: {
-              start: { line: number; column: number };
-              end: { line: number; column: number };
-            },
+            span:
+              | {
+                  start: { line: number; column: number };
+                  end: { line: number; column: number };
+                }
+              | undefined,
             code: string,
             customMsg: string,
             category: DiagnosticCategory = "error",
             explanation?: string,
             suggestedAction?: string,
           ) => {
+            if (!span || !span.start || !span.end) return;
             const key = `${span.start.line}:${span.start.column}:${code}`;
             if (reportedSpans.has(key)) return;
             reportedSpans.add(key);
@@ -1605,13 +1675,16 @@ export const typeCheckVirtualFiles = (
                 binding.kind === "BindingDeclaration" &&
                 binding.init
               ) {
-                const isRefMake = (expr: any): boolean => {
-                  if (!expr) return false;
-                  if (expr.kind === "CallExpression") {
-                    const c = expr.callee;
+                const isRefMake = (expr: unknown): boolean => {
+                  if (!expr || typeof expr !== "object") return false;
+                  const e = expr as Record<string, unknown>;
+                  if (e.kind === "CallExpression") {
+                    const c = e.callee as Record<string, unknown> | undefined;
                     if (c?.kind === "MemberExpression") {
-                      const obj = c.object?.name;
-                      const prop = c.property?.name;
+                      const obj = (c.object as { name?: string } | undefined)
+                        ?.name;
+                      const prop = (c.property as { name?: string } | undefined)
+                        ?.name;
                       if (
                         (obj === "Ref" ||
                           obj === "SynchronizedRef" ||
@@ -1623,23 +1696,27 @@ export const typeCheckVirtualFiles = (
                       if (
                         obj === "Effect" &&
                         (prop === "runSync" || prop === "runPromise") &&
-                        expr.args?.[0]
+                        Array.isArray(e.args) &&
+                        e.args[0]
                       ) {
-                        return isRefMake(expr.args[0]);
+                        return isRefMake(e.args[0]);
                       }
                     } else if (
                       c?.kind === "Identifier" &&
-                      c.name === "unsafeMake"
+                      (c as { name?: string }).name === "unsafeMake"
                     ) {
                       return true;
                     }
-                  } else if (expr.kind === "PipelineExpression") {
-                    return isRefMake(expr.right);
+                  } else if (e.kind === "PipelineExpression") {
+                    return isRefMake(e.right);
                   }
                   return false;
                 };
                 if (isRefMake(binding.init)) {
-                  const name = binding.id?.name ?? "binding";
+                  const name =
+                    "name" in binding.id
+                      ? ((binding.id as { name?: string }).name ?? "binding")
+                      : "binding";
                   addAstDiag(
                     binding.span || decl.span,
                     "TOP_LEVEL_REF",
@@ -1652,8 +1729,8 @@ export const typeCheckVirtualFiles = (
               }
             }
             const walkAst = (
-              node: any,
-              parent?: any,
+              node: AstInspectNode | null | undefined,
+              parent?: AstInspectNode | null,
               inMutBlock = false,
               inMatchArm = false,
             ) => {
@@ -2058,7 +2135,7 @@ export const typeCheckVirtualFiles = (
               if (!isEntry) {
                 // §1.10: Running Effects mid-program
                 let runnerName: string | null = null;
-                let runnerSpan: any = null;
+                let runnerSpan: Span | null = null;
 
                 if (node.kind === "CallExpression") {
                   runnerName = getEffectRunnerName(node.callee);
@@ -2074,7 +2151,7 @@ export const typeCheckVirtualFiles = (
                   }
                 }
 
-                if (runnerName) {
+                if (runnerName && runnerSpan) {
                   addAstDiag(
                     runnerSpan,
                     "EFFECT_RUN",
@@ -2237,12 +2314,15 @@ export const typeCheckVirtualFiles = (
               }
 
               // § Pit of Success: Eager evaluation in Effect.succeed
-              const isPureDataConstructor = (expr: any): boolean => {
-                if (!expr || expr.kind !== "CallExpression") return false;
-                const c = expr.callee;
+              const isPureDataConstructor = (expr: unknown): boolean => {
+                if (!expr || typeof expr !== "object") return false;
+                const e = expr as Record<string, unknown>;
+                if (e.kind !== "CallExpression") return false;
+                const c = e.callee as Record<string, unknown> | undefined;
                 if (c?.kind === "MemberExpression") {
-                  const obj = c.object?.name;
-                  const prop = c.property?.name;
+                  const obj = (c.object as { name?: string } | undefined)?.name;
+                  const prop = (c.property as { name?: string } | undefined)
+                    ?.name;
                   if (obj === "Option" && (prop === "some" || prop === "none"))
                     return true;
                   if (obj === "Chunk" && (prop === "empty" || prop === "make"))
@@ -2317,37 +2397,42 @@ export const typeCheckVirtualFiles = (
               ) {
                 const readRefs = new Set<string>();
                 const getRefOp = (
-                  expr: any,
+                  expr: unknown,
                 ): { type: "get" | "set"; refName: string } | null => {
-                  if (!expr || expr.kind !== "CallExpression") return null;
-                  const c = expr.callee;
+                  if (!expr || typeof expr !== "object") return null;
+                  const e = expr as Record<string, unknown>;
+                  if (e.kind !== "CallExpression") return null;
+                  const c = e.callee as Record<string, unknown> | undefined;
                   if (!c || c.kind !== "MemberExpression") return null;
-                  const obj = c.object;
-                  const prop = c.property?.name;
+                  const obj = c.object as Record<string, unknown> | undefined;
+                  const prop = (c.property as { name?: string } | undefined)
+                    ?.name;
                   if (
-                    obj?.name === "Ref" &&
+                    (obj as { name?: string } | undefined)?.name === "Ref" &&
                     (prop === "get" || prop === "set")
                   ) {
-                    const firstArg = expr.args?.[0];
+                    const args = e.args as unknown[] | undefined;
+                    const firstArg = args?.[0] as
+                      Record<string, unknown> | undefined;
                     if (
                       firstArg &&
                       (firstArg.kind === "Identifier" ||
                         firstArg.kind === "UpperIdentifier")
                     ) {
-                      return { type: prop, refName: firstArg.name };
+                      return { type: prop, refName: firstArg.name as string };
                     }
                   } else if (
                     (prop === "get" || prop === "set") &&
                     (obj?.kind === "Identifier" ||
                       obj?.kind === "UpperIdentifier")
                   ) {
-                    return { type: prop, refName: obj.name };
+                    return { type: prop, refName: obj.name as string };
                   }
                   return null;
                 };
 
                 for (const stmt of node.body || []) {
-                  let effExpr: any;
+                  let effExpr: unknown;
                   if (
                     stmt.kind === "EffectBindStatement" ||
                     stmt.kind === "EffectDiscardStatement"
@@ -2385,34 +2470,50 @@ export const typeCheckVirtualFiles = (
 
                 if (!isUnit) {
                   const findFinalizer = (
-                    n: any,
-                  ): { name: string; span: any } | null => {
+                    n: unknown,
+                  ): { name: string; span: Span } | null => {
                     if (!n || typeof n !== "object") return null;
-                    if (n !== node && n.kind === "EffectBlockExpression")
+                    const objNode = n as Record<string, unknown>;
+                    if (
+                      objNode !== node &&
+                      objNode.kind === "EffectBlockExpression"
+                    )
                       return null;
-                    if (n.kind === "CallExpression") {
-                      const callee = n.callee;
+                    if (objNode.kind === "CallExpression") {
+                      const callee = objNode.callee as
+                        Record<string, unknown> | undefined;
                       if (callee?.kind === "MemberExpression") {
-                        const obj = callee.object?.name;
-                        const prop = callee.property?.name;
+                        const obj = (
+                          callee.object as { name?: string } | undefined
+                        )?.name;
+                        const prop = (
+                          callee.property as { name?: string } | undefined
+                        )?.name;
                         if (
                           (obj === "Effect" || obj === "Scope") &&
                           (prop === "addFinalizer" || prop === "acquireRelease")
                         ) {
-                          return { name: `${obj}.${prop}`, span: n.span };
+                          return {
+                            name: `${obj}.${prop}`,
+                            span: objNode.span as Span,
+                          };
                         }
                       } else if (callee?.kind === "Identifier") {
+                        const calleeName = (callee as { name?: string }).name;
                         if (
-                          callee.name === "addFinalizer" ||
-                          callee.name === "acquireRelease"
+                          calleeName === "addFinalizer" ||
+                          calleeName === "acquireRelease"
                         ) {
-                          return { name: callee.name, span: n.span };
+                          return {
+                            name: calleeName,
+                            span: objNode.span as Span,
+                          };
                         }
                       }
                     }
-                    for (const k of Object.keys(n)) {
+                    for (const k of Object.keys(objNode)) {
                       if (k === "span") continue;
-                      const val = n[k];
+                      const val = objNode[k];
                       if (Array.isArray(val)) {
                         for (const item of val) {
                           const res = findFinalizer(item);
@@ -2426,7 +2527,7 @@ export const typeCheckVirtualFiles = (
                     return null;
                   };
 
-                  let detectedCall: { name: string; span: any } | null = null;
+                  let detectedCall: { name: string; span: Span } | null = null;
                   for (const stmt of node.body || []) {
                     const res = findFinalizer(stmt);
                     if (res) {
@@ -2439,7 +2540,7 @@ export const typeCheckVirtualFiles = (
                   }
 
                   if (detectedCall) {
-                    const callInfo: { name: string; span: any } = detectedCall;
+                    const callInfo: { name: string; span: Span } = detectedCall;
                     addAstDiag(
                       callInfo.span,
                       "PREMATURE_FINALIZER_CLOSE",
@@ -2452,18 +2553,29 @@ export const typeCheckVirtualFiles = (
                 }
               }
 
-              for (const k of Object.keys(node)) {
+              const nodeRecord = node as Record<string, unknown>;
+              for (const k of Object.keys(nodeRecord)) {
                 if (k === "span") continue;
-                const child = node[k];
+                const child = nodeRecord[k];
                 const nextInMatchArm =
                   node.kind === "MatchArm" && k === "body"
                     ? true
                     : currentInMatchArm;
                 if (Array.isArray(child)) {
                   for (const c of child)
-                    walkAst(c, node, currentInMut, nextInMatchArm);
+                    walkAst(
+                      c as AstInspectNode,
+                      node,
+                      currentInMut,
+                      nextInMatchArm,
+                    );
                 } else if (child && typeof child === "object") {
-                  walkAst(child, node, currentInMut, nextInMatchArm);
+                  walkAst(
+                    child as AstInspectNode,
+                    node,
+                    currentInMut,
+                    nextInMatchArm,
+                  );
                 }
               }
             };
@@ -2620,7 +2732,8 @@ export const typeCheckVirtualFiles = (
         formattedOutput,
       };
     },
-    catch: (error: any) => new Error(`Type-checking failed: ${error.message}`),
+    catch: (error: unknown) =>
+      new Error(`Type-checking failed: ${toErrorMessage(error)}`),
   });
 
 export const typeCheckSource = (
@@ -2644,8 +2757,10 @@ export const typeCheckFiles = (
         : path.resolve(cwd, filePath);
       const content = yield* Effect.tryPromise({
         try: () => fs.readFile(fullPath, "utf-8"),
-        catch: (err: any) =>
-          new Error(`Failed to read file '${filePath}': ${err.message}`),
+        catch: (err: unknown) =>
+          new Error(
+            `Failed to read file '${filePath}': ${toErrorMessage(err)}`,
+          ),
       });
       virtualFiles[filePath] = content;
     }

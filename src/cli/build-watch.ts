@@ -1,15 +1,15 @@
+import * as Effect from "effect/Effect";
+import { createHash } from "node:crypto";
 import * as fs from "node:fs/promises";
 import * as path from "node:path";
-import { createHash } from "node:crypto";
-import { Effect } from "effect";
-import { collectCliFiles } from "./typecheck.js";
+import type { CheckOptions } from "../compiler/check.js";
 import { IncrementalBuildSession } from "../compiler/incremental-build.js";
 import { incrementalDependencyKeys } from "../compiler/incremental-dependencies.js";
 import {
   loadProjectConfig,
   type FunScriptProjectConfig,
 } from "../compiler/project-config.js";
-import type { CheckOptions } from "../compiler/check.js";
+import { collectCliFiles } from "./typecheck.js";
 
 export interface WatchBuildOptions {
   targets: string[];

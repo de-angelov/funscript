@@ -1,16 +1,9 @@
+import { spawn } from "node:child_process";
 import * as fs from "node:fs/promises";
 import * as path from "node:path";
-import { spawn } from "node:child_process";
+import type { Program } from "../ast/types.js";
 import { Lexer } from "../lexer/lexer.js";
 import { Parser } from "../parser/parser.js";
-import type {
-  Program,
-  SchemaDeclaration,
-  ServiceDeclaration,
-  ErrorDeclaration,
-  BindingDeclaration,
-  FunctionExpression,
-} from "../ast/types.js";
 
 export interface DocField {
   name: string;

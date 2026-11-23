@@ -19,8 +19,9 @@ export function resolvePackageRecordContracts(
       value.forEach(visit);
       return;
     }
-    const node = value as Record<string, any>;
-    if (node.kind === "TypeReferenceNode") usedTypes.add(node.name.name);
+    const node = value as Record<string, unknown>;
+    if (node.kind === "TypeReferenceNode")
+      usedTypes.add((node.name as { name: string }).name);
     for (const [key, child] of Object.entries(node))
       if (key !== "span") visit(child);
   };

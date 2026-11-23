@@ -1,28 +1,27 @@
+import * as Effect from "effect/Effect";
+import { fileURLToPath } from "node:url";
+import ts from "typescript";
 import {
+  MarkupKind,
   type Hover,
   type Position,
-  type Range,
-  MarkupKind,
 } from "vscode-languageserver/node";
-import { Lexer } from "../lexer/lexer.js";
-import {
-  TokenType,
-  type Token,
-  BANNED_KEYWORDS,
-  BANNED_SYMBOLS,
-} from "../lexer/tokens.js";
-import { getDocItem, getHoverDocumentation } from "./docs.js";
-import { spanToRange } from "./definition.js";
-import { pipelineCompanionCandidates } from "../emitter/pipeline-catalog.js";
-import { Parser } from "../parser/parser.js";
-import { Emitter } from "../emitter/emitter.js";
-import { TypeScriptCompilationContext } from "../compiler/typescript-context.js";
+import { compileString, type CompileResult } from "../compiler.js";
 import { resolveImportedSchemas } from "../compiler/imported-schemas.js";
 import { inferPipelineCompanions } from "../compiler/pipeline-companions.js";
-import { fileURLToPath } from "node:url";
-import { Effect } from "effect";
-import { compileString, type CompileResult } from "../compiler.js";
-import ts from "typescript";
+import { TypeScriptCompilationContext } from "../compiler/typescript-context.js";
+import { Emitter } from "../emitter/emitter.js";
+import { pipelineCompanionCandidates } from "../emitter/pipeline-catalog.js";
+import { Lexer } from "../lexer/lexer.js";
+import {
+  BANNED_KEYWORDS,
+  BANNED_SYMBOLS,
+  TokenType,
+  type Token,
+} from "../lexer/tokens.js";
+import { Parser } from "../parser/parser.js";
+import { spanToRange } from "./definition.js";
+import { getHoverDocumentation } from "./docs.js";
 
 function symbolHover(source: string, uri: string, token: Token): Hover | null {
   if (

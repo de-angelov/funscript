@@ -1,7 +1,6 @@
 import type {
   ArrayPattern,
   BindingTarget,
-  Identifier,
   Pattern,
   RecordPattern,
   RecordPatternField,

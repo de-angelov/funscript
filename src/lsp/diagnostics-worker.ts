@@ -1,5 +1,5 @@
-import { parentPort } from "node:worker_threads";
 import { fileURLToPath } from "node:url";
+import { parentPort } from "node:worker_threads";
 import {
   DiagnosticSeverity,
   type Diagnostic,
