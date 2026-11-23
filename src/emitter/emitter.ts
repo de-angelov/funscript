@@ -1,8 +1,14 @@
 import { MatchEmitter, type RecordFieldInfo } from "./match.js";
 import { emitRuntimeHelpers } from "./runtime-helpers.js";
-import { emitAssemblyScript } from "./assemblyscript.js";
 import { FunScriptError } from "../errors.js";
-import { renderImport, renderExportFrom } from "./imports.js";
+import {
+  emitTopLevelDeclaration,
+  emitErrorDeclaration,
+  emitServiceDeclaration,
+  emitBindingDeclaration,
+  isPrimitiveType,
+  collectBindingNames,
+} from "./declarations.js";
 import {
   emitJsxElement,
   emitJsxSelfClosingElement,
@@ -612,8 +618,8 @@ const NATIVE_CONSTRUCTOR_NAMES = new Set([
 
 export class Emitter {
   private effectImports = new Set<string>();
-  private parameterScopes: Array<Map<string, boolean>> = [];
-  private recordScopes: Array<
+  public parameterScopes: Array<Map<string, boolean>> = [];
+  public recordScopes: Array<
     Map<string, Map<string, RecordFieldInfo> | undefined>
   > = [];
   private userEffectBindings = new Set<string>();
@@ -629,7 +635,7 @@ export class Emitter {
   private needsFromNullishOrElse = false;
   private needsFromNullishOr = false;
   private needsOptionTry = false;
-  private primitiveIdentifiers = new Set<string>();
+  public primitiveIdentifiers = new Set<string>();
   private currentPlaceholderParam: string | null = null;
   public bindings = new Map<string, BindingDeclaration>();
   private tryContextDepth = 0;
@@ -930,39 +936,10 @@ export class Emitter {
     decl: TopLevelDeclaration,
     isExport = false,
   ): string {
-    switch (decl.kind) {
-      case "ImportDeclaration":
-        return this.emitImportDeclaration(decl);
-      case "ExportFromDeclaration":
-        return renderExportFrom(decl);
-      case "ExportDeclaration":
-        return this.emitTopLevelDeclaration(decl.declaration, true);
-      case "ExportDefaultDeclaration":
-        return `export default ${this.emitExpression(decl.expression)};`;
-      case "SchemaDeclaration":
-        return this.emitSchemaDeclaration(decl, isExport);
-      case "ErrorDeclaration":
-        return this.emitErrorDeclaration(decl, isExport);
-      case "ServiceDeclaration":
-        return this.emitServiceDeclaration(decl, isExport);
-      case "BindingDeclaration":
-        return this.emitBindingDeclaration(decl, isExport);
-      case "WhenStatement":
-        return this.emitWhenStatement(decl);
-      case "TsEscapeDeclaration":
-        return decl.code + "\n";
-      case "AsDeclaration":
-        this.effectImports.add("Effect");
-        this.effectImports.add("Scope");
-        return emitAssemblyScript(decl);
-    }
+    return emitTopLevelDeclaration(this, decl, isExport);
   }
 
-  private emitImportDeclaration(decl: ImportDeclaration): string {
-    return renderImport(decl);
-  }
-
-  private emitSchemaDeclaration(
+  public emitSchemaDeclaration(
     decl: SchemaDeclaration,
     isExport: boolean,
   ): string {
@@ -973,40 +950,18 @@ export class Emitter {
     return emitSchemaTypeField(this, typeNode);
   }
 
-  private emitErrorDeclaration(
+  public emitErrorDeclaration(
     decl: ErrorDeclaration,
     isExport: boolean,
   ): string {
-    this.effectImports.add("Schema");
-    const name = decl.id.name;
-    const exp = isExport ? "export " : "";
-    const fields = decl.fields
-      .map(
-        (f) =>
-          `  ${f.name.name}: ${this.emitSchemaTypeField(f.typeAnnotation)}`,
-      )
-      .join(",\n");
-
-    const className = `${name}$Class`;
-    return `${exp}class ${className} extends Schema.TaggedError<${className}>()("${name}", {\n${fields}\n}) {}\n${exp}type ${name} = InstanceType<typeof ${className}>;\n${exp}const ${name} = (function(args: ConstructorParameters<typeof ${className}>[0]): ${name} { return new ${className}(args); }) as { (args: ConstructorParameters<typeof ${className}>[0]): ${name}; new (args: ConstructorParameters<typeof ${className}>[0]): ${name} };`;
+    return emitErrorDeclaration(this, decl, isExport);
   }
 
-  private emitServiceDeclaration(
+  public emitServiceDeclaration(
     decl: ServiceDeclaration,
     isExport: boolean,
   ): string {
-    this.effectImports.add("Context");
-    this.effectImports.add("Effect");
-    const name = decl.id.name;
-    const exp = isExport ? "export " : "";
-    const tag = decl.customTag ? decl.customTag.raw : `"app/${name}"`;
-    const members = decl.members
-      .map(
-        (m) => `  readonly ${m.name.name}: ${this.emitTypeNode(m.signature)};`,
-      )
-      .join("\n");
-
-    return `${exp}class ${name} extends Context.Service<${name}, {\n${members}\n}>()(${tag}) {}`;
+    return emitServiceDeclaration(this, decl, isExport);
   }
 
   private isAsyncOrPromiseType(type?: TypeNode): boolean {
@@ -1021,22 +976,11 @@ export class Emitter {
     return false;
   }
 
-  private isPrimitiveType(type?: TypeNode): boolean {
-    if (!type) return false;
-    if (type.kind === "TypeReferenceNode") {
-      const name = type.name.name.toLowerCase();
-      return (
-        name === "number" ||
-        name === "string" ||
-        name === "boolean" ||
-        name === "int" ||
-        name === "float"
-      );
-    }
-    return false;
+  public isPrimitiveType(type?: TypeNode): boolean {
+    return isPrimitiveType(type);
   }
 
-  private isPrimitive(expr: Expression): boolean {
+  public isPrimitive(expr: Expression): boolean {
     if (
       expr.kind === "NumberLiteral" ||
       expr.kind === "StringLiteral" ||
@@ -1068,7 +1012,7 @@ export class Emitter {
     );
   }
 
-  private recordFields(name: string): Map<string, RecordFieldInfo> | undefined {
+  public recordFields(name: string): Map<string, RecordFieldInfo> | undefined {
     for (let i = this.recordScopes.length - 1; i >= 0; i--) {
       if (this.recordScopes[i].has(name)) return this.recordScopes[i].get(name);
     }
@@ -1107,7 +1051,7 @@ export class Emitter {
     return false;
   }
 
-  private isOptionalValue(expr: Expression): boolean {
+  public isOptionalValue(expr: Expression): boolean {
     if (expr.kind === "Identifier") return this.isOptionalParameter(expr.name);
     if (expr.kind === "MemberExpression")
       return this.recordField(expr)?.optional ?? false;
@@ -1396,120 +1340,7 @@ export class Emitter {
     decl: BindingDeclaration,
     isExport = false,
   ): string {
-    const scope = this.parameterScopes.at(-1);
-    const idName =
-      decl.id.kind === "Identifier" || decl.id.kind === "UpperIdentifier"
-        ? decl.id.name
-        : undefined;
-    if (idName) {
-      if (scope) scope.set(idName, this.isOptionalValue(decl.init));
-      const aliasedFields =
-        !decl.isMut && decl.init.kind === "Identifier"
-          ? this.recordFields(decl.init.name)
-          : undefined;
-      this.recordScopes.at(-1)?.set(idName, aliasedFields);
-      if (
-        this.isPrimitiveType(decl.typeAnnotation) ||
-        this.isPrimitive(decl.init)
-      ) {
-        this.primitiveIdentifiers.add(idName);
-      }
-    }
-    const target = this.emitBindingTarget(decl.id);
-    const exp = isExport ? "export " : "";
-    const keyword = decl.isMut ? "let" : "const";
-    const typeAnn = decl.typeAnnotation
-      ? `: ${this.emitTypeNode(decl.typeAnnotation)}`
-      : "";
-
-    if (decl.isJs) {
-      if (
-        decl.init.kind === "FunctionExpression" &&
-        decl.init.params.some(
-          (p) =>
-            p.typeAnnotation?.kind === "TypeReferenceNode" &&
-            this.recordContracts.has(p.typeAnnotation.name.name),
-        )
-      ) {
-        throw new FunScriptError(
-          "Compile-time record contracts are not supported on js entry bindings",
-          decl.span,
-        );
-      }
-      this.effectImports.add("Effect");
-      if (decl.init.kind === "FunctionExpression") {
-        const fn = decl.init;
-        const validations = fn.params
-          .filter(
-            (p) =>
-              !p.optional && p.typeAnnotation && p.name.kind === "Identifier",
-          )
-          .map(
-            (p) =>
-              `  ${(p.name as Identifier).name} = Schema.decodeUnknownSync(${this.emitSchemaTypeField(p.typeAnnotation!)})(${(p.name as Identifier).name});`,
-          )
-          .join("\n");
-        const optionalBindings = fn.params.flatMap((p, index) => {
-          if (!p.optional) return [];
-          this.effectImports.add("Option");
-          const targetName = this.emitBindingTarget(p.name);
-          const rawName = `$funscriptOptional${index}`;
-          if (p.typeAnnotation && p.name.kind === "Identifier") {
-            this.effectImports.add("Schema");
-            return [
-              `  const ${targetName} = ${rawName} !== undefined ? Option.some(Schema.decodeUnknownSync(${this.emitSchemaTypeField(p.typeAnnotation)})(${rawName})) : Option.none();`,
-            ];
-          }
-          return [
-            `  const ${targetName} = Option.fromUndefinedOr(${rawName});`,
-          ];
-        });
-        if (validations || optionalBindings.length > 0)
-          this.effectImports.add("Schema");
-        for (const p of fn.params) {
-          if (this.isPrimitiveType(p.typeAnnotation)) {
-            for (const n of this.collectBindingNames(p.name)) {
-              this.primitiveIdentifiers.add(n);
-            }
-          }
-        }
-        const params = fn.params
-          .map((p, index) => {
-            const rest = p.isRest ? "..." : "";
-            const name = p.optional
-              ? `$funscriptOptional${index}`
-              : this.emitBindingTarget(p.name);
-            const t = p.typeAnnotation
-              ? `: ${this.emitTypeNode(p.typeAnnotation)}`
-              : "";
-            const def = p.defaultValue
-              ? ` = ${this.emitExpression(p.defaultValue)}`
-              : "";
-            return `${rest}${name}${p.optional ? "?" : ""}${t}${def}`;
-          })
-          .join(", ");
-        const headerStatements = [validations, ...optionalBindings]
-          .filter(Boolean)
-          .join("\n");
-        const prefix = headerStatements ? `${headerStatements}\n` : "";
-        if (fn.body.kind === "BlockStatement") {
-          const retExpr = fn.body.finalExpression
-            ? this.emitExpression(fn.body.finalExpression)
-            : "undefined";
-          if (fn.body.statements.length === 0) {
-            return `${exp}${keyword} ${target} = (${params}) => {\n${prefix}  return Effect.runPromise(${retExpr});\n};`;
-          }
-          const stmts = fn.body.statements
-            .map((s) => "    " + this.emitStatement(s))
-            .join("\n");
-          return `${exp}${keyword} ${target} = (${params}) => {\n${prefix}  return Effect.runPromise(Effect.gen(function* () {\n${stmts}\n    return ${retExpr};\n  }));\n};`;
-        }
-        return `${exp}${keyword} ${target} = (${params}) => {\n${prefix}  return Effect.runPromise(${this.emitExpression(fn.body)});\n};`;
-      }
-      return `${exp}${keyword} ${target}${typeAnn} = Effect.runPromise(${this.emitExpression(decl.init)});`;
-    }
-
-    return `${exp}${keyword} ${target}${typeAnn} = ${this.emitExpression(decl.init)};`;
+    return emitBindingDeclaration(this, decl, isExport);
   }
 
   public emitBindingTarget(target: BindingTarget | Pattern): string {
@@ -1552,21 +1383,8 @@ export class Emitter {
     return "_";
   }
 
-  private collectBindingNames(target: BindingTarget | Pattern): string[] {
-    if (target.kind === "Identifier" || target.kind === "UpperIdentifier")
-      return [target.name];
-    if (target.kind === "VariablePattern") return [target.name.name];
-    if (target.kind === "RestPattern")
-      return this.collectBindingNames(target.argument);
-    if (target.kind === "RecordPattern") {
-      return target.fields.flatMap((f) =>
-        f.pattern ? this.collectBindingNames(f.pattern) : [f.key.name],
-      );
-    }
-    if (target.kind === "ArrayPattern") {
-      return target.elements.flatMap((el) => this.collectBindingNames(el));
-    }
-    return [];
+  public collectBindingNames(target: BindingTarget | Pattern): string[] {
+    return collectBindingNames(target);
   }
 
   // --- Expressions ---
