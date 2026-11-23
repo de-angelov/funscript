@@ -200,19 +200,30 @@ export function emitBindingDeclaration(
         .filter(Boolean)
         .join("\n");
       const prefix = headerStatements ? `${headerStatements}\n` : "";
-      if (fn.body.kind === "BlockStatement") {
-        const retExpr = fn.body.finalExpression
-          ? ctx.emitExpression(fn.body.finalExpression)
-          : "undefined";
-        if (fn.body.statements.length === 0) {
-          return `${exp}${keyword} ${target} = (${params}) => {\n${prefix}  return Effect.runPromise(${retExpr});\n};`;
+      const varTypeEntries: [string, TypeNode | undefined][] = [];
+      for (const p of fn.params) {
+        for (const n of collectBindingNames(p.name)) {
+          varTypeEntries.push([n, p.typeAnnotation]);
         }
-        const stmts = fn.body.statements
-          .map((s) => "    " + ctx.emitStatement(s))
-          .join("\n");
-        return `${exp}${keyword} ${target} = (${params}) => {\n${prefix}  return Effect.runPromise(Effect.gen(function* () {\n${stmts}\n    return ${retExpr};\n  }));\n};`;
       }
-      return `${exp}${keyword} ${target} = (${params}) => {\n${prefix}  return Effect.runPromise(${ctx.emitExpression(fn.body)});\n};`;
+      ctx.variableTypeScopes.push(new Map(varTypeEntries));
+      try {
+        if (fn.body.kind === "BlockStatement") {
+          const retExpr = fn.body.finalExpression
+            ? ctx.emitExpression(fn.body.finalExpression)
+            : "undefined";
+          if (fn.body.statements.length === 0) {
+            return `${exp}${keyword} ${target} = (${params}) => {\n${prefix}  return Effect.runPromise(${retExpr});\n};`;
+          }
+          const stmts = fn.body.statements
+            .map((s) => "    " + ctx.emitStatement(s))
+            .join("\n");
+          return `${exp}${keyword} ${target} = (${params}) => {\n${prefix}  return Effect.runPromise(Effect.gen(function* () {\n${stmts}\n    return ${retExpr};\n  }));\n};`;
+        }
+        return `${exp}${keyword} ${target} = (${params}) => {\n${prefix}  return Effect.runPromise(${ctx.emitExpression(fn.body)});\n};`;
+      } finally {
+        ctx.variableTypeScopes.pop();
+      }
     }
     return `${exp}${keyword} ${target}${typeAnn} = Effect.runPromise(${ctx.emitExpression(decl.init)});`;
   }

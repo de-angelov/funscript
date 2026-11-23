@@ -1055,6 +1055,7 @@ export class Emitter {
     expr: Expression,
     category: string,
     prop: string,
+    visitedBindings: Set<string> = new Set(),
   ): boolean {
     if (category === "array" && expr.kind === "ArrayExpression") return true;
     if (
@@ -1104,17 +1105,8 @@ export class Emitter {
           if (typeName === "Date") {
             return category === "date";
           }
-          if (typeName === "Object") {
-            const isWebMutable =
-              (prop === "set" || prop === "delete") &&
-              /^(url|search|query|param|header|form|request|response|req|res)/i.test(
-                name,
-              );
-            if (isWebMutable) return false;
-            return category === "collection" || category === "date";
-          }
-          // The identifier is explicitly typed as a non-native type (e.g. Observable, QueryBuilder, Parser, Store).
-          // Effect does NOT provide an alternative for this type.
+          // Any other type reference (URLSearchParams, Headers, FormData, Request, Response, URL, Observable, QueryBuilder, Parser, Store, etc.)
+          // is NOT a native JavaScript type replaced by Effect.
           return false;
         }
         if (
@@ -1125,17 +1117,22 @@ export class Emitter {
         }
       }
 
-      // Check if initialized from a literal
+      // Check if initialized from a binding
       const binding = this.bindings.get(name);
       if (binding) {
-        if (category === "array" && binding.init.kind === "ArrayExpression")
-          return true;
-        if (
-          category === "string" &&
-          (binding.init.kind === "StringLiteral" ||
-            binding.init.kind === "TemplateLiteral")
-        )
-          return true;
+        if (!visitedBindings.has(name)) {
+          visitedBindings.add(name);
+          if (
+            this.isTargetNativeCategory(
+              binding.init,
+              category,
+              prop,
+              visitedBindings,
+            )
+          ) {
+            return true;
+          }
+        }
       }
     }
 
@@ -1154,11 +1151,12 @@ export class Emitter {
             expr.name,
           );
           if (tsType) {
+            const symName = tsType.symbol?.name ?? tsType.aliasSymbol?.name;
             if (category === "array") {
               return (
                 checker.isArrayType(tsType) ||
-                tsType.symbol?.name === "Array" ||
-                tsType.symbol?.name === "ReadonlyArray"
+                symName === "Array" ||
+                symName === "ReadonlyArray"
               );
             }
             if (category === "string") {
@@ -1166,14 +1164,14 @@ export class Emitter {
             }
             if (category === "collection") {
               return (
-                tsType.symbol?.name === "Map" ||
-                tsType.symbol?.name === "Set" ||
-                tsType.symbol?.name === "WeakMap" ||
-                tsType.symbol?.name === "WeakSet"
+                symName === "Map" ||
+                symName === "Set" ||
+                symName === "WeakMap" ||
+                symName === "WeakSet"
               );
             }
             if (category === "date") {
-              return tsType.symbol?.name === "Date";
+              return symName === "Date";
             }
             return false;
           }

@@ -630,32 +630,73 @@ export safeJsJson = (raw: String) =>
 
   it("bans mutating collection methods on Map and Set while allowing web params", () => {
     const invalidSetAdd = `
-export addItem = (items: Object, item: String) => items.add(item)
+export addItem = (items: Set<String>, item: String) => items.add(item)
 `;
     expect(() => Effect.runSync(compileString(invalidSetAdd))).toThrow(
       "Native collection method '.add()' is banned by the Effect style guide",
     );
 
     const invalidCollectionClear = `
-export reset = (c: Object) => c.clear()
+export reset = (c: Map<String, String>) => c.clear()
 `;
     expect(() => Effect.runSync(compileString(invalidCollectionClear))).toThrow(
       "Native collection method '.clear()' is banned by the Effect style guide",
     );
 
     const invalidMapSet = `
-export updateMap = (map: Object, k: String, v: String) => map.set(k, v)
+export updateMap = (opts: Map<String, String>, k: String, v: String) => opts.set(k, v)
 `;
     expect(() => Effect.runSync(compileString(invalidMapSet))).toThrow(
       "Native collection method '.set()' is banned by the Effect style guide",
     );
 
     const validWebParams = `
-export updateQuery = (searchParams: Object, q: String) =>
-  searchParams.set("q", q)
+export updateQuery = (opts: URLSearchParams, q: String) =>
+  opts.set("q", q)
+export updateQueryShort = (p: URLSearchParams, q: String) =>
+  p.set("q", q)
+export updateHeaders = (opts: Headers, k: String, v: String) =>
+  opts.set(k, v)
+export updateForm = (p: FormData, k: String, v: String) =>
+  p.set(k, v)
 `;
     const res = Effect.runSync(compileString(validWebParams));
-    expect(res.typescript).toContain('searchParams.set("q", q)');
+    expect(res.typescript).toContain('opts.set("q", q)');
+    expect(res.typescript).toContain('p.set("q", q)');
+    expect(res.typescript).toContain("opts.set(k, v)");
+    expect(res.typescript).toContain("p.set(k, v)");
+  });
+
+  it("enforces method bans by type and does not use variable-name regex heuristics", () => {
+    // A Map named 'params' or 'search' is STILL banned (previously bypassed by variable name heuristic)
+    const mapNamedParams = `
+export updateMap = (params: Map<String, String>, k: String, v: String) => params.set(k, v)
+`;
+    expect(() => Effect.runSync(compileString(mapNamedParams))).toThrow(
+      "Native collection method '.set()' is banned by the Effect style guide",
+    );
+
+    const mapNamedSearch = `
+export updateMap = (search: Map<String, String>, k: String, v: String) => search.set(k, v)
+`;
+    expect(() => Effect.runSync(compileString(mapNamedSearch))).toThrow(
+      "Native collection method '.set()' is banned by the Effect style guide",
+    );
+
+    // Web mutable APIs work cleanly regardless of variable name (opts, p, x, etc.)
+    const webParamsAnyName = `
+export fnOpts = (opts: URLSearchParams) => opts.set("page", "1")
+export fnP = (p: URLSearchParams) => p.set("page", "1")
+export fnH = (h: Headers) => h.set("content-type", "application/json")
+export fnF = (f: FormData) => f.delete("file")
+`;
+    const res = Effect.runSync(compileString(webParamsAnyName));
+    expect(res.typescript).toContain('opts.set("page", "1")');
+    expect(res.typescript).toContain('p.set("page", "1")');
+    expect(res.typescript).toContain(
+      'h.set("content-type", "application/json")',
+    );
+    expect(res.typescript).toContain('f.delete("file")');
   });
 
   it("resolves bare pipeline combinators for String and Record", () => {
@@ -682,7 +723,7 @@ export roll = () => Math.random()
 
   it("bans mutating Date prototype methods in favor of DateTime", () => {
     const invalidDateMutation = `
-export updateYear = (d: Object) => d.setFullYear(2026)
+export updateYear = (d: Date) => d.setFullYear(2026)
 `;
     expect(() => Effect.runSync(compileString(invalidDateMutation))).toThrow(
       "Native date method '.setFullYear()' is banned by the Effect style guide",
