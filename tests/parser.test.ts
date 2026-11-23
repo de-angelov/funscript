@@ -25,10 +25,11 @@ import {
   IndexExpression,
   RecordExpression,
   ArrayExpression,
-    FunctionExpression,
+  FunctionExpression,
   FunctionTypeNode,
   EffectTypeNode,
   BlockStatement,
+  AssignmentStatement,
   MutBlockExpression,
   MatchExpression,
   EffectBlockExpression,
@@ -51,13 +52,18 @@ function parse(source: string, filename = "test.fun"): Program {
 describe("FunScript Parser", () => {
   describe("Import & Export Declarations", () => {
     it("parses standard and aliased imports", () => {
-      const ast = parse(`import { User, Config as AppConfig } from "./config.js"`);
+      const ast = parse(
+        `import { User, Config as AppConfig } from "./config.js"`,
+      );
       expect(ast.body.length).toBe(1);
 
       const imp = ast.body[0] as ImportDeclaration;
       expect(imp.kind).toBe("ImportDeclaration");
       expect(imp.isTypeOnly).toBe(false);
-      expect(imp.source.parts[0]).toEqual({ kind: "StringRawPart", value: "./config.js" });
+      expect(imp.source.parts[0]).toEqual({
+        kind: "StringRawPart",
+        value: "./config.js",
+      });
       expect(imp.specifiers.length).toBe(2);
 
       expect(imp.specifiers[0].imported.name).toBe("User");
@@ -70,7 +76,9 @@ describe("FunScript Parser", () => {
     });
 
     it("parses multiple imports", () => {
-      const ast = parse(`import { State } from "./state.js"\nimport { client, Config } from "./api.js"`);
+      const ast = parse(
+        `import { State } from "./state.js"\nimport { client, Config } from "./api.js"`,
+      );
       expect(ast.body.length).toBe(2);
 
       const imp1 = ast.body[0] as ImportDeclaration;
@@ -91,10 +99,14 @@ export count = 10
 `);
       expect(ast.body.length).toBe(2);
       expect(ast.body[0].kind).toBe("ExportDeclaration");
-      expect((ast.body[0] as ExportDeclaration).declaration.kind).toBe("SchemaDeclaration");
+      expect((ast.body[0] as ExportDeclaration).declaration.kind).toBe(
+        "SchemaDeclaration",
+      );
 
       expect(ast.body[1].kind).toBe("ExportDeclaration");
-      expect((ast.body[1] as ExportDeclaration).declaration.kind).toBe("BindingDeclaration");
+      expect((ast.body[1] as ExportDeclaration).declaration.kind).toBe(
+        "BindingDeclaration",
+      );
     });
 
     it("parses export default declarations", () => {
@@ -124,7 +136,7 @@ export count = 10
 
     it("rejects multiple export default declarations in one file", () => {
       expect(() => parse("export default 1\nexport default 2")).toThrowError(
-        /Multiple default exports are not allowed/
+        /Multiple default exports are not allowed/,
       );
     });
   });
@@ -283,14 +295,18 @@ export ts schema Users = Array<UserType>
       expect(decl1.isTs).toBe(true);
       expect(decl1.id.name).toBe("Config");
       expect(decl1.body.kind).toBe("TsDerivedSchema");
-      expect((decl1.body as TsDerivedSchema).targetType.kind).toBe("RecordTypeNode");
+      expect((decl1.body as TsDerivedSchema).targetType.kind).toBe(
+        "RecordTypeNode",
+      );
 
       const exp2 = ast.body[1] as ExportDeclaration;
       const decl2 = exp2.declaration as SchemaDeclaration;
       expect(decl2.isTs).toBe(true);
       expect(decl2.id.name).toBe("Users");
       expect(decl2.body.kind).toBe("TsDerivedSchema");
-      expect((decl2.body as TsDerivedSchema).targetType.kind).toBe("TypeReferenceNode");
+      expect((decl2.body as TsDerivedSchema).targetType.kind).toBe(
+        "TypeReferenceNode",
+      );
     });
 
     it("parses ImportedTsSchema declarations from ts<Type>", () => {
@@ -342,8 +358,12 @@ export ts schema Users = Array<UserType>
       const body = decl.body as ImportedTsSchema;
       expect(body.kind).toBe("ImportedTsSchema");
       expect(body.typeArguments.length).toBe(2);
-      expect((body.typeArguments[0] as TypeReferenceNode).name.name).toBe("SourceType");
-      expect((body.typeArguments[1] as TypeReferenceNode).name.name).toBe("TargetType");
+      expect((body.typeArguments[0] as TypeReferenceNode).name.name).toBe(
+        "SourceType",
+      );
+      expect((body.typeArguments[1] as TypeReferenceNode).name.name).toBe(
+        "TargetType",
+      );
     });
   });
 
@@ -397,7 +417,10 @@ service PaymentGateway "custom/payment/gateway"
 
       expect(svc.kind).toBe("ServiceDeclaration");
       expect(svc.id.name).toBe("PaymentGateway");
-      expect(svc.customTag?.parts[0]).toEqual({ kind: "StringRawPart", value: "custom/payment/gateway" });
+      expect(svc.customTag?.parts[0]).toEqual({
+        kind: "StringRawPart",
+        value: "custom/payment/gateway",
+      });
       expect(svc.members.length).toBe(1);
       expect(svc.members[0].name.name).toBe("charge");
     });
@@ -406,7 +429,7 @@ service PaymentGateway "custom/payment/gateway"
   describe("Retired 'extern' Keyword", () => {
     it("rejects 'extern' with an actionable migration error", () => {
       expect(() => parse(`extern "stripe" service StripeClient`)).toThrow(
-        /FunScript has retired 'extern service'/
+        /FunScript has retired 'extern service'/,
       );
     });
   });
@@ -459,7 +482,8 @@ mut flag: Boolean = true
 
     it("groups multiplication on both sides of addition", () => {
       const ast = parse(`res = 1 * 2 + 3 * 4`);
-      const addition = (ast.body[0] as BindingDeclaration).init as BinaryExpression;
+      const addition = (ast.body[0] as BindingDeclaration)
+        .init as BinaryExpression;
 
       expect(addition.operator).toBe("+");
       expect((addition.left as BinaryExpression).operator).toBe("*");
@@ -517,7 +541,9 @@ mut flag: Boolean = true
       const logical = binding.init as BinaryExpression;
       expect(logical.operator).toBe("and");
       expect((logical.left as BinaryExpression).operator).toBe("<");
-      expect(((logical.left as BinaryExpression).left as BinaryExpression).operator).toBe("+");
+      expect(
+        ((logical.left as BinaryExpression).left as BinaryExpression).operator,
+      ).toBe("+");
       expect((logical.right as BinaryExpression).operator).toBe(">=");
     });
 
@@ -542,7 +568,8 @@ mut flag: Boolean = true
 
     it("groups mixed equality and comparison operators", () => {
       const ast = parse(`res = 1 #= 2 < 3 #! 4 >= 5`);
-      const inequality = (ast.body[0] as BindingDeclaration).init as BinaryExpression;
+      const inequality = (ast.body[0] as BindingDeclaration)
+        .init as BinaryExpression;
 
       // Equality operators associate left to right, while each comparison stays
       // grouped within its equality operand: (1 #= (2 < 3)) #! (4 >= 5).
@@ -571,14 +598,18 @@ mut flag: Boolean = true
 
     it("lets parentheses override comparison and equality precedence", () => {
       const ast = parse(`res = (1 < 2 #= true) and (3 + 4) * 5 < 40`);
-      const logical = (ast.body[0] as BindingDeclaration).init as BinaryExpression;
+      const logical = (ast.body[0] as BindingDeclaration)
+        .init as BinaryExpression;
 
       expect(logical.operator).toBe("and");
       expect((logical.left as BinaryExpression).operator).toBe("#=");
       const comparison = logical.right as BinaryExpression;
       expect(comparison.operator).toBe("<");
       expect((comparison.left as BinaryExpression).operator).toBe("*");
-      expect(((comparison.left as BinaryExpression).left as BinaryExpression).operator).toBe("+");
+      expect(
+        ((comparison.left as BinaryExpression).left as BinaryExpression)
+          .operator,
+      ).toBe("+");
     });
 
     it("parses unary expressions (not, -)", () => {
@@ -633,13 +664,17 @@ user = {
       expect(rec.entries[2].kind).toBe("SpreadEntry");
       expect(rec.entries[3].kind).toBe("DotPathEntry");
       if (rec.entries[3].kind === "DotPathEntry") {
-        expect(rec.entries[3].path.map((p) => p.name)).toEqual(["address", "city"]);
+        expect(rec.entries[3].path.map((p) => p.name)).toEqual([
+          "address",
+          "city",
+        ]);
       }
     });
 
     it("parses pipeline expressions and placeholder", () => {
       const ast = parse(`res = items |> process |> save(config, _)`);
-      const pipe = (ast.body[0] as BindingDeclaration).init as PipelineExpression;
+      const pipe = (ast.body[0] as BindingDeclaration)
+        .init as PipelineExpression;
       expect(pipe.kind).toBe("PipelineExpression");
 
       const call = pipe.right as CallExpression;
@@ -704,7 +739,8 @@ updated = user |> mut(draft) =>
   draft.tags.push("active")
   draft
 `);
-      const pipe = (ast.body[0] as BindingDeclaration).init as PipelineExpression;
+      const pipe = (ast.body[0] as BindingDeclaration)
+        .init as PipelineExpression;
       const mutBlock = pipe.right as MutBlockExpression;
 
       expect(mutBlock.kind).toBe("MutBlockExpression");
@@ -714,6 +750,49 @@ updated = user |> mut(draft) =>
       const block = mutBlock.body as BlockStatement;
       expect(block.statements.length).toBe(1);
       expect(block.finalExpression.kind).toBe("Identifier");
+    });
+
+    it("preserves outer draft variable tracking in nested mut blocks", () => {
+      const ast = parse(`
+updated = user |> mut(draft) =>
+  inner = item |> mut(draft) =>
+    draft.nested = 1
+    draft
+  draft.count = 2
+  draft
+`);
+      const pipe = (ast.body[0] as BindingDeclaration)
+        .init as PipelineExpression;
+      const outerMut = pipe.right as MutBlockExpression;
+      const outerBlock = outerMut.body as BlockStatement;
+      expect(outerBlock.statements.length).toBe(2);
+      expect(outerBlock.statements[0].kind).toBe("BindingDeclaration");
+      expect(outerBlock.statements[1].kind).toBe("AssignmentStatement");
+    });
+
+    it("isolates mutable variables lexically between sibling functions", () => {
+      const ast = parse(`
+first = () =>
+  mut x = 1
+  x = 2
+  => x
+
+second = () =>
+  x = 3
+  => x
+`);
+      expect(ast.body.length).toBe(2);
+      const f1 = ast.body[0] as BindingDeclaration;
+      const f1Body = (f1.init as FunctionExpression).body as BlockStatement;
+      expect(f1Body.statements[0].kind).toBe("BindingDeclaration");
+      expect((f1Body.statements[0] as BindingDeclaration).isMut).toBe(true);
+      expect(f1Body.statements[1].kind).toBe("AssignmentStatement");
+
+      const f2 = ast.body[1] as BindingDeclaration;
+      const f2Body = (f2.init as FunctionExpression).body as BlockStatement;
+      // In second(), x is a new immutable binding, not an assignment to first's mutable x
+      expect(f2Body.statements[0].kind).toBe("BindingDeclaration");
+      expect((f2Body.statements[0] as BindingDeclaration).isMut).toBe(false);
     });
   });
 
@@ -727,7 +806,8 @@ res = match shape
   | other => other
   | _ => -1
 `);
-      const matchExpr = (ast.body[0] as BindingDeclaration).init as MatchExpression;
+      const matchExpr = (ast.body[0] as BindingDeclaration)
+        .init as MatchExpression;
       expect(matchExpr.kind).toBe("MatchExpression");
       expect(matchExpr.scrutinee?.kind).toBe("Identifier");
       expect(matchExpr.arms.length).toBe(5);
@@ -762,7 +842,8 @@ res = match shape
   | Circle(r) when r |> Number.isGreaterThan(0) => r
   | _ => 0
 `);
-      const matchExpr = (ast.body[0] as BindingDeclaration).init as MatchExpression;
+      const matchExpr = (ast.body[0] as BindingDeclaration)
+        .init as MatchExpression;
       expect(matchExpr.arms[0].guard).toBeDefined();
       expect(matchExpr.arms[0].guard?.kind).toBe("PipelineExpression");
     });
@@ -773,7 +854,8 @@ res = match flag
   | true => 1
   | false => 0
 `);
-      const matchExpr = (ast.body[0] as BindingDeclaration).init as MatchExpression;
+      const matchExpr = (ast.body[0] as BindingDeclaration)
+        .init as MatchExpression;
       expect(matchExpr.arms.length).toBe(2);
       expect(matchExpr.arms[0].pattern.kind).toBe("LiteralPattern");
       expect(matchExpr.arms[1].pattern.kind).toBe("LiteralPattern");
@@ -785,7 +867,8 @@ res = match code
   | 200 | 201 | 204 => "ok"
   | _ => "err"
 `);
-      const matchExpr = (ast.body[0] as BindingDeclaration).init as MatchExpression;
+      const matchExpr = (ast.body[0] as BindingDeclaration)
+        .init as MatchExpression;
       const orPat = matchExpr.arms[0].pattern as OrPattern;
       expect(orPat.kind).toBe("OrPattern");
       expect(orPat.patterns.length).toBe(3);
@@ -798,7 +881,8 @@ grade = match
   | score |> Number.isGreaterThan(80) => "B"
   | _ => "C"
 `);
-      const matchExpr = (ast.body[0] as BindingDeclaration).init as MatchExpression;
+      const matchExpr = (ast.body[0] as BindingDeclaration)
+        .init as MatchExpression;
       expect(matchExpr.scrutinee).toBeUndefined();
       expect(matchExpr.arms.length).toBe(3);
 
@@ -810,11 +894,16 @@ grade = match
   describe("Effect Blocks", () => {
     it("requires explicit returns in effect blocks", () => {
       expect(() => parse("result = effect {\n  => 1\n}")).not.toThrow();
-      expect(() => parse("result = effect {\n  1\n}")).toThrow(/explicit '=> returnValue'/);
+      expect(() => parse("result = effect {\n  1\n}")).toThrow(
+        /explicit '=> returnValue'/,
+      );
     });
     it("parses a brace-delimited effect expression", () => {
-      const ast = parse(`result = effect {\n  user <- fetchUser()\n  => user |> summarize\n}`);
-      const eff = (ast.body[0] as BindingDeclaration).init as EffectBlockExpression;
+      const ast = parse(
+        `result = effect {\n  user <- fetchUser()\n  => user |> summarize\n}`,
+      );
+      const eff = (ast.body[0] as BindingDeclaration)
+        .init as EffectBlockExpression;
       expect(eff.body[0].kind).toBe("EffectBindStatement");
       expect(eff.finalExpression.kind).toBe("PipelineExpression");
     });
@@ -858,7 +947,9 @@ run = () =>
   }
 `;
       expect(() => parse(code)).toThrow(ParseError);
-      expect(() => parse(code)).toThrow(/Non-final bare expression in effect block is not executed/);
+      expect(() => parse(code)).toThrow(
+        /Non-final bare expression in effect block is not executed/,
+      );
     });
 
     it("throws ParseError when effect block does not end with an expression", () => {
@@ -869,17 +960,21 @@ run = () =>
   }
 `;
       expect(() => parse(code)).toThrow(ParseError);
-      expect(() => parse(code)).toThrow(/Effect block must end with an explicit/);
+      expect(() => parse(code)).toThrow(
+        /Effect block must end with an explicit/,
+      );
     });
   });
 
   describe("Explicit block returns", () => {
     it("requires an explicit => returnValue at the end of function blocks", () => {
-      expect(() => parse(`
+      expect(() =>
+        parse(`
 increment = (value) =>
   next = value + 1
   next
-`)).toThrow(/Function block must end with an explicit '=> returnValue'/);
+`),
+      ).toThrow(/Function block must end with an explicit '=> returnValue'/);
 
       const ast = parse(`
 increment = (value) =>
@@ -887,7 +982,9 @@ increment = (value) =>
   => next
 `);
       const fn = (ast.body[0] as BindingDeclaration).init as FunctionExpression;
-      expect((fn.body as BlockStatement).statements.at(-1)?.kind).toBe("ReturnStatement");
+      expect((fn.body as BlockStatement).statements.at(-1)?.kind).toBe(
+        "ReturnStatement",
+      );
     });
 
     it("keeps expression-bodied lambdas concise", () => {
@@ -900,48 +997,54 @@ increment = (value) =>
   describe("Parser Error Handling", () => {
     it("throws ParseError on empty parens not followed by arrow", () => {
       expect(() => parse(`x = () + 1`)).toThrow(ParseError);
-      expect(() => parse(`x = () + 1`)).toThrow(/Empty parentheses '\(\)' must be followed by '=>'/);
+      expect(() => parse(`x = () + 1`)).toThrow(
+        /Empty parentheses '\(\)' must be followed by '=>'/,
+      );
     });
 
     it("throws ParseError on missing required tokens", () => {
       expect(() => parse(`schema User`)).toThrow(ParseError);
       expect(() => parse(`import { foo }`)).toThrow(ParseError);
       expect(() => parse(`service MyService`)).toThrow(ParseError);
-      expect(() => parse(`export schema MySchema = { id }`)).toThrow(ParseError);
-      expect(() => parse(`export ts 123`)).toThrow("Expected '{ ... }' after 'ts'");
+      expect(() => parse(`export schema MySchema = { id }`)).toThrow(
+        ParseError,
+      );
+      expect(() => parse(`export ts 123`)).toThrow(
+        "Expected '{ ... }' after 'ts'",
+      );
       expect(() => parse(`ts 123`)).toThrow("Expected '{ ... }' after 'ts'");
     });
 
     it("throws actionable ParseErrors with source locations for imported TypeScript schemas", () => {
       // Missing 'ts' after 'from'
       expect(() => parse(`schema User = from`)).toThrowError(
-        /Expected 'ts' after 'from'/
+        /Expected 'ts' after 'from'/,
       );
       expect(() => parse(`schema User = from other<Type>`)).toThrowError(
-        /Expected 'ts' after 'from'/
+        /Expected 'ts' after 'from'/,
       );
 
       // Missing '<' after 'ts'
       expect(() => parse(`schema User = from ts`)).toThrowError(
-        /Expected '<' after 'ts'/
+        /Expected '<' after 'ts'/,
       );
       expect(() => parse(`schema User = from ts(Type)`)).toThrowError(
-        /Expected '<' after 'ts'/
+        /Expected '<' after 'ts'/,
       );
 
       // Empty type arguments in ts<>
       expect(() => parse(`schema User = from ts<>`)).toThrowError(
-        /Expected type argument inside 'ts<...>'/
+        /Expected type argument inside 'ts<...>'/,
       );
 
       // Missing closing '>'
       expect(() => parse(`schema User = from ts<Type`)).toThrowError(
-        /Expected '>' after type argument/
+        /Expected '>' after type argument/,
       );
 
       // Invalid lowercase type name inside ts<...>
       expect(() => parse(`schema User = from ts<lowercase>`)).toThrowError(
-        /Type names must begin with an uppercase letter/
+        /Type names must begin with an uppercase letter/,
       );
 
       // Accurate source location verification

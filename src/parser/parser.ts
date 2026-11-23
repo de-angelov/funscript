@@ -124,12 +124,65 @@ export interface ParserOptions {
   isFunx?: boolean;
 }
 
+interface ParserScope {
+  mutableVariables: Set<string>;
+  mutDraftVariables: Set<string>;
+}
+
 export class Parser {
   private current = 0;
   public diagnostics: ParseError[] = [];
   private functionDepth = 0;
-  private mutableVariables = new Set<string>();
-  private mutDraftVariables = new Set<string>();
+  private scopeStack: ParserScope[] = [
+    {
+      mutableVariables: new Set<string>(),
+      mutDraftVariables: new Set<string>(),
+    },
+  ];
+
+  private currentScope(): ParserScope {
+    return this.scopeStack[this.scopeStack.length - 1];
+  }
+
+  private enterScope(): void {
+    this.scopeStack.push({
+      mutableVariables: new Set<string>(),
+      mutDraftVariables: new Set<string>(),
+    });
+  }
+
+  private exitScope(): void {
+    if (this.scopeStack.length > 1) {
+      this.scopeStack.pop();
+    }
+  }
+
+  private addMutableVariable(name: string): void {
+    this.currentScope().mutableVariables.add(name);
+  }
+
+  private addMutDraftVariable(name: string): void {
+    this.currentScope().mutDraftVariables.add(name);
+  }
+
+  private isMutableVariable(name: string): boolean {
+    for (let i = this.scopeStack.length - 1; i >= 0; i--) {
+      if (this.scopeStack[i].mutableVariables.has(name)) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  private isMutDraftVariable(name: string): boolean {
+    for (let i = this.scopeStack.length - 1; i >= 0; i--) {
+      if (this.scopeStack[i].mutDraftVariables.has(name)) {
+        return true;
+      }
+    }
+    return false;
+  }
+
   private parsingBraceEffect = false;
   private hasDefaultExport = false;
   private allowOptionalRecordFields = false;
@@ -173,6 +226,12 @@ export class Parser {
       this.isFunx = opts.isFunx;
     }
     this.hasDefaultExport = false;
+    this.scopeStack = [
+      {
+        mutableVariables: new Set<string>(),
+        mutDraftVariables: new Set<string>(),
+      },
+    ];
 
     const start = this.peek().span.start;
     const body: TopLevelDeclaration[] = [];
@@ -890,13 +949,13 @@ export class Parser {
       id = this.parsePattern() as RecordPattern | ArrayPattern;
       if (isMut) {
         for (const name of this.collectPatternVariables(id)) {
-          this.mutableVariables.add(name);
+          this.addMutableVariable(name);
         }
       }
     } else {
       id = this.parseAnyIdentifier();
       if (isMut) {
-        this.mutableVariables.add(id.name);
+        this.addMutableVariable(id.name);
       }
     }
     let typeParams: TypeParameter[] | undefined;
@@ -1263,12 +1322,13 @@ export class Parser {
       throw new ParseError("Expected '=>' in mut block", this.peek().span);
     }
 
-    this.mutDraftVariables.add(draftParam.name);
+    this.enterScope();
+    this.addMutDraftVariable(draftParam.name);
     let body: FunctionBody;
     try {
       body = this.parseFunctionBody();
     } finally {
-      this.mutDraftVariables.delete(draftParam.name);
+      this.exitScope();
     }
     return {
       kind: "MutBlockExpression",
@@ -2292,277 +2352,296 @@ export class Parser {
       "Expected '{' after 'effect' (effect blocks require braces)",
     );
     this.parsingBraceEffect = true;
+    this.enterScope();
 
-    const body: EffectStatement[] = [];
-    let finalExpression: Expression | undefined;
+    try {
+      const body: EffectStatement[] = [];
+      let finalExpression: Expression | undefined;
 
-    const atEnd = () => this.check(TokenType.RBRACE);
-    while (!atEnd() && !this.isAtEnd()) {
-      this.skipNewlines();
-      while (this.match(TokenType.INDENT) || this.match(TokenType.DEDENT)) {}
-      if (atEnd()) break;
-
-      if (this.match(TokenType.ARROW)) {
-        finalExpression = this.parseExpression();
+      const atEnd = () => this.check(TokenType.RBRACE);
+      while (!atEnd() && !this.isAtEnd()) {
         this.skipNewlines();
         while (this.match(TokenType.INDENT) || this.match(TokenType.DEDENT)) {}
-        if (!atEnd() && !this.isAtEnd())
-          throw new ParseError(
-            "Effect block return must be the final statement",
-            finalExpression.span,
-          );
-        break;
-      } else if (this.check(TokenType.WHEN)) {
-        body.push(this.parseWhenStatement());
-        // Check for effect bind: x <- eff or _ <- eff
-      } else if (
-        this.check(TokenType.UNDERSCORE) &&
-        this.peekAhead(1).type === TokenType.LARROW
-      ) {
-        this.advance(); // consume '_'
-        this.advance(); // consume '<-'
-        const eff = this.parseExpression();
-        this.consumeNewlineOrEof("Expected newline after discard bind");
-        body.push({
-          kind: "EffectDiscardStatement",
-          effect: eff,
-          span: { start: eff.span.start, end: eff.span.end },
-        });
-      } else if (
-        (this.check(TokenType.IDENTIFIER) &&
-          this.peekAhead(1).type === TokenType.LARROW) ||
-        this.isDestructuringEffectBindStart()
-      ) {
-        const id =
-          this.check(TokenType.LBRACE) || this.check(TokenType.LBRACKET)
-            ? (this.parsePattern() as RecordPattern | ArrayPattern)
-            : this.parseIdentifier();
-        this.consume(TokenType.LARROW, "Expected '<-' in effect bind");
-        const eff = this.parseExpression();
-        this.consumeNewlineOrEof("Expected newline after effect bind");
-        body.push({
-          kind: "EffectBindStatement",
-          id,
-          effect: eff,
-          span: { start: id.span.start, end: eff.span.end },
-        });
-      } else if (
-        this.check(TokenType.IDENTIFIER) &&
-        this.peekAhead(1).type === TokenType.EQ &&
-        this.mutableVariables.has(this.peek().value)
-      ) {
-        const target = this.parseIdentifier();
-        this.consume(TokenType.EQ, "Expected '=' in assignment");
-        const val = this.parseExpression();
-        this.consumeNewlineOrEof();
-        body.push({
-          kind: "AssignmentStatement",
-          target,
-          value: val,
-          span: { start: target.span.start, end: val.span.end },
-        });
-        this.skipNewlines();
-        continue;
-      } else if (
-        this.check(TokenType.MUT) ||
-        (this.check(TokenType.IDENTIFIER) &&
-          (this.peekAhead(1).type === TokenType.EQ ||
-            this.peekAhead(1).type === TokenType.COLON)) ||
-        (this.check(TokenType.UNDERSCORE) &&
-          this.peekAhead(1).type === TokenType.EQ) ||
-        this.isDestructuringBindingStart()
-      ) {
-        if (this.check(TokenType.UNDERSCORE)) {
+        if (atEnd()) break;
+
+        if (this.match(TokenType.ARROW)) {
+          finalExpression = this.parseExpression();
+          this.skipNewlines();
+          while (
+            this.match(TokenType.INDENT) ||
+            this.match(TokenType.DEDENT)
+          ) {}
+          if (!atEnd() && !this.isAtEnd())
+            throw new ParseError(
+              "Effect block return must be the final statement",
+              finalExpression.span,
+            );
+          break;
+        } else if (this.check(TokenType.WHEN)) {
+          body.push(this.parseWhenStatement());
+          // Check for effect bind: x <- eff or _ <- eff
+        } else if (
+          this.check(TokenType.UNDERSCORE) &&
+          this.peekAhead(1).type === TokenType.LARROW
+        ) {
           this.advance(); // consume '_'
-          this.advance(); // consume '='
-          const discardExpr = this.parseExpression();
-          this.consumeNewlineOrEof("Expected newline");
+          this.advance(); // consume '<-'
+          const eff = this.parseExpression();
+          this.consumeNewlineOrEof("Expected newline after discard bind");
           body.push({
-            kind: "BindingDeclaration",
-            isMut: false,
-            id: { kind: "Identifier", name: "_", span: discardExpr.span },
-            init: discardExpr,
-            span: discardExpr.span,
+            kind: "EffectDiscardStatement",
+            effect: eff,
+            span: { start: eff.span.start, end: eff.span.end },
           });
+        } else if (
+          (this.check(TokenType.IDENTIFIER) &&
+            this.peekAhead(1).type === TokenType.LARROW) ||
+          this.isDestructuringEffectBindStart()
+        ) {
+          const id =
+            this.check(TokenType.LBRACE) || this.check(TokenType.LBRACKET)
+              ? (this.parsePattern() as RecordPattern | ArrayPattern)
+              : this.parseIdentifier();
+          this.consume(TokenType.LARROW, "Expected '<-' in effect bind");
+          const eff = this.parseExpression();
+          this.consumeNewlineOrEof("Expected newline after effect bind");
+          body.push({
+            kind: "EffectBindStatement",
+            id,
+            effect: eff,
+            span: { start: id.span.start, end: eff.span.end },
+          });
+        } else if (
+          this.check(TokenType.IDENTIFIER) &&
+          this.peekAhead(1).type === TokenType.EQ &&
+          this.isMutableVariable(this.peek().value)
+        ) {
+          const target = this.parseIdentifier();
+          this.consume(TokenType.EQ, "Expected '=' in assignment");
+          const val = this.parseExpression();
+          this.consumeNewlineOrEof();
+          body.push({
+            kind: "AssignmentStatement",
+            target,
+            value: val,
+            span: { start: target.span.start, end: val.span.end },
+          });
+          this.skipNewlines();
+          continue;
+        } else if (
+          this.check(TokenType.MUT) ||
+          (this.check(TokenType.IDENTIFIER) &&
+            (this.peekAhead(1).type === TokenType.EQ ||
+              this.peekAhead(1).type === TokenType.COLON)) ||
+          (this.check(TokenType.UNDERSCORE) &&
+            this.peekAhead(1).type === TokenType.EQ) ||
+          this.isDestructuringBindingStart()
+        ) {
+          if (this.check(TokenType.UNDERSCORE)) {
+            this.advance(); // consume '_'
+            this.advance(); // consume '='
+            const discardExpr = this.parseExpression();
+            this.consumeNewlineOrEof("Expected newline");
+            body.push({
+              kind: "BindingDeclaration",
+              isMut: false,
+              id: { kind: "Identifier", name: "_", span: discardExpr.span },
+              init: discardExpr,
+              span: discardExpr.span,
+            });
+          } else {
+            const bind = this.parseBindingDeclaration();
+            body.push(bind);
+          }
         } else {
-          const bind = this.parseBindingDeclaration();
-          body.push(bind);
-        }
-      } else {
-        // Expression - must be the final line or control flow
-        const expr = this.parseExpression();
-        this.skipNewlines();
-        while (this.match(TokenType.INDENT) || this.match(TokenType.DEDENT)) {}
-        if (atEnd()) {
-          throw new ParseError(EFFECT_RETURN_DIAGNOSTIC, expr.span);
-        } else {
-          throw new ParseError(EFFECT_BARE_EXPR_DIAGNOSTIC, expr.span);
+          // Expression - must be the final line or control flow
+          const expr = this.parseExpression();
+          this.skipNewlines();
+          while (
+            this.match(TokenType.INDENT) ||
+            this.match(TokenType.DEDENT)
+          ) {}
+          if (atEnd()) {
+            throw new ParseError(EFFECT_RETURN_DIAGNOSTIC, expr.span);
+          } else {
+            throw new ParseError(EFFECT_BARE_EXPR_DIAGNOSTIC, expr.span);
+          }
         }
       }
+
+      this.consume(TokenType.RBRACE, "Expected '}' to close effect block");
+      this.parsingBraceEffect = false;
+
+      if (!finalExpression) {
+        throw new ParseError(EFFECT_RETURN_DIAGNOSTIC, {
+          start,
+          end: this.previous().span.end,
+        });
+      }
+
+      return {
+        kind: "EffectBlockExpression",
+        body,
+        finalExpression,
+        unscoped,
+        span: { start, end: finalExpression.span.end },
+      };
+    } finally {
+      this.exitScope();
     }
-
-    this.consume(TokenType.RBRACE, "Expected '}' to close effect block");
-    this.parsingBraceEffect = false;
-
-    if (!finalExpression) {
-      throw new ParseError(EFFECT_RETURN_DIAGNOSTIC, {
-        start,
-        end: this.previous().span.end,
-      });
-    }
-
-    return {
-      kind: "EffectBlockExpression",
-      body,
-      finalExpression,
-      unscoped,
-      span: { start, end: finalExpression.span.end },
-    };
   }
 
   private parseParBlock(): ParBlockExpression {
-    const start = this.previous().span.start;
-    let concurrency: Expression | undefined;
-    if (this.match(TokenType.LPAREN)) {
-      if (
-        this.check(TokenType.IDENTIFIER) &&
-        this.peek().value === "concurrency" &&
-        this.peekAhead(1).type === TokenType.EQ
-      ) {
-        this.advance(); // consume 'concurrency'
-        this.advance(); // consume '='
-        concurrency = this.parseExpression();
-      } else if (!this.check(TokenType.RPAREN)) {
-        concurrency = this.parseExpression();
+    this.enterScope();
+    try {
+      const start = this.previous().span.start;
+      let concurrency: Expression | undefined;
+      if (this.match(TokenType.LPAREN)) {
+        if (
+          this.check(TokenType.IDENTIFIER) &&
+          this.peek().value === "concurrency" &&
+          this.peekAhead(1).type === TokenType.EQ
+        ) {
+          this.advance(); // consume 'concurrency'
+          this.advance(); // consume '='
+          concurrency = this.parseExpression();
+        } else if (!this.check(TokenType.RPAREN)) {
+          concurrency = this.parseExpression();
+        }
+        this.consume(TokenType.RPAREN, "Expected ')' after par options");
       }
-      this.consume(TokenType.RPAREN, "Expected ')' after par options");
-    }
 
-    const braced = this.match(TokenType.LBRACE);
-    if (!braced) {
-      this.consume(TokenType.NEWLINE, "Expected newline or '{' after 'par'");
-      this.consume(TokenType.INDENT, "Expected indent after 'par'");
-    }
+      const braced = this.match(TokenType.LBRACE);
+      if (!braced) {
+        this.consume(TokenType.NEWLINE, "Expected newline or '{' after 'par'");
+        this.consume(TokenType.INDENT, "Expected indent after 'par'");
+      }
 
-    const body: EffectStatement[] = [];
-    let finalExpression: Expression | undefined;
-    let hasExplicitReturn = false;
+      const body: EffectStatement[] = [];
+      let finalExpression: Expression | undefined;
+      let hasExplicitReturn = false;
 
-    const atEnd = () =>
-      braced ? this.check(TokenType.RBRACE) : this.check(TokenType.DEDENT);
-    while (!atEnd() && !this.isAtEnd()) {
-      this.skipNewlines();
-      if (braced)
-        while (this.match(TokenType.INDENT) || this.match(TokenType.DEDENT)) {}
-      if (atEnd()) break;
-
-      if (this.match(TokenType.ARROW)) {
-        finalExpression = this.parseExpression();
-        hasExplicitReturn = true;
+      const atEnd = () =>
+        braced ? this.check(TokenType.RBRACE) : this.check(TokenType.DEDENT);
+      while (!atEnd() && !this.isAtEnd()) {
         this.skipNewlines();
         if (braced)
           while (
             this.match(TokenType.INDENT) ||
             this.match(TokenType.DEDENT)
           ) {}
-        if (!atEnd())
+        if (atEnd()) break;
+
+        if (this.match(TokenType.ARROW)) {
+          finalExpression = this.parseExpression();
+          hasExplicitReturn = true;
+          this.skipNewlines();
+          if (braced)
+            while (
+              this.match(TokenType.INDENT) ||
+              this.match(TokenType.DEDENT)
+            ) {}
+          if (!atEnd())
+            throw new ParseError(
+              "Par block return must be the final statement",
+              finalExpression.span,
+            );
+          break;
+        } else if (this.check(TokenType.WHEN)) {
+          const whenToken = this.advance();
           throw new ParseError(
-            "Par block return must be the final statement",
-            finalExpression.span,
+            "Early return 'when (...) =>' is rejected inside 'par' blocks because it leaves sibling fibers in an ambiguous state",
+            whenToken.span,
           );
-        break;
-      } else if (this.check(TokenType.WHEN)) {
-        const whenToken = this.advance();
-        throw new ParseError(
-          "Early return 'when (...) =>' is rejected inside 'par' blocks because it leaves sibling fibers in an ambiguous state",
-          whenToken.span,
-        );
-      } else if (
-        this.check(TokenType.UNDERSCORE) &&
-        this.peekAhead(1).type === TokenType.LARROW
-      ) {
-        this.advance(); // consume '_'
-        this.advance(); // consume '<-'
-        const eff = this.parseExpression();
-        this.consumeNewlineOrEof("Expected newline after discard bind");
-        body.push({
-          kind: "EffectDiscardStatement",
-          effect: eff,
-          span: { start: eff.span.start, end: eff.span.end },
-        });
-      } else if (
-        (this.check(TokenType.IDENTIFIER) &&
-          this.peekAhead(1).type === TokenType.LARROW) ||
-        this.isDestructuringEffectBindStart()
-      ) {
-        const id =
-          this.check(TokenType.LBRACE) || this.check(TokenType.LBRACKET)
-            ? (this.parsePattern() as RecordPattern | ArrayPattern)
-            : this.parseIdentifier();
-        this.consume(TokenType.LARROW, "Expected '<-' in effect bind");
-        const eff = this.parseExpression();
-        this.consumeNewlineOrEof("Expected newline after effect bind");
-        body.push({
-          kind: "EffectBindStatement",
-          id,
-          effect: eff,
-          span: { start: id.span.start, end: eff.span.end },
-        });
-      } else if (
-        this.check(TokenType.IDENTIFIER) &&
-        this.peekAhead(1).type === TokenType.EQ
-      ) {
-        const id = this.parseIdentifier();
-        this.consume(TokenType.EQ, "Expected '=' in assignment");
-        const value = this.parseExpression();
-        this.consumeNewlineOrEof("Expected newline after assignment");
-        body.push({
-          kind: "BindingDeclaration",
-          isMut: false,
-          id,
-          init: value,
-          span: { start: id.span.start, end: value.span.end },
-        });
-      } else {
-        const eff = this.parseExpression();
-        this.consumeNewlineOrEof("Expected newline after effect statement");
-        body.push({
-          kind: "EffectDiscardStatement",
-          effect: eff,
-          span: { start: eff.span.start, end: eff.span.end },
-        });
+        } else if (
+          this.check(TokenType.UNDERSCORE) &&
+          this.peekAhead(1).type === TokenType.LARROW
+        ) {
+          this.advance(); // consume '_'
+          this.advance(); // consume '<-'
+          const eff = this.parseExpression();
+          this.consumeNewlineOrEof("Expected newline after discard bind");
+          body.push({
+            kind: "EffectDiscardStatement",
+            effect: eff,
+            span: { start: eff.span.start, end: eff.span.end },
+          });
+        } else if (
+          (this.check(TokenType.IDENTIFIER) &&
+            this.peekAhead(1).type === TokenType.LARROW) ||
+          this.isDestructuringEffectBindStart()
+        ) {
+          const id =
+            this.check(TokenType.LBRACE) || this.check(TokenType.LBRACKET)
+              ? (this.parsePattern() as RecordPattern | ArrayPattern)
+              : this.parseIdentifier();
+          this.consume(TokenType.LARROW, "Expected '<-' in effect bind");
+          const eff = this.parseExpression();
+          this.consumeNewlineOrEof("Expected newline after effect bind");
+          body.push({
+            kind: "EffectBindStatement",
+            id,
+            effect: eff,
+            span: { start: id.span.start, end: eff.span.end },
+          });
+        } else if (
+          this.check(TokenType.IDENTIFIER) &&
+          this.peekAhead(1).type === TokenType.EQ
+        ) {
+          const id = this.parseIdentifier();
+          this.consume(TokenType.EQ, "Expected '=' in assignment");
+          const value = this.parseExpression();
+          this.consumeNewlineOrEof("Expected newline after assignment");
+          body.push({
+            kind: "BindingDeclaration",
+            isMut: false,
+            id,
+            init: value,
+            span: { start: id.span.start, end: value.span.end },
+          });
+        } else {
+          const eff = this.parseExpression();
+          this.consumeNewlineOrEof("Expected newline after effect statement");
+          body.push({
+            kind: "EffectDiscardStatement",
+            effect: eff,
+            span: { start: eff.span.start, end: eff.span.end },
+          });
+        }
       }
+
+      if (braced) {
+        this.consume(TokenType.RBRACE, "Expected '}' to close par block");
+      } else {
+        this.consume(TokenType.DEDENT, "Expected dedent to close par block");
+      }
+
+      const resolvedFinalExpression: Expression = finalExpression ?? {
+        kind: "RecordExpression",
+        entries: body
+          .filter(
+            (s): s is EffectBindStatement =>
+              s.kind === "EffectBindStatement" && s.id.kind === "Identifier",
+          )
+          .map((s) => ({
+            kind: "ShorthandEntry" as const,
+            key: s.id as Identifier,
+            span: s.id.span,
+          })),
+        span: { start, end: this.previous().span.end },
+      };
+
+      return {
+        kind: "ParBlockExpression",
+        concurrency,
+        body,
+        finalExpression: resolvedFinalExpression,
+        hasExplicitReturn,
+        span: { start, end: resolvedFinalExpression.span.end },
+      };
+    } finally {
+      this.exitScope();
     }
-
-    if (braced) {
-      this.consume(TokenType.RBRACE, "Expected '}' to close par block");
-    } else {
-      this.consume(TokenType.DEDENT, "Expected dedent to close par block");
-    }
-
-    const resolvedFinalExpression: Expression = finalExpression ?? {
-      kind: "RecordExpression",
-      entries: body
-        .filter(
-          (s): s is EffectBindStatement =>
-            s.kind === "EffectBindStatement" && s.id.kind === "Identifier",
-        )
-        .map((s) => ({
-          kind: "ShorthandEntry" as const,
-          key: s.id as Identifier,
-          span: s.id.span,
-        })),
-      span: { start, end: this.previous().span.end },
-    };
-
-    return {
-      kind: "ParBlockExpression",
-      concurrency,
-      body,
-      finalExpression: resolvedFinalExpression,
-      hasExplicitReturn,
-      span: { start, end: resolvedFinalExpression.span.end },
-    };
   }
 
   private isBraceBlock(): boolean {
@@ -2651,8 +2730,8 @@ export class Parser {
     }
     return (
       this.peekAhead(i).type === TokenType.EQ &&
-      (this.mutableVariables.has(this.peek().value) ||
-        (member && this.mutDraftVariables.has(this.peek().value)))
+      (this.isMutableVariable(this.peek().value) ||
+        (member && this.isMutDraftVariable(this.peek().value)))
     );
   }
 
@@ -2795,230 +2874,91 @@ export class Parser {
   }
 
   private parseBraceBlock(requireExplicitReturn = false): BlockStatement {
-    const start = this.previous().span.start;
-    const statements: Statement[] = [];
-    let finalExpression: Expression | undefined;
+    this.enterScope();
+    try {
+      const start = this.previous().span.start;
+      const statements: Statement[] = [];
+      let finalExpression: Expression | undefined;
 
-    this.skipNewlines();
-    const hasIndent = this.match(TokenType.INDENT);
-
-    while (
-      !this.check(TokenType.RBRACE) &&
-      !this.check(TokenType.DEDENT) &&
-      !this.isAtEnd()
-    ) {
       this.skipNewlines();
-      if (this.check(TokenType.RBRACE) || this.check(TokenType.DEDENT)) break;
+      const hasIndent = this.match(TokenType.INDENT);
 
-      try {
-        if (this.check(TokenType.WHEN)) {
-          statements.push(this.parseWhenStatement());
-          this.skipNewlines();
-          continue;
-        }
-
-        if (this.match(TokenType.ARROW)) {
-          const retStart = this.previous().span.start;
-          const retExpr = this.parseExpression();
-          this.consumeNewlineOrEof();
-          statements.push({
-            kind: "ReturnStatement",
-            argument: retExpr,
-            span: { start: retStart, end: retExpr.span.end },
-          });
-          this.skipNewlines();
-          continue;
-        }
-
-        if (this.isAssignmentStart()) {
-          const target = this.parseAssignmentTarget();
-          this.consume(TokenType.EQ, "Expected '=' in assignment");
-          const val = this.parseExpression();
-          this.consumeNewlineOrEof();
-          statements.push({
-            kind: "AssignmentStatement",
-            target,
-            value: val,
-            span: { start: target.span.start, end: val.span.end },
-          });
-          this.skipNewlines();
-          continue;
-        }
-
-        if (
-          this.check(TokenType.MUT) ||
-          (this.check(TokenType.IDENTIFIER) &&
-            (this.peekAhead(1).type === TokenType.EQ ||
-              this.peekAhead(1).type === TokenType.COLON)) ||
-          (this.check(TokenType.UNDERSCORE) &&
-            this.peekAhead(1).type === TokenType.EQ) ||
-          this.isDestructuringBindingStart()
-        ) {
-          if (this.check(TokenType.UNDERSCORE)) {
-            this.advance(); // consume '_'
-            this.advance(); // consume '='
-            const discardExpr = this.parseExpression();
-            this.consumeNewlineOrEof("Expected newline");
-            statements.push({
-              kind: "BindingDeclaration",
-              isMut: false,
-              id: { kind: "Identifier", name: "_", span: discardExpr.span },
-              init: discardExpr,
-              span: discardExpr.span,
-            });
-          } else {
-            const bind = this.parseBindingDeclaration();
-            statements.push(bind);
-          }
-          this.skipNewlines();
-          continue;
-        }
-
-        const expr = this.parseExpression();
+      while (
+        !this.check(TokenType.RBRACE) &&
+        !this.check(TokenType.DEDENT) &&
+        !this.isAtEnd()
+      ) {
         this.skipNewlines();
+        if (this.check(TokenType.RBRACE) || this.check(TokenType.DEDENT)) break;
 
-        if (this.check(TokenType.RBRACE) || this.check(TokenType.DEDENT)) {
-          const isAllowedImplicitReturn = statements.length === 0;
-          if (
-            requireExplicitReturn &&
-            !isAllowedImplicitReturn &&
-            expr.kind !== "MatchExpression" &&
-            expr.kind !== "EffectBlockExpression"
-          ) {
-            throw new ParseError(FUNCTION_RETURN_DIAGNOSTIC, expr.span);
-          }
-          finalExpression = expr;
-          break;
-        } else {
-          statements.push({
-            kind: "ExpressionStatement",
-            expression: expr,
-            span: expr.span,
-          });
-        }
-      } catch (err: any) {
-        if (err instanceof ParseError) {
-          this.diagnostics.push(err);
-          this.synchronize();
-        } else {
-          throw err;
-        }
-      }
-    }
-
-    if (
-      requireExplicitReturn &&
-      !finalExpression &&
-      statements.at(-1)?.kind !== "ReturnStatement"
-    ) {
-      throw new ParseError(FUNCTION_RETURN_DIAGNOSTIC, {
-        start,
-        end: this.previous().span.end,
-      });
-    }
-    if (hasIndent) {
-      this.consume(TokenType.DEDENT, "Expected unindent after brace block");
-    }
-    this.skipNewlines();
-    const end = this.consume(TokenType.RBRACE, "Expected '}' after block").span
-      .end;
-    return {
-      kind: "BlockStatement",
-      statements,
-      finalExpression,
-      span: { start, end },
-    };
-  }
-
-  private parseIndentedBlock(requireExplicitReturn = false): BlockStatement {
-    const start = this.previous().span.start;
-    const statements: Statement[] = [];
-    let finalExpression: Expression | undefined;
-
-    while (!this.check(TokenType.DEDENT) && !this.isAtEnd()) {
-      this.skipNewlines();
-      if (this.check(TokenType.DEDENT)) break;
-
-      try {
-        if (this.check(TokenType.WHEN)) {
-          statements.push(this.parseWhenStatement());
-          this.skipNewlines();
-          continue;
-        }
-
-        if (this.match(TokenType.ARROW)) {
-          const retStart = this.previous().span.start;
-          const retExpr = this.parseExpression();
-          this.consumeNewlineOrEof();
-          statements.push({
-            kind: "ReturnStatement",
-            argument: retExpr,
-            span: { start: retStart, end: retExpr.span.end },
-          });
-          this.skipNewlines();
-          continue;
-        }
-
-        if (this.isAssignmentStart()) {
-          const target = this.parseAssignmentTarget();
-          this.consume(TokenType.EQ, "Expected '=' in assignment");
-          const val = this.parseExpression();
-          this.consumeNewlineOrEof();
-          statements.push({
-            kind: "AssignmentStatement",
-            target,
-            value: val,
-            span: { start: target.span.start, end: val.span.end },
-          });
-          this.skipNewlines();
-          continue;
-        }
-
-        if (
-          this.check(TokenType.MUT) ||
-          (this.check(TokenType.IDENTIFIER) &&
-            (this.peekAhead(1).type === TokenType.EQ ||
-              this.peekAhead(1).type === TokenType.COLON)) ||
-          (this.check(TokenType.UNDERSCORE) &&
-            this.peekAhead(1).type === TokenType.EQ) ||
-          this.isDestructuringBindingStart()
-        ) {
-          if (this.check(TokenType.UNDERSCORE)) {
-            this.advance(); // consume '_'
-            this.advance(); // consume '='
-            const discardExpr = this.parseExpression();
-            this.consumeNewlineOrEof("Expected newline");
-            statements.push({
-              kind: "BindingDeclaration",
-              isMut: false,
-              id: { kind: "Identifier", name: "_", span: discardExpr.span },
-              init: discardExpr,
-              span: discardExpr.span,
-            });
-          } else {
-            const bind = this.parseBindingDeclaration();
+        try {
+          if (this.check(TokenType.WHEN)) {
+            statements.push(this.parseWhenStatement());
             this.skipNewlines();
-            if (this.check(TokenType.DEDENT)) {
-              if (requireExplicitReturn)
-                throw new ParseError(FUNCTION_RETURN_DIAGNOSTIC, bind.span);
-              bind.isTrailingBinding = true;
-              statements.push(bind);
-              if (
-                bind.id.kind === "Identifier" ||
-                bind.id.kind === "UpperIdentifier"
-              ) {
-                finalExpression = bind.id;
-              }
-              break;
+            continue;
+          }
+
+          if (this.match(TokenType.ARROW)) {
+            const retStart = this.previous().span.start;
+            const retExpr = this.parseExpression();
+            this.consumeNewlineOrEof();
+            statements.push({
+              kind: "ReturnStatement",
+              argument: retExpr,
+              span: { start: retStart, end: retExpr.span.end },
+            });
+            this.skipNewlines();
+            continue;
+          }
+
+          if (this.isAssignmentStart()) {
+            const target = this.parseAssignmentTarget();
+            this.consume(TokenType.EQ, "Expected '=' in assignment");
+            const val = this.parseExpression();
+            this.consumeNewlineOrEof();
+            statements.push({
+              kind: "AssignmentStatement",
+              target,
+              value: val,
+              span: { start: target.span.start, end: val.span.end },
+            });
+            this.skipNewlines();
+            continue;
+          }
+
+          if (
+            this.check(TokenType.MUT) ||
+            (this.check(TokenType.IDENTIFIER) &&
+              (this.peekAhead(1).type === TokenType.EQ ||
+                this.peekAhead(1).type === TokenType.COLON)) ||
+            (this.check(TokenType.UNDERSCORE) &&
+              this.peekAhead(1).type === TokenType.EQ) ||
+            this.isDestructuringBindingStart()
+          ) {
+            if (this.check(TokenType.UNDERSCORE)) {
+              this.advance(); // consume '_'
+              this.advance(); // consume '='
+              const discardExpr = this.parseExpression();
+              this.consumeNewlineOrEof("Expected newline");
+              statements.push({
+                kind: "BindingDeclaration",
+                isMut: false,
+                id: { kind: "Identifier", name: "_", span: discardExpr.span },
+                init: discardExpr,
+                span: discardExpr.span,
+              });
             } else {
+              const bind = this.parseBindingDeclaration();
               statements.push(bind);
             }
+            this.skipNewlines();
+            continue;
           }
-        } else {
+
           const expr = this.parseExpression();
           this.skipNewlines();
 
-          if (this.check(TokenType.DEDENT)) {
+          if (this.check(TokenType.RBRACE) || this.check(TokenType.DEDENT)) {
             const isAllowedImplicitReturn = statements.length === 0;
             if (
               requireExplicitReturn &&
@@ -3037,50 +2977,200 @@ export class Parser {
               span: expr.span,
             });
           }
-        }
-      } catch (err: any) {
-        if (err instanceof ParseError) {
-          this.diagnostics.push(err);
-          this.synchronize();
-        } else {
-          throw err;
+        } catch (err: any) {
+          if (err instanceof ParseError) {
+            this.diagnostics.push(err);
+            this.synchronize();
+          } else {
+            throw err;
+          }
         }
       }
-    }
 
-    if (
-      requireExplicitReturn &&
-      !finalExpression &&
-      statements.at(-1)?.kind !== "ReturnStatement"
-    ) {
-      throw new ParseError(FUNCTION_RETURN_DIAGNOSTIC, {
-        start,
-        end: this.previous().span.end,
-      });
+      if (
+        requireExplicitReturn &&
+        !finalExpression &&
+        statements.at(-1)?.kind !== "ReturnStatement"
+      ) {
+        throw new ParseError(FUNCTION_RETURN_DIAGNOSTIC, {
+          start,
+          end: this.previous().span.end,
+        });
+      }
+      if (hasIndent) {
+        this.consume(TokenType.DEDENT, "Expected unindent after brace block");
+      }
+      this.skipNewlines();
+      const end = this.consume(TokenType.RBRACE, "Expected '}' after block")
+        .span.end;
+      return {
+        kind: "BlockStatement",
+        statements,
+        finalExpression,
+        span: { start, end },
+      };
+    } finally {
+      this.exitScope();
     }
-    this.consume(TokenType.DEDENT, "Expected unindent after function body");
-    const fallbackExpr: Expression = {
-      kind: "Identifier",
-      name: "_error",
-      span: {
-        start: this.previous().span.start,
-        end: this.previous().span.end,
-      },
-    };
-    return {
-      kind: "BlockStatement",
-      statements,
-      finalExpression:
-        finalExpression ?? (statements.length === 0 ? fallbackExpr : undefined),
-      span: {
-        start:
-          statements[0]?.span.start ||
-          (finalExpression
-            ? finalExpression.span.start
-            : this.previous().span.start),
-        end: (finalExpression ?? fallbackExpr).span.end,
-      },
-    };
+  }
+
+  private parseIndentedBlock(requireExplicitReturn = false): BlockStatement {
+    this.enterScope();
+    try {
+      const start = this.previous().span.start;
+      const statements: Statement[] = [];
+      let finalExpression: Expression | undefined;
+
+      while (!this.check(TokenType.DEDENT) && !this.isAtEnd()) {
+        this.skipNewlines();
+        if (this.check(TokenType.DEDENT)) break;
+
+        try {
+          if (this.check(TokenType.WHEN)) {
+            statements.push(this.parseWhenStatement());
+            this.skipNewlines();
+            continue;
+          }
+
+          if (this.match(TokenType.ARROW)) {
+            const retStart = this.previous().span.start;
+            const retExpr = this.parseExpression();
+            this.consumeNewlineOrEof();
+            statements.push({
+              kind: "ReturnStatement",
+              argument: retExpr,
+              span: { start: retStart, end: retExpr.span.end },
+            });
+            this.skipNewlines();
+            continue;
+          }
+
+          if (this.isAssignmentStart()) {
+            const target = this.parseAssignmentTarget();
+            this.consume(TokenType.EQ, "Expected '=' in assignment");
+            const val = this.parseExpression();
+            this.consumeNewlineOrEof();
+            statements.push({
+              kind: "AssignmentStatement",
+              target,
+              value: val,
+              span: { start: target.span.start, end: val.span.end },
+            });
+            this.skipNewlines();
+            continue;
+          }
+
+          if (
+            this.check(TokenType.MUT) ||
+            (this.check(TokenType.IDENTIFIER) &&
+              (this.peekAhead(1).type === TokenType.EQ ||
+                this.peekAhead(1).type === TokenType.COLON)) ||
+            (this.check(TokenType.UNDERSCORE) &&
+              this.peekAhead(1).type === TokenType.EQ) ||
+            this.isDestructuringBindingStart()
+          ) {
+            if (this.check(TokenType.UNDERSCORE)) {
+              this.advance(); // consume '_'
+              this.advance(); // consume '='
+              const discardExpr = this.parseExpression();
+              this.consumeNewlineOrEof("Expected newline");
+              statements.push({
+                kind: "BindingDeclaration",
+                isMut: false,
+                id: { kind: "Identifier", name: "_", span: discardExpr.span },
+                init: discardExpr,
+                span: discardExpr.span,
+              });
+            } else {
+              const bind = this.parseBindingDeclaration();
+              this.skipNewlines();
+              if (this.check(TokenType.DEDENT)) {
+                if (requireExplicitReturn)
+                  throw new ParseError(FUNCTION_RETURN_DIAGNOSTIC, bind.span);
+                bind.isTrailingBinding = true;
+                statements.push(bind);
+                if (
+                  bind.id.kind === "Identifier" ||
+                  bind.id.kind === "UpperIdentifier"
+                ) {
+                  finalExpression = bind.id;
+                }
+                break;
+              } else {
+                statements.push(bind);
+              }
+            }
+          } else {
+            const expr = this.parseExpression();
+            this.skipNewlines();
+
+            if (this.check(TokenType.DEDENT)) {
+              const isAllowedImplicitReturn = statements.length === 0;
+              if (
+                requireExplicitReturn &&
+                !isAllowedImplicitReturn &&
+                expr.kind !== "MatchExpression" &&
+                expr.kind !== "EffectBlockExpression"
+              ) {
+                throw new ParseError(FUNCTION_RETURN_DIAGNOSTIC, expr.span);
+              }
+              finalExpression = expr;
+              break;
+            } else {
+              statements.push({
+                kind: "ExpressionStatement",
+                expression: expr,
+                span: expr.span,
+              });
+            }
+          }
+        } catch (err: any) {
+          if (err instanceof ParseError) {
+            this.diagnostics.push(err);
+            this.synchronize();
+          } else {
+            throw err;
+          }
+        }
+      }
+
+      if (
+        requireExplicitReturn &&
+        !finalExpression &&
+        statements.at(-1)?.kind !== "ReturnStatement"
+      ) {
+        throw new ParseError(FUNCTION_RETURN_DIAGNOSTIC, {
+          start,
+          end: this.previous().span.end,
+        });
+      }
+      this.consume(TokenType.DEDENT, "Expected unindent after function body");
+      const fallbackExpr: Expression = {
+        kind: "Identifier",
+        name: "_error",
+        span: {
+          start: this.previous().span.start,
+          end: this.previous().span.end,
+        },
+      };
+      return {
+        kind: "BlockStatement",
+        statements,
+        finalExpression:
+          finalExpression ??
+          (statements.length === 0 ? fallbackExpr : undefined),
+        span: {
+          start:
+            statements[0]?.span.start ||
+            (finalExpression
+              ? finalExpression.span.start
+              : this.previous().span.start),
+          end: (finalExpression ?? fallbackExpr).span.end,
+        },
+      };
+    } finally {
+      this.exitScope();
+    }
   }
 
   // --- Types ---
