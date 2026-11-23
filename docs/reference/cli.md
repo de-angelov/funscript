@@ -102,6 +102,32 @@ funscript test --watch
 funscript test --engine bun
 ```
 
+### `funscript init`
+
+```text
+funscript init [directory] [--template <template>] [--force]
+```
+
+Scaffold a new FunScript project with configured scripts, dependencies, and examples.
+
+Aliases: `new`.
+
+```sh
+funscript init my-app
+```
+
+```sh
+funscript init my-server --template bun-server
+```
+
+```sh
+funscript init my-ui --template vite-react
+```
+
+```sh
+funscript init --template vite-solid
+```
+
 ### `funscript repl`
 
 ```text

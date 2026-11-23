@@ -63,6 +63,7 @@ const commandOptions: Record<string, ReadonlySet<string>> = {
   fmt: new Set(["--check", "--diff", "--stdin", "--stdin-filepath"]),
   doctor: new Set(["--json"]),
   lsp: new Set(["--stdio"]),
+  init: new Set(["--template", "--force"]),
 };
 
 const valueOptions: Record<string, ReadonlySet<string>> = {
@@ -70,6 +71,7 @@ const valueOptions: Record<string, ReadonlySet<string>> = {
   emit: new Set(["--out"]),
   fmt: new Set(["--stdin-filepath"]),
   test: new Set(["--engine", "--reporter"]),
+  init: new Set(["--template"]),
 };
 
 export function validateCliArgs(
@@ -154,6 +156,19 @@ export const CLI_COMMANDS: readonly CliCommand[] = [
       "funscript test tests/native-funscript.test.fun",
       "funscript test --watch",
       "funscript test --engine bun",
+    ],
+  },
+  {
+    name: "init",
+    aliases: ["new"],
+    usage: "init [directory] [--template <template>] [--force]",
+    description:
+      "Scaffold a new FunScript project with configured scripts, dependencies, and examples.",
+    examples: [
+      "funscript init my-app",
+      "funscript init my-server --template bun-server",
+      "funscript init my-ui --template vite-react",
+      "funscript init --template vite-solid",
     ],
   },
   {

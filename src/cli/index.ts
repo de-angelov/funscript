@@ -36,6 +36,7 @@ import {
   buildRunBundle,
   isBunAvailable,
 } from "./build-bun.js";
+import { initProject } from "./init.js";
 
 const readFile = (filePath: string) =>
   Effect.tryPromise({
@@ -1584,6 +1585,22 @@ const testCommand = (args: string[]) =>
     child.on("error", (err) => resume(Effect.fail(err)));
   });
 
+const initCommand = (args: string[]) =>
+  Effect.gen(function* () {
+    const templateIndex = args.indexOf("--template");
+    const template = templateIndex !== -1 ? args[templateIndex + 1] : undefined;
+    const isForce = args.includes("--force");
+    const targetDir =
+      args.find(
+        (arg, i) =>
+          !arg.startsWith("-") &&
+          (templateIndex === -1 ||
+            (i !== templateIndex && i !== templateIndex + 1)),
+      ) ?? ".";
+
+    yield* initProject(targetDir, { template, force: isForce });
+  });
+
 const helpCommand = Console.log(renderCliHelp(FUNSCRIPT_VERSION));
 
 const program = Effect.gen(function* () {
@@ -1644,6 +1661,9 @@ const program = Effect.gen(function* () {
       return yield* runCommand(commandArgs);
     case "test":
       return yield* testCommand(commandArgs);
+    case "init":
+    case "new":
+      return yield* initCommand(commandArgs);
     case "repl":
       return yield* replCommand(commandArgs);
     case "emit":
