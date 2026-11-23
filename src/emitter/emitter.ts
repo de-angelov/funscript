@@ -4,6 +4,33 @@ import { emitAssemblyScript } from "./assemblyscript.js";
 import { FunScriptError } from "../errors.js";
 import { renderImport, renderExportFrom } from "./imports.js";
 import {
+  emitJsxElement,
+  emitJsxSelfClosingElement,
+  emitJsxTagName,
+  emitJsxAttribute,
+  emitJsxExpressionContainer,
+  emitJsxText,
+  emitJsxChild,
+} from "./jsx.js";
+import {
+  PRIMITIVE_TYPES,
+  EFFECT_TYPE_MODULES,
+  emitPropertyKey,
+  emitTypeParameters,
+  emitTypeNode,
+} from "./types.js";
+import {
+  emitSchemaDeclaration,
+  emitGenericDataSchema,
+  emitCheckedRecordDecoder,
+  emitSchemaTypeField,
+  emitGenericSchemaArgument,
+  emitRefinementStage,
+  flattenPipelineStages,
+  extractBrandNames,
+  getBrandNameFromStage,
+} from "./schemas.js";
+import {
   isRecordContract,
   recordContractType,
   RECORD_CONTRACT_BRAND,
@@ -548,19 +575,6 @@ const EFFECT_V4_MEMBER_RENAMES: Readonly<Record<string, string>> = {
   fork: "forkChild",
 };
 
-const PRIMITIVE_TYPES: Readonly<Record<string, string>> = {
-  String: "string",
-  Number: "number",
-  Boolean: "boolean",
-  Void: "void",
-  Unit: "void",
-  Unknown: "unknown",
-  Any: "any",
-  Null: "null",
-  Undefined: "undefined",
-  Never: "never",
-};
-
 const AUTO_NEW_CONSTRUCTORS = new Set([
   "Set",
   "Map",
@@ -640,29 +654,6 @@ const NATIVE_CONSTRUCTOR_NAMES = new Set([
   "Array",
 ]);
 
-const EFFECT_TYPE_MODULES = new Set([
-  "Option",
-  "Duration",
-  "Result",
-  "Effect",
-  "Config",
-  "Queue",
-  "Ref",
-  "Fiber",
-  "Scope",
-  "Stream",
-  "Chunk",
-  "HashMap",
-  "HashSet",
-  "Cause",
-  "Exit",
-  "Brand",
-]);
-
-function emitPropertyKey(name: string): string {
-  return /^[a-zA-Z_$][a-zA-Z0-9_$]*$/.test(name) ? name : JSON.stringify(name);
-}
-
 export class Emitter {
   private effectImports = new Set<string>();
   private parameterScopes: Array<Map<string, boolean>> = [];
@@ -672,7 +663,7 @@ export class Emitter {
   private userEffectBindings = new Set<string>();
   private effectModuleBindings = new Set<string>();
   private userEsToolkitBindings = new Set<string>();
-  private userImportBindings = new Set<string>();
+  public userImportBindings = new Set<string>();
   private esToolkitImports = new Set<string>();
   private needsTsPattern = false;
   private needsMutative = false;
@@ -684,30 +675,34 @@ export class Emitter {
   private needsOptionTry = false;
   private primitiveIdentifiers = new Set<string>();
   private currentPlaceholderParam: string | null = null;
-  private bindings = new Map<string, BindingDeclaration>();
+  public bindings = new Map<string, BindingDeclaration>();
   private tryContextDepth = 0;
   private activeDraftParams = new Set<string>();
 
-  private declaredTypeNames = new Set<string>();
-  private runtimeSchemaNames = new Set<string>();
-  private genericDataSchemas = new Map<string, number>();
-  private genericSchemaDeclarations = new Map<string, SchemaDeclaration>();
-  private activeSchemaParameters?: Set<string>;
-  private unsafeSchemaBinding = false;
+  public declaredTypeNames = new Set<string>();
+  public runtimeSchemaNames = new Set<string>();
+  public genericDataSchemas = new Map<string, number>();
+  public genericSchemaDeclarations = new Map<string, SchemaDeclaration>();
+  public activeSchemaParameters?: Set<string>;
+  public unsafeSchemaBinding = false;
   private inPipelineStage = false;
-  private recordContracts = new Map<
+  public recordContracts = new Map<
     string,
     import("../ast/types.js").RecordTypeNode
   >();
-  private needsCheckedRecordDecoder = false;
-  private checkedCallbackKinds = new Set<"sync" | "void" | "effect">();
-  private identityRecordSchemas = new Set<string>();
-  private checkedTaggedSchemas = new Map<string, TaggedUnionSchema>();
+  public needsCheckedRecordDecoder = false;
+  public checkedCallbackKinds = new Set<"sync" | "void" | "effect">();
+  public identityRecordSchemas = new Set<string>();
+  public checkedTaggedSchemas = new Map<string, TaggedUnionSchema>();
+
+  public addEffectImport(name: string): void {
+    this.effectImports.add(name);
+  }
 
   constructor(
     private program?: Program,
     contextProgram?: Program,
-    private options: EmitterOptions = {},
+    public options: EmitterOptions = {},
   ) {
     for (const [name, contract] of options.importedRecordContracts ?? [])
       this.recordContracts.set(name, contract);
@@ -1015,777 +1010,11 @@ export class Emitter {
     decl: SchemaDeclaration,
     isExport: boolean,
   ): string {
-    const name = decl.id.name;
-    const exp = isExport ? "export " : "";
-
-    if (
-      decl.typeParams?.length &&
-      decl.body.kind !== "TypeSignatureSchema" &&
-      decl.body.kind !== "TaggedUnionSchema" &&
-      !(decl.body.kind === "RecordSchema")
-    ) {
-      throw new FunScriptError(
-        "Generic runtime schemas are not supported yet; use a TypeScript type alias",
-        decl.span,
-      );
-    }
-
-    switch (decl.body.kind) {
-      case "RecordSchema": {
-        if (this.recordContracts.has(name)) {
-          const brand = `${RECORD_CONTRACT_BRAND}$${name}`;
-          const typeParamsStr = this.emitTypeParameters(decl.typeParams);
-          const contract = `declare const ${brand}: unique symbol;\n${exp}type ${name}${typeParamsStr} = ${this.emitTypeNode(recordContractType(decl.body))} & { readonly [${brand}]?: never };`;
-          return contract + this.emitCheckedRecordDecoder(decl, exp);
-        }
-        if (decl.typeParams?.length)
-          return this.emitGenericDataSchema(decl, exp);
-        this.effectImports.add("Schema");
-        const schemaFields = decl.body.fields
-          .map((f) => {
-            const fieldKey = emitPropertyKey(f.name.name);
-            const schema = this.emitSchemaTypeField(f.typeAnnotation);
-            if (f.optional)
-              return `  ${fieldKey}: Schema.OptionFromOptionalNullOr(${schema}, { onNoneEncoding: "omit" })`;
-            if (!f.defaultValue) return `  ${fieldKey}: ${schema}`;
-            this.effectImports.add("Effect");
-            return `  ${fieldKey}: ${schema}.pipe(Schema.withDecodingDefaultType(Effect.sync(() => ${this.emitExpression(f.defaultValue)})))`;
-          })
-          .join(",\n");
-        return `${exp}const ${name} = Schema.Struct({\n${schemaFields}\n});\n${exp}type ${name} = typeof ${name}.Type;\n${exp}const ${name}FromUnknown = (input: unknown): ${name} => Schema.decodeUnknownSync(${name})(input);`;
-      }
-      case "TaggedUnionSchema": {
-        this.effectImports.add("Data");
-        const typeParams = this.emitTypeParameters(decl.typeParams);
-        const hasTypeParams = Boolean(
-          decl.typeParams && decl.typeParams.length > 0,
-        );
-        const anyArgs = hasTypeParams
-          ? `<${decl.typeParams!.map(() => "any").join(", ")}>`
-          : "";
-        const neverArgs = hasTypeParams
-          ? `<${decl.typeParams!.map(() => "never").join(", ")}>`
-          : "";
-        const typeArgs = hasTypeParams
-          ? `<${decl.typeParams!.map((tp) => tp.name.name).join(", ")}>`
-          : "";
-
-        const collectTypeParamNames = (type: TypeNode): Set<string> => {
-          const names = new Set<string>();
-          const walk = (t: TypeNode | undefined): void => {
-            if (!t) return;
-            if (t.kind === "TypeReferenceNode") {
-              names.add(t.name.name);
-              if (t.typeArgs) t.typeArgs.forEach(walk);
-            } else if (t.kind === "FunctionTypeNode") {
-              t.params.forEach((p) => walk(p.typeAnnotation));
-              walk(t.returnType);
-            } else if (t.kind === "EffectTypeNode") {
-              walk(t.success);
-              walk(t.error);
-              walk(t.requirements);
-            } else if (t.kind === "RecordTypeNode") {
-              t.fields.forEach((f) => walk(f.typeAnnotation));
-            } else if (t.kind === "IntersectionTypeNode") {
-              t.types.forEach(walk);
-            }
-          };
-          walk(type);
-          return names;
-        };
-
-        const typeVariants = decl.body.variants
-          .map((v) => {
-            if (v.fields.length === 0) {
-              return `  ${v.name.name}: {}`;
-            }
-            const fields = v.fields
-              .map(
-                (f) =>
-                  `readonly ${f.name.name}: ${this.emitTypeNode(f.typeAnnotation)}`,
-              )
-              .join("; ");
-            return `  ${v.name.name}: { ${fields} }`;
-          })
-          .join(";\n");
-
-        const constructors = decl.body.variants
-          .map((v) => {
-            if (v.fields.length === 0) {
-              const retType = hasTypeParams ? `${name}${neverArgs}` : name;
-              return `${exp}const ${v.name.name}: ${retType} = $${name}.${v.name.name}();`;
-            }
-            const usedParams = new Set<string>();
-            for (const f of v.fields) {
-              for (const pName of collectTypeParamNames(f.typeAnnotation)) {
-                usedParams.add(pName);
-              }
-            }
-            let constrTypeParams = "";
-            if (hasTypeParams) {
-              const requiredParams = decl.typeParams!.filter((tp) =>
-                usedParams.has(tp.name.name),
-              );
-              const optionalParams = decl.typeParams!.filter(
-                (tp) => !usedParams.has(tp.name.name),
-              );
-              const paramsList = [
-                ...requiredParams.map((tp) => tp.name.name),
-                ...optionalParams.map((tp) => `${tp.name.name} = never`),
-              ];
-              constrTypeParams = `<${paramsList.join(", ")}>`;
-            }
-            const params = v.fields
-              .map(
-                (f) => `${f.name.name}: ${this.emitTypeNode(f.typeAnnotation)}`,
-              )
-              .join(", ");
-            const args = v.fields.map((f) => f.name.name).join(", ");
-            const retType = hasTypeParams ? `${name}${typeArgs}` : name;
-            return `${exp}const ${v.name.name} = ${constrTypeParams}(${params}): ${retType} => $${name}.${v.name.name}({ ${args} });`;
-          })
-          .join("\n");
-
-        return `${exp}type ${name}${typeParams} = Data.TaggedEnum<{\n${typeVariants}\n}>;\nconst $${name} = Data.taggedEnum<${name}${anyArgs}>();\n${constructors}`;
-      }
-      case "StructuralUnionSchema": {
-        this.effectImports.add("Schema");
-        const members = decl.body.members
-          .map((member) => this.emitSchemaTypeField(member))
-          .join(", ");
-        return `${exp}const ${name} = Schema.Union([${members}]);\n${exp}type ${name} = typeof ${name}.Type;\n${exp}const ${name}FromUnknown = (input: unknown): ${name} => Schema.decodeUnknownSync(${name})(input);`;
-      }
-      case "RefinementSchema": {
-        const stages = this.flattenPipelineStages(decl.body.refinement);
-        const brands = this.extractBrandNames(stages);
-
-        if (brands.length > 0) {
-          this.effectImports.add("Schema");
-          this.effectImports.add("Brand");
-          const baseSchema = this.emitSchemaTypeField(decl.body.baseType);
-          const emittedStages = stages.map((s) => this.emitRefinementStage(s));
-
-          const baseTypeName =
-            decl.body.baseType.kind === "TypeReferenceNode" &&
-            decl.body.baseType.name.name === "Int"
-              ? "number"
-              : this.emitTypeNode(decl.body.baseType);
-
-          const brandTypeStr = brands
-            .map((b) => `Brand.Brand<${JSON.stringify(b)}>`)
-            .join(" & ");
-          const typeDef = `${baseTypeName} & ${brandTypeStr}`;
-
-          return `${exp}const ${name} = ${baseSchema}.pipe(${emittedStages.join(", ")});\n${exp}type ${name} = ${typeDef};\n${exp}const ${name}FromUnknown = (input: unknown): ${name} => Schema.decodeUnknownSync(${name})(input);`;
-        }
-
-        this.effectImports.add("pipe");
-        this.effectImports.add("Schema");
-        return `${exp}const ${name} = pipe(${this.emitSchemaTypeField(decl.body.baseType)}, ${this.emitExpression(decl.body.refinement)});\n${exp}type ${name} = typeof ${name}.Type;\n${exp}const ${name}FromUnknown = (input: unknown): ${name} => Schema.decodeUnknownSync(${name})(input);`;
-      }
-      case "TypeSignatureSchema": {
-        return `${exp}type ${name}${this.emitTypeParameters(decl.typeParams)} = ${this.emitTypeNode(decl.body.signature)};`;
-      }
-      case "TsDerivedSchema": {
-        this.effectImports.add("Schema");
-        let schemaExpr: string;
-        const targetType = decl.body.targetType;
-        if (
-          targetType.kind === "TypeReferenceNode" &&
-          this.options.importedSchemas?.has(decl.id.name)
-        ) {
-          schemaExpr = this.options.importedSchemas.get(decl.id.name)!;
-        } else if (
-          targetType.kind === "TypeReferenceNode" &&
-          !PRIMITIVE_TYPES[targetType.name.name] &&
-          targetType.name.name !== "Duration" &&
-          targetType.name.name !== "UUID" &&
-          !this.declaredTypeNames.has(targetType.name.name) &&
-          targetType.name.name !== "Option" &&
-          targetType.name.name !== "Array" &&
-          targetType.name.name !== "Record"
-        ) {
-          schemaExpr =
-            this.options.importedSchemas?.get(decl.id.name) ??
-            `(Schema.Unknown as unknown as Schema.Codec<${this.emitTypeNode(targetType)}>)`;
-        } else {
-          schemaExpr =
-            this.options.importedSchemas?.get(decl.id.name) ??
-            this.emitSchemaTypeField(targetType);
-        }
-        return `${exp}const ${name} = ${schemaExpr};\n${exp}type ${name} = typeof ${name}.Type;\n${exp}const ${name}FromUnknown = (input: unknown): ${name} => Schema.decodeUnknownSync(${name})(input);`;
-      }
-      case "ImportedTsSchema": {
-        this.effectImports.add("Schema");
-        const schemaExpr =
-          this.options.importedSchemas?.get(decl.id.name) ??
-          `(Schema.Unknown as unknown as Schema.Codec<${this.emitTypeNode(decl.body.typeNode)}>)`;
-        return `${exp}const ${name} = ${schemaExpr};\n${exp}type ${name} = typeof ${name}.Type;\n${exp}const ${name}FromUnknown = (input: unknown): ${name} => Schema.decodeUnknownSync(${name})(input);`;
-      }
-    }
+    return emitSchemaDeclaration(this, decl, isExport);
   }
 
-  private emitGenericDataSchema(decl: SchemaDeclaration, exp: string): string {
-    if (decl.body.kind !== "RecordSchema" || !decl.typeParams?.length)
-      throw new Error("Expected a generic record schema");
-    const parameters = decl.typeParams.map((param) => param.name.name);
-    const names = new Set(parameters);
-    if (
-      this.unsafeSchemaBinding ||
-      this.declaredTypeNames.has("Schema") ||
-      this.bindings.has("Schema")
-    ) {
-      throw new FunScriptError(
-        "Generic data schemas require 'Schema' to refer to Effect Schema; rename the conflicting declaration or import.",
-        decl.span,
-      );
-    }
-    if (
-      names.size !== parameters.length ||
-      decl.typeParams.some(
-        (param) =>
-          param.constraint ||
-          [
-            "Schema",
-            "String",
-            "Number",
-            "Boolean",
-            "Array",
-            "Option",
-            "Record",
-            decl.id.name,
-          ].includes(param.name.name),
-      )
-    ) {
-      throw new FunScriptError(
-        "Generic data schemas require distinct, unconstrained type parameters that do not shadow built-in schema names.",
-        decl.span,
-      );
-    }
-    // A generic factory is evaluated when called. Cycles would recurse forever,
-    // including cycles formed by declarations that appear later in the file.
-    const visitFactory = (name: string, active: Set<string>): boolean => {
-      if (active.has(name)) return false;
-      const target = this.genericSchemaDeclarations.get(name);
-      if (!target || target.body.kind !== "RecordSchema") return true;
-      const next = new Set(active).add(name);
-      const params = new Set(
-        target.typeParams?.map((param) => param.name.name),
-      );
-      const visitType = (type: TypeNode): boolean => {
-        if (type.kind === "ParenthesizedTypeNode")
-          return visitType(type.typeNode);
-        if (type.kind === "ArrayTypeNode") return visitType(type.elementType);
-        if (type.kind === "UnionTypeNode") return type.types.every(visitType);
-        if (type.kind === "RecordTypeNode")
-          return type.fields.every((field) => visitType(field.typeAnnotation));
-        if (type.kind !== "TypeReferenceNode") return true;
-        return (
-          (params.has(type.name.name) ||
-            !this.genericSchemaDeclarations.has(type.name.name) ||
-            visitFactory(type.name.name, next)) &&
-          (type.typeArgs?.every(visitType) ?? true)
-        );
-      };
-      return target.body.fields.every((field) =>
-        visitType(field.typeAnnotation),
-      );
-    };
-    if (!visitFactory(decl.id.name, new Set())) {
-      throw new FunScriptError(
-        `Generic data schema '${decl.id.name}' cannot use recursive generic schema factories.`,
-        decl.span,
-      );
-    }
-    const supportsArgument = (type: TypeNode): boolean => {
-      if (type.kind === "ParenthesizedTypeNode")
-        return supportsArgument(type.typeNode);
-      if (type.kind !== "TypeReferenceNode") return false;
-      const name = type.name.name;
-      if (names.has(name)) return !type.typeArgs?.length;
-      if (["String", "Number", "Boolean"].includes(name))
-        return !type.typeArgs?.length && !this.declaredTypeNames.has(name);
-      if (name === "Array")
-        return (
-          type.typeArgs?.length === 1 && supportsArgument(type.typeArgs[0])
-        );
-      const arity =
-        this.genericDataSchemas.get(name) ??
-        this.options.importedGenericDataSchemas?.get(name);
-      if (arity !== undefined)
-        return (
-          type.typeArgs?.length === arity &&
-          type.typeArgs.every(supportsArgument)
-        );
-      return (
-        !type.typeArgs?.length &&
-        ((this.runtimeSchemaNames.has(name) &&
-          !this.genericDataSchemas.has(name)) ||
-          this.options.importedDataSchemas?.has(name) === true)
-      );
-    };
-    const supports = (type: TypeNode): boolean => {
-      if (type.kind === "ParenthesizedTypeNode") return supports(type.typeNode);
-      if (type.kind === "LiteralTypeNode") return true;
-      if (type.kind === "ArrayTypeNode") return supports(type.elementType);
-      if (type.kind === "UnionTypeNode") return type.types.every(supports);
-      if (type.kind === "RecordTypeNode")
-        return type.fields.every(
-          (field) =>
-            field.name.name !== "__proto__" &&
-            !field.optional &&
-            !field.defaultValue &&
-            supports(field.typeAnnotation),
-        );
-      if (type.kind !== "TypeReferenceNode") return false;
-      const name = type.name.name;
-      if (names.has(name)) return !type.typeArgs?.length;
-      if (["String", "Number", "Boolean"].includes(name))
-        return !type.typeArgs?.length && !this.declaredTypeNames.has(name);
-      if (name === "Array")
-        return type.typeArgs?.length === 1 && supports(type.typeArgs[0]);
-      const arity =
-        this.genericDataSchemas.get(name) ??
-        this.options.importedGenericDataSchemas?.get(name);
-      if (arity !== undefined)
-        return (
-          type.typeArgs?.length === arity &&
-          type.typeArgs.every(supportsArgument)
-        );
-      return (
-        !type.typeArgs?.length &&
-        ((this.runtimeSchemaNames.has(name) &&
-          !this.genericDataSchemas.has(name)) ||
-          this.options.importedDataSchemas?.has(name) === true)
-      );
-    };
-    for (const field of decl.body.fields) {
-      if (
-        field.name.name === "__proto__" ||
-        field.defaultValue ||
-        !supports(field.typeAnnotation)
-      ) {
-        throw new FunScriptError(
-          `Generic data schema '${decl.id.name}' currently supports required or optional fields with primitive, local data-schema, type-parameter, array, union, verified generic application, or nested required-record types. Field '${field.name.name}' needs an explicit non-generic schema or contract.`,
-          field.span,
-        );
-      }
-    }
-    this.effectImports.add("Schema");
-    this.effectImports.add("SchemaAST as $funscriptSchemaAST");
-    const previous = this.activeSchemaParameters;
-    this.activeSchemaParameters = names;
-    try {
-      const fields = decl.body.fields
-        .map((field) => {
-          const schema = this.emitSchemaTypeField(field.typeAnnotation);
-          return `  ${emitPropertyKey(field.name.name)}: ${field.optional ? `Schema.OptionFromOptionalNullOr(${schema}, { onNoneEncoding: "omit" })` : schema}`;
-        })
-        .join(",\n");
-      const args = parameters
-        .map(
-          (param) =>
-            `${param} extends Schema.Constraint & { readonly "~type.optionality": "required"; readonly "~type.mutability": "readonly" }`,
-        )
-        .join(", ");
-      const values = parameters.map((param) => `${param}: ${param}`).join(", ");
-      const checks = parameters
-        .map(
-          (param) =>
-            `  if (!Schema.isSchema(${param}) || $funscriptSchemaAST.isOptional($funscriptSchemaAST.toType(${param}.ast)) || $funscriptSchemaAST.toType(${param}.ast).context?.isMutable) throw new TypeError(${JSON.stringify(`${decl.id.name} requires a schema without optional-key or mutable-key modifiers for ${param}`)});`,
-        )
-        .join("\n");
-      const dataType = `{ ${decl.body.fields
-        .map((field) => {
-          const type = this.emitTypeNode(field.typeAnnotation);
-          return `readonly ${emitPropertyKey(field.name.name)}: ${field.optional ? `import("effect").Option.Option<${type}>` : type}`;
-        })
-        .join("; ")} }`;
-      return `${exp}const ${decl.id.name} = <${args}>(${values}) => {\n${checks}\n  return Schema.Struct({\n${fields}\n  });\n};\n${exp}type ${decl.id.name}<${parameters.join(", ")}> = ${dataType};`;
-    } finally {
-      this.activeSchemaParameters = previous;
-    }
-  }
-
-  /** Generate only the subset for which every value has an unambiguous codec. */
-  private emitCheckedRecordDecoder(
-    decl: SchemaDeclaration,
-    exp: string,
-  ): string {
-    if (decl.body.kind !== "RecordSchema" || decl.typeParams?.length) return "";
-    const primitive = (type: TypeNode | undefined): boolean =>
-      type?.kind === "TypeReferenceNode" &&
-      !type.typeArgs?.length &&
-      ["String", "Number", "Boolean"].includes(type.name.name) &&
-      !this.declaredTypeNames.has(type.name.name);
-    const codec = (type: TypeNode | undefined): type is TypeReferenceNode =>
-      !!type &&
-      type.kind === "TypeReferenceNode" &&
-      !type.typeArgs?.length &&
-      (primitive(type) ||
-        this.identityRecordSchemas.has(type.name.name) ||
-        this.checkedTaggedSchemas.has(type.name.name) ||
-        this.options.importedIdentitySchemas?.has(type.name.name) === true);
-    const fields = decl.body.fields;
-    const hasEffect = fields.some(
-      (field) =>
-        field.typeAnnotation.kind === "FunctionTypeNode" &&
-        field.typeAnnotation.returnType.kind === "EffectTypeNode",
-    );
-    if (
-      !fields.some((field) => field.typeAnnotation.kind === "FunctionTypeNode")
-    )
-      return "";
-    for (const field of fields) {
-      if (
-        (hasEffect && field.optional) ||
-        field.defaultValue ||
-        field.name.name === "__proto__"
-      )
-        return "";
-      const type = field.typeAnnotation;
-      if (type.kind === "FunctionTypeNode") {
-        if (
-          type.typeParams?.length ||
-          type.params.some(
-            (param) =>
-              param.optional || param.isRest || !codec(param.typeAnnotation),
-          )
-        )
-          return "";
-        if (type.returnType.kind === "EffectTypeNode") {
-          if (!codec(type.returnType.success)) return "";
-        } else if (
-          hasEffect ||
-          !(
-            primitive(type.returnType) ||
-            (type.returnType.kind === "TypeReferenceNode" &&
-              type.returnType.name.name === "Void" &&
-              !type.returnType.typeArgs?.length &&
-              !this.declaredTypeNames.has("Void"))
-          )
-        )
-          return "";
-      } else if (!codec(type)) return "";
-    }
-    const name = `${decl.id.name}DecodeChecked`;
-    if (
-      this.bindings.has(name) ||
-      this.declaredTypeNames.has(name) ||
-      this.userImportBindings.has(name)
-    ) {
-      // Do not shadow an existing user-defined boundary function.
-      return "";
-    }
-    if (hasEffect) {
-      const checkedName = `${decl.id.name}Checked`;
-      if (
-        this.declaredTypeNames.has(checkedName) ||
-        this.bindings.has(checkedName) ||
-        this.userImportBindings.has(checkedName)
-      )
-        return "";
-    }
-    this.effectImports.add("Schema");
-    this.needsCheckedRecordDecoder = true;
-    const checkedCodec = (type: TypeNode): string => {
-      if (type.kind === "TypeReferenceNode") {
-        const tagged = this.checkedTaggedSchemas.get(type.name.name);
-        if (tagged) {
-          const checks = tagged.variants
-            .map((variant) => {
-              const clauses = [
-                `($value as { readonly _tag?: unknown })._tag === ${JSON.stringify(variant.name.name)}`,
-              ];
-              for (const field of variant.fields) {
-                const fieldType = (field.typeAnnotation as TypeReferenceNode)
-                  .name.name;
-                const access = `($value as { readonly [key: string]: unknown })[${JSON.stringify(field.name.name)}]`;
-                if (
-                  this.identityRecordSchemas.has(fieldType) ||
-                  this.options.importedIdentitySchemas?.has(fieldType)
-                ) {
-                  clauses.push(`Schema.is(${fieldType})(${access})`);
-                } else {
-                  clauses.push(
-                    `typeof ${access} === ${JSON.stringify(fieldType.toLowerCase())}`,
-                  );
-                }
-              }
-              return `(${clauses.join(" && ")})`;
-            })
-            .join(" || ");
-          return `Schema.declare(($value: unknown): $value is ${this.emitTypeNode(type)} => typeof $value === "object" && $value !== null && !globalThis.Array.isArray($value) && (${checks}))`;
-        }
-        if (this.options.importedIdentitySchemas?.has(type.name.name))
-          return type.name.name;
-      }
-      return this.emitSchemaTypeField(type);
-    };
-    const data = fields
-      .filter((field) => field.typeAnnotation.kind !== "FunctionTypeNode")
-      .map(
-        (field) =>
-          `${emitPropertyKey(field.name.name)}: ${field.optional ? `Schema.optional(${checkedCodec(field.typeAnnotation)})` : checkedCodec(field.typeAnnotation)}`,
-      )
-      .join(", ");
-    const callbacks = fields
-      .filter((field) => field.typeAnnotation.kind === "FunctionTypeNode")
-      .map((field) => {
-        const type = field.typeAnnotation as FunctionTypeNode;
-        const args = type.params
-          .map((param) => checkedCodec(param.typeAnnotation!))
-          .join(", ");
-        if (type.returnType.kind === "EffectTypeNode") {
-          this.checkedCallbackKinds.add("effect");
-          const callbackType = `${decl.id.name}[${JSON.stringify(field.name.name)}]`;
-          return `${emitPropertyKey(field.name.name)}: ($value: unknown) => $funscriptCheckedEffect($value as ${callbackType}, Schema.Tuple([${args}]), ${checkedCodec(type.returnType.success)})`;
-        }
-        if (
-          type.returnType.kind === "TypeReferenceNode" &&
-          type.returnType.name.name === "Void"
-        ) {
-          this.checkedCallbackKinds.add("void");
-          return `${emitPropertyKey(field.name.name)}: ($value: unknown) => $funscriptCheckedSyncVoid($value, Schema.Tuple([${args}]), ${type.params.length})`;
-        }
-        this.checkedCallbackKinds.add("sync");
-        return `${emitPropertyKey(field.name.name)}: ($value: unknown) => $funscriptCheckedSync($value, Schema.Tuple([${args}]), ${this.emitSchemaTypeField(type.returnType)})`;
-      })
-      .join(", ");
-    if (hasEffect) {
-      const callbackFields = fields.filter(
-        (field) => field.typeAnnotation.kind === "FunctionTypeNode",
-      );
-      const keys = callbackFields
-        .map((field) => JSON.stringify(field.name.name))
-        .join(" | ");
-      const checkedFields = callbackFields
-        .map((field) => {
-          const type = field.typeAnnotation as FunctionTypeNode;
-          const output = type.returnType as EffectTypeNode;
-          const params = type.params
-            .map(
-              (param) =>
-                `${this.emitBindingTarget(param.name)}: ${this.emitTypeNode(param.typeAnnotation!)}`,
-            )
-            .join(", ");
-          const error = output.error
-            ? this.emitTypeNode(output.error)
-            : "never";
-          const requirements = output.requirements
-            ? this.emitTypeNode(output.requirements)
-            : "never";
-          this.effectImports.add("Effect");
-          return `${emitPropertyKey(field.name.name)}: (${params}) => Effect.Effect<${this.emitTypeNode(output.success)}, ${error} | $funscriptCallbackBoundaryError, ${requirements}>`;
-        })
-        .join("; ");
-      const checkedName = `${decl.id.name}Checked`;
-      return `\n${exp}type ${checkedName} = Omit<${decl.id.name}, ${keys}> & { ${checkedFields} };\n${exp}const ${name} = ($input: ${decl.id.name}): ${checkedName} => $funscriptDecodeCheckedRecord($input, Schema.Struct({ ${data} }), { ${callbacks} });`;
-    }
-    const optionalCallbacks = fields
-      .filter(
-        (field) =>
-          field.optional && field.typeAnnotation.kind === "FunctionTypeNode",
-      )
-      .map((field) => JSON.stringify(field.name.name))
-      .join(", ");
-    return `\n${exp}const ${name} = ($input: unknown): ${decl.id.name} => $funscriptDecodeCheckedRecord($input, Schema.Struct({ ${data} }), { ${callbacks} }, [${optionalCallbacks}] as const);`;
-  }
-
-  private emitSchemaTypeField(typeNode: TypeNode): string {
-    if (
-      typeNode.kind === "QualifiedTypeReferenceNode" ||
-      typeNode.kind === "TypeQueryNode" ||
-      typeNode.kind === "IndexedAccessTypeNode"
-    ) {
-      this.effectImports.add("Schema");
-      return `(Schema.Unknown as unknown as Schema.Codec<${this.emitTypeNode(typeNode)}>)`;
-    }
-    if (typeNode.kind === "ParenthesizedTypeNode") {
-      return this.emitSchemaTypeField(typeNode.typeNode);
-    }
-    this.effectImports.add("Schema");
-    if (typeNode.kind === "LiteralTypeNode")
-      return `Schema.Literal(${JSON.stringify(typeNode.value)})`;
-    if (
-      typeNode.kind === "FunctionTypeNode" ||
-      typeNode.kind === "EffectTypeNode"
-    ) {
-      throw new FunScriptError(
-        "Runtime schema fields cannot validate function or Effect types; use a separate type or an explicit schema",
-        typeNode.span,
-      );
-    }
-    if (typeNode.kind === "RecordTypeNode") {
-      const inner = typeNode.fields
-        .map((f) => {
-          if (f.defaultValue)
-            throw new FunScriptError(
-              "Nested schema field defaults are not supported yet",
-              f.span,
-            );
-          const schema = this.emitSchemaTypeField(f.typeAnnotation);
-          return `  ${f.name.name}: ${f.optional ? `Schema.OptionFromOptionalNullOr(${schema}, { onNoneEncoding: "omit" })` : schema}`;
-        })
-        .join(",\n");
-      return `Schema.Struct({\n${inner}\n})`;
-    }
-    if (typeNode.kind === "ArrayTypeNode") {
-      return `Schema.Array(${this.emitSchemaTypeField(typeNode.elementType)})`;
-    }
-    if (typeNode.kind === "UnionTypeNode") {
-      return `Schema.Union([${typeNode.types.map((type) => this.emitSchemaTypeField(type)).join(", ")}])`;
-    }
-    if (typeNode.kind === "TypeReferenceNode") {
-      const tName = typeNode.name.name;
-      if (this.activeSchemaParameters?.has(tName)) return tName;
-      if (tName === "SchemaInput" && !this.declaredTypeNames.has(tName)) {
-        throw new Error(
-          "SchemaInput is a static input type, not a runtime schema; use the schema itself for validation",
-        );
-      }
-      if (PRIMITIVE_TYPES[tName] || tName === "Duration")
-        return `Schema.${tName}`;
-      if (tName === "UUID") return "Schema.UUID";
-      if (tName === "Int") return "Schema.Int";
-      if (tName === "Option" && typeNode.typeArgs) {
-        return `Schema.Option(${this.emitSchemaTypeField(typeNode.typeArgs[0])})`;
-      }
-      if (tName === "Array" && typeNode.typeArgs?.length === 1) {
-        return `Schema.Array(${this.emitSchemaTypeField(typeNode.typeArgs[0])})`;
-      }
-      if (tName === "Record" && typeNode.typeArgs?.length === 2) {
-        return `Schema.Record(${this.emitSchemaTypeField(typeNode.typeArgs[0])}, ${this.emitSchemaTypeField(typeNode.typeArgs[1])})`;
-      }
-      const genericArity =
-        this.genericDataSchemas.get(tName) ??
-        this.options.importedGenericDataSchemas?.get(tName);
-      if (genericArity !== undefined) {
-        if (typeNode.typeArgs?.length !== genericArity)
-          throw new FunScriptError(
-            `Generic data schema '${tName}' requires ${genericArity} schema argument(s).`,
-            typeNode.span,
-          );
-        return `${tName}(${typeNode.typeArgs.map((arg) => this.emitGenericSchemaArgument(arg, this.options.importedGenericDataSchemas?.has(tName) === true)).join(", ")})`;
-      }
-      if (this.runtimeSchemaNames.has(tName)) return tName;
-      if (this.options.importedSchemas?.has(tName))
-        return this.options.importedSchemas.get(tName)!;
-      if (this.userImportBindings.has(tName)) {
-        if (typeNode.typeArgs?.length)
-          throw new FunScriptError(
-            `Cannot derive a runtime schema for imported generic '${tName}' here. Instantiate its schema factory explicitly.`,
-            typeNode.span,
-          );
-        return tName;
-      }
-      if (this.recordContracts.has(tName)) {
-        throw new FunScriptError(
-          `'${tName}' is a compile-time record contract, not a runtime schema; it cannot be used as a runtime schema field`,
-          typeNode.span,
-        );
-      }
-      if (typeNode.typeArgs?.length)
-        throw new FunScriptError(
-          `Cannot derive a runtime schema for generic '${tName}' here. Provide a concrete runtime schema explicitly.`,
-          typeNode.span,
-        );
-      return `(Schema.Unknown as unknown as Schema.Codec<${this.emitTypeNode(typeNode)}>)`;
-    }
-    return this.emitTypeNode(typeNode);
-  }
-
-  private emitGenericSchemaArgument(
-    type: TypeNode,
-    verifyImports = false,
-  ): string {
-    if (type.kind === "ParenthesizedTypeNode")
-      return this.emitGenericSchemaArgument(type.typeNode, verifyImports);
-    if (type.kind === "TypeReferenceNode") {
-      const name = type.name.name;
-      if (this.activeSchemaParameters?.has(name) && !type.typeArgs?.length)
-        return name;
-      if (
-        ["String", "Number", "Boolean"].includes(name) &&
-        !type.typeArgs?.length &&
-        !this.declaredTypeNames.has(name)
-      )
-        return this.emitSchemaTypeField(type);
-      if (name === "Array" && type.typeArgs?.length === 1)
-        return `Schema.Array(${this.emitGenericSchemaArgument(type.typeArgs[0], verifyImports)})`;
-      const arity =
-        this.genericDataSchemas.get(name) ??
-        this.options.importedGenericDataSchemas?.get(name);
-      if (arity !== undefined && type.typeArgs?.length === arity)
-        return `${name}(${type.typeArgs.map((arg) => this.emitGenericSchemaArgument(arg, verifyImports || this.options.importedGenericDataSchemas?.has(name) === true)).join(", ")})`;
-      if (
-        !type.typeArgs?.length &&
-        (this.runtimeSchemaNames.has(name) ||
-          (this.userImportBindings.has(name) &&
-            (!verifyImports || this.options.importedDataSchemas?.has(name))))
-      )
-        return this.emitSchemaTypeField(type);
-    }
-    throw new FunScriptError(
-      "Generic data schema arguments must name a runtime data schema or supported primitive; compile-time contracts and unknown types cannot validate data.",
-      type.span,
-    );
-  }
-
-  private flattenPipelineStages(expr: Expression): Expression[] {
-    if (expr.kind === "PipelineExpression") {
-      return [
-        ...this.flattenPipelineStages(expr.left),
-        ...this.flattenPipelineStages(expr.right),
-      ];
-    }
-    return [expr];
-  }
-
-  private extractBrandNames(stages: Expression[]): string[] {
-    const brands: string[] = [];
-    for (const stage of stages) {
-      const b = this.getBrandNameFromStage(stage);
-      if (b) brands.push(b);
-    }
-    return brands;
-  }
-
-  private getBrandNameFromStage(stage: Expression): string | null {
-    if (stage.kind !== "CallExpression") return null;
-    const callee = stage.callee;
-    let isBrand = false;
-    if (
-      (callee.kind === "UpperIdentifier" || callee.kind === "Identifier") &&
-      callee.name === "Brand"
-    ) {
-      isBrand = true;
-    } else if (
-      callee.kind === "MemberExpression" &&
-      (callee.object.kind === "Identifier" ||
-        callee.object.kind === "UpperIdentifier") &&
-      (callee.object.name === "Schema" || callee.object.name === "Brand") &&
-      callee.property.name === "brand"
-    ) {
-      isBrand = true;
-    }
-    if (!isBrand || stage.args.length === 0) return null;
-    const first = stage.args[0];
-    if (first.kind === "StringLiteral") {
-      return first.parts
-        .map((p) => (p.kind === "StringRawPart" ? p.value : ""))
-        .join("");
-    }
-    return null;
-  }
-
-  private emitRefinementStage(stage: Expression): string {
-    const brandName = this.getBrandNameFromStage(stage);
-    if (brandName !== null) {
-      this.effectImports.add("Schema");
-      return `Schema.brand(${JSON.stringify(brandName)})`;
-    }
-    return this.emitExpression(stage);
+  public emitSchemaTypeField(typeNode: TypeNode): string {
+    return emitSchemaTypeField(this, typeNode);
   }
 
   private emitErrorDeclaration(
@@ -2327,7 +1556,7 @@ export class Emitter {
     return `${exp}${keyword} ${target}${typeAnn} = ${this.emitExpression(decl.init)};`;
   }
 
-  private emitBindingTarget(target: BindingTarget | Pattern): string {
+  public emitBindingTarget(target: BindingTarget | Pattern): string {
     if (target.kind === "Identifier" || target.kind === "UpperIdentifier") {
       return target.name;
     }
@@ -2540,7 +1769,7 @@ export class Emitter {
     }
   }
 
-  private emitStringLiteral(lit: StringLiteral): string {
+  public emitStringLiteral(lit: StringLiteral): string {
     if (lit.parts.length === 1 && lit.parts[0].kind === "StringRawPart") {
       return JSON.stringify(lit.parts[0].value);
     }
@@ -3065,7 +2294,7 @@ export class Emitter {
     }
   }
 
-  private isUserBinding(name: string): boolean {
+  public isUserBinding(name: string): boolean {
     return (
       this.bindings.has(name) ||
       this.userImportBindings.has(name) ||
@@ -3678,225 +2907,44 @@ export class Emitter {
 
   // --- Types ---
 
-  private emitTypeParameters(
+  public emitTypeParameters(
     typeParams: TypeParameter[] | undefined,
     forArrowExpression = false,
   ): string {
-    if (!typeParams || typeParams.length === 0) return "";
-    const params = typeParams.map((param) =>
-      param.constraint
-        ? `${param.name.name} extends ${this.emitTypeNode(param.constraint)}`
-        : param.name.name,
-    );
-    // TypeScript parses `<A>(...)` as JSX in `.tsx` (and in JSX-enabled contexts like Vite);
-    // a trailing comma keeps unconstrained generic arrow functions valid in both `.ts` and `.tsx`.
-    const needsTsxComma =
-      forArrowExpression &&
-      (this.options.isJsx || typeParams.length === 1) &&
-      typeParams.every((param) => !param.constraint);
-    return `<${params.join(", ")}${needsTsxComma ? "," : ""}>`;
+    return emitTypeParameters(this, typeParams, forArrowExpression);
   }
 
-  private emitTypeNode(node: TypeNode): string {
-    switch (node.kind) {
-      case "QualifiedTypeReferenceNode": {
-        const name = node.parts.map((part) => part.name).join(".");
-        return node.typeArgs?.length
-          ? `${name}<${node.typeArgs.map((arg) => this.emitTypeNode(arg)).join(", ")}>`
-          : name;
-      }
-      case "TypeReferenceNode": {
-        let name = node.name.name;
-        if (name === "SchemaInput" && !this.declaredTypeNames.has(name)) {
-          const arg = node.typeArgs?.[0];
-          if (
-            node.typeArgs?.length !== 1 ||
-            arg?.kind !== "TypeReferenceNode" ||
-            arg.typeArgs?.length
-          ) {
-            throw new Error(
-              "SchemaInput requires one named schema, for example SchemaInput<User>",
-            );
-          }
-          if (this.recordContracts.has(arg.name.name)) {
-            throw new FunScriptError(
-              `${arg.name.name} is a compile-time record contract and has no encoded schema input type. Use the contract type directly or validate data with a separate runtime schema.`,
-              node.span,
-            );
-          }
-          return `typeof ${arg.name.name}.Encoded`;
-        }
-        if (name === "HtmlProps") {
-          const tag = node.typeArgs?.[0]
-            ? this.emitTypeNode(node.typeArgs[0])
-            : '"div"';
-          return `React.ComponentPropsWithoutRef<${tag}>`;
-        }
-        if (PRIMITIVE_TYPES[name]) return PRIMITIVE_TYPES[name];
-        if (name === "Array" && !this.declaredTypeNames.has(name))
-          name = "ReadonlyArray";
-        else if (name === "Map" && !this.declaredTypeNames.has(name))
-          name = "ReadonlyMap";
-        else if (name === "Set" && !this.declaredTypeNames.has(name))
-          name = "ReadonlySet";
-        else if (name === "Record" && !this.declaredTypeNames.has(name)) {
-          if (!this.isUserBinding(name)) this.effectImports.add("Record");
-          name = "Record.ReadonlyRecord";
-        } else if (
-          EFFECT_TYPE_MODULES.has(name) &&
-          !this.declaredTypeNames.has(name)
-        ) {
-          if (!this.isUserBinding(name)) this.effectImports.add(name);
-          name = `${name}.${name}`;
-        }
-        if (node.typeArgs && node.typeArgs.length > 0) {
-          return `${name}<${node.typeArgs.map((t) => this.emitTypeNode(t)).join(", ")}>`;
-        }
-        return name;
-      }
-      case "FunctionTypeNode": {
-        const params = node.params
-          .map((p) => {
-            const rest = p.isRest ? "..." : "";
-            const name = p.name ? this.emitBindingTarget(p.name) : "_";
-            const opt = p.optional ? "?" : "";
-            return p.typeAnnotation
-              ? `${rest}${name}${opt}: ${this.emitTypeNode(p.typeAnnotation)}`
-              : `${rest}${name}${opt}`;
-          })
-          .join(", ");
-        return `${this.emitTypeParameters(node.typeParams)}(${params}) => ${this.emitTypeNode(node.returnType)}`;
-      }
-      case "EffectTypeNode": {
-        this.effectImports.add("Effect");
-        const succ = this.emitTypeNode(node.success);
-        const err = node.error ? this.emitTypeNode(node.error) : "never";
-        const req = node.requirements
-          ? this.emitTypeNode(node.requirements)
-          : "never";
-        return `Effect.Effect<${succ}, ${err}, ${req}>`;
-      }
-      case "RecordTypeNode": {
-        const fields = node.fields
-          .map(
-            (f) =>
-              `readonly ${emitPropertyKey(f.name.name)}${f.optional || f.defaultValue ? "?" : ""}: ${this.emitTypeNode(f.typeAnnotation)}`,
-          )
-          .join("; ");
-        return `{ ${fields} }`;
-      }
-      case "ArrayTypeNode":
-        return `ReadonlyArray<${this.emitTypeNode(node.elementType)}>`;
-      case "UnionTypeNode":
-        return node.types.map((t) => this.emitTypeNode(t)).join(" | ");
-      case "IntersectionTypeNode":
-        return node.types.map((t) => this.emitTypeNode(t)).join(" & ");
-      case "LiteralTypeNode":
-        return JSON.stringify(node.value);
-      case "TypeQueryNode":
-        return `typeof ${this.emitExpression(node.expr)}`;
-      case "IndexedAccessTypeNode":
-        return `${this.emitTypeNode(node.objectType)}[${this.emitTypeNode(node.indexType)}]`;
-      case "ParenthesizedTypeNode":
-        return `(${this.emitTypeNode(node.typeNode)})`;
-      case "TsEscapeTypeNode":
-        return node.code;
-    }
+  public emitTypeNode(node: TypeNode): string {
+    return emitTypeNode(this, node);
   }
 
   // --- JSX ---
 
   public emitJsxElement(el: JSXElement): string {
-    const tagName = this.emitJsxTagName(el.openingElement.name);
-    const attrs = el.openingElement.attributes
-      .map((a) => this.emitJsxAttribute(a))
-      .join(" ");
-    const attrsStr = attrs.length > 0 ? ` ${attrs}` : "";
-    const openTag = tagName === "" ? "<>" : `<${tagName}${attrsStr}>`;
-    const closeTag = tagName === "" ? "</>" : `</${tagName}>`;
-    const childrenStr = el.children.map((c) => this.emitJsxChild(c)).join("");
-    return `${openTag}${childrenStr}${closeTag}`;
+    return emitJsxElement(this, el);
   }
 
   public emitJsxSelfClosingElement(el: JSXSelfClosingElement): string {
-    const tagName = this.emitJsxTagName(el.name);
-    const attrs = el.attributes.map((a) => this.emitJsxAttribute(a)).join(" ");
-    const attrsStr = attrs.length > 0 ? ` ${attrs}` : "";
-    if (tagName === "") {
-      return `<${attrsStr} />`;
-    }
-    return `<${tagName}${attrsStr} />`;
+    return emitJsxSelfClosingElement(this, el);
   }
 
   public emitJsxTagName(name: JSXTagName): string {
-    switch (name.kind) {
-      case "Identifier":
-      case "UpperIdentifier":
-        return name.name;
-      case "MemberExpression":
-        return `${this.emitJsxTagName(name.object as JSXTagName)}.${name.property.name}`;
-      default:
-        return "";
-    }
+    return emitJsxTagName(name);
   }
 
   public emitJsxAttribute(attr: JSXAttribute): string {
-    if (attr.kind === "JSXSpreadAttribute")
-      return `{...${this.emitExpression(attr.argument)}}`;
-    const name = attr.name.name;
-    if (attr.value === undefined) {
-      return name;
-    }
-    if (attr.value.kind === "StringLiteral") {
-      const isSimple = attr.value.parts.every(
-        (p) => p.kind === "StringRawPart",
-      );
-      if (isSimple) {
-        const rawVal = attr.value.parts.map((p) => (p as any).value).join("");
-        return `${name}=${JSON.stringify(rawVal)}`;
-      }
-      return `${name}={${this.emitStringLiteral(attr.value)}}`;
-    }
-    if (attr.value.kind === "JSXExpressionContainer") {
-      const expression = attr.value.expression;
-      const value = this.emitExpression(expression);
-      if (
-        this.options.forwardNullProperties?.has(expression.span.start.offset)
-      ) {
-        this.effectImports.add("Option");
-        return `${name}={Option.getOrNull(${value})}`;
-      }
-      if (
-        this.options.forwardOptionalProperties?.has(
-          expression.span.start.offset,
-        )
-      ) {
-        this.effectImports.add("Option");
-        return `{...((__value: import("effect").Option.Option<any>) => Option.isSome(__value) ? { [${JSON.stringify(name)}]: __value.value } : {})(${value})}`;
-      }
-      return `${name}={${this.options.markCallArguments ? `__funscriptCallArgument(${expression.span.start.offset}, ${value})` : value}}`;
-    }
-    return `${name}={${this.emitExpression(attr.value)}}`;
+    return emitJsxAttribute(this, attr);
   }
 
   public emitJsxExpressionContainer(container: JSXExpressionContainer): string {
-    return `{${this.emitExpression(container.expression)}}`;
+    return emitJsxExpressionContainer(this, container);
   }
 
   public emitJsxText(text: JSXText): string {
-    return text.value;
+    return emitJsxText(text);
   }
 
   public emitJsxChild(child: JSXChild): string {
-    switch (child.kind) {
-      case "JSXText":
-        return this.emitJsxText(child);
-      case "JSXExpressionContainer":
-        return this.emitJsxExpressionContainer(child);
-      case "JSXElement":
-        return this.emitJsxElement(child);
-      case "JSXSelfClosingElement":
-        return this.emitJsxSelfClosingElement(child);
-    }
+    return emitJsxChild(this, child);
   }
 }
