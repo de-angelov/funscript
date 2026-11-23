@@ -68,6 +68,12 @@ export interface BunPluginOptions {
    * Defaults to false.
    */
   serverBoundary?: boolean | ServerBoundaryOptions;
+  /** Automatically append the Effect / main runner snippet to the entry file. */
+  runMain?: boolean;
+  /** Whether building an executable (also appends the main runner snippet). */
+  executable?: boolean;
+  /** Explicit entry file for runMain insertion (defaults to the first compiled module). */
+  entryFile?: string;
 }
 
 export interface BunPluginBuilder {
@@ -311,8 +317,16 @@ export function funscriptBunPlugin(options: BunPluginOptions = {}): BunPlugin {
           }
         }
 
+        let contents = res.typescript;
+        const isEntry = options.entryFile
+          ? path.resolve(args.path) === path.resolve(options.entryFile)
+          : true;
+        if ((options.runMain || options.executable) && isEntry) {
+          contents = `${contents}\nimport * as __funscript_effect from "effect";\nif (typeof main !== "undefined") {\n  if (__funscript_effect.Effect.isEffect(main)) await __funscript_effect.Effect.runPromise(main);\n  else if (typeof main === "function") await main();\n}\n`;
+        }
+
         return {
-          contents: res.typescript,
+          contents,
           loader,
         };
       });

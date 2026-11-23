@@ -13,7 +13,7 @@ import {
 } from "../compiler/project-config.js";
 import { findFunFiles, checkNoTsPaths, readFile, writeFile } from "./io.js";
 
-const projectPolicy: FunScriptProjectConfig = {};
+let projectPolicy: FunScriptProjectConfig = {};
 const checkNoTsPathsProxy = (
   targets: string[],
   effectOnly = false,
@@ -23,9 +23,10 @@ const checkNoTsPathsProxy = (
 
 export const runCommand = (
   args: string[],
-  projectPolicy: FunScriptProjectConfig = {},
+  initialProjectPolicy: FunScriptProjectConfig = {},
 ) =>
   Effect.gen(function* () {
+    projectPolicy = initialProjectPolicy;
     const separator = args.indexOf("--");
     const commandArgs = separator < 0 ? args : args.slice(0, separator);
     const programArgs = separator < 0 ? [] : args.slice(separator + 1);

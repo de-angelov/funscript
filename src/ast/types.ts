@@ -164,7 +164,7 @@ export interface RefinementSchema extends NodeBase {
 
 export interface TypeSignatureSchema extends NodeBase {
   kind: "TypeSignatureSchema";
-  signature: FunctionTypeNode | EffectTypeNode;
+  signature: TypeNode;
 }
 
 export interface ImportedTsSchema extends NodeBase {
@@ -287,7 +287,7 @@ export interface CallExpression extends NodeBase {
 export interface MemberExpression extends NodeBase {
   kind: "MemberExpression";
   object: Expression;
-  property: Identifier;
+  property: Identifier | UpperIdentifier;
 }
 
 export interface IndexExpression extends NodeBase {
@@ -317,7 +317,7 @@ export interface FieldEntry extends NodeBase {
 
 export interface DotPathEntry extends NodeBase {
   kind: "DotPathEntry";
-  path: Identifier[];
+  path: (Identifier | UpperIdentifier)[];
   value: Expression;
 }
 
@@ -374,7 +374,7 @@ export interface AssignmentStatement extends NodeBase {
 
 export interface DotPathExpression extends NodeBase {
   kind: "DotPathExpression";
-  path: Identifier[];
+  path: (Identifier | UpperIdentifier)[];
 }
 
 export interface ExpressionStatement extends NodeBase {
@@ -428,7 +428,7 @@ export interface LiteralPattern extends NodeBase {
 
 export interface VariablePattern extends NodeBase {
   kind: "VariablePattern";
-  name: Identifier;
+  name: Identifier | UpperIdentifier;
 }
 
 export interface ConstructorPattern extends NodeBase {
@@ -545,6 +545,7 @@ export interface StringInterpolationPart {
 export interface BooleanLiteral extends NodeBase {
   kind: "BooleanLiteral";
   value: boolean;
+  rawExpr?: Expression;
 }
 
 export interface Identifier extends NodeBase {

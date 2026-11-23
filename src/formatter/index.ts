@@ -1090,9 +1090,8 @@ export class Formatter {
       case "WildcardPattern":
         return "_";
       case "LiteralPattern": {
-        const rawExpr = (pat.literal as any).rawExpr;
-        if (rawExpr) {
-          return this.formatExpression(rawExpr, 0);
+        if (pat.literal.kind === "BooleanLiteral" && pat.literal.rawExpr) {
+          return this.formatExpression(pat.literal.rawExpr, 0);
         }
         return this.formatLiteral(pat.literal);
       }

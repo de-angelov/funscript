@@ -94,6 +94,9 @@ const result = await Bun.build({
       noGlobalThis: ${Boolean(options.noGlobalThis)},
       noOptional: ${Boolean(options.noOptional)},
       barePipelines: ${Boolean(options.barePipelines)},
+      runMain: ${Boolean(options.runMain)},
+      executable: ${Boolean(options.executable)},
+      entryFile: ${JSON.stringify(entry)},
     })
   ]
 });
@@ -113,11 +116,6 @@ if (!result.success) {
 
   let code = await fs.readFile(targetOut, "utf8");
   let modified = false;
-
-  if (options.runMain || options.executable) {
-    code += `\nimport * as __funscript_effect from "effect";\nif (typeof main !== "undefined") {\n  if (__funscript_effect.Effect.isEffect(main)) await __funscript_effect.Effect.runPromise(main);\n  else if (typeof main === "function") await main();\n}\n`;
-    modified = true;
-  }
 
   if (options.executable) {
     if (!code.startsWith("#!/usr/bin/env bun")) {

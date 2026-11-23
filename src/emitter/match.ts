@@ -236,8 +236,11 @@ export class MatchEmitter {
 
   private emitPatternAsCondition(pattern: Pattern): string {
     if (pattern.kind === "LiteralPattern") {
-      if ((pattern.literal as any).rawExpr) {
-        return this.context.emitExpression((pattern.literal as any).rawExpr);
+      if (
+        pattern.literal.kind === "BooleanLiteral" &&
+        pattern.literal.rawExpr
+      ) {
+        return this.context.emitExpression(pattern.literal.rawExpr);
       }
       if (pattern.literal.kind === "BooleanLiteral") {
         return pattern.literal.value ? "true" : "false";
