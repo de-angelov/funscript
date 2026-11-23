@@ -246,6 +246,28 @@ export function inferPipelineCompanions(
   const pipelineSourceNodes = new Map<number, ts.CallExpression>();
   const directCallNodes = new Map<number, ts.CallExpression>();
 
+  // Some curried Effect APIs have TypeScript signatures whose first stage can
+  // infer `never` when the predicate callback is typed before the receiver is
+  // applied (for example, `Array.filter(predicate)(array)`). Preserve the
+  // companion we already know from the pipeline initializer for later uses of
+  // that local binding instead of losing it to the checker’s intermediate type.
+  const pipelineBindingNames = new Map<number, string>();
+  const collectPipelineBindings = (node: any): void => {
+    if (!node || typeof node !== "object") return;
+    if (Array.isArray(node)) {
+      for (const child of node) collectPipelineBindings(child);
+      return;
+    }
+    if (node.kind === "BindingDeclaration" && node.id?.kind === "Identifier" && node.init?.kind === "PipelineExpression") {
+      pipelineBindingNames.set(node.init.span.start.offset, node.id.name);
+    } else if (node.kind === "AssignmentStatement" && node.target?.kind === "Identifier" && node.value?.kind === "PipelineExpression") {
+      pipelineBindingNames.set(node.value.span.start.offset, node.target.name);
+    }
+    for (const [key, child] of Object.entries(node)) if (key !== "span") collectPipelineBindings(child);
+  };
+  collectPipelineBindings(ast);
+  const bindingCompanions = new Map<string, PipelineCompanionModule>();
+
   const visitNodes = (node: ts.Node): void => {
     if (ts.isCallExpression(node) && ts.isIdentifier(node.expression)) {
       if (node.expression.text === "__funscriptPipelineSource" && node.arguments.length === 2 && ts.isNumericLiteral(node.arguments[0])) {
@@ -268,6 +290,13 @@ export function inferPipelineCompanions(
 
     let currentType = checker.getTypeAtLocation(sourceNode.arguments[1]);
     let currentCompanion = companionForType(currentType);
+    if (
+      s0.kind === "Identifier" &&
+      !currentCompanion &&
+      (currentType.flags & (ts.TypeFlags.Any | ts.TypeFlags.Unknown | ts.TypeFlags.Never)) !== 0
+    ) {
+      currentCompanion = bindingCompanions.get(s0.name);
+    }
 
     // Schema constructors such as Schema.String are values whose inferred
     // TypeScript type is the decoded value (string), not the schema module.
@@ -511,6 +540,11 @@ export function inferPipelineCompanions(
           continue;
         }
       }
+    }
+
+    const bindingName = pipelineBindingNames.get(pipeline.span.start.offset);
+    if (bindingName && currentCompanion && currentCompanion in PIPELINE_COMPANION_CATALOG) {
+      bindingCompanions.set(bindingName, currentCompanion as PipelineCompanionModule);
     }
   }
 

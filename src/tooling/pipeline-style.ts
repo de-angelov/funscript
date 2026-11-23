@@ -91,13 +91,19 @@ export function convertPipelineStyle(source: string, filename: string, style: Pi
       const ast = new Parser(new Lexer(transformed, filename).tokenize(), filename, transformed).parse();
       const inferred = inferPipelineCompanions(ast, context, undefined, undefined, undefined, undefined, undefined, true).stageResolutions;
       let delta = 0;
-      const safe = new Set<Edit>();
+      const candidatesForExactCheck = new Set<Edit>();
       for (const edit of [...edits].sort((a, b) => a.start - b.start)) {
         const resolution = inferred.get(edit.start + delta);
-        if (resolution?.module === edit.module && (resolution.method ?? edit.method) === edit.method) safe.add(edit);
+        // The batch inference pass can lose a candidate when its surrounding
+        // file contains unresolved or unrelated types. Keep unresolved edits
+        // for the exact emission comparison below; it is still the authority
+        // on whether removing this qualifier preserves the generated code.
+        if (!resolution || (resolution.module === edit.module && (resolution.method ?? edit.method) === edit.method)) {
+          candidatesForExactCheck.add(edit);
+        }
         delta += edit.text.length - (edit.end - edit.start);
       }
-      candidates = edits.filter(edit => safe.has(edit));
+      candidates = edits.filter(edit => candidatesForExactCheck.has(edit));
     } catch { /* Fall back to the exact compiler comparison below. */ }
   }
   const accepted: Edit[] = [];
