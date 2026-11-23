@@ -641,7 +641,13 @@ export class Emitter {
   public primitiveIdentifiers = new Set<string>();
   private currentPlaceholderParam: string | null = null;
   public bindings = new Map<string, BindingDeclaration>();
-  private tryContextDepth = 0;
+  private tryContextStack: boolean[] = [false];
+  private pendingTryThunk = false;
+  private pendingTryRecord = false;
+
+  private isInTryContext(): boolean {
+    return this.tryContextStack[this.tryContextStack.length - 1] ?? false;
+  }
   public activeDraftParams = new Set<string>();
 
   public declaredTypeNames = new Set<string>();
@@ -1670,12 +1676,17 @@ export class Emitter {
     this.needsJsInterop = true;
     // compiler.ts replaces this provisional flag with the nullability inferred
     // from the native TypeScript return type.
-    this.tryContextDepth++;
     let inner: string;
-    try {
+    if (expr.expression.kind === "FunctionExpression") {
+      this.pendingTryThunk = true;
       inner = this.emitExpression(expr.expression);
-    } finally {
-      this.tryContextDepth--;
+    } else {
+      this.tryContextStack.push(true);
+      try {
+        inner = this.emitExpression(expr.expression);
+      } finally {
+        this.tryContextStack.pop();
+      }
     }
     if (
       expr.expression.kind === "FunctionExpression" &&
@@ -1845,7 +1856,7 @@ export class Emitter {
       (expr.callee.kind === "UpperIdentifier" ||
         expr.callee.kind === "Identifier") &&
       expr.callee.name === "URL" &&
-      this.tryContextDepth === 0
+      !this.isInTryContext()
     ) {
       throw new FunScriptError(
         `'URL(...)' is unsafe because URL constructors throw on malformed input. Guard it with 'js URL(...)', 'Result.try(() => URL(...))', or 'Option.try(() => URL(...))'.`,
@@ -1862,12 +1873,8 @@ export class Emitter {
     ) {
       this.needsOptionTry = true;
       this.effectImports.add("Option");
-      this.tryContextDepth++;
-      try {
-        return `optionTry(${expr.args.map((a) => this.emitExpression(a)).join(", ")})`;
-      } finally {
-        this.tryContextDepth--;
-      }
+      const emittedArgs = expr.args.map((a) => this.emitTryArgument(a));
+      return `optionTry(${emittedArgs.join(", ")})`;
     }
 
     if (
@@ -1878,12 +1885,8 @@ export class Emitter {
       expr.callee.property.name === "try"
     ) {
       this.effectImports.add("Result");
-      this.tryContextDepth++;
-      try {
-        return `Result.try(${expr.args.map((a) => this.emitExpression(a)).join(", ")})`;
-      } finally {
-        this.tryContextDepth--;
-      }
+      const emittedArgs = expr.args.map((a) => this.emitTryArgument(a));
+      return `Result.try(${emittedArgs.join(", ")})`;
     }
 
     if (expr.callee.kind === "MemberExpression") {
@@ -1908,7 +1911,7 @@ export class Emitter {
       if (
         (objName === "JSON" || objName === "globalThis") &&
         prop === "parse" &&
-        this.tryContextDepth === 0
+        !this.isInTryContext()
       ) {
         throw new FunScriptError(
           `'JSON.parse()' is unsafe because it throws on malformed input. Guard it with 'js JSON.parse(...)', 'Result.try(() => JSON.parse(...))', or use 'Schema.decodeUnknown'.`,
@@ -2302,7 +2305,26 @@ export class Emitter {
     return `(-${arg})`;
   }
 
+  private emitTryArgument(arg: Expression): string {
+    if (arg.kind === "FunctionExpression") {
+      this.pendingTryThunk = true;
+      return this.emitExpression(arg);
+    }
+    if (arg.kind === "RecordExpression") {
+      this.pendingTryRecord = true;
+      return this.emitExpression(arg);
+    }
+    this.tryContextStack.push(true);
+    try {
+      return this.emitExpression(arg);
+    } finally {
+      this.tryContextStack.pop();
+    }
+  }
+
   private emitRecordExpression(expr: RecordExpression): string {
+    const isTryRecord = this.pendingTryRecord;
+    this.pendingTryRecord = false;
     const hasDotPaths = expr.entries.some((e) => e.kind === "DotPathEntry");
     if (hasDotPaths) {
       // Lower to Mutative create
@@ -2344,7 +2366,22 @@ export class Emitter {
         if (e.kind === "SpreadEntry")
           return `...${this.emitExpression(e.argument)}`;
         if (e.kind === "FieldEntry") {
-          let val = this.emitExpression(e.value);
+          let val: string;
+          if (isTryRecord && e.key.name === "try") {
+            if (e.value.kind === "FunctionExpression") {
+              this.pendingTryThunk = true;
+              val = this.emitExpression(e.value);
+            } else {
+              this.tryContextStack.push(true);
+              try {
+                val = this.emitExpression(e.value);
+              } finally {
+                this.tryContextStack.pop();
+              }
+            }
+          } else {
+            val = this.emitExpression(e.value);
+          }
           if (
             this.options.forwardNullProperties?.has(e.value.span.start.offset)
           ) {
@@ -2380,6 +2417,8 @@ export class Emitter {
   }
 
   private emitFunctionExpression(expr: FunctionExpression): string {
+    const isTryThunk = this.pendingTryThunk;
+    this.pendingTryThunk = false;
     for (const p of expr.params) {
       if (this.isPrimitiveType(p.typeAnnotation)) {
         for (const n of this.collectBindingNames(p.name)) {
@@ -2556,6 +2595,7 @@ export class Emitter {
     this.parameterScopes.push(new Map(paramScopeEntries));
     this.variableTypeScopes.push(new Map(varTypeEntries));
     this.recordScopes.push(records);
+    this.tryContextStack.push(isTryThunk);
     try {
       for (const name of records.keys())
         if (records.get(name))
@@ -2570,6 +2610,7 @@ export class Emitter {
       }
       return `${typeParams}(${params})${retType} => ${this.emitArrowExpression(expr.body)}`;
     } finally {
+      this.tryContextStack.pop();
       this.recordScopes.pop();
       this.parameterScopes.pop();
       this.variableTypeScopes.pop();

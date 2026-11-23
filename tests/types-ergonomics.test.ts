@@ -628,6 +628,65 @@ export safeJsJson = (raw: String) =>
     );
   });
 
+  it("does not leak try-context into nested closures", () => {
+    const nestedClosureOption = `
+export leak = (raw: String) =>
+  Option.try(() => {
+    later = () => JSON.parse(raw)
+    => later
+  })
+`;
+    expect(() => Effect.runSync(compileString(nestedClosureOption))).toThrow(
+      "'JSON.parse()' is unsafe because it throws on malformed input.",
+    );
+
+    const nestedClosureResult = `
+export leak = (raw: String) =>
+  Result.try(() => {
+    later = () => URL(raw)
+    => later
+  })
+`;
+    expect(() => Effect.runSync(compileString(nestedClosureResult))).toThrow(
+      "'URL(...)' is unsafe because URL constructors throw on malformed input.",
+    );
+
+    const nestedClosureResultRecord = `
+export leak = (raw: String) =>
+  Result.try({
+    "try": () => {
+      later = () => JSON.parse(raw)
+      => later
+    },
+    "catch": (e) => e
+  })
+`;
+    expect(() =>
+      Effect.runSync(compileString(nestedClosureResultRecord)),
+    ).toThrow("'JSON.parse()' is unsafe because it throws on malformed input.");
+
+    const nestedClosureJs = `
+export leak = (raw: String) =>
+  js (() => {
+    later = () => JSON.parse(raw)
+    => later
+  })
+`;
+    expect(() => Effect.runSync(compileString(nestedClosureJs))).toThrow(
+      "'JSON.parse()' is unsafe because it throws on malformed input.",
+    );
+
+    const safeNestedTry = `
+export safe = (raw: String) =>
+  Option.try(() => {
+    safeLater = () => Option.try(() => JSON.parse(raw))
+    => safeLater
+  })
+`;
+    const res = Effect.runSync(compileString(safeNestedTry));
+    expect(res.typescript).toContain("optionTry");
+  });
+
   it("bans mutating collection methods on Map and Set while allowing web params", () => {
     const invalidSetAdd = `
 export addItem = (items: Set<String>, item: String) => items.add(item)
