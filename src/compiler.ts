@@ -546,6 +546,7 @@ export const compileString = (
             importedGenericDataSchemas,
             importedDataSchemas,
             isJsx: filename.endsWith(".funx"),
+            context,
           };
           const optionalResolutions = resolveOptionalArguments(
             ast,

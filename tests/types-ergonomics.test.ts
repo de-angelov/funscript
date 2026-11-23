@@ -7,7 +7,10 @@ import { format } from "../src/formatter/index.js";
 
 function evaluateTsFunction(tsCode: string, fnName: string) {
   const cjs = ts.transpileModule(tsCode, {
-    compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 },
+    compilerOptions: {
+      module: ts.ModuleKind.CommonJS,
+      target: ts.ScriptTarget.ES2022,
+    },
   }).outputText;
   const module = { exports: {} as any };
   const fn = new Function("exports", "require", "module", "match", "P", cjs);
@@ -56,7 +59,9 @@ export schema RedisClientProviderOptions<Client> = {
 }
 `;
     const res = Effect.runSync(compileString(src));
-    expect(res.typescript).toContain("export type RedisClientProviderOptions<Client> = { readonly env?: NodeJS.ProcessEnv; readonly clientFactory: (config: RedisConfig) => Client }");
+    expect(res.typescript).toContain(
+      "export type RedisClientProviderOptions<Client> = { readonly env?: NodeJS.ProcessEnv; readonly clientFactory: (config: RedisConfig) => Client }",
+    );
   });
 
   it("compiles Any, Null, and Undefined primitive types", () => {
@@ -96,7 +101,9 @@ export g = (x?: String) =>
 `;
     const res = Effect.runSync(compileString(src));
     expect(res.typescript).toContain("($funscriptOptional0?: string)");
-    expect(res.typescript).toContain("Option.fromUndefinedOr($funscriptOptional0)");
+    expect(res.typescript).toContain(
+      "Option.fromUndefinedOr($funscriptOptional0)",
+    );
   });
 
   it("supports default values on record contract schemas and defaulted record parameter", () => {
@@ -164,9 +171,15 @@ export run = () =>
   }
 `;
     const res = Effect.runSync(compileString(src));
-    expect(res.typescript).toContain("const [greeting, code] = yield* getPair();");
-    expect(res.typescript).toContain("const { name, count } = yield* getRecord();");
-    expect(res.typescript).toContain("const { name: customName } = { name: \"test\" };");
+    expect(res.typescript).toContain(
+      "const [greeting, code] = yield* getPair();",
+    );
+    expect(res.typescript).toContain(
+      "const { name, count } = yield* getRecord();",
+    );
+    expect(res.typescript).toContain(
+      'const { name: customName } = { name: "test" };',
+    );
   });
 
   it("supports mutable destructuring and top-level export destructuring", () => {
@@ -204,7 +217,7 @@ export run = (arr: Array<Number>, i: Number) =>
     const res = Effect.runSync(compileString(src));
     expect(res.typescript).toContain("fromNullishOr(arr[0])");
     expect(res.typescript).toContain("fromNullishOr(arr[i])");
-    expect(res.typescript).toContain("import { Option } from \"effect\";");
+    expect(res.typescript).toContain('import { Option } from "effect";');
   });
 
   it("preserves raw property indexing for string literal keys and mutable assignment targets", () => {
@@ -229,7 +242,9 @@ export describeList = (list: Array<Number>) =>
 `;
     const res = Effect.runSync(compileString(src));
     expect(res.typescript).toContain(".with([], ($matched: any) => {");
-    expect(res.typescript).toContain(".with([P._, ...P.array()], ($matched: any) => {");
+    expect(res.typescript).toContain(
+      ".with([P._, ...P.array()], ($matched: any) => {",
+    );
     expect(res.typescript).toContain("const [head, ...tail] = $matched;");
   });
 
@@ -264,8 +279,12 @@ export getPair = ([first, ...rest]: Array<String>) =>
   => first
 `;
     const res = Effect.runSync(compileString(src));
-    expect(res.typescript).toContain("({ name, age }: { readonly name: string; readonly age: number }) =>");
-    expect(res.typescript).toContain("([first, ...rest]: ReadonlyArray<string>) =>");
+    expect(res.typescript).toContain(
+      "({ name, age }: { readonly name: string; readonly age: number }) =>",
+    );
+    expect(res.typescript).toContain(
+      "([first, ...rest]: ReadonlyArray<string>) =>",
+    );
 
     const getProps = evaluateTsFunction(res.typescript, "getProps");
     const getPair = evaluateTsFunction(res.typescript, "getPair");
@@ -275,10 +294,10 @@ export getPair = ([first, ...rest]: Array<String>) =>
 
   it("formats function parameter destructuring cleanly", () => {
     const src = `export getProps = ({ name, age }: { name: String, age: Number }) =>
-  => name
+  name
 
 export getPair = ([first, ...rest]: Array<String>) =>
-  => first
+  first
 `;
     const formatted = format(src);
     expect(formatted).toBe(src);
@@ -318,8 +337,12 @@ export withGenericTag = (id: Number) =>
   => sql<{ id: Number }>\`INSERT INTO users (id) VALUES (\${id})\`
 `;
     const res = Effect.runSync(compileString(src));
-    expect(res.typescript).toContain("tagFn`SELECT * FROM users WHERE id = ${id} LIMIT 1`");
-    expect(res.typescript).toContain("sql<{ readonly id: number }>`INSERT INTO users (id) VALUES (${id})`");
+    expect(res.typescript).toContain(
+      "tagFn`SELECT * FROM users WHERE id = ${id} LIMIT 1`",
+    );
+    expect(res.typescript).toContain(
+      "sql<{ readonly id: number }>`INSERT INTO users (id) VALUES (${id})`",
+    );
 
     const query = evaluateTsFunction(res.typescript, "query");
     expect(query(42)).toBe("SELECT * FROM users WHERE id = 42 LIMIT 1");
@@ -327,10 +350,10 @@ export withGenericTag = (id: Number) =>
 
   it("formats template literals and tagged template expressions cleanly", () => {
     const src = `export query = (id: Number) =>
-  => tagFn\`SELECT * FROM users WHERE id = \${id} LIMIT 1\`
+  tagFn\`SELECT * FROM users WHERE id = \${id} LIMIT 1\`
 
 export typedQuery = (id: Number) =>
-  => sql<{ id: Number }>\`INSERT INTO users VALUES (\${id})\`
+  sql<{ id: Number }>\`INSERT INTO users VALUES (\${id})\`
 `;
     const formatted = format(src);
     expect(formatted).toBe(src);
@@ -353,8 +376,12 @@ export doNothing = (): Unit =>
   Unit
 `;
     const res = Effect.runSync(compileString(src));
-    expect(res.typescript).toContain("export const logMessage = (msg: string): void =>");
-    expect(res.typescript).toContain("export type Task = Effect.Effect<void, Error, never>;");
+    expect(res.typescript).toContain(
+      "export const logMessage = (msg: string): void =>",
+    );
+    expect(res.typescript).toContain(
+      "export type Task = Effect.Effect<void, Error, never>;",
+    );
     expect(res.typescript).toContain("export const doNothing = (): void =>");
     expect(res.typescript).not.toContain("return Unit;");
 
@@ -392,21 +419,21 @@ export totalDivide = (a: Number, b: Number) => Number.divide(a, b)
 export doubleAll = (items: Array<Number>) => items.map((x) => x * 2)
 `;
     expect(() => Effect.runSync(compileString(invalidMap))).toThrow(
-      "Native array method '.map()' is banned by the Effect style guide. Use 'Array.map(...)' or pipeline '|> Array.map(...)' instead."
+      "Native array method '.map()' is banned by the Effect style guide. Use 'Array.map(...)' or pipeline '|> Array.map(...)' instead.",
     );
 
     const invalidFilter = `
 export positive = (items: Array<Number>) => items.filter((x) => x > 0)
 `;
     expect(() => Effect.runSync(compileString(invalidFilter))).toThrow(
-      "Native array method '.filter()' is banned by the Effect style guide. Use 'Array.filter(...)' or pipeline '|> Array.filter(...)' instead."
+      "Native array method '.filter()' is banned by the Effect style guide. Use 'Array.filter(...)' or pipeline '|> Array.filter(...)' instead.",
     );
 
     const invalidSort = `
 export sortItems = (items: Array<Number>) => items.sort((a, b) => a - b)
 `;
     expect(() => Effect.runSync(compileString(invalidSort))).toThrow(
-      "Native array method '.sort()' is banned by the Effect style guide. Use 'Array.sort(...)' or pipeline '|> Array.sort(...)' instead."
+      "Native array method '.sort()' is banned by the Effect style guide. Use 'Array.sort(...)' or pipeline '|> Array.sort(...)' instead.",
     );
   });
 
@@ -423,9 +450,40 @@ export doubleArrayDirect = (items: Array<Number>): Array<Number> =>
     expect(res.typescript).toContain("Array.map");
 
     const doubleArray = evaluateTsFunction(res.typescript, "doubleArray");
-    const doubleArrayDirect = evaluateTsFunction(res.typescript, "doubleArrayDirect");
+    const doubleArrayDirect = evaluateTsFunction(
+      res.typescript,
+      "doubleArrayDirect",
+    );
     expect(doubleArray([1, 2, 3])).toEqual([2, 4, 6]);
     expect(doubleArrayDirect([1, 2, 3])).toEqual([2, 4, 6]);
+  });
+
+  it("allows method calls on non-native third-party and custom types (Observable, QueryBuilder, Store)", () => {
+    const customTypes = `
+ts {
+  export interface Observable<T> {
+    map<U>(fn: (x: T) => U): Observable<U>
+  }
+  export interface QueryBuilder {
+    filter(predicate: (x: any) => boolean): QueryBuilder
+  }
+  export interface CustomStore {
+    set(key: string, val: any): void
+    delete(key: string): boolean
+  }
+  declare const myObservable: Observable<number>
+}
+
+export transformObs = (obs: Observable<Number>) => obs.map((x) => x * 2)
+export filterQuery = (qb: QueryBuilder) => qb.filter((x) => true)
+export saveToStore = (store: CustomStore, k: String, v: Number) => store.set(k, v)
+export escapeHatchCall = myObservable.map((x) => x + 1)
+`;
+    const res = Effect.runSync(compileString(customTypes));
+    expect(res.typescript).toContain("obs.map(");
+    expect(res.typescript).toContain("qb.filter(");
+    expect(res.typescript).toContain("store.set(k, v)");
+    expect(res.typescript).toContain("myObservable.map(");
   });
 
   it("bans native String prototype methods under Effect style guide", () => {
@@ -433,21 +491,21 @@ export doubleArrayDirect = (items: Array<Number>): Array<Number> =>
 export clean = (s: String) => s.trim()
 `;
     expect(() => Effect.runSync(compileString(invalidTrim))).toThrow(
-      "Native string method '.trim()' is banned by the Effect style guide. Use 'String.trim(...)' or pipeline '|> String.trim' instead."
+      "Native string method '.trim()' is banned by the Effect style guide. Use 'String.trim(...)' or pipeline '|> String.trim' instead.",
     );
 
     const invalidLower = `
 export lower = (s: String) => s.toLowerCase()
 `;
     expect(() => Effect.runSync(compileString(invalidLower))).toThrow(
-      "Native string method '.toLowerCase()' is banned by the Effect style guide. Use 'String.toLowerCase(...)' or pipeline '|> String.toLowerCase' instead."
+      "Native string method '.toLowerCase()' is banned by the Effect style guide. Use 'String.toLowerCase(...)' or pipeline '|> String.toLowerCase' instead.",
     );
 
     const invalidSplit = `
 export parts = (s: String) => s.split(",")
 `;
     expect(() => Effect.runSync(compileString(invalidSplit))).toThrow(
-      "Native string method '.split()' is banned by the Effect style guide. Use 'String.split(...)' or pipeline '|> String.split(...)' instead."
+      "Native string method '.split()' is banned by the Effect style guide. Use 'String.split(...)' or pipeline '|> String.split(...)' instead.",
     );
   });
 
@@ -456,28 +514,28 @@ export parts = (s: String) => s.split(",")
 export getKeys = (o: Object) => Object.keys(o)
 `;
     expect(() => Effect.runSync(compileString(invalidKeys))).toThrow(
-      "'Object.keys()' is banned by the Effect style guide. Use Record.keys(...) instead."
+      "'Object.keys()' is banned by the Effect style guide. Use Record.keys(...) instead.",
     );
 
     const invalidValues = `
 export getValues = (o: Object) => Object.values(o)
 `;
     expect(() => Effect.runSync(compileString(invalidValues))).toThrow(
-      "'Object.values()' is banned by the Effect style guide. Use Record.values(...) instead."
+      "'Object.values()' is banned by the Effect style guide. Use Record.values(...) instead.",
     );
 
     const invalidAssign = `
 export merge = (a: Object, b: Object) => Object.assign({}, a, b)
 `;
     expect(() => Effect.runSync(compileString(invalidAssign))).toThrow(
-      "'Object.assign()' is banned by the Effect style guide. Use Record.union(...) or object spread '{ ...a, ...b }' instead."
+      "'Object.assign()' is banned by the Effect style guide. Use Record.union(...) or object spread '{ ...a, ...b }' instead.",
     );
 
     const invalidFreeze = `
 export freezeObj = (o: Object) => Object.freeze(o)
 `;
     expect(() => Effect.runSync(compileString(invalidFreeze))).toThrow(
-      "'Object.freeze()' is banned by the Effect style guide. Use plain record literals '{ ... }' (FunScript records are already immutable) instead."
+      "'Object.freeze()' is banned by the Effect style guide. Use plain record literals '{ ... }' (FunScript records are already immutable) instead.",
     );
   });
 
@@ -490,7 +548,9 @@ export recordKeys = (r: Object): Array<String> =>
   Record.keys(r)
 `;
     const res = Effect.runSync(compileString(valid));
-    expect(res.typescript).toMatch(/import \{.*Record.*String.*\} from "effect";|import \{.*String.*Record.*\} from "effect";/);
+    expect(res.typescript).toMatch(
+      /import \{.*Record.*String.*\} from "effect";|import \{.*String.*Record.*\} from "effect";/,
+    );
     expect(res.typescript).toContain("String.trim");
     expect(res.typescript).toContain("Record.keys");
 
@@ -506,21 +566,21 @@ export recordKeys = (r: Object): Array<String> =>
 export toNum = (s: String) => parseInt(s)
 `;
     expect(() => Effect.runSync(compileString(invalidParseInt))).toThrow(
-      "'parseInt()' is banned by the Effect style guide because it produces NaN on invalid input. Use 'Number.parse(s)' instead for total parsing returning Option<number>."
+      "'parseInt()' is banned by the Effect style guide because it produces NaN on invalid input. Use 'Number.parse(s)' instead for total parsing returning Option<number>.",
     );
 
     const invalidParseFloat = `
 export toFloat = (s: String) => parseFloat(s)
 `;
     expect(() => Effect.runSync(compileString(invalidParseFloat))).toThrow(
-      "'parseFloat()' is banned by the Effect style guide because it produces NaN on invalid input. Use 'Number.parse(s)' instead for total parsing returning Option<number>."
+      "'parseFloat()' is banned by the Effect style guide because it produces NaN on invalid input. Use 'Number.parse(s)' instead for total parsing returning Option<number>.",
     );
 
     const invalidNumberParseInt = `
 export toNum = (s: String) => Number.parseInt(s)
 `;
     expect(() => Effect.runSync(compileString(invalidNumberParseInt))).toThrow(
-      "'Number.parseInt()' is banned by the Effect style guide because it produces NaN on invalid input. Use 'Number.parse(s)' instead for total parsing returning Option<number>."
+      "'Number.parseInt()' is banned by the Effect style guide because it produces NaN on invalid input. Use 'Number.parse(s)' instead for total parsing returning Option<number>.",
     );
 
     const validNumberParse = `
@@ -541,14 +601,14 @@ export parseTotal = (s: String): Number =>
 export parsePayload = (raw: String) => JSON.parse(raw)
 `;
     expect(() => Effect.runSync(compileString(directJson))).toThrow(
-      "'JSON.parse()' is unsafe because it throws on malformed input. Guard it with 'js JSON.parse(...)', 'Result.try(() => JSON.parse(...))', or use 'Schema.decodeUnknown'."
+      "'JSON.parse()' is unsafe because it throws on malformed input. Guard it with 'js JSON.parse(...)', 'Result.try(() => JSON.parse(...))', or use 'Schema.decodeUnknown'.",
     );
 
     const directUrl = `
 export makeUrl = (raw: String) => URL(raw)
 `;
     expect(() => Effect.runSync(compileString(directUrl))).toThrow(
-      "'URL(...)' is unsafe because URL constructors throw on malformed input. Guard it with 'js URL(...)', 'Result.try(() => URL(...))', or 'Option.try(() => URL(...))'."
+      "'URL(...)' is unsafe because URL constructors throw on malformed input. Guard it with 'js URL(...)', 'Result.try(() => URL(...))', or 'Option.try(() => URL(...))'.",
     );
 
     const guardedJson = `
@@ -563,7 +623,9 @@ export safeJsJson = (raw: String) =>
   js JSON.parse(raw)
 `;
     const resJs = Effect.runSync(compileString(guardedWithJs));
-    expect(resJs.typescript).toContain('__funscriptJs(() => JSON.parse(raw), "unknown")');
+    expect(resJs.typescript).toContain(
+      '__funscriptJs(() => JSON.parse(raw), "unknown")',
+    );
   });
 
   it("bans mutating collection methods on Map and Set while allowing web params", () => {
@@ -571,21 +633,21 @@ export safeJsJson = (raw: String) =>
 export addItem = (items: Object, item: String) => items.add(item)
 `;
     expect(() => Effect.runSync(compileString(invalidSetAdd))).toThrow(
-      "Native collection method '.add()' is banned by the Effect style guide"
+      "Native collection method '.add()' is banned by the Effect style guide",
     );
 
     const invalidCollectionClear = `
 export reset = (c: Object) => c.clear()
 `;
     expect(() => Effect.runSync(compileString(invalidCollectionClear))).toThrow(
-      "Native collection method '.clear()' is banned by the Effect style guide"
+      "Native collection method '.clear()' is banned by the Effect style guide",
     );
 
     const invalidMapSet = `
 export updateMap = (map: Object, k: String, v: String) => map.set(k, v)
 `;
     expect(() => Effect.runSync(compileString(invalidMapSet))).toThrow(
-      "Native collection method '.set()' is banned by the Effect style guide"
+      "Native collection method '.set()' is banned by the Effect style guide",
     );
 
     const validWebParams = `
@@ -614,7 +676,7 @@ export formatSlug = (name: String): String =>
 export roll = () => Math.random()
 `;
     expect(() => Effect.runSync(compileString(invalidMathRandom))).toThrow(
-      "'Math.random()' is banned by the Effect style guide because it is unmanaged and non-deterministic. Use 'Random.next' or 'Random.nextIntBetween' instead."
+      "'Math.random()' is banned by the Effect style guide because it is unmanaged and non-deterministic. Use 'Random.next' or 'Random.nextIntBetween' instead.",
     );
   });
 
@@ -623,7 +685,7 @@ export roll = () => Math.random()
 export updateYear = (d: Object) => d.setFullYear(2026)
 `;
     expect(() => Effect.runSync(compileString(invalidDateMutation))).toThrow(
-      "Native date method '.setFullYear()' is banned by the Effect style guide"
+      "Native date method '.setFullYear()' is banned by the Effect style guide",
     );
   });
 
@@ -690,9 +752,15 @@ export callInterop = (optStr: Option<String>) => effect {
 }
 `;
     const res = Effect.runSync(compileString(src));
-    expect(res.typescript).toContain("foreignOptional(Option.getOrUndefined(optStr))");
-    expect(res.typescript).toContain("foreignNull(\"data\", Option.getOrNull(optStr), 2)");
+    expect(res.typescript).toContain(
+      "foreignOptional(Option.getOrUndefined(optStr))",
+    );
+    expect(res.typescript).toContain(
+      'foreignNull("data", Option.getOrNull(optStr), 2)',
+    );
     expect(res.typescript).toContain('["deletedAt"]: Option.getOrNull(optStr)');
-    expect(res.typescript).toContain('Option.isSome(__value) ? { ["comment"]: __value.value } : {}');
+    expect(res.typescript).toContain(
+      'Option.isSome(__value) ? { ["comment"]: __value.value } : {}',
+    );
   });
 });

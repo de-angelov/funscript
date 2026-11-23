@@ -6,6 +6,7 @@ import type {
   EffectBlockExpression,
   Expression,
   FunctionBody,
+  Identifier,
   IndexExpression,
   JsExpression,
   MemberExpression,
@@ -209,7 +210,10 @@ export function emitParBlockExpression(
   ctx.addEffectImport("Effect");
   const entries: string[] = [];
   const boundNames: string[] = [];
-  const bindings: Array<{ resultKey: string; target: BindingTarget | Pattern }> = [];
+  const bindings: Array<{
+    resultKey: string;
+    target: BindingTarget | Pattern;
+  }> = [];
   const usedNames = expr.body.flatMap((statement) =>
     statement.kind === "EffectBindStatement"
       ? ctx.collectBindingNames(statement.id)
@@ -220,10 +224,11 @@ export function emitParBlockExpression(
 
   for (const s of expr.body) {
     if (s.kind === "EffectBindStatement") {
-      const isIdentifier =
-        s.id.kind === "Identifier" || s.id.kind === "UpperIdentifier";
+      const isIdentifier = s.id.kind === "Identifier";
       hasDestructuring ||= !isIdentifier;
-      let key = isIdentifier ? s.id.name : `__funscriptPar${syntheticIndex++}`;
+      let key = isIdentifier
+        ? (s.id as Identifier).name
+        : `__funscriptPar${syntheticIndex++}`;
       while (!isIdentifier && usedNames.includes(key)) {
         key = `__funscriptPar${syntheticIndex++}`;
       }
@@ -249,20 +254,20 @@ export function emitParBlockExpression(
     !hasDestructuring &&
     (!expr.hasExplicitReturn ||
       (expr.finalExpression.kind === "RecordExpression" &&
-      expr.finalExpression.entries.length === boundNames.length &&
-      expr.finalExpression.entries.every((e, i) => {
-        if (e.kind === "ShorthandEntry") {
-          return e.key.name === boundNames[i];
-        }
-        if (e.kind === "FieldEntry") {
-          return (
-            e.key.name === boundNames[i] &&
-            e.value.kind === "Identifier" &&
-            e.value.name === boundNames[i]
-          );
-        }
-        return false;
-      })));
+        expr.finalExpression.entries.length === boundNames.length &&
+        expr.finalExpression.entries.every((e, i) => {
+          if (e.kind === "ShorthandEntry") {
+            return e.key.name === boundNames[i];
+          }
+          if (e.kind === "FieldEntry") {
+            return (
+              e.key.name === boundNames[i] &&
+              e.value.kind === "Identifier" &&
+              e.value.name === boundNames[i]
+            );
+          }
+          return false;
+        })));
 
   if (isExactShorthand) {
     return allCall;

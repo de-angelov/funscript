@@ -225,4 +225,16 @@ export class TypeScriptCompilationContext {
         }
       : undefined;
   }
+
+  getProgram(): ts.Program | undefined {
+    return this.program;
+  }
+
+  getTypeChecker(): ts.TypeChecker | undefined {
+    return this.program?.getTypeChecker();
+  }
+
+  getNormalizedFilename(): string {
+    return this.normalized || this.virtualFile;
+  }
 }

@@ -28,6 +28,7 @@ export interface DeclarationEmitterContext {
   addEffectImport(name: string): void;
   recordContracts: Map<string, TypeNode>;
   parameterScopes: Array<Map<string, boolean>>;
+  variableTypeScopes: Array<Map<string, TypeNode | undefined>>;
   recordScopes: Array<Map<string, Map<string, RecordFieldInfo> | undefined>>;
   primitiveIdentifiers: Set<string>;
   isOptionalValue(expr: Expression): boolean;
@@ -119,6 +120,7 @@ export function emitBindingDeclaration(
         ? ctx.recordFields(decl.init.name)
         : undefined;
     ctx.recordScopes.at(-1)?.set(idName, aliasedFields);
+    ctx.variableTypeScopes.at(-1)?.set(idName, decl.typeAnnotation);
     if (isPrimitiveType(decl.typeAnnotation) || ctx.isPrimitive(decl.init)) {
       ctx.primitiveIdentifiers.add(idName);
     }

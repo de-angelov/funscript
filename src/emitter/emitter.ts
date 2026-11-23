@@ -1,3 +1,4 @@
+import ts from "typescript";
 import { MatchEmitter, type RecordFieldInfo } from "./match.js";
 import { emitRuntimeHelpers } from "./runtime-helpers.js";
 import { FunScriptError } from "../errors.js";
@@ -182,6 +183,7 @@ export interface EmitterOptions {
   importedDataSchemas?: ReadonlySet<string>;
   /** Whether the output is `.tsx`; generic arrows need a comma there. */
   isJsx?: boolean;
+  context?: import("../compiler/typescript-context.js").TypeScriptCompilationContext;
 }
 
 export const EFFECT_MODULE_NAMES = new Set([
@@ -619,6 +621,7 @@ const NATIVE_CONSTRUCTOR_NAMES = new Set([
 export class Emitter {
   private effectImports = new Set<string>();
   public parameterScopes: Array<Map<string, boolean>> = [];
+  public variableTypeScopes: Array<Map<string, TypeNode | undefined>> = [];
   public recordScopes: Array<
     Map<string, Map<string, RecordFieldInfo> | undefined>
   > = [];
@@ -1037,6 +1040,166 @@ export class Emitter {
         ? this.recordFields(expr.object.name)
         : this.recordField(expr.object)?.fields;
     return fields?.get(expr.property.name);
+  }
+
+  public getTypeNodeForIdentifier(name: string): TypeNode | undefined {
+    for (let i = this.variableTypeScopes.length - 1; i >= 0; i--) {
+      if (this.variableTypeScopes[i].has(name)) {
+        return this.variableTypeScopes[i].get(name);
+      }
+    }
+    return this.bindings.get(name)?.typeAnnotation;
+  }
+
+  private isTargetNativeCategory(
+    expr: Expression,
+    category: string,
+    prop: string,
+  ): boolean {
+    if (category === "array" && expr.kind === "ArrayExpression") return true;
+    if (
+      category === "string" &&
+      (expr.kind === "StringLiteral" || expr.kind === "TemplateLiteral")
+    )
+      return true;
+    if (expr.kind === "CallExpression") {
+      const callee = expr.callee;
+      if (callee.kind === "Identifier" || callee.kind === "UpperIdentifier") {
+        if (category === "array" && callee.name === "Array") return true;
+        if (
+          category === "collection" &&
+          (callee.name === "Map" ||
+            callee.name === "Set" ||
+            callee.name === "WeakMap" ||
+            callee.name === "WeakSet")
+        )
+          return true;
+        if (category === "date" && callee.name === "Date") return true;
+      }
+    }
+
+    if (expr.kind === "Identifier") {
+      const name = expr.name;
+      const typeNode = this.getTypeNodeForIdentifier(name);
+      if (typeNode) {
+        if (typeNode.kind === "ArrayTypeNode") {
+          return category === "array";
+        }
+        if (typeNode.kind === "TypeReferenceNode") {
+          const typeName = typeNode.name.name;
+          if (typeName === "Array" || typeName === "ReadonlyArray") {
+            return category === "array";
+          }
+          if (typeName === "String" || typeName === "string") {
+            return category === "string";
+          }
+          if (
+            typeName === "Map" ||
+            typeName === "Set" ||
+            typeName === "WeakMap" ||
+            typeName === "WeakSet"
+          ) {
+            return category === "collection";
+          }
+          if (typeName === "Date") {
+            return category === "date";
+          }
+          if (typeName === "Object") {
+            const isWebMutable =
+              (prop === "set" || prop === "delete") &&
+              /^(url|search|query|param|header|form|request|response|req|res)/i.test(
+                name,
+              );
+            if (isWebMutable) return false;
+            return category === "collection" || category === "date";
+          }
+          // The identifier is explicitly typed as a non-native type (e.g. Observable, QueryBuilder, Parser, Store).
+          // Effect does NOT provide an alternative for this type.
+          return false;
+        }
+        if (
+          typeNode.kind === "RecordTypeNode" ||
+          typeNode.kind === "FunctionTypeNode"
+        ) {
+          return false;
+        }
+      }
+
+      // Check if initialized from a literal
+      const binding = this.bindings.get(name);
+      if (binding) {
+        if (category === "array" && binding.init.kind === "ArrayExpression")
+          return true;
+        if (
+          category === "string" &&
+          (binding.init.kind === "StringLiteral" ||
+            binding.init.kind === "TemplateLiteral")
+        )
+          return true;
+      }
+    }
+
+    // TypeScript TypeChecker check (for unannotated identifiers, ts escape blocks, external imports)
+    if (this.options.context) {
+      const checker = this.options.context.getTypeChecker();
+      const program = this.options.context.getProgram();
+      if (checker && program && expr.kind === "Identifier") {
+        const sourceFile = program.getSourceFile(
+          this.options.context.getNormalizedFilename(),
+        );
+        if (sourceFile) {
+          const tsType = this.findTsTypeForIdentifier(
+            sourceFile,
+            checker,
+            expr.name,
+          );
+          if (tsType) {
+            if (category === "array") {
+              return (
+                checker.isArrayType(tsType) ||
+                tsType.symbol?.name === "Array" ||
+                tsType.symbol?.name === "ReadonlyArray"
+              );
+            }
+            if (category === "string") {
+              return Boolean(tsType.flags & ts.TypeFlags.StringLike);
+            }
+            if (category === "collection") {
+              return (
+                tsType.symbol?.name === "Map" ||
+                tsType.symbol?.name === "Set" ||
+                tsType.symbol?.name === "WeakMap" ||
+                tsType.symbol?.name === "WeakSet"
+              );
+            }
+            if (category === "date") {
+              return tsType.symbol?.name === "Date";
+            }
+            return false;
+          }
+        }
+      }
+    }
+
+    return false;
+  }
+
+  private findTsTypeForIdentifier(
+    sourceFile: ts.SourceFile,
+    checker: ts.TypeChecker,
+    name: string,
+  ): ts.Type | undefined {
+    let foundType: ts.Type | undefined;
+    const visit = (node: ts.Node): void => {
+      if (ts.isIdentifier(node) && node.text === name) {
+        foundType = checker.getTypeAtLocation(node);
+      }
+      if (!foundType) {
+        ts.forEachChild(node, visit);
+      }
+    };
+    visit(sourceFile);
+    return foundType;
   }
 
   private isHtmlPropsType(type?: TypeNode): boolean {
@@ -1757,13 +1920,9 @@ export class Emitter {
         BANNED_INSTANCE_METHODS.has(prop)
       ) {
         const info = BANNED_INSTANCE_METHODS.get(prop)!;
-        const isWebMutable =
-          (prop === "set" || prop === "delete") &&
-          root !== null &&
-          /^(url|search|query|param|header|form|request|response|req|res)/i.test(
-            root,
-          );
-        if (!isWebMutable) {
+        if (
+          this.isTargetNativeCategory(expr.callee.object, info.category, prop)
+        ) {
           if (["push", "pop", "shift", "unshift", "splice"].includes(prop)) {
             throw new FunScriptError(
               `In-place mutation '.${prop}()' is quarantined in FunScript. Use '${info.replacement}(...)' or pipeline '${info.pipeline}' instead, or isolate mutable edits inside 'mut (draft) => { ... }'.`,
@@ -2349,12 +2508,15 @@ export class Emitter {
       }
     }
     const paramScopeEntries: [string, boolean][] = [];
+    const varTypeEntries: [string, TypeNode | undefined][] = [];
     for (const p of expr.params) {
       for (const n of this.collectBindingNames(p.name)) {
         paramScopeEntries.push([n, Boolean(p.optional)]);
+        varTypeEntries.push([n, p.typeAnnotation]);
       }
     }
     this.parameterScopes.push(new Map(paramScopeEntries));
+    this.variableTypeScopes.push(new Map(varTypeEntries));
     this.recordScopes.push(records);
     try {
       for (const name of records.keys())
@@ -2372,6 +2534,7 @@ export class Emitter {
     } finally {
       this.recordScopes.pop();
       this.parameterScopes.pop();
+      this.variableTypeScopes.pop();
     }
   }
 
