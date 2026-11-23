@@ -13,7 +13,16 @@ describe("CLI help contract", () => {
     const help = runCli("--help");
     const docs = readFileSync(CLI_DOCS, "utf8");
 
-    for (const command of ["build", "emit", "check", "run", "repl", "lsp", "fmt", "version"]) {
+    for (const command of [
+      "build",
+      "emit",
+      "check",
+      "run",
+      "repl",
+      "lsp",
+      "fmt",
+      "version",
+    ]) {
       expect(help).toContain(`funscript ${command}`);
       expect(docs).toContain(`\`funscript ${command}`);
     }
@@ -23,8 +32,10 @@ describe("CLI help contract", () => {
     const help = runCli("--help");
 
     expect(help).toContain("not currently available");
-    for (const command of ["new", "dev", "preview", "test", "add"]) {
-      expect(help).not.toMatch(new RegExp(`^\\s*funscript ${command}(?:\\s|$)`, "m"));
+    for (const command of ["new", "dev", "preview", "add"]) {
+      expect(help).not.toMatch(
+        new RegExp(`^\\s*funscript ${command}(?:\\s|$)`, "m"),
+      );
     }
   });
 
@@ -33,7 +44,9 @@ describe("CLI help contract", () => {
   });
 
   it("reports the version declared in package.json", () => {
-    const { version } = JSON.parse(readFileSync(new URL("../package.json", import.meta.url), "utf8"));
+    const { version } = JSON.parse(
+      readFileSync(new URL("../package.json", import.meta.url), "utf8"),
+    );
     expect(runCli("--version").trim()).toBe(`funscript ${version}`);
     expect(runCli("--help")).toContain(`FunScript ${version}`);
   });

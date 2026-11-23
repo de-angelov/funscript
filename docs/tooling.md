@@ -10,7 +10,7 @@ Use the package manager and ecosystem tools directly when you need those feature
 `funscript --help` and the generated [CLI reference](reference/cli.md) are the source of
 truth for command syntax.
 
-The CLI does not currently provide `new`, `dev`, `preview`, `test`, or `add`.
+The CLI does not currently provide `new`, `dev`, `preview`, or `add`.
 For project creation, create ordinary `package.json`, `tsconfig.json`, and tool config files
 using the relevant ecosystem tool. Use Vite for web development and builds, Vitest for
 JavaScript/TypeScript tests, and npm, pnpm, or Bun to manage dependencies. These tools do not
@@ -78,7 +78,7 @@ documentation from TypeScript dependencies. Add consecutive `///` lines
 immediately before a top-level binding to include its FunScript documentation:
 
 ```funscript
-/// Greet someone by name.
+// / Greet someone by name.
 export greet = (name: String) => "Hello, {name}!"
 ```
 
@@ -171,10 +171,9 @@ proprietary project layout or package format.
 
 ## Package scripts in this repository
 
-The repository's own scripts are defined in `package.json`: `build`, `check`, `benchmark`,
-`prototype:optional`, `spike:optional-compiler`, `test`,
+The repository's own scripts are defined in `package.json`: `build`, `check`, `typecheck`, `benchmark`, `test`,
 `test:examples`, `test:watch`, `fmt`, `fmt:check`, `fmt:ts`, `fmt:ts:check`, `lint`, `lint:fix`, `prettier:check`, `docs:generate`,
-`docs:check`, `check:idiomatic`, `package:check`, `verify`, and `pr:check`. They are repository scripts,
+`docs:check`, `check:idiomatic`, `package:check`, `verify`, `pr:check`, and `prepare`. They are repository scripts,
 not additional `funscript` CLI commands.
 
 ## Language compatibility policy
@@ -233,6 +232,7 @@ Under the human-approved decision for TASK-104 and TASK-166, FunScript has **dec
 ### Decision rationale and compatibility policy
 
 In alignment with FunScript's [Strict Zero-Alias compatibility policy](#language-compatibility-policy):
+
 - FunScript is in early active development with zero external production consumers.
 - No automated CLI command (such as `funscript migrate`) performs automatic silent rewrites on build.
 - Programmatic safe migration functions (`migrateSource`, `migrateFile`, `migrateFiles`, `formatMigrationReport`) are available in `src/tooling/migrate.ts` to convert unambiguous function blocks while leaving ambiguous constructs untouched for developer review.
@@ -244,16 +244,19 @@ Automated mechanical insertion of `=>` was rejected because semantic equivalence
 
 1. **Side effects vs. return values in function blocks**
    In multi-statement functions, a trailing expression may be executed purely for side effects with an intended `Unit` or `void` return:
+
    ```funscript
    # Ambiguous legacy block:
    saveState = (state: State) =>
      serialized = serialize(state)
      writeDisk(serialized)
    ```
+
    Mechanically rewriting the final line to `=> writeDisk(serialized)` alters the inferred return type and leaks internal state, breaking caller contracts when the author intended the return value to be discarded.
 
 2. **Yield (`<-`) vs. discard (`_ <-`) vs. return (`=>`) in effect blocks**
    In FunScript `effect` blocks, returning an expression with `=>` does not execute or yield it; it returns the unyielded `Effect` generator:
+
    ```funscript
    # Ambiguous legacy effect block:
    program = effect {
@@ -261,14 +264,18 @@ Automated mechanical insertion of `=>` was rejected because semantic equivalence
      Console.log("Done")
    }
    ```
+
    If a codemod mechanically prepends `=> Console.log("Done")`, `Console.log` is **never executed** at runtime, causing a silent defect. The developer's intent may instead have been:
+
    ```funscript
-   program = effect {
-     user <- fetchUser()
-     _ <- Console.log("Done")
-     => Unit
-   }
+   program =
+     effect {
+       user <- fetchUser()
+       _ <- Console.log("Done")
+       => Unit
+     }
    ```
+
    A mechanical migration tool cannot deduce whether an effect expression should be yielded, discarded, or returned.
 
 3. **Trailing binding declarations**
@@ -277,7 +284,7 @@ Automated mechanical insertion of `=>` was rejected because semantic equivalence
 4. **Syntactic exemptions and expression bodies**
    - Multi-statement function blocks ending in `match` or `effect` expressions are exempt from `=>` in the parser (for example, a trailing `match x ...` is accepted as the final block expression).
    - Single-expression lambdas (`sum = (a, b) => a + b`) are expression bodies and do not use `=>` in the body.
-   Blind mechanical insertion risks corrupting valid syntax or introducing redundant tokens.
+     Blind mechanical insertion risks corrupting valid syntax or introducing redundant tokens.
 
 5. **Mechanical irreversibility**
    Because `=> expr` is identical for hand-authored code and migrated code, an automated transformation is mechanically irreversible. Version control (`git`) serves as the sole rollback mechanism for manual code updates.
@@ -336,7 +343,6 @@ export config = {
 `indentSize` is an integer from 1 to 8 (default 2); `lineWidth` is an integer from 40 to 240 (default 100). The width is a target used when formatting records, lists, and pipelines; it is not a hard limit for every expression. The `fmt` command and language server use the closest config above each file. Project indentation overrides the editor's tab size. Leading `and` and `or` continuations are not currently supported.
 
 To measure conversion on a representative file without changing it, build FunScript and run `node scripts/benchmark-pipeline-style.mjs path/to/file.fun bare`. The report includes elapsed time, converted and skipped stages, and peak process memory; compare results on the same machine and input.
-
 
 ### Incremental watch builds
 

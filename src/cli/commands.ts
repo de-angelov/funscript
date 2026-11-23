@@ -273,7 +273,7 @@ ${CLI_COMMANDS.flatMap((command) => command.examples)
   .map((example) => `  ${example}`)
   .join("\n")}
 
-Project scaffolding and dev/preview/test/add/doctor wrappers are not currently available.
+Development server, preview, and package add wrappers (dev/preview/add) are not currently available.
 Use standard project tools such as Vite, Vitest, and npm/pnpm/Bun directly.
 `;
 };
