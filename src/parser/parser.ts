@@ -1,36 +1,36 @@
 import {
-  Program,
-  TopLevelDeclaration,
-  ImportDeclaration,
-  ImportSpecifier,
+  type Program,
+  type TopLevelDeclaration,
+  type ImportDeclaration,
+  type ImportSpecifier,
   ExportDeclaration,
-  ExportDefaultDeclaration,
-  ExportFromDeclaration,
-  BindingDeclaration,
-  BindingTarget,
-  SchemaDeclaration,
-  SchemaBody,
-  RecordSchema,
-  RecordFieldSchema,
-  TaggedUnionSchema,
-  ImportedTsSchema,
-  VariantDeclaration,
-  VariantField,
-  TsDerivedSchema,
-  ErrorDeclaration,
-  ErrorField,
-  ServiceDeclaration,
-  ServiceMember,
-  Expression,
+  type ExportDefaultDeclaration,
+  type ExportFromDeclaration,
+  type BindingDeclaration,
+  type BindingTarget,
+  type SchemaDeclaration,
+  type SchemaBody,
+  type RecordSchema,
+  type RecordFieldSchema,
+  type TaggedUnionSchema,
+  type ImportedTsSchema,
+  type VariantDeclaration,
+  type VariantField,
+  type TsDerivedSchema,
+  type ErrorDeclaration,
+  type ErrorField,
+  type ServiceDeclaration,
+  type ServiceMember,
+  type Expression,
   Literal,
   NumberLiteral,
-  StringLiteral,
-  TemplateLiteral,
+  type StringLiteral,
+  type TemplateLiteral,
   TaggedTemplateExpression,
-  StringPart,
+  type StringPart,
   BooleanLiteral,
-  Identifier,
-  UpperIdentifier,
+  type Identifier,
+  type UpperIdentifier,
   Placeholder,
   TypedHole,
   PipelineExpression,
@@ -38,48 +38,48 @@ import {
   UnaryExpression,
   CallExpression,
   MemberExpression,
-  IndexExpression,
-  DotPathExpression,
-  RecordExpression,
-  RecordEntry,
+  type IndexExpression,
+  type DotPathExpression,
+  type RecordExpression,
+  type RecordEntry,
   SpreadEntry,
   SpreadElement,
   FieldEntry,
   DotPathEntry,
   ShorthandEntry,
-  ArrayExpression,
-  FunctionExpression,
-  FunctionBody,
-  BlockStatement,
-  Statement,
+  type ArrayExpression,
+  type FunctionExpression,
+  type FunctionBody,
+  type BlockStatement,
+  type Statement,
   AssignmentStatement,
   ExpressionStatement,
   ReturnStatement,
-  WhenStatement,
-  MutBlockExpression,
-  MatchExpression,
-  MatchArm,
-  Pattern,
+  type WhenStatement,
+  type MutBlockExpression,
+  type MatchExpression,
+  type MatchArm,
+  type Pattern,
   ConstructorPattern,
-  RecordPattern,
-  RecordPatternField,
-  ArrayPattern,
+  type RecordPattern,
+  type RecordPatternField,
+  type ArrayPattern,
   RestPattern,
   OrPattern,
-  EffectBlockExpression,
-  ParBlockExpression,
-  EffectStatement,
-  EffectBindStatement,
+  type EffectBlockExpression,
+  type ParBlockExpression,
+  type EffectStatement,
+  type EffectBindStatement,
   EffectDiscardStatement,
   EffectControlFlowStatement,
-  TypeNode,
+  type TypeNode,
   TypeReferenceNode,
-  TypeParameter,
-  Parameter,
-  FunctionTypeNode,
-  EffectTypeNode,
+  type TypeParameter,
+  type Parameter,
+  type FunctionTypeNode,
+  type EffectTypeNode,
   RecordTypeNode,
-  RecordTypeField,
+  type RecordTypeField,
   ArrayTypeNode,
   UnionTypeNode,
   IntersectionTypeNode,
@@ -87,20 +87,20 @@ import {
   JsExpression,
   TsEscapeExpression,
   TsEscapeTypeNode,
-  Span,
-  Position,
-  JSXElement,
-  JSXSelfClosingElement,
-  JSXOpeningElement,
-  JSXClosingElement,
-  JSXAttribute,
-  JSXAttributeValue,
-  JSXExpressionContainer,
+  type Span,
+  type Position,
+  type JSXElement,
+  type JSXSelfClosingElement,
+  type JSXOpeningElement,
+  type JSXClosingElement,
+  type JSXAttribute,
+  type JSXAttributeValue,
+  type JSXExpressionContainer,
   JSXText,
-  JSXChild,
-  JSXTagName,
+  type JSXChild,
+  type JSXTagName,
 } from "../ast/types.js";
-import { Token, TokenType, KEYWORDS } from "../lexer/tokens.js";
+import { type Token, TokenType, KEYWORDS } from "../lexer/tokens.js";
 import { FunScriptError } from "../errors.js";
 
 export class ParseError extends FunScriptError {
@@ -237,23 +237,38 @@ export class Parser {
   }
 
   private isExportFrom(): boolean {
-    let offset = this.check(TokenType.IDENTIFIER) && this.peek().value === "type" ? 1 : 0;
+    let offset =
+      this.check(TokenType.IDENTIFIER) && this.peek().value === "type" ? 1 : 0;
     if (this.peekAhead(offset).type !== TokenType.LBRACE) return false;
-    while (this.peekAhead(offset).type !== TokenType.RBRACE &&
-           this.peekAhead(offset).type !== TokenType.NEWLINE &&
-           this.peekAhead(offset).type !== TokenType.EOF) offset++;
-    return this.peekAhead(offset).type === TokenType.RBRACE && this.peekAhead(offset + 1).type === TokenType.FROM;
+    while (
+      this.peekAhead(offset).type !== TokenType.RBRACE &&
+      this.peekAhead(offset).type !== TokenType.NEWLINE &&
+      this.peekAhead(offset).type !== TokenType.EOF
+    )
+      offset++;
+    return (
+      this.peekAhead(offset).type === TokenType.RBRACE &&
+      this.peekAhead(offset + 1).type === TokenType.FROM
+    );
   }
 
   private parseExportFrom(start: Position): ExportFromDeclaration {
-    const isTypeOnly = this.check(TokenType.IDENTIFIER) && this.peek().value === "type";
+    const isTypeOnly =
+      this.check(TokenType.IDENTIFIER) && this.peek().value === "type";
     if (isTypeOnly) this.advance();
     this.consume(TokenType.LBRACE, "Expected '{' in re-export");
     const specifiers: ImportSpecifier[] = [];
     if (!this.check(TokenType.RBRACE)) {
       do {
         let specTypeOnly = false;
-        if (!isTypeOnly && this.check(TokenType.IDENTIFIER) && this.peek().value === "type" && this.peekAhead(1).type !== TokenType.COMMA && this.peekAhead(1).type !== TokenType.RBRACE && this.peekAhead(1).value !== "as") {
+        if (
+          !isTypeOnly &&
+          this.check(TokenType.IDENTIFIER) &&
+          this.peek().value === "type" &&
+          this.peekAhead(1).type !== TokenType.COMMA &&
+          this.peekAhead(1).type !== TokenType.RBRACE &&
+          this.peekAhead(1).value !== "as"
+        ) {
           this.advance();
           specTypeOnly = true;
         }
@@ -263,17 +278,31 @@ export class Parser {
           this.advance();
           local = this.parseAnyIdentifier();
         }
-        specifiers.push({ kind: "ImportSpecifier", imported, local, isTypeOnly: specTypeOnly, span: { start: imported.span.start, end: local.span.end } });
+        specifiers.push({
+          kind: "ImportSpecifier",
+          imported,
+          local,
+          isTypeOnly: specTypeOnly,
+          span: { start: imported.span.start, end: local.span.end },
+        });
       } while (this.match(TokenType.COMMA) && !this.check(TokenType.RBRACE));
     }
     this.consume(TokenType.RBRACE, "Expected '}' after re-export specifiers");
     this.consume(TokenType.FROM, "Expected 'from' after re-export specifiers");
     const source = this.parseImportSource();
     this.consumeNewlineOrEof("Expected newline after re-export");
-    return { kind: "ExportFromDeclaration", isTypeOnly, specifiers, source, span: { start, end: source.span.end } };
+    return {
+      kind: "ExportFromDeclaration",
+      isTypeOnly,
+      specifiers,
+      source,
+      span: { start, end: source.span.end },
+    };
   }
 
-  private parseExportDefaultDeclaration(start: Position): ExportDefaultDeclaration {
+  private parseExportDefaultDeclaration(
+    start: Position,
+  ): ExportDefaultDeclaration {
     if (this.hasDefaultExport) {
       throw new ParseError("Multiple default exports are not allowed", {
         start,
@@ -289,7 +318,10 @@ export class Parser {
     if (hasIndent) {
       this.skipNewlines();
       if (!this.isAtEnd() && !this.check(TokenType.EOF)) {
-        this.consume(TokenType.DEDENT, "Expected unindent after default export");
+        this.consume(
+          TokenType.DEDENT,
+          "Expected unindent after default export",
+        );
       }
     }
     this.consumeNewlineOrEof("Expected newline after default export");
@@ -308,13 +340,24 @@ export class Parser {
       if (this.check(TokenType.SCHEMA)) {
         return this.parseSchemaDeclaration(true);
       }
-      throw new ParseError("Expected 'schema' after 'export ts'", this.peek().span);
+      throw new ParseError(
+        "Expected 'schema' after 'export ts'",
+        this.peek().span,
+      );
     }
     if (this.match(TokenType.AS)) {
       const start = this.previous().span.start;
-      const code = this.consume(TokenType.AS_CODE, "Expected '{ ... }' after 'as'");
+      const code = this.consume(
+        TokenType.AS_CODE,
+        "Expected '{ ... }' after 'as'",
+      );
       this.consumeNewlineOrEof("Expected newline after as declaration");
-      return { kind: "AsDeclaration", code: code.value, codeStart: code.contentStart, span: { start, end: code.span.end } };
+      return {
+        kind: "AsDeclaration",
+        code: code.value,
+        codeStart: code.contentStart,
+        span: { start, end: code.span.end },
+      };
     }
     if (this.match(TokenType.TS)) {
       const start = this.previous().span.start;
@@ -353,57 +396,112 @@ export class Parser {
   }
 
   private parseImportDeclaration(): ImportDeclaration {
-    const start = this.consume(TokenType.IMPORT, "Expected 'import'").span.start;
+    const start = this.consume(TokenType.IMPORT, "Expected 'import'").span
+      .start;
     if (this.check(TokenType.STRING)) {
       const source = this.parseImportSource();
       this.consumeNewlineOrEof("Expected newline after import declaration");
-      return { kind: "ImportDeclaration", isTypeOnly: false, isSideEffect: true, specifiers: [], source, span: { start, end: source.span.end } };
+      return {
+        kind: "ImportDeclaration",
+        isTypeOnly: false,
+        isSideEffect: true,
+        specifiers: [],
+        source,
+        span: { start, end: source.span.end },
+      };
     }
-    const isTypeOnly = this.check(TokenType.IDENTIFIER) && this.peek().value === "type" && this.peekAhead(1).type !== TokenType.FROM;
+    const isTypeOnly =
+      this.check(TokenType.IDENTIFIER) &&
+      this.peek().value === "type" &&
+      this.peekAhead(1).type !== TokenType.FROM;
     if (isTypeOnly) this.advance();
     let defaultBinding: Identifier | UpperIdentifier | undefined;
     let namespaceBinding: Identifier | UpperIdentifier | undefined;
     const specifiers: ImportSpecifier[] = [];
-    if (this.check(TokenType.IDENTIFIER) || this.check(TokenType.UPPER_IDENTIFIER)) {
+    if (
+      this.check(TokenType.IDENTIFIER) ||
+      this.check(TokenType.UPPER_IDENTIFIER)
+    ) {
       defaultBinding = this.parseAnyIdentifier();
       if (this.match(TokenType.COMMA)) {
-        if (isTypeOnly) throw new ParseError("A type-only import cannot combine a default binding with other bindings", this.peek().span);
+        if (isTypeOnly)
+          throw new ParseError(
+            "A type-only import cannot combine a default binding with other bindings",
+            this.peek().span,
+          );
       } else {
         this.consume(TokenType.FROM, "Expected 'from' after import binding");
         const source = this.parseImportSource();
         this.consumeNewlineOrEof("Expected newline after import declaration");
-        return { kind: "ImportDeclaration", isTypeOnly, isSideEffect: false, defaultBinding, specifiers, source, span: { start, end: source.span.end } };
+        return {
+          kind: "ImportDeclaration",
+          isTypeOnly,
+          isSideEffect: false,
+          defaultBinding,
+          specifiers,
+          source,
+          span: { start, end: source.span.end },
+        };
       }
     }
     if (this.match(TokenType.STAR)) {
       if (!(this.check(TokenType.IDENTIFIER) && this.peek().value === "as")) {
-        throw new ParseError("Expected 'as' after '*' in namespace import", this.peek().span);
+        throw new ParseError(
+          "Expected 'as' after '*' in namespace import",
+          this.peek().span,
+        );
       }
       this.advance();
       namespaceBinding = this.parseAnyIdentifier();
     } else {
-      this.consume(TokenType.LBRACE, "Expected '{' or '*' in import declaration");
+      this.consume(
+        TokenType.LBRACE,
+        "Expected '{' or '*' in import declaration",
+      );
       if (!this.check(TokenType.RBRACE)) {
         do {
           let specTypeOnly = false;
-          if (this.check(TokenType.IDENTIFIER) && this.peek().value === "type" && this.peekAhead(1).type !== TokenType.COMMA && this.peekAhead(1).type !== TokenType.RBRACE && this.peekAhead(1).value !== "as") {
+          if (
+            this.check(TokenType.IDENTIFIER) &&
+            this.peek().value === "type" &&
+            this.peekAhead(1).type !== TokenType.COMMA &&
+            this.peekAhead(1).type !== TokenType.RBRACE &&
+            this.peekAhead(1).value !== "as"
+          ) {
             this.advance();
             specTypeOnly = true;
-            if (isTypeOnly) throw new ParseError("A type-only import cannot contain a type-only specifier", this.previous().span);
+            if (isTypeOnly)
+              throw new ParseError(
+                "A type-only import cannot contain a type-only specifier",
+                this.previous().span,
+              );
           }
           let importedId: Identifier | UpperIdentifier;
           if (this.match(TokenType.DEFAULT)) {
             const token = this.previous();
-            importedId = { kind: "Identifier", name: token.value, span: token.span };
+            importedId = {
+              kind: "Identifier",
+              name: token.value,
+              span: token.span,
+            };
           } else importedId = this.parseAnyIdentifier();
           let localId = importedId;
           if (this.check(TokenType.IDENTIFIER) && this.peek().value === "as") {
             this.advance();
             localId = this.parseAnyIdentifier();
           } else if (importedId.name === "default") {
-            throw new ParseError("A default import specifier requires an alias", importedId.span);
+            throw new ParseError(
+              "A default import specifier requires an alias",
+              importedId.span,
+            );
           }
-          specifiers.push({ kind: "ImportSpecifier", isTypeOnly: specTypeOnly, imported: importedId, local: localId, span: { start: importedId.span.start, end: localId.span.end } });
+          specifiers.push({
+            kind: "ImportSpecifier",
+            isTypeOnly: specTypeOnly,
+            imported: importedId,
+            local: localId,
+            span: { start: importedId.span.start, end: localId.span.end },
+          });
         } while (this.match(TokenType.COMMA) && !this.check(TokenType.RBRACE));
       }
       this.consume(TokenType.RBRACE, "Expected '}' after import specifiers");
@@ -411,18 +509,34 @@ export class Parser {
     this.consume(TokenType.FROM, "Expected 'from' after import specifiers");
     const source = this.parseImportSource();
     this.consumeNewlineOrEof("Expected newline after import declaration");
-    return { kind: "ImportDeclaration", isTypeOnly, isSideEffect: false, defaultBinding, namespaceBinding, specifiers, source, span: { start, end: source.span.end } };
+    return {
+      kind: "ImportDeclaration",
+      isTypeOnly,
+      isSideEffect: false,
+      defaultBinding,
+      namespaceBinding,
+      specifiers,
+      source,
+      span: { start, end: source.span.end },
+    };
   }
 
   private parseImportSource(): StringLiteral {
     if (!this.check(TokenType.STRING)) {
-      throw new ParseError("Expected a non-interpolated string module specifier", this.peek().span);
+      throw new ParseError(
+        "Expected a non-interpolated string module specifier",
+        this.peek().span,
+      );
     }
     return this.parseStringLiteral();
   }
 
-  private parseSchemaDeclaration(isTs = false, tsStart?: Position): SchemaDeclaration {
-    const start = tsStart ?? this.consume(TokenType.SCHEMA, "Expected 'schema'").span.start;
+  private parseSchemaDeclaration(
+    isTs = false,
+    tsStart?: Position,
+  ): SchemaDeclaration {
+    const start =
+      tsStart ?? this.consume(TokenType.SCHEMA, "Expected 'schema'").span.start;
     if (tsStart) {
       this.consume(TokenType.SCHEMA, "Expected 'schema'");
     }
@@ -467,9 +581,22 @@ export class Parser {
     }
 
     // 1. Tagged Union: | Variant(...)
-    if (this.check(TokenType.BAR) || (this.check(TokenType.INDENT) && this.peekAhead(1).type === TokenType.BAR)) {
-      const first = this.check(TokenType.INDENT) ? this.peekAhead(2) : this.peekAhead(1);
-      if ([TokenType.STRING, TokenType.NUMBER, TokenType.TRUE, TokenType.FALSE, TokenType.LBRACE].includes(first.type)) {
+    if (
+      this.check(TokenType.BAR) ||
+      (this.check(TokenType.INDENT) && this.peekAhead(1).type === TokenType.BAR)
+    ) {
+      const first = this.check(TokenType.INDENT)
+        ? this.peekAhead(2)
+        : this.peekAhead(1);
+      if (
+        [
+          TokenType.STRING,
+          TokenType.NUMBER,
+          TokenType.TRUE,
+          TokenType.FALSE,
+          TokenType.LBRACE,
+        ].includes(first.type)
+      ) {
         return this.parseStructuralUnionSchema();
       }
       return this.parseTaggedUnionSchema();
@@ -505,7 +632,10 @@ export class Parser {
     const ltToken = this.consume(TokenType.LT, "Expected '<' after 'ts'");
 
     if (this.check(TokenType.GT)) {
-      throw new ParseError("Expected type argument inside 'ts<...>'", this.peek().span);
+      throw new ParseError(
+        "Expected type argument inside 'ts<...>'",
+        this.peek().span,
+      );
     }
 
     const typeArgs: TypeNode[] = [];
@@ -513,7 +643,10 @@ export class Parser {
       typeArgs.push(this.parseTypeNode());
     } while (this.match(TokenType.COMMA) && !this.check(TokenType.GT));
 
-    const gtToken = this.consume(TokenType.GT, "Expected '>' after type argument");
+    const gtToken = this.consume(
+      TokenType.GT,
+      "Expected '>' after type argument",
+    );
 
     return {
       kind: "ImportedTsSchema",
@@ -531,7 +664,11 @@ export class Parser {
     this.skipNewlines();
     const hasIndent = this.match(TokenType.INDENT);
 
-    while (!this.check(TokenType.RBRACE) && !this.check(TokenType.DEDENT) && !this.isAtEnd()) {
+    while (
+      !this.check(TokenType.RBRACE) &&
+      !this.check(TokenType.DEDENT) &&
+      !this.isAtEnd()
+    ) {
       this.skipNewlines();
       if (this.check(TokenType.RBRACE) || this.check(TokenType.DEDENT)) break;
 
@@ -541,12 +678,19 @@ export class Parser {
       const previous = this.allowOptionalRecordFields;
       this.allowOptionalRecordFields = true;
       let fieldType: TypeNode;
-      try { fieldType = this.parseTypeNode(); }
-      finally { this.allowOptionalRecordFields = previous; }
+      try {
+        fieldType = this.parseTypeNode();
+      } finally {
+        this.allowOptionalRecordFields = previous;
+      }
       let defaultValue: Expression | undefined;
 
       if (this.match(TokenType.EQ)) {
-        if (optional) throw new ParseError("A schema field cannot be both optional and defaulted", fieldName.span);
+        if (optional)
+          throw new ParseError(
+            "A schema field cannot be both optional and defaulted",
+            fieldName.span,
+          );
         defaultValue = this.parseExpression();
       }
 
@@ -556,7 +700,10 @@ export class Parser {
         typeAnnotation: fieldType,
         optional,
         defaultValue,
-        span: { start: fieldName.span.start, end: (defaultValue || fieldType).span.end },
+        span: {
+          start: fieldName.span.start,
+          end: (defaultValue || fieldType).span.end,
+        },
       });
 
       this.match(TokenType.COMMA);
@@ -567,7 +714,10 @@ export class Parser {
       this.consume(TokenType.DEDENT, "Expected unindent after schema fields");
     }
     this.skipNewlines();
-    const end = this.consume(TokenType.RBRACE, "Expected '}' after record schema").span.end;
+    const end = this.consume(
+      TokenType.RBRACE,
+      "Expected '}' after record schema",
+    ).span.end;
 
     return {
       kind: "RecordSchema",
@@ -583,12 +733,20 @@ export class Parser {
     while (this.match(TokenType.BAR)) {
       const previous = this.allowOptionalRecordFields;
       this.allowOptionalRecordFields = true;
-      try { members.push(this.parsePrimaryType()); }
-      finally { this.allowOptionalRecordFields = previous; }
+      try {
+        members.push(this.parsePrimaryType());
+      } finally {
+        this.allowOptionalRecordFields = previous;
+      }
       this.skipNewlines();
     }
-    if (hasIndent) this.consume(TokenType.DEDENT, "Expected unindent after union members");
-    return { kind: "StructuralUnionSchema", members, span: { start, end: members[members.length - 1].span.end } };
+    if (hasIndent)
+      this.consume(TokenType.DEDENT, "Expected unindent after union members");
+    return {
+      kind: "StructuralUnionSchema",
+      members,
+      span: { start, end: members[members.length - 1].span.end },
+    };
   }
 
   private parseTaggedUnionSchema(): TaggedUnionSchema {
@@ -596,7 +754,10 @@ export class Parser {
     const variants: VariantDeclaration[] = [];
     const hasIndent = this.match(TokenType.INDENT);
 
-    while (this.match(TokenType.BAR) || (variants.length === 0 && this.check(TokenType.UPPER_IDENTIFIER))) {
+    while (
+      this.match(TokenType.BAR) ||
+      (variants.length === 0 && this.check(TokenType.UPPER_IDENTIFIER))
+    ) {
       const varStart = this.previous().span.start;
       const varName = this.parseUpperIdentifier();
       const fields: VariantField[] = [];
@@ -605,7 +766,10 @@ export class Parser {
         if (!this.check(TokenType.RPAREN)) {
           do {
             const fName = this.parseIdentifier();
-            this.consume(TokenType.COLON, "Expected ':' after variant field name");
+            this.consume(
+              TokenType.COLON,
+              "Expected ':' after variant field name",
+            );
             const fType = this.parseTypeNode();
             fields.push({
               kind: "VariantField",
@@ -613,7 +777,10 @@ export class Parser {
               typeAnnotation: fType,
               span: { start: fName.span.start, end: fType.span.end },
             });
-          } while (this.match(TokenType.COMMA) && !this.check(TokenType.RPAREN));
+          } while (
+            this.match(TokenType.COMMA) &&
+            !this.check(TokenType.RPAREN)
+          );
         }
         this.consume(TokenType.RPAREN, "Expected ')' after variant fields");
       }
@@ -630,7 +797,10 @@ export class Parser {
     }
 
     if (hasIndent) {
-      this.consume(TokenType.DEDENT, "Expected unindent after tagged union variants");
+      this.consume(
+        TokenType.DEDENT,
+        "Expected unindent after tagged union variants",
+      );
     }
 
     return {
@@ -673,7 +843,8 @@ export class Parser {
   }
 
   private parseServiceDeclaration(): ServiceDeclaration {
-    const start = this.consume(TokenType.SERVICE, "Expected 'service'").span.start;
+    const start = this.consume(TokenType.SERVICE, "Expected 'service'").span
+      .start;
     const id = this.parseUpperIdentifier();
     let customTag: StringLiteral | undefined;
 
@@ -733,7 +904,10 @@ export class Parser {
       }
     }
     let typeParams: TypeParameter[] | undefined;
-    if ((id.kind === "Identifier" || id.kind === "UpperIdentifier") && this.check(TokenType.LT)) {
+    if (
+      (id.kind === "Identifier" || id.kind === "UpperIdentifier") &&
+      this.check(TokenType.LT)
+    ) {
       typeParams = this.parseTypeParameters();
     }
     let typeAnnotation: TypeNode | undefined;
@@ -750,21 +924,43 @@ export class Parser {
     const init = this.parseExpression();
     if (typeParams) {
       if (init.kind !== "FunctionExpression") {
-        throw new ParseError("Generic type parameters require a function initializer", typeParams[0].span);
+        throw new ParseError(
+          "Generic type parameters require a function initializer",
+          typeParams[0].span,
+        );
       }
       if (init.typeParams?.length) {
-        throw new ParseError("Generic type parameters may be declared either after the binding name or before the parameter list, not both", typeParams[0].span);
+        throw new ParseError(
+          "Generic type parameters may be declared either after the binding name or before the parameter list, not both",
+          typeParams[0].span,
+        );
       }
       init.typeParams = typeParams;
       init.span = { start: typeParams[0].span.start, end: init.span.end };
     }
-    if (isJs && init.kind === "FunctionExpression" && init.params.some((p) => p.typeAnnotation?.kind === "RecordTypeNode" && p.typeAnnotation.fields.some((field) => field.optional || field.defaultValue))) {
-      throw new ParseError("Optional and defaulted parameters inside record contracts are not yet supported on js entry bindings", init.span);
+    if (
+      isJs &&
+      init.kind === "FunctionExpression" &&
+      init.params.some(
+        (p) =>
+          p.typeAnnotation?.kind === "RecordTypeNode" &&
+          p.typeAnnotation.fields.some(
+            (field) => field.optional || field.defaultValue,
+          ),
+      )
+    ) {
+      throw new ParseError(
+        "Optional and defaulted parameters inside record contracts are not yet supported on js entry bindings",
+        init.span,
+      );
     }
     if (hasIndent) {
       this.skipNewlines();
       if (!this.isAtEnd() && !this.check(TokenType.EOF)) {
-        this.consume(TokenType.DEDENT, "Expected unindent after binding expression");
+        this.consume(
+          TokenType.DEDENT,
+          "Expected unindent after binding expression",
+        );
       }
     }
     this.consumeNewlineOrEof("Expected newline after binding");
@@ -807,9 +1003,15 @@ export class Parser {
         } else if (entry.kind === "FieldEntry") {
           const subTarget = this.expressionToBindingTarget(entry.value);
           if (!subTarget) return null;
-          const subPattern: Pattern = subTarget.kind === "Identifier" || subTarget.kind === "UpperIdentifier"
-            ? { kind: "VariablePattern", name: subTarget as Identifier, span: subTarget.span }
-            : subTarget;
+          const subPattern: Pattern =
+            subTarget.kind === "Identifier" ||
+            subTarget.kind === "UpperIdentifier"
+              ? {
+                  kind: "VariablePattern",
+                  name: subTarget as Identifier,
+                  span: subTarget.span,
+                }
+              : subTarget;
           fields.push({
             kind: "RecordPatternField",
             key: entry.key,
@@ -834,18 +1036,29 @@ export class Parser {
           if (!subTarget) return null;
           elements.push({
             kind: "RestPattern",
-            argument: subTarget.kind === "Identifier" || subTarget.kind === "UpperIdentifier"
-              ? { kind: "VariablePattern", name: subTarget as Identifier, span: subTarget.span }
-              : subTarget,
+            argument:
+              subTarget.kind === "Identifier" ||
+              subTarget.kind === "UpperIdentifier"
+                ? {
+                    kind: "VariablePattern",
+                    name: subTarget as Identifier,
+                    span: subTarget.span,
+                  }
+                : subTarget,
             span: el.span,
           });
         } else {
           const subTarget = this.expressionToBindingTarget(el);
           if (!subTarget) return null;
           elements.push(
-            subTarget.kind === "Identifier" || subTarget.kind === "UpperIdentifier"
-              ? { kind: "VariablePattern", name: subTarget as Identifier, span: subTarget.span }
-              : subTarget
+            subTarget.kind === "Identifier" ||
+              subTarget.kind === "UpperIdentifier"
+              ? {
+                  kind: "VariablePattern",
+                  name: subTarget as Identifier,
+                  span: subTarget.span,
+                }
+              : subTarget,
           );
         }
       }
@@ -858,18 +1071,35 @@ export class Parser {
     return null;
   }
 
-  private parseValueParameter(name: BindingTarget, nameOnlySpan = false, isRest = false): Parameter {
+  private parseValueParameter(
+    name: BindingTarget,
+    nameOnlySpan = false,
+    isRest = false,
+  ): Parameter {
     const optional = this.match(TokenType.QUESTION);
     let typeAnnotation: TypeNode | undefined;
     if (this.match(TokenType.COLON)) {
       const previous = this.allowOptionalRecordFields;
       this.allowOptionalRecordFields = this.check(TokenType.LBRACE);
-      try { typeAnnotation = this.parseTypeNode(); }
-      finally { this.allowOptionalRecordFields = previous; }
+      try {
+        typeAnnotation = this.parseTypeNode();
+      } finally {
+        this.allowOptionalRecordFields = previous;
+      }
     }
-    if (optional && !typeAnnotation) throw new ParseError("Optional parameters require a type annotation", name.span);
-    const defaultValue = this.match(TokenType.EQ) ? this.parseExpression() : undefined;
-    if (optional && defaultValue) throw new ParseError("A parameter cannot be both optional and defaulted", name.span);
+    if (optional && !typeAnnotation)
+      throw new ParseError(
+        "Optional parameters require a type annotation",
+        name.span,
+      );
+    const defaultValue = this.match(TokenType.EQ)
+      ? this.parseExpression()
+      : undefined;
+    if (optional && defaultValue)
+      throw new ParseError(
+        "A parameter cannot be both optional and defaulted",
+        name.span,
+      );
     return {
       kind: "Parameter",
       name,
@@ -877,24 +1107,44 @@ export class Parser {
       optional,
       defaultValue,
       isRest: isRest ? true : undefined,
-      span: nameOnlySpan ? name.span : { start: name.span.start, end: (defaultValue ?? typeAnnotation ?? name).span.end },
+      span: nameOnlySpan
+        ? name.span
+        : {
+            start: name.span.start,
+            end: (defaultValue ?? typeAnnotation ?? name).span.end,
+          },
     };
   }
 
   private validateValueParameters(params: Parameter[]): void {
     for (let i = 0; i < params.length; i++) {
-      if (params[i].optional && params.slice(i + 1).some((p) => !p.optional && !p.isRest)) {
-        throw new ParseError("Only optional parameters may follow an optional parameter", params[i].span);
+      if (
+        params[i].optional &&
+        params.slice(i + 1).some((p) => !p.optional && !p.isRest)
+      ) {
+        throw new ParseError(
+          "Only optional parameters may follow an optional parameter",
+          params[i].span,
+        );
       }
       if (params[i].isRest) {
         if (i !== params.length - 1) {
-          throw new ParseError("A rest parameter must be the last parameter in a parameter list", params[i].span);
+          throw new ParseError(
+            "A rest parameter must be the last parameter in a parameter list",
+            params[i].span,
+          );
         }
         if (params[i].optional) {
-          throw new ParseError("A rest parameter cannot be optional", params[i].span);
+          throw new ParseError(
+            "A rest parameter cannot be optional",
+            params[i].span,
+          );
         }
         if (params[i].defaultValue) {
-          throw new ParseError("A rest parameter cannot have a default value", params[i].span);
+          throw new ParseError(
+            "A rest parameter cannot have a default value",
+            params[i].span,
+          );
         }
       }
     }
@@ -912,7 +1162,10 @@ export class Parser {
 
     if (this.match(TokenType.ARROW)) {
       if (this.functionDepth === 0) {
-        throw new ParseError("Early return 'when (...) =>' is rejected outside function context", this.previous().span);
+        throw new ParseError(
+          "Early return 'when (...) =>' is rejected outside function context",
+          this.previous().span,
+        );
       }
       const earlyExpr = this.parseExpression();
       this.consumeNewlineOrEof();
@@ -949,7 +1202,10 @@ export class Parser {
       };
     }
 
-    throw new ParseError("Expected '=>' or conditional block '{ ... }' after when condition", this.peek().span);
+    throw new ParseError(
+      "Expected '=>' or conditional block '{ ... }' after when condition",
+      this.peek().span,
+    );
   }
 
   // --- Expressions & Pratt Parser ---
@@ -1064,7 +1320,10 @@ export class Parser {
     ) {
       return true;
     }
-    if (expr.kind === "UnaryExpression" && this.isPrimitiveLiteral(expr.argument)) {
+    if (
+      expr.kind === "UnaryExpression" &&
+      this.isPrimitiveLiteral(expr.argument)
+    ) {
       return true;
     }
     if (expr.kind === "BinaryExpression") {
@@ -1075,7 +1334,14 @@ export class Parser {
 
   private parseEquality(): Expression {
     let expr = this.parseComparison();
-    while (this.match(TokenType.VALUE_EQ, TokenType.VALUE_NEQ, TokenType.REF_EQ, TokenType.REF_NEQ)) {
+    while (
+      this.match(
+        TokenType.VALUE_EQ,
+        TokenType.VALUE_NEQ,
+        TokenType.REF_EQ,
+        TokenType.REF_NEQ,
+      )
+    ) {
       const opTok = this.previous();
       const op = opTok.value as "#=" | "#!" | "@=" | "@!";
       const right = this.parseComparison();
@@ -1083,7 +1349,7 @@ export class Parser {
         if (this.isPrimitiveLiteral(expr) || this.isPrimitiveLiteral(right)) {
           throw new ParseError(
             `Reference identity operator '${op}' cannot be used with primitive values; use '#=' or '#!' for value equality`,
-            opTok.span
+            opTok.span,
           );
         }
       }
@@ -1100,7 +1366,9 @@ export class Parser {
 
   private parseComparison(): Expression {
     let expr = this.parseAdditive();
-    while (this.match(TokenType.LT, TokenType.LTE, TokenType.GT, TokenType.GTE)) {
+    while (
+      this.match(TokenType.LT, TokenType.LTE, TokenType.GT, TokenType.GTE)
+    ) {
       const op = this.previous().value as "<" | "<=" | ">" | ">=";
       const right = this.parseAdditive();
       expr = {
@@ -1179,7 +1447,10 @@ export class Parser {
     let expr = this.parsePrimary();
 
     while (true) {
-      if (this.check(TokenType.TEMPLATE_STRING) || this.check(TokenType.TEMPLATE_PART)) {
+      if (
+        this.check(TokenType.TEMPLATE_STRING) ||
+        this.check(TokenType.TEMPLATE_PART)
+      ) {
         const template = this.parseTemplateLiteral();
         expr = {
           kind: "TaggedTemplateExpression",
@@ -1187,7 +1458,10 @@ export class Parser {
           template,
           span: { start: expr.span.start, end: template.span.end },
         };
-      } else if (this.check(TokenType.LT) && this.isTypeArgumentListBeforeTemplate()) {
+      } else if (
+        this.check(TokenType.LT) &&
+        this.isTypeArgumentListBeforeTemplate()
+      ) {
         const typeArgs = this.parseTypeArguments();
         const template = this.parseTemplateLiteral();
         expr = {
@@ -1205,7 +1479,10 @@ export class Parser {
         if (!this.check(TokenType.RPAREN)) {
           do {
             this.skipNewlines();
-            while (this.match(TokenType.INDENT) || this.match(TokenType.DEDENT)) {}
+            while (
+              this.match(TokenType.INDENT) ||
+              this.match(TokenType.DEDENT)
+            ) {}
             this.skipNewlines();
             if (this.check(TokenType.RPAREN)) break;
             if (this.match(TokenType.DOTDOTDOT)) {
@@ -1220,14 +1497,23 @@ export class Parser {
               args.push(this.parseExpression());
             }
             this.skipNewlines();
-            while (this.match(TokenType.INDENT) || this.match(TokenType.DEDENT)) {}
+            while (
+              this.match(TokenType.INDENT) ||
+              this.match(TokenType.DEDENT)
+            ) {}
             this.skipNewlines();
-          } while (this.match(TokenType.COMMA) && !this.check(TokenType.RPAREN));
+          } while (
+            this.match(TokenType.COMMA) &&
+            !this.check(TokenType.RPAREN)
+          );
         }
         this.skipNewlines();
         while (this.match(TokenType.INDENT) || this.match(TokenType.DEDENT)) {}
         this.skipNewlines();
-        const end = this.consume(TokenType.RPAREN, "Expected ')' after call arguments").span.end;
+        const end = this.consume(
+          TokenType.RPAREN,
+          "Expected ')' after call arguments",
+        ).span.end;
         expr = {
           kind: "CallExpression",
           callee: expr,
@@ -1242,10 +1528,14 @@ export class Parser {
           property: prop as any,
           span: { start: expr.span.start, end: prop.span.end },
         };
-      } else if (this.check(TokenType.LBRACKET) && this.peek().span.start.line === expr.span.end.line) {
+      } else if (
+        this.check(TokenType.LBRACKET) &&
+        this.peek().span.start.line === expr.span.end.line
+      ) {
         this.advance();
         const index = this.parseExpression();
-        const end = this.consume(TokenType.RBRACKET, "Expected ']' after index").span.end;
+        const end = this.consume(TokenType.RBRACKET, "Expected ']' after index")
+          .span.end;
         expr = {
           kind: "IndexExpression",
           object: expr,
@@ -1262,7 +1552,10 @@ export class Parser {
 
   private parsePrimary(): Expression {
     if (this.parsingBraceEffect && this.isAtEnd()) {
-      throw new ParseError("Expected '}' to close effect block", this.peek().span);
+      throw new ParseError(
+        "Expected '}' to close effect block",
+        this.peek().span,
+      );
     }
     // 0. Generic function expression: <A>(value: A) => ...
     if (this.check(TokenType.LT) && this.isGenericCallableStart()) {
@@ -1287,7 +1580,9 @@ export class Parser {
       const start = this.previous().span.start;
       let label: string | undefined;
       if (this.check(TokenType.STRING)) {
-        label = this.parseStringLiteral().parts.map((p) => (p.kind === "StringRawPart" ? p.value : "")).join("");
+        label = this.parseStringLiteral()
+          .parts.map((p) => (p.kind === "StringRawPart" ? p.value : ""))
+          .join("");
       }
       return {
         kind: "TypedHole",
@@ -1320,10 +1615,18 @@ export class Parser {
       return this.parseTemplateLiteral();
     }
     if (this.match(TokenType.TRUE)) {
-      return { kind: "BooleanLiteral", value: true, span: this.previous().span };
+      return {
+        kind: "BooleanLiteral",
+        value: true,
+        span: this.previous().span,
+      };
     }
     if (this.match(TokenType.FALSE)) {
-      return { kind: "BooleanLiteral", value: false, span: this.previous().span };
+      return {
+        kind: "BooleanLiteral",
+        value: false,
+        span: this.previous().span,
+      };
     }
 
     // 4. Identifiers & Constructors
@@ -1372,7 +1675,10 @@ export class Parser {
             span: { start, end: body.span.end },
           };
         }
-        throw new ParseError("Empty parentheses '()' must be followed by '=>'", this.previous().span);
+        throw new ParseError(
+          "Empty parentheses '()' must be followed by '=>'",
+          this.previous().span,
+        );
       }
 
       // Check if this looks like function params (param: Type, ...) => or (...rest) =>
@@ -1383,14 +1689,33 @@ export class Parser {
         firstDotSpan = this.previous().span;
       }
 
-      const firstExpr = firstIsRest ? this.parseIdentifier() : this.parseExpression();
+      const firstExpr = firstIsRest
+        ? this.parseIdentifier()
+        : this.parseExpression();
 
-      if (firstIsRest || this.check(TokenType.COLON) || this.check(TokenType.COMMA) || this.check(TokenType.QUESTION) || this.check(TokenType.EQ)) {
+      if (
+        firstIsRest ||
+        this.check(TokenType.COLON) ||
+        this.check(TokenType.COMMA) ||
+        this.check(TokenType.QUESTION) ||
+        this.check(TokenType.EQ)
+      ) {
         const firstTarget = this.expressionToBindingTarget(firstExpr);
-        if (!firstTarget) throw new ParseError("Expected a parameter name or pattern", firstExpr.span);
-        const firstParam = this.parseValueParameter(firstTarget, true, firstIsRest);
+        if (!firstTarget)
+          throw new ParseError(
+            "Expected a parameter name or pattern",
+            firstExpr.span,
+          );
+        const firstParam = this.parseValueParameter(
+          firstTarget,
+          true,
+          firstIsRest,
+        );
         if (firstDotSpan) {
-          firstParam.span = { start: firstDotSpan.start, end: firstParam.span.end };
+          firstParam.span = {
+            start: firstDotSpan.start,
+            end: firstParam.span.end,
+          };
         }
         const params: Parameter[] = [firstParam];
         while (this.match(TokenType.COMMA)) {
@@ -1433,7 +1758,10 @@ export class Parser {
           this.match(TokenType.ARROW);
         }
         if (!arrowConsumed && !this.match(TokenType.ARROW)) {
-          throw new ParseError("Expected '=>' after parameters", this.peek().span);
+          throw new ParseError(
+            "Expected '=>' after parameters",
+            this.peek().span,
+          );
         }
         const body = this.parseFunctionBody(!this.options.allowLegacyReturns);
         return {
@@ -1467,10 +1795,16 @@ export class Parser {
       if (arrowConsumed || this.match(TokenType.ARROW)) {
         const body = this.parseFunctionBody(!this.options.allowLegacyReturns);
         const paramTarget = this.expressionToBindingTarget(firstExpr);
-        if (!paramTarget) throw new ParseError("Expected parameter name or pattern", firstExpr.span);
+        if (!paramTarget)
+          throw new ParseError(
+            "Expected parameter name or pattern",
+            firstExpr.span,
+          );
         return {
           kind: "FunctionExpression",
-          params: [{ kind: "Parameter", name: paramTarget, span: firstExpr.span }],
+          params: [
+            { kind: "Parameter", name: paramTarget, span: firstExpr.span },
+          ],
           returnType: singleReturnType,
           body,
           span: { start, end: body.span.end },
@@ -1534,7 +1868,10 @@ export class Parser {
         };
       }
       if (this.match(TokenType.DOT)) {
-        throw new ParseError("FunScript has no 'js.try'; use 'js <expr>' (or '<- js <expr>') directly.", this.previous().span);
+        throw new ParseError(
+          "FunScript has no 'js.try'; use 'js <expr>' (or '<- js <expr>') directly.",
+          this.previous().span,
+        );
       }
       const inner = this.parseExpression();
       return {
@@ -1555,7 +1892,10 @@ export class Parser {
       };
     }
 
-    throw new ParseError(`Unexpected token '${this.peek().value}' (${this.peek().type})`, this.peek().span);
+    throw new ParseError(
+      `Unexpected token '${this.peek().value}' (${this.peek().type})`,
+      this.peek().span,
+    );
   }
 
   private parseRecordLiteral(): RecordExpression {
@@ -1565,7 +1905,11 @@ export class Parser {
     this.skipNewlines();
     const hasIndent = this.match(TokenType.INDENT);
 
-    while (!this.check(TokenType.RBRACE) && !this.check(TokenType.DEDENT) && !this.isAtEnd()) {
+    while (
+      !this.check(TokenType.RBRACE) &&
+      !this.check(TokenType.DEDENT) &&
+      !this.isAtEnd()
+    ) {
       this.skipNewlines();
       if (this.check(TokenType.RBRACE) || this.check(TokenType.DEDENT)) break;
 
@@ -1668,7 +2012,12 @@ export class Parser {
     let scrutinee: Expression | undefined;
 
     // Check if scrutinee is present or if it's a subjectless boolean match
-    if (!isPipeline && !this.check(TokenType.BAR) && !this.check(TokenType.NEWLINE) && !this.check(TokenType.INDENT)) {
+    if (
+      !isPipeline &&
+      !this.check(TokenType.BAR) &&
+      !this.check(TokenType.NEWLINE) &&
+      !this.check(TokenType.INDENT)
+    ) {
       scrutinee = this.parseExpression();
     }
 
@@ -1738,7 +2087,7 @@ export class Parser {
   }
 
   private parsePattern(): Pattern {
-    let pat = this.parsePrimaryPattern();
+    const pat = this.parsePrimaryPattern();
     if (this.match(TokenType.BAR)) {
       const patterns: Pattern[] = [pat];
       do {
@@ -1747,7 +2096,10 @@ export class Parser {
       return {
         kind: "OrPattern",
         patterns,
-        span: { start: pat.span.start, end: patterns[patterns.length - 1].span.end },
+        span: {
+          start: pat.span.start,
+          end: patterns[patterns.length - 1].span.end,
+        },
       };
     }
     return pat;
@@ -1760,7 +2112,12 @@ export class Parser {
     if (this.match(TokenType.NUMBER)) {
       return {
         kind: "LiteralPattern",
-        literal: { kind: "NumberLiteral", value: parseFloat(this.previous().value.replaceAll("_", "")), raw: this.previous().value, span: this.previous().span },
+        literal: {
+          kind: "NumberLiteral",
+          value: parseFloat(this.previous().value.replaceAll("_", "")),
+          raw: this.previous().value,
+          span: this.previous().span,
+        },
         span: this.previous().span,
       };
     }
@@ -1775,22 +2132,36 @@ export class Parser {
     if (this.match(TokenType.TRUE, TokenType.FALSE)) {
       return {
         kind: "LiteralPattern",
-        literal: { kind: "BooleanLiteral", value: this.previous().value === "true", span: this.previous().span },
+        literal: {
+          kind: "BooleanLiteral",
+          value: this.previous().value === "true",
+          span: this.previous().span,
+        },
         span: this.previous().span,
       };
     }
     if (this.match(TokenType.UPPER_IDENTIFIER)) {
       const start = this.previous().span.start;
-      const constructorName: UpperIdentifier = { kind: "UpperIdentifier", name: this.previous().value, span: this.previous().span };
+      const constructorName: UpperIdentifier = {
+        kind: "UpperIdentifier",
+        name: this.previous().value,
+        span: this.previous().span,
+      };
       const args: Pattern[] = [];
 
       if (this.match(TokenType.LPAREN)) {
         if (!this.check(TokenType.RPAREN)) {
           do {
             args.push(this.parsePattern());
-          } while (this.match(TokenType.COMMA) && !this.check(TokenType.RPAREN));
+          } while (
+            this.match(TokenType.COMMA) &&
+            !this.check(TokenType.RPAREN)
+          );
         }
-        this.consume(TokenType.RPAREN, "Expected ')' after constructor pattern args");
+        this.consume(
+          TokenType.RPAREN,
+          "Expected ')' after constructor pattern args",
+        );
       }
 
       return {
@@ -1803,7 +2174,11 @@ export class Parser {
     if (this.match(TokenType.IDENTIFIER)) {
       return {
         kind: "VariablePattern",
-        name: { kind: "Identifier", name: this.previous().value, span: this.previous().span },
+        name: {
+          kind: "Identifier",
+          name: this.previous().value,
+          span: this.previous().span,
+        },
         span: this.previous().span,
       };
     }
@@ -1813,7 +2188,11 @@ export class Parser {
       this.skipNewlines();
       const hasIndent = this.match(TokenType.INDENT);
 
-      while (!this.check(TokenType.RBRACE) && !this.check(TokenType.DEDENT) && !this.isAtEnd()) {
+      while (
+        !this.check(TokenType.RBRACE) &&
+        !this.check(TokenType.DEDENT) &&
+        !this.isAtEnd()
+      ) {
         this.skipNewlines();
         if (this.check(TokenType.RBRACE) || this.check(TokenType.DEDENT)) break;
 
@@ -1828,7 +2207,10 @@ export class Parser {
           key,
           pattern,
           isRest: isRest || undefined,
-          span: { start: isRest ? this.previous().span.start : key.span.start, end: pattern ? pattern.span.end : key.span.end },
+          span: {
+            start: isRest ? this.previous().span.start : key.span.start,
+            end: pattern ? pattern.span.end : key.span.end,
+          },
         });
 
         this.match(TokenType.COMMA);
@@ -1839,7 +2221,10 @@ export class Parser {
         this.consume(TokenType.DEDENT, "Expected unindent in record pattern");
       }
       this.skipNewlines();
-      const end = this.consume(TokenType.RBRACE, "Expected '}' after record pattern").span.end;
+      const end = this.consume(
+        TokenType.RBRACE,
+        "Expected '}' after record pattern",
+      ).span.end;
       return {
         kind: "RecordPattern",
         fields,
@@ -1854,7 +2239,10 @@ export class Parser {
         this.skipNewlines();
         if (this.check(TokenType.RBRACKET)) break;
         if (this.match(TokenType.COMMA)) {
-          elements.push({ kind: "WildcardPattern", span: this.previous().span });
+          elements.push({
+            kind: "WildcardPattern",
+            span: this.previous().span,
+          });
           continue;
         }
         if (this.match(TokenType.DOTDOTDOT)) {
@@ -1871,7 +2259,10 @@ export class Parser {
         this.match(TokenType.COMMA);
         this.skipNewlines();
       }
-      const end = this.consume(TokenType.RBRACKET, "Expected ']' after array pattern").span.end;
+      const end = this.consume(
+        TokenType.RBRACKET,
+        "Expected ']' after array pattern",
+      ).span.end;
       return {
         kind: "ArrayPattern",
         elements,
@@ -1879,7 +2270,10 @@ export class Parser {
       };
     }
 
-    throw new ParseError(`Unexpected pattern token '${this.peek().value}'`, this.peek().span);
+    throw new ParseError(
+      `Unexpected pattern token '${this.peek().value}'`,
+      this.peek().span,
+    );
   }
 
   // --- Effect Blocks ---
@@ -1888,13 +2282,19 @@ export class Parser {
     const start = this.previous().span.start;
     let unscoped = false;
     if (this.match(TokenType.LPAREN)) {
-      if (this.check(TokenType.IDENTIFIER) && this.peek().value === "unscoped") {
+      if (
+        this.check(TokenType.IDENTIFIER) &&
+        this.peek().value === "unscoped"
+      ) {
         this.advance();
         unscoped = true;
       }
       this.consume(TokenType.RPAREN, "Expected ')' after effect options");
     }
-    this.consume(TokenType.LBRACE, "Expected '{' after 'effect' (effect blocks require braces)");
+    this.consume(
+      TokenType.LBRACE,
+      "Expected '{' after 'effect' (effect blocks require braces)",
+    );
     this.parsingBraceEffect = true;
 
     const body: EffectStatement[] = [];
@@ -1911,12 +2311,19 @@ export class Parser {
         finalExpression = this.parseExpression();
         this.skipNewlines();
         while (this.match(TokenType.INDENT) || this.match(TokenType.DEDENT)) {}
-        if (!atEnd() && !this.isAtEnd()) throw new ParseError("Effect block return must be the final statement", finalExpression.span);
+        if (!atEnd() && !this.isAtEnd())
+          throw new ParseError(
+            "Effect block return must be the final statement",
+            finalExpression.span,
+          );
         break;
       } else if (this.check(TokenType.WHEN)) {
         body.push(this.parseWhenStatement());
-      // Check for effect bind: x <- eff or _ <- eff
-      } else if (this.check(TokenType.UNDERSCORE) && this.peekAhead(1).type === TokenType.LARROW) {
+        // Check for effect bind: x <- eff or _ <- eff
+      } else if (
+        this.check(TokenType.UNDERSCORE) &&
+        this.peekAhead(1).type === TokenType.LARROW
+      ) {
         this.advance(); // consume '_'
         this.advance(); // consume '<-'
         const eff = this.parseExpression();
@@ -1927,12 +2334,14 @@ export class Parser {
           span: { start: eff.span.start, end: eff.span.end },
         });
       } else if (
-        (this.check(TokenType.IDENTIFIER) && this.peekAhead(1).type === TokenType.LARROW) ||
+        (this.check(TokenType.IDENTIFIER) &&
+          this.peekAhead(1).type === TokenType.LARROW) ||
         this.isDestructuringEffectBindStart()
       ) {
-        const id = (this.check(TokenType.LBRACE) || this.check(TokenType.LBRACKET))
-          ? (this.parsePattern() as RecordPattern | ArrayPattern)
-          : this.parseIdentifier();
+        const id =
+          this.check(TokenType.LBRACE) || this.check(TokenType.LBRACKET)
+            ? (this.parsePattern() as RecordPattern | ArrayPattern)
+            : this.parseIdentifier();
         this.consume(TokenType.LARROW, "Expected '<-' in effect bind");
         const eff = this.parseExpression();
         this.consumeNewlineOrEof("Expected newline after effect bind");
@@ -1942,7 +2351,11 @@ export class Parser {
           effect: eff,
           span: { start: id.span.start, end: eff.span.end },
         });
-      } else if (this.check(TokenType.IDENTIFIER) && this.peekAhead(1).type === TokenType.EQ && this.mutableVariables.has(this.peek().value)) {
+      } else if (
+        this.check(TokenType.IDENTIFIER) &&
+        this.peekAhead(1).type === TokenType.EQ &&
+        this.mutableVariables.has(this.peek().value)
+      ) {
         const target = this.parseIdentifier();
         this.consume(TokenType.EQ, "Expected '=' in assignment");
         const val = this.parseExpression();
@@ -1957,8 +2370,11 @@ export class Parser {
         continue;
       } else if (
         this.check(TokenType.MUT) ||
-        (this.check(TokenType.IDENTIFIER) && (this.peekAhead(1).type === TokenType.EQ || this.peekAhead(1).type === TokenType.COLON)) ||
-        (this.check(TokenType.UNDERSCORE) && this.peekAhead(1).type === TokenType.EQ) ||
+        (this.check(TokenType.IDENTIFIER) &&
+          (this.peekAhead(1).type === TokenType.EQ ||
+            this.peekAhead(1).type === TokenType.COLON)) ||
+        (this.check(TokenType.UNDERSCORE) &&
+          this.peekAhead(1).type === TokenType.EQ) ||
         this.isDestructuringBindingStart()
       ) {
         if (this.check(TokenType.UNDERSCORE)) {
@@ -1990,10 +2406,7 @@ export class Parser {
           }
           throw new ParseError(EFFECT_RETURN_DIAGNOSTIC, expr.span);
         } else {
-          throw new ParseError(
-            EFFECT_BARE_EXPR_DIAGNOSTIC,
-            expr.span,
-          );
+          throw new ParseError(EFFECT_BARE_EXPR_DIAGNOSTIC, expr.span);
         }
       }
     }
@@ -2010,7 +2423,10 @@ export class Parser {
         };
         legacyReturnKind = "missing";
       } else {
-        throw new ParseError(EFFECT_RETURN_DIAGNOSTIC, { start, end: this.previous().span.end });
+        throw new ParseError(EFFECT_RETURN_DIAGNOSTIC, {
+          start,
+          end: this.previous().span.end,
+        });
       }
     }
 
@@ -2028,7 +2444,11 @@ export class Parser {
     const start = this.previous().span.start;
     let concurrency: Expression | undefined;
     if (this.match(TokenType.LPAREN)) {
-      if (this.check(TokenType.IDENTIFIER) && this.peek().value === "concurrency" && this.peekAhead(1).type === TokenType.EQ) {
+      if (
+        this.check(TokenType.IDENTIFIER) &&
+        this.peek().value === "concurrency" &&
+        this.peekAhead(1).type === TokenType.EQ
+      ) {
         this.advance(); // consume 'concurrency'
         this.advance(); // consume '='
         concurrency = this.parseExpression();
@@ -2048,23 +2468,39 @@ export class Parser {
     let finalExpression: Expression | undefined;
     let hasExplicitReturn = false;
 
-    const atEnd = () => braced ? this.check(TokenType.RBRACE) : this.check(TokenType.DEDENT);
+    const atEnd = () =>
+      braced ? this.check(TokenType.RBRACE) : this.check(TokenType.DEDENT);
     while (!atEnd() && !this.isAtEnd()) {
       this.skipNewlines();
-      if (braced) while (this.match(TokenType.INDENT) || this.match(TokenType.DEDENT)) {}
+      if (braced)
+        while (this.match(TokenType.INDENT) || this.match(TokenType.DEDENT)) {}
       if (atEnd()) break;
 
       if (this.match(TokenType.ARROW)) {
         finalExpression = this.parseExpression();
         hasExplicitReturn = true;
         this.skipNewlines();
-        if (braced) while (this.match(TokenType.INDENT) || this.match(TokenType.DEDENT)) {}
-        if (!atEnd()) throw new ParseError("Par block return must be the final statement", finalExpression.span);
+        if (braced)
+          while (
+            this.match(TokenType.INDENT) ||
+            this.match(TokenType.DEDENT)
+          ) {}
+        if (!atEnd())
+          throw new ParseError(
+            "Par block return must be the final statement",
+            finalExpression.span,
+          );
         break;
       } else if (this.check(TokenType.WHEN)) {
         const whenToken = this.advance();
-        throw new ParseError("Early return 'when (...) =>' is rejected inside 'par' blocks because it leaves sibling fibers in an ambiguous state", whenToken.span);
-      } else if (this.check(TokenType.UNDERSCORE) && this.peekAhead(1).type === TokenType.LARROW) {
+        throw new ParseError(
+          "Early return 'when (...) =>' is rejected inside 'par' blocks because it leaves sibling fibers in an ambiguous state",
+          whenToken.span,
+        );
+      } else if (
+        this.check(TokenType.UNDERSCORE) &&
+        this.peekAhead(1).type === TokenType.LARROW
+      ) {
         this.advance(); // consume '_'
         this.advance(); // consume '<-'
         const eff = this.parseExpression();
@@ -2075,12 +2511,14 @@ export class Parser {
           span: { start: eff.span.start, end: eff.span.end },
         });
       } else if (
-        (this.check(TokenType.IDENTIFIER) && this.peekAhead(1).type === TokenType.LARROW) ||
+        (this.check(TokenType.IDENTIFIER) &&
+          this.peekAhead(1).type === TokenType.LARROW) ||
         this.isDestructuringEffectBindStart()
       ) {
-        const id = (this.check(TokenType.LBRACE) || this.check(TokenType.LBRACKET))
-          ? (this.parsePattern() as RecordPattern | ArrayPattern)
-          : this.parseIdentifier();
+        const id =
+          this.check(TokenType.LBRACE) || this.check(TokenType.LBRACKET)
+            ? (this.parsePattern() as RecordPattern | ArrayPattern)
+            : this.parseIdentifier();
         this.consume(TokenType.LARROW, "Expected '<-' in effect bind");
         const eff = this.parseExpression();
         this.consumeNewlineOrEof("Expected newline after effect bind");
@@ -2090,7 +2528,10 @@ export class Parser {
           effect: eff,
           span: { start: id.span.start, end: eff.span.end },
         });
-      } else if (this.check(TokenType.IDENTIFIER) && this.peekAhead(1).type === TokenType.EQ) {
+      } else if (
+        this.check(TokenType.IDENTIFIER) &&
+        this.peekAhead(1).type === TokenType.EQ
+      ) {
         const id = this.parseIdentifier();
         this.consume(TokenType.EQ, "Expected '=' in assignment");
         const value = this.parseExpression();
@@ -2122,7 +2563,10 @@ export class Parser {
     const resolvedFinalExpression: Expression = finalExpression ?? {
       kind: "RecordExpression",
       entries: body
-        .filter((s): s is EffectBindStatement => s.kind === "EffectBindStatement" && s.id.kind === "Identifier")
+        .filter(
+          (s): s is EffectBindStatement =>
+            s.kind === "EffectBindStatement" && s.id.kind === "Identifier",
+        )
         .map((s) => ({
           kind: "ShorthandEntry" as const,
           key: s.id as Identifier,
@@ -2156,21 +2600,37 @@ export class Parser {
     const firstTok = this.tokens[this.current + i];
     if (firstTok.type === TokenType.DOTDOTDOT) return false;
     if (firstTok.type === TokenType.RBRACE) return false;
-    if (firstTok.type === TokenType.WHEN || firstTok.type === TokenType.MUT || firstTok.type === TokenType.ARROW) return true;
-    if (this.current + i + 1 < this.tokens.length && this.tokens[this.current + i + 1].type === TokenType.EQ) return true;
+    if (
+      firstTok.type === TokenType.WHEN ||
+      firstTok.type === TokenType.MUT ||
+      firstTok.type === TokenType.ARROW
+    )
+      return true;
+    if (
+      this.current + i + 1 < this.tokens.length &&
+      this.tokens[this.current + i + 1].type === TokenType.EQ
+    )
+      return true;
 
     while (this.current + i < this.tokens.length) {
       const tok = this.tokens[this.current + i];
       if (tok.type === TokenType.RBRACE || tok.type === TokenType.DEDENT) break;
       if (tok.type === TokenType.ARROW) return true;
-      if (tok.type === TokenType.WHEN || tok.type === TokenType.MUT) return true;
+      if (tok.type === TokenType.WHEN || tok.type === TokenType.MUT)
+        return true;
       if (tok.type === TokenType.DOTDOTDOT) return false;
       if (tok.type === TokenType.COLON) {
         let j = i + 1;
         let hasEq = false;
         while (this.current + j < this.tokens.length) {
           const t = this.tokens[this.current + j];
-          if (t.type === TokenType.NEWLINE || t.type === TokenType.COMMA || t.type === TokenType.RBRACE || t.type === TokenType.DEDENT) break;
+          if (
+            t.type === TokenType.NEWLINE ||
+            t.type === TokenType.COMMA ||
+            t.type === TokenType.RBRACE ||
+            t.type === TokenType.DEDENT
+          )
+            break;
           if (t.type === TokenType.EQ) {
             hasEq = true;
             break;
@@ -2191,7 +2651,11 @@ export class Parser {
     let member = false;
     while (true) {
       const type = this.peekAhead(i).type;
-      if (type === TokenType.DOT) { member = true; i += 2; continue; }
+      if (type === TokenType.DOT) {
+        member = true;
+        i += 2;
+        continue;
+      }
       if (type === TokenType.LBRACKET) {
         member = true;
         i++;
@@ -2205,11 +2669,15 @@ export class Parser {
       }
       break;
     }
-    return this.peekAhead(i).type === TokenType.EQ &&
-      (this.mutableVariables.has(this.peek().value) || (member && this.mutDraftVariables.has(this.peek().value)));
+    return (
+      this.peekAhead(i).type === TokenType.EQ &&
+      (this.mutableVariables.has(this.peek().value) ||
+        (member && this.mutDraftVariables.has(this.peek().value)))
+    );
   }
 
-  private parseAssignmentTarget(): Identifier | DotPathExpression | IndexExpression {
+  private parseAssignmentTarget():
+    Identifier | DotPathExpression | IndexExpression {
     const expr = this.parsePostfix();
     if (expr.kind === "Identifier") return expr;
     if (expr.kind === "IndexExpression") return expr;
@@ -2217,7 +2685,7 @@ export class Parser {
       const path: Identifier[] = [];
       let current: Expression = expr;
       while (current.kind === "MemberExpression") {
-        path.unshift(current.property as Identifier);
+        path.unshift(current.property);
         current = current.object;
       }
       if (current.kind === "Identifier") path.unshift(current);
@@ -2258,7 +2726,8 @@ export class Parser {
   }
 
   private isDestructuringBindingStart(): boolean {
-    if (!this.check(TokenType.LBRACE) && !this.check(TokenType.LBRACKET)) return false;
+    if (!this.check(TokenType.LBRACE) && !this.check(TokenType.LBRACKET))
+      return false;
     const stack: TokenType[] = [];
     for (let i = 0; i < 512; i++) {
       const tok = this.peekAhead(i);
@@ -2267,7 +2736,10 @@ export class Parser {
         stack.push(TokenType.RBRACE);
       } else if (tok.type === TokenType.LBRACKET) {
         stack.push(TokenType.RBRACKET);
-      } else if (tok.type === TokenType.RBRACE || tok.type === TokenType.RBRACKET) {
+      } else if (
+        tok.type === TokenType.RBRACE ||
+        tok.type === TokenType.RBRACKET
+      ) {
         if (stack.length === 0 || stack[stack.length - 1] !== tok.type) {
           return false;
         }
@@ -2286,7 +2758,8 @@ export class Parser {
   }
 
   private isDestructuringEffectBindStart(): boolean {
-    if (!this.check(TokenType.LBRACE) && !this.check(TokenType.LBRACKET)) return false;
+    if (!this.check(TokenType.LBRACE) && !this.check(TokenType.LBRACKET))
+      return false;
     const stack: TokenType[] = [];
     for (let i = 0; i < 512; i++) {
       const tok = this.peekAhead(i);
@@ -2295,7 +2768,10 @@ export class Parser {
         stack.push(TokenType.RBRACE);
       } else if (tok.type === TokenType.LBRACKET) {
         stack.push(TokenType.RBRACKET);
-      } else if (tok.type === TokenType.RBRACE || tok.type === TokenType.RBRACKET) {
+      } else if (
+        tok.type === TokenType.RBRACE ||
+        tok.type === TokenType.RBRACKET
+      ) {
         if (stack.length === 0 || stack[stack.length - 1] !== tok.type) {
           return false;
         }
@@ -2326,7 +2802,10 @@ export class Parser {
         if (this.check(TokenType.MATCH) || this.check(TokenType.EFFECT)) {
           return this.parseExpression();
         }
-        this.consume(TokenType.INDENT, "Expected indent for function body block");
+        this.consume(
+          TokenType.INDENT,
+          "Expected indent for function body block",
+        );
         return this.parseIndentedBlock(requireExplicitReturn);
       }
       return this.parseExpression();
@@ -2343,7 +2822,11 @@ export class Parser {
     this.skipNewlines();
     const hasIndent = this.match(TokenType.INDENT);
 
-    while (!this.check(TokenType.RBRACE) && !this.check(TokenType.DEDENT) && !this.isAtEnd()) {
+    while (
+      !this.check(TokenType.RBRACE) &&
+      !this.check(TokenType.DEDENT) &&
+      !this.isAtEnd()
+    ) {
       this.skipNewlines();
       if (this.check(TokenType.RBRACE) || this.check(TokenType.DEDENT)) break;
 
@@ -2384,8 +2867,11 @@ export class Parser {
 
         if (
           this.check(TokenType.MUT) ||
-          (this.check(TokenType.IDENTIFIER) && (this.peekAhead(1).type === TokenType.EQ || this.peekAhead(1).type === TokenType.COLON)) ||
-          (this.check(TokenType.UNDERSCORE) && this.peekAhead(1).type === TokenType.EQ) ||
+          (this.check(TokenType.IDENTIFIER) &&
+            (this.peekAhead(1).type === TokenType.EQ ||
+              this.peekAhead(1).type === TokenType.COLON)) ||
+          (this.check(TokenType.UNDERSCORE) &&
+            this.peekAhead(1).type === TokenType.EQ) ||
           this.isDestructuringBindingStart()
         ) {
           if (this.check(TokenType.UNDERSCORE)) {
@@ -2440,14 +2926,22 @@ export class Parser {
       }
     }
 
-    if (requireExplicitReturn && !finalExpression && statements.at(-1)?.kind !== "ReturnStatement") {
-      throw new ParseError(FUNCTION_RETURN_DIAGNOSTIC, { start, end: this.previous().span.end });
+    if (
+      requireExplicitReturn &&
+      !finalExpression &&
+      statements.at(-1)?.kind !== "ReturnStatement"
+    ) {
+      throw new ParseError(FUNCTION_RETURN_DIAGNOSTIC, {
+        start,
+        end: this.previous().span.end,
+      });
     }
     if (hasIndent) {
       this.consume(TokenType.DEDENT, "Expected unindent after brace block");
     }
     this.skipNewlines();
-    const end = this.consume(TokenType.RBRACE, "Expected '}' after block").span.end;
+    const end = this.consume(TokenType.RBRACE, "Expected '}' after block").span
+      .end;
     return {
       kind: "BlockStatement",
       statements,
@@ -2471,7 +2965,6 @@ export class Parser {
           this.skipNewlines();
           continue;
         }
-
 
         if (this.match(TokenType.ARROW)) {
           const retStart = this.previous().span.start;
@@ -2503,8 +2996,11 @@ export class Parser {
 
         if (
           this.check(TokenType.MUT) ||
-          (this.check(TokenType.IDENTIFIER) && (this.peekAhead(1).type === TokenType.EQ || this.peekAhead(1).type === TokenType.COLON)) ||
-          (this.check(TokenType.UNDERSCORE) && this.peekAhead(1).type === TokenType.EQ) ||
+          (this.check(TokenType.IDENTIFIER) &&
+            (this.peekAhead(1).type === TokenType.EQ ||
+              this.peekAhead(1).type === TokenType.COLON)) ||
+          (this.check(TokenType.UNDERSCORE) &&
+            this.peekAhead(1).type === TokenType.EQ) ||
           this.isDestructuringBindingStart()
         ) {
           if (this.check(TokenType.UNDERSCORE)) {
@@ -2523,10 +3019,14 @@ export class Parser {
             const bind = this.parseBindingDeclaration();
             this.skipNewlines();
             if (this.check(TokenType.DEDENT)) {
-              if (requireExplicitReturn) throw new ParseError(FUNCTION_RETURN_DIAGNOSTIC, bind.span);
+              if (requireExplicitReturn)
+                throw new ParseError(FUNCTION_RETURN_DIAGNOSTIC, bind.span);
               bind.isTrailingBinding = true;
               statements.push(bind);
-              if (bind.id.kind === "Identifier" || bind.id.kind === "UpperIdentifier") {
+              if (
+                bind.id.kind === "Identifier" ||
+                bind.id.kind === "UpperIdentifier"
+              ) {
                 finalExpression = bind.id;
               }
               break;
@@ -2568,21 +3068,36 @@ export class Parser {
       }
     }
 
-    if (requireExplicitReturn && !finalExpression && statements.at(-1)?.kind !== "ReturnStatement") {
-      throw new ParseError(FUNCTION_RETURN_DIAGNOSTIC, { start, end: this.previous().span.end });
+    if (
+      requireExplicitReturn &&
+      !finalExpression &&
+      statements.at(-1)?.kind !== "ReturnStatement"
+    ) {
+      throw new ParseError(FUNCTION_RETURN_DIAGNOSTIC, {
+        start,
+        end: this.previous().span.end,
+      });
     }
     this.consume(TokenType.DEDENT, "Expected unindent after function body");
     const fallbackExpr: Expression = {
       kind: "Identifier",
       name: "_error",
-      span: { start: this.previous().span.start, end: this.previous().span.end },
+      span: {
+        start: this.previous().span.start,
+        end: this.previous().span.end,
+      },
     };
     return {
       kind: "BlockStatement",
       statements,
-      finalExpression: finalExpression ?? (statements.length === 0 ? fallbackExpr : undefined),
+      finalExpression:
+        finalExpression ?? (statements.length === 0 ? fallbackExpr : undefined),
       span: {
-        start: statements[0]?.span.start || (finalExpression ? finalExpression.span.start : this.previous().span.start),
+        start:
+          statements[0]?.span.start ||
+          (finalExpression
+            ? finalExpression.span.start
+            : this.previous().span.start),
         end: (finalExpression ?? fallbackExpr).span.end,
       },
     };
@@ -2633,11 +3148,13 @@ export class Parser {
     if (this.check(TokenType.LPAREN)) {
       const isFunctionType =
         typeParams !== undefined ||
-        (this.peekAhead(1).type === TokenType.RPAREN && this.peekAhead(2).type === TokenType.ARROW) ||
+        (this.peekAhead(1).type === TokenType.RPAREN &&
+          this.peekAhead(2).type === TokenType.ARROW) ||
         this.peekAhead(1).type === TokenType.DOTDOTDOT ||
         (this.peekAhead(1).type === TokenType.IDENTIFIER &&
           (this.peekAhead(2).type === TokenType.COLON ||
-            (this.peekAhead(2).type === TokenType.QUESTION && this.peekAhead(3).type === TokenType.COLON)));
+            (this.peekAhead(2).type === TokenType.QUESTION &&
+              this.peekAhead(3).type === TokenType.COLON)));
 
       if (isFunctionType) {
         this.advance(); // consume '('
@@ -2651,7 +3168,10 @@ export class Parser {
               dotSpan = this.previous().span;
             }
             let pTarget: BindingTarget;
-            if (this.check(TokenType.LBRACE) || this.check(TokenType.LBRACKET)) {
+            if (
+              this.check(TokenType.LBRACE) ||
+              this.check(TokenType.LBRACKET)
+            ) {
               pTarget = this.parsePattern() as RecordPattern | ArrayPattern;
             } else {
               pTarget = this.parseIdentifier();
@@ -2665,14 +3185,23 @@ export class Parser {
               typeAnnotation: pType,
               optional: optional ? true : undefined,
               isRest: isRest ? true : undefined,
-              span: { start: dotSpan ? dotSpan.start : pTarget.span.start, end: pType.span.end },
+              span: {
+                start: dotSpan ? dotSpan.start : pTarget.span.start,
+                end: pType.span.end,
+              },
             });
-          } while (this.match(TokenType.COMMA) && !this.check(TokenType.RPAREN));
+          } while (
+            this.match(TokenType.COMMA) &&
+            !this.check(TokenType.RPAREN)
+          );
         }
         this.consume(TokenType.RPAREN, "Expected ')'");
         this.validateValueParameters(params);
         if (!this.match(TokenType.ARROW)) {
-          throw new ParseError("Expected '=>' in function type", this.peek().span);
+          throw new ParseError(
+            "Expected '=>' in function type",
+            this.peek().span,
+          );
         }
         const ret = this.parseTypeNode();
         return {
@@ -2693,7 +3222,10 @@ export class Parser {
         };
         while (this.match(TokenType.LBRACKET)) {
           const indexType = this.parseTypeNode();
-          const bracketEnd = this.consume(TokenType.RBRACKET, "Expected ']' after index type").span.end;
+          const bracketEnd = this.consume(
+            TokenType.RBRACKET,
+            "Expected ']' after index type",
+          ).span.end;
           resultType = {
             kind: "IndexedAccessTypeNode",
             objectType: resultType,
@@ -2706,15 +3238,30 @@ export class Parser {
     }
 
     if (typeParams) {
-      throw new ParseError("Expected '(' after generic type parameters", this.peek().span);
+      throw new ParseError(
+        "Expected '(' after generic type parameters",
+        this.peek().span,
+      );
     }
     return this.parsePrimaryType() as any;
   }
 
   private parsePrimaryType(): TypeNode {
-    if (this.match(TokenType.STRING, TokenType.NUMBER, TokenType.TRUE, TokenType.FALSE)) {
+    if (
+      this.match(
+        TokenType.STRING,
+        TokenType.NUMBER,
+        TokenType.TRUE,
+        TokenType.FALSE,
+      )
+    ) {
       const token = this.previous();
-      const value = token.type === TokenType.STRING ? token.value : token.type === TokenType.NUMBER ? Number(token.value) : token.type === TokenType.TRUE;
+      const value =
+        token.type === TokenType.STRING
+          ? token.value
+          : token.type === TokenType.NUMBER
+            ? Number(token.value)
+            : token.type === TokenType.TRUE;
       return { kind: "LiteralTypeNode", value, span: token.span };
     }
     if (this.match(TokenType.LBRACE)) {
@@ -2724,23 +3271,51 @@ export class Parser {
       try {
         this.skipNewlines();
         const hasIndent = this.match(TokenType.INDENT);
-        while (!this.check(TokenType.RBRACE) && !this.check(TokenType.DEDENT) && !this.isAtEnd()) {
+        while (
+          !this.check(TokenType.RBRACE) &&
+          !this.check(TokenType.DEDENT) &&
+          !this.isAtEnd()
+        ) {
           this.skipNewlines();
-          if (this.check(TokenType.RBRACE) || this.check(TokenType.DEDENT)) break;
+          if (this.check(TokenType.RBRACE) || this.check(TokenType.DEDENT))
+            break;
           const fName: Identifier = this.parseRecordKeyIdentifier();
           const optional = this.match(TokenType.QUESTION);
           this.consume(TokenType.COLON, "Expected ':' after field name");
           const fType = this.parseTypeNode();
-          const defaultValue = this.match(TokenType.EQ) ? this.parseExpression() : undefined;
-          if (defaultValue && (!this.allowOptionalRecordFields || this.recordTypeDepth !== 1)) {
-            throw new ParseError("Defaulted record fields are supported only on direct function parameters", fName.span);
+          const defaultValue = this.match(TokenType.EQ)
+            ? this.parseExpression()
+            : undefined;
+          if (
+            defaultValue &&
+            (!this.allowOptionalRecordFields || this.recordTypeDepth !== 1)
+          ) {
+            throw new ParseError(
+              "Defaulted record fields are supported only on direct function parameters",
+              fName.span,
+            );
           }
-          if (optional && defaultValue) throw new ParseError("A record field cannot be both optional and defaulted", fName.span);
-          fields.push({ kind: "RecordTypeField", name: fName, typeAnnotation: fType, optional, defaultValue, span: { start: fName.span.start, end: (defaultValue ?? fType).span.end } });
+          if (optional && defaultValue)
+            throw new ParseError(
+              "A record field cannot be both optional and defaulted",
+              fName.span,
+            );
+          fields.push({
+            kind: "RecordTypeField",
+            name: fName,
+            typeAnnotation: fType,
+            optional,
+            defaultValue,
+            span: {
+              start: fName.span.start,
+              end: (defaultValue ?? fType).span.end,
+            },
+          });
           this.match(TokenType.COMMA);
           this.skipNewlines();
         }
-        if (hasIndent) this.consume(TokenType.DEDENT, "Expected unindent in record type");
+        if (hasIndent)
+          this.consume(TokenType.DEDENT, "Expected unindent in record type");
         this.skipNewlines();
         const end = this.consume(TokenType.RBRACE, "Expected '}'").span.end;
         return { kind: "RecordTypeNode", fields, span: { start, end } };
@@ -2760,7 +3335,11 @@ export class Parser {
       };
     }
 
-    if (this.check(TokenType.UPPER_IDENTIFIER) && this.peek().value === "Effect" && this.peekAhead(1).type === TokenType.LT) {
+    if (
+      this.check(TokenType.UPPER_IDENTIFIER) &&
+      this.peek().value === "Effect" &&
+      this.peekAhead(1).type === TokenType.LT
+    ) {
       return this.parseEffectTypeNode();
     }
 
@@ -2783,7 +3362,10 @@ export class Parser {
       };
       while (this.match(TokenType.LBRACKET)) {
         const indexType = this.parseTypeNode();
-        const bracketEnd = this.consume(TokenType.RBRACKET, "Expected ']' after index type").span.end;
+        const bracketEnd = this.consume(
+          TokenType.RBRACKET,
+          "Expected ']' after index type",
+        ).span.end;
         resultType = {
           kind: "IndexedAccessTypeNode",
           objectType: resultType,
@@ -2795,11 +3377,15 @@ export class Parser {
     }
 
     if (!this.check(TokenType.UPPER_IDENTIFIER)) {
-      throw new ParseError("Type names must begin with an uppercase letter (for example String or Number); use ts for TypeScript types", this.peek().span);
+      throw new ParseError(
+        "Type names must begin with an uppercase letter (for example String or Number); use ts for TypeScript types",
+        this.peek().span,
+      );
     }
     const typeId = this.parseUpperIdentifier();
     const parts: (Identifier | UpperIdentifier)[] = [typeId];
-    while (this.match(TokenType.DOT)) parts.push(this.parsePropertyIdentifier());
+    while (this.match(TokenType.DOT))
+      parts.push(this.parsePropertyIdentifier());
     let typeArgs: TypeNode[] | undefined;
 
     if (this.match(TokenType.LT)) {
@@ -2810,13 +3396,27 @@ export class Parser {
       this.consume(TokenType.GT, "Expected '>' after type arguments");
     }
 
-    let resultType: TypeNode = parts.length > 1
-      ? { kind: "QualifiedTypeReferenceNode", parts, typeArgs, span: { start: typeId.span.start, end: this.previous().span.end } }
-      : { kind: "TypeReferenceNode", name: typeId as any, typeArgs, span: { start: typeId.span.start, end: this.previous().span.end } };
+    let resultType: TypeNode =
+      parts.length > 1
+        ? {
+            kind: "QualifiedTypeReferenceNode",
+            parts,
+            typeArgs,
+            span: { start: typeId.span.start, end: this.previous().span.end },
+          }
+        : {
+            kind: "TypeReferenceNode",
+            name: typeId,
+            typeArgs,
+            span: { start: typeId.span.start, end: this.previous().span.end },
+          };
 
     while (this.match(TokenType.LBRACKET)) {
       const indexType = this.parseTypeNode();
-      const bracketEnd = this.consume(TokenType.RBRACKET, "Expected ']' after index type").span.end;
+      const bracketEnd = this.consume(
+        TokenType.RBRACKET,
+        "Expected ']' after index type",
+      ).span.end;
       resultType = {
         kind: "IndexedAccessTypeNode",
         objectType: resultType,
@@ -2857,10 +3457,16 @@ export class Parser {
     const typeParams = this.parseTypeParameters();
     const expression = this.parsePrimary();
     if (expression.kind !== "FunctionExpression") {
-      throw new ParseError("Expected a function after generic type parameters", expression.span);
+      throw new ParseError(
+        "Expected a function after generic type parameters",
+        expression.span,
+      );
     }
     if (expression.typeParams?.length) {
-      throw new ParseError("Generic type parameters may be declared only once", typeParams[0].span);
+      throw new ParseError(
+        "Generic type parameters may be declared only once",
+        typeParams[0].span,
+      );
     }
     expression.typeParams = typeParams;
     expression.span = { start, end: expression.span.end };
@@ -2873,7 +3479,8 @@ export class Parser {
     let angleDepth = 1;
     for (let i = 1; i < 512; i++) {
       const token = this.peekAhead(i);
-      if (token.type === TokenType.EOF || token.type === TokenType.NEWLINE) return false;
+      if (token.type === TokenType.EOF || token.type === TokenType.NEWLINE)
+        return false;
       if (token.type === TokenType.LT) {
         angleDepth++;
       } else if (token.type === TokenType.GT) {
@@ -2883,12 +3490,20 @@ export class Parser {
           let parenDepth = 1;
           for (let j = i + 2; j < 1024; j++) {
             const param = this.peekAhead(j);
-            if (param.type === TokenType.EOF || param.type === TokenType.NEWLINE) return false;
+            if (
+              param.type === TokenType.EOF ||
+              param.type === TokenType.NEWLINE
+            )
+              return false;
             if (param.type === TokenType.LPAREN) {
               parenDepth++;
             } else if (param.type === TokenType.RPAREN) {
               parenDepth--;
-              if (parenDepth === 0) return this.peekAhead(j + 1).type === TokenType.ARROW || this.peekAhead(j + 1).type === TokenType.COLON;
+              if (parenDepth === 0)
+                return (
+                  this.peekAhead(j + 1).type === TokenType.ARROW ||
+                  this.peekAhead(j + 1).type === TokenType.COLON
+                );
             }
           }
           return false;
@@ -2912,7 +3527,10 @@ export class Parser {
         kind: "TypeParameter",
         name: id,
         constraint,
-        span: { start: id.span.start, end: constraint?.span.end ?? id.span.end },
+        span: {
+          start: id.span.start,
+          end: constraint?.span.end ?? id.span.end,
+        },
       });
     } while (this.match(TokenType.COMMA) && !this.check(TokenType.GT));
     this.consume(TokenType.GT, "Expected '>'");
@@ -2922,7 +3540,8 @@ export class Parser {
   // --- JSX Parsing ---
 
   public parseJsxElement(): JSXElement | JSXSelfClosingElement {
-    const start = this.consume(TokenType.JSX_TAG_OPEN, "Expected '<'").span.start;
+    const start = this.consume(TokenType.JSX_TAG_OPEN, "Expected '<'").span
+      .start;
     const tagName = this.parseJsxTagName();
 
     const attributes: JSXAttribute[] = [];
@@ -2932,7 +3551,11 @@ export class Parser {
       !this.isAtEnd()
     ) {
       this.skipNewlines();
-      if (this.check(TokenType.JSX_TAG_CLOSE) || this.check(TokenType.JSX_SLASH_CLOSE)) break;
+      if (
+        this.check(TokenType.JSX_TAG_CLOSE) ||
+        this.check(TokenType.JSX_SLASH_CLOSE)
+      )
+        break;
       attributes.push(this.parseJsxAttribute());
       this.skipNewlines();
     }
@@ -2947,7 +3570,10 @@ export class Parser {
       };
     }
 
-    const tagClose = this.consume(TokenType.JSX_TAG_CLOSE, "Expected '>' or '/>' after JSX attributes");
+    const tagClose = this.consume(
+      TokenType.JSX_TAG_CLOSE,
+      "Expected '>' or '/>' after JSX attributes",
+    );
     const openingElement: JSXOpeningElement = {
       kind: "JSXOpeningElement",
       name: tagName,
@@ -2969,7 +3595,9 @@ export class Parser {
           continue;
         }
         // Normalize leading and trailing newlines from multiline text, preserving inline spacing
-        const value = raw.replace(/^\s*[\r\n]+\s*/, "").replace(/\s*[\r\n]+\s*$/, "");
+        const value = raw
+          .replace(/^\s*[\r\n]+\s*/, "")
+          .replace(/\s*[\r\n]+\s*$/, "");
         children.push({
           kind: "JSXText",
           value,
@@ -2977,7 +3605,10 @@ export class Parser {
           span: textTok.span,
         });
       } else {
-        throw new ParseError(`Unexpected token '${this.peek().value}' in JSX children`, this.peek().span);
+        throw new ParseError(
+          `Unexpected token '${this.peek().value}' in JSX children`,
+          this.peek().span,
+        );
       }
     }
 
@@ -2986,7 +3617,10 @@ export class Parser {
       `Expected closing tag for <${this.formatTagName(tagName)}>`,
     ).span.start;
     const closingName = this.parseJsxTagName();
-    const closingGt = this.consume(TokenType.JSX_TAG_CLOSE, "Expected '>' to close tag");
+    const closingGt = this.consume(
+      TokenType.JSX_TAG_CLOSE,
+      "Expected '>' to close tag",
+    );
 
     if (!this.areTagNamesEqual(tagName, closingName)) {
       throw new ParseError(
@@ -3021,8 +3655,14 @@ export class Parser {
       };
     }
 
-    if (!this.check(TokenType.IDENTIFIER) && !this.check(TokenType.UPPER_IDENTIFIER)) {
-      throw new ParseError(`Expected JSX tag name, found '${this.peek().value}'`, this.peek().span);
+    if (
+      !this.check(TokenType.IDENTIFIER) &&
+      !this.check(TokenType.UPPER_IDENTIFIER)
+    ) {
+      throw new ParseError(
+        `Expected JSX tag name, found '${this.peek().value}'`,
+        this.peek().span,
+      );
     }
 
     let name: JSXTagName = this.parseAnyIdentifier();
@@ -3041,18 +3681,30 @@ export class Parser {
   private parseJsxAttribute(): JSXAttribute {
     if (this.match(TokenType.LBRACE)) {
       const start = this.previous().span.start;
-      this.consume(TokenType.DOTDOTDOT, "Expected '...' in JSX spread attribute");
+      this.consume(
+        TokenType.DOTDOTDOT,
+        "Expected '...' in JSX spread attribute",
+      );
       const argument = this.parseExpression();
-      const end = this.consume(TokenType.RBRACE, "Expected '}' after JSX spread").span.end;
+      const end = this.consume(
+        TokenType.RBRACE,
+        "Expected '}' after JSX spread",
+      ).span.end;
       return { kind: "JSXSpreadAttribute", argument, span: { start, end } };
     }
     let nameTok: Token;
     if (this.check(TokenType.JSX_ATTRIBUTE_NAME)) {
       nameTok = this.advance();
-    } else if (this.check(TokenType.IDENTIFIER) || this.check(TokenType.UPPER_IDENTIFIER)) {
+    } else if (
+      this.check(TokenType.IDENTIFIER) ||
+      this.check(TokenType.UPPER_IDENTIFIER)
+    ) {
       nameTok = this.advance();
     } else {
-      throw new ParseError(`Expected attribute name, found '${this.peek().value}'`, this.peek().span);
+      throw new ParseError(
+        `Expected attribute name, found '${this.peek().value}'`,
+        this.peek().span,
+      );
     }
 
     const nameNode: Identifier | UpperIdentifier =
@@ -3098,7 +3750,10 @@ export class Parser {
       this.match(TokenType.DEDENT);
       this.skipNewlines();
     }
-    const end = this.consume(TokenType.RBRACE, "Expected '}' after JSX expression").span.end;
+    const end = this.consume(
+      TokenType.RBRACE,
+      "Expected '}' after JSX expression",
+    ).span.end;
     return {
       kind: "JSXExpressionContainer",
       expression,
@@ -3124,12 +3779,18 @@ export class Parser {
   // --- Helpers ---
 
   private parseIdentifier(): Identifier {
-    const tok = this.consume(TokenType.IDENTIFIER, "Expected lowercase identifier");
+    const tok = this.consume(
+      TokenType.IDENTIFIER,
+      "Expected lowercase identifier",
+    );
     return { kind: "Identifier", name: tok.value, span: tok.span };
   }
 
   private parseUpperIdentifier(): UpperIdentifier {
-    const tok = this.consume(TokenType.UPPER_IDENTIFIER, "Expected UpperCamel identifier");
+    const tok = this.consume(
+      TokenType.UPPER_IDENTIFIER,
+      "Expected UpperCamel identifier",
+    );
     return { kind: "UpperIdentifier", name: tok.value, span: tok.span };
   }
 
@@ -3138,7 +3799,8 @@ export class Parser {
       const token = this.advance();
       return { kind: "Identifier", name: token.value, span: token.span };
     }
-    if (this.check(TokenType.UPPER_IDENTIFIER)) return this.parseUpperIdentifier();
+    if (this.check(TokenType.UPPER_IDENTIFIER))
+      return this.parseUpperIdentifier();
     return this.parseIdentifier();
   }
 
@@ -3183,12 +3845,18 @@ export class Parser {
       };
     }
 
-    while (this.check(TokenType.STRING_PART) || this.check(TokenType.INTERPOLATION_START)) {
+    while (
+      this.check(TokenType.STRING_PART) ||
+      this.check(TokenType.INTERPOLATION_START)
+    ) {
       if (this.match(TokenType.STRING_PART)) {
         parts.push({ kind: "StringRawPart", value: this.previous().value });
       } else if (this.match(TokenType.INTERPOLATION_START)) {
         const expr = this.parseExpression();
-        this.consume(TokenType.INTERPOLATION_END, "Expected '}' to close interpolation");
+        this.consume(
+          TokenType.INTERPOLATION_END,
+          "Expected '}' to close interpolation",
+        );
         parts.push({ kind: "StringInterpolationPart", expression: expr });
       }
     }
@@ -3214,12 +3882,18 @@ export class Parser {
       };
     }
 
-    while (this.check(TokenType.TEMPLATE_PART) || this.check(TokenType.INTERPOLATION_START)) {
+    while (
+      this.check(TokenType.TEMPLATE_PART) ||
+      this.check(TokenType.INTERPOLATION_START)
+    ) {
       if (this.match(TokenType.TEMPLATE_PART)) {
         parts.push({ kind: "StringRawPart", value: this.previous().value });
       } else if (this.match(TokenType.INTERPOLATION_START)) {
         const expr = this.parseExpression();
-        this.consume(TokenType.INTERPOLATION_END, "Expected '}' to close interpolation");
+        this.consume(
+          TokenType.INTERPOLATION_END,
+          "Expected '}' to close interpolation",
+        );
         parts.push({ kind: "StringInterpolationPart", expression: expr });
       }
     }
@@ -3237,7 +3911,8 @@ export class Parser {
     let angleDepth = 1;
     for (let i = 1; i < 512; i++) {
       const token = this.peekAhead(i);
-      if (token.type === TokenType.EOF || token.type === TokenType.NEWLINE) return false;
+      if (token.type === TokenType.EOF || token.type === TokenType.NEWLINE)
+        return false;
       if (token.type === TokenType.LT) {
         angleDepth++;
       } else if (token.type === TokenType.GT) {
@@ -3284,7 +3959,10 @@ export class Parser {
       this.skipNewlines();
       return;
     }
-    throw new ParseError(`${message} (got '${this.peek().value}', expected NEWLINE)`, this.peek().span);
+    throw new ParseError(
+      `${message} (got '${this.peek().value}', expected NEWLINE)`,
+      this.peek().span,
+    );
   }
 
   private match(...types: TokenType[]): boolean {
@@ -3325,6 +4003,9 @@ export class Parser {
 
   private consume(type: TokenType, message: string): Token {
     if (this.check(type)) return this.advance();
-    throw new ParseError(`${message} (got '${this.peek().value}', expected ${type})`, this.peek().span);
+    throw new ParseError(
+      `${message} (got '${this.peek().value}', expected ${type})`,
+      this.peek().span,
+    );
   }
 }

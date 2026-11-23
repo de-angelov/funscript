@@ -3,84 +3,100 @@ import { emitRuntimeHelpers } from "./runtime-helpers.js";
 import { emitAssemblyScript } from "./assemblyscript.js";
 import { FunScriptError } from "../errors.js";
 import { renderImport, renderExportFrom } from "./imports.js";
-import { isRecordContract, recordContractType, RECORD_CONTRACT_BRAND } from "../compiler/record-contracts.js";
 import {
-  Program,
-  TopLevelDeclaration,
-  ImportDeclaration,
+  isRecordContract,
+  recordContractType,
+  RECORD_CONTRACT_BRAND,
+} from "../compiler/record-contracts.js";
+import {
+  type Program,
+  type TopLevelDeclaration,
+  type ImportDeclaration,
   ExportDeclaration,
   ExportDefaultDeclaration,
-  BindingDeclaration,
-  BindingTarget,
-  SchemaDeclaration,
+  type BindingDeclaration,
+  type BindingTarget,
+  type SchemaDeclaration,
   RecordSchema,
-  TaggedUnionSchema,
+  type TaggedUnionSchema,
   RefinementSchema,
   TypeSignatureSchema,
   TsDerivedSchema,
-  ErrorDeclaration,
-  ServiceDeclaration,
-  Expression,
+  type ErrorDeclaration,
+  type ServiceDeclaration,
+  type Expression,
   Literal,
   NumberLiteral,
-  StringLiteral,
-  TemplateLiteral,
-  TaggedTemplateExpression,
-  Identifier,
-  UpperIdentifier,
+  type StringLiteral,
+  type TemplateLiteral,
+  type TaggedTemplateExpression,
+  type Identifier,
+  type UpperIdentifier,
   Placeholder,
   TypedHole,
-  PipelineExpression,
-  BinaryExpression,
-  UnaryExpression,
-  CallExpression,
-  MemberExpression,
-  IndexExpression,
-  RecordExpression,
+  type PipelineExpression,
+  type BinaryExpression,
+  type UnaryExpression,
+  type CallExpression,
+  type MemberExpression,
+  type IndexExpression,
+  type RecordExpression,
   DotPathEntry,
   ArrayExpression,
-  FunctionExpression,
-  FunctionBody,
-  BlockStatement,
-  Statement,
+  type FunctionExpression,
+  type FunctionBody,
+  type BlockStatement,
+  type Statement,
   AssignmentStatement,
   ExpressionStatement,
   ReturnStatement,
-  WhenStatement,
-  MutBlockExpression,
-  MatchExpression,
-  Pattern,
-  EffectBlockExpression,
-  ParBlockExpression,
+  type WhenStatement,
+  type MutBlockExpression,
+  type MatchExpression,
+  type Pattern,
+  type EffectBlockExpression,
+  type ParBlockExpression,
   EffectStatement,
   EffectBindStatement,
   EffectDiscardStatement,
-  TypeNode,
-  TypeReferenceNode,
-  TypeParameter,
-  FunctionTypeNode,
-  EffectTypeNode,
+  type TypeNode,
+  type TypeReferenceNode,
+  type TypeParameter,
+  type FunctionTypeNode,
+  type EffectTypeNode,
   IntersectionTypeNode,
   TsEscapeDeclaration,
-  JsExpression,
+  type JsExpression,
   TsEscapeExpression,
   TsEscapeTypeNode,
-  JSXElement,
-  JSXSelfClosingElement,
+  type JSXElement,
+  type JSXSelfClosingElement,
   JSXOpeningElement,
   JSXClosingElement,
-  JSXAttribute,
-  JSXExpressionContainer,
-  JSXText,
-  JSXChild,
-  JSXTagName,
+  type JSXAttribute,
+  type JSXExpressionContainer,
+  type JSXText,
+  type JSXChild,
+  type JSXTagName,
 } from "../ast/types.js";
-import { EFFECT_PIPELINE_COMPATIBILITY_ALIASES, type PipelineCompanionModule } from "./pipeline-catalog.js";
-import { PipelineResolver, COMPARISON_METHOD_MAP, ES_TOOLKIT_METHODS } from "./pipeline-resolution.js";
+import {
+  EFFECT_PIPELINE_COMPATIBILITY_ALIASES,
+  type PipelineCompanionModule,
+} from "./pipeline-catalog.js";
+import {
+  PipelineResolver,
+  COMPARISON_METHOD_MAP,
+  ES_TOOLKIT_METHODS,
+} from "./pipeline-resolution.js";
 export {
-  COMPARISON_METHOD_MAP, PipelineResolutionError, ES_TOOLKIT_METHODS,
-  ES_TOOLKIT_STRING_METHODS, ES_TOOLKIT_MATH_DATA_LAST, ES_TOOLKIT_MATH_COLLECTION,
-  ES_TOOLKIT_TIMING_DATA_LAST, ES_TOOLKIT_DATA_LAST_CALLS,
+  COMPARISON_METHOD_MAP,
+  PipelineResolutionError,
+  ES_TOOLKIT_METHODS,
+  ES_TOOLKIT_STRING_METHODS,
+  ES_TOOLKIT_MATH_DATA_LAST,
+  ES_TOOLKIT_MATH_COLLECTION,
+  ES_TOOLKIT_TIMING_DATA_LAST,
+  ES_TOOLKIT_DATA_LAST_CALLS,
 } from "./pipeline-resolution.js";
 
 export interface StageResolution {
@@ -112,7 +128,10 @@ export interface EmitterOptions {
   importedSchemas?: ReadonlyMap<string, string>;
   /** Direct imported FunScript functions with verified optional-record parameters. */
   importedRecordFunctions?: ReadonlyMap<string, ReadonlySet<number>>;
-  importedRecordContracts?: ReadonlyMap<string, import("../ast/types.js").RecordTypeNode>;
+  importedRecordContracts?: ReadonlyMap<
+    string,
+    import("../ast/types.js").RecordTypeNode
+  >;
   /** Direct imported data schemas verified to have an identity encoding. */
   importedIdentitySchemas?: ReadonlySet<string>;
   importedGenericDataSchemas?: ReadonlyMap<string, number>;
@@ -145,60 +164,353 @@ export const EFFECT_MODULE_NAMES = new Set([
   "pipe",
 ]);
 
-const BANNED_INSTANCE_METHODS = new Map<string, { category: string; replacement: string; pipeline: string }>([
+const BANNED_INSTANCE_METHODS = new Map<
+  string,
+  { category: string; replacement: string; pipeline: string }
+>([
   // Array methods
-  ["map", { category: "array", replacement: "Array.map", pipeline: "|> Array.map(...)" }],
-  ["filter", { category: "array", replacement: "Array.filter", pipeline: "|> Array.filter(...)" }],
-  ["reduce", { category: "array", replacement: "Array.reduce", pipeline: "|> Array.reduce(...)" }],
-  ["reduceRight", { category: "array", replacement: "Array.reduceRight", pipeline: "|> Array.reduceRight(...)" }],
-  ["flatMap", { category: "array", replacement: "Array.flatMap", pipeline: "|> Array.flatMap(...)" }],
-  ["flat", { category: "array", replacement: "Array.flatten", pipeline: "|> Array.flatten" }],
-  ["find", { category: "array", replacement: "Array.findFirst", pipeline: "|> Array.findFirst(...)" }],
-  ["findIndex", { category: "array", replacement: "Array.findFirstIndex", pipeline: "|> Array.findFirstIndex(...)" }],
-  ["findLast", { category: "array", replacement: "Array.findLast", pipeline: "|> Array.findLast(...)" }],
-  ["findLastIndex", { category: "array", replacement: "Array.findLastIndex", pipeline: "|> Array.findLastIndex(...)" }],
-  ["some", { category: "array", replacement: "Array.some", pipeline: "|> Array.some(...)" }],
-  ["every", { category: "array", replacement: "Array.every", pipeline: "|> Array.every(...)" }],
-  ["sort", { category: "array", replacement: "Array.sort", pipeline: "|> Array.sort(...)" }],
-  ["reverse", { category: "array", replacement: "Array.reverse", pipeline: "|> Array.reverse" }],
-  ["push", { category: "array", replacement: "Array.append", pipeline: "|> Array.append(...)" }],
-  ["pop", { category: "array", replacement: "Array.unappend", pipeline: "|> Array.unappend" }],
-  ["shift", { category: "array", replacement: "Array.unprepend", pipeline: "|> Array.unprepend" }],
-  ["unshift", { category: "array", replacement: "Array.prepend", pipeline: "|> Array.prepend(...)" }],
-  ["splice", { category: "array", replacement: "Array.remove / Array.modify", pipeline: "Array.remove(...)" }],
+  [
+    "map",
+    {
+      category: "array",
+      replacement: "Array.map",
+      pipeline: "|> Array.map(...)",
+    },
+  ],
+  [
+    "filter",
+    {
+      category: "array",
+      replacement: "Array.filter",
+      pipeline: "|> Array.filter(...)",
+    },
+  ],
+  [
+    "reduce",
+    {
+      category: "array",
+      replacement: "Array.reduce",
+      pipeline: "|> Array.reduce(...)",
+    },
+  ],
+  [
+    "reduceRight",
+    {
+      category: "array",
+      replacement: "Array.reduceRight",
+      pipeline: "|> Array.reduceRight(...)",
+    },
+  ],
+  [
+    "flatMap",
+    {
+      category: "array",
+      replacement: "Array.flatMap",
+      pipeline: "|> Array.flatMap(...)",
+    },
+  ],
+  [
+    "flat",
+    {
+      category: "array",
+      replacement: "Array.flatten",
+      pipeline: "|> Array.flatten",
+    },
+  ],
+  [
+    "find",
+    {
+      category: "array",
+      replacement: "Array.findFirst",
+      pipeline: "|> Array.findFirst(...)",
+    },
+  ],
+  [
+    "findIndex",
+    {
+      category: "array",
+      replacement: "Array.findFirstIndex",
+      pipeline: "|> Array.findFirstIndex(...)",
+    },
+  ],
+  [
+    "findLast",
+    {
+      category: "array",
+      replacement: "Array.findLast",
+      pipeline: "|> Array.findLast(...)",
+    },
+  ],
+  [
+    "findLastIndex",
+    {
+      category: "array",
+      replacement: "Array.findLastIndex",
+      pipeline: "|> Array.findLastIndex(...)",
+    },
+  ],
+  [
+    "some",
+    {
+      category: "array",
+      replacement: "Array.some",
+      pipeline: "|> Array.some(...)",
+    },
+  ],
+  [
+    "every",
+    {
+      category: "array",
+      replacement: "Array.every",
+      pipeline: "|> Array.every(...)",
+    },
+  ],
+  [
+    "sort",
+    {
+      category: "array",
+      replacement: "Array.sort",
+      pipeline: "|> Array.sort(...)",
+    },
+  ],
+  [
+    "reverse",
+    {
+      category: "array",
+      replacement: "Array.reverse",
+      pipeline: "|> Array.reverse",
+    },
+  ],
+  [
+    "push",
+    {
+      category: "array",
+      replacement: "Array.append",
+      pipeline: "|> Array.append(...)",
+    },
+  ],
+  [
+    "pop",
+    {
+      category: "array",
+      replacement: "Array.unappend",
+      pipeline: "|> Array.unappend",
+    },
+  ],
+  [
+    "shift",
+    {
+      category: "array",
+      replacement: "Array.unprepend",
+      pipeline: "|> Array.unprepend",
+    },
+  ],
+  [
+    "unshift",
+    {
+      category: "array",
+      replacement: "Array.prepend",
+      pipeline: "|> Array.prepend(...)",
+    },
+  ],
+  [
+    "splice",
+    {
+      category: "array",
+      replacement: "Array.remove / Array.modify",
+      pipeline: "Array.remove(...)",
+    },
+  ],
 
   // String methods
-  ["trim", { category: "string", replacement: "String.trim", pipeline: "|> String.trim" }],
-  ["trimStart", { category: "string", replacement: "String.trimStart", pipeline: "|> String.trimStart" }],
-  ["trimEnd", { category: "string", replacement: "String.trimEnd", pipeline: "|> String.trimEnd" }],
-  ["toLowerCase", { category: "string", replacement: "String.toLowerCase", pipeline: "|> String.toLowerCase" }],
-  ["toUpperCase", { category: "string", replacement: "String.toUpperCase", pipeline: "|> String.toUpperCase" }],
-  ["toLocaleLowerCase", { category: "string", replacement: "String.toLocaleLowerCase", pipeline: "|> String.toLocaleLowerCase" }],
-  ["toLocaleUpperCase", { category: "string", replacement: "String.toLocaleUpperCase", pipeline: "|> String.toLocaleUpperCase" }],
-  ["startsWith", { category: "string", replacement: "String.startsWith", pipeline: "|> String.startsWith(...)" }],
-  ["endsWith", { category: "string", replacement: "String.endsWith", pipeline: "|> String.endsWith(...)" }],
-  ["split", { category: "string", replacement: "String.split", pipeline: "|> String.split(...)" }],
-  ["replace", { category: "string", replacement: "String.replace", pipeline: "|> String.replace(...)" }],
-  ["replaceAll", { category: "string", replacement: "String.replaceAll", pipeline: "|> String.replaceAll(...)" }],
-  ["padStart", { category: "string", replacement: "String.padStart", pipeline: "|> String.padStart(...)" }],
-  ["padEnd", { category: "string", replacement: "String.padEnd", pipeline: "|> String.padEnd(...)" }],
-  ["repeat", { category: "string", replacement: "String.repeat", pipeline: "|> String.repeat(...)" }],
+  [
+    "trim",
+    {
+      category: "string",
+      replacement: "String.trim",
+      pipeline: "|> String.trim",
+    },
+  ],
+  [
+    "trimStart",
+    {
+      category: "string",
+      replacement: "String.trimStart",
+      pipeline: "|> String.trimStart",
+    },
+  ],
+  [
+    "trimEnd",
+    {
+      category: "string",
+      replacement: "String.trimEnd",
+      pipeline: "|> String.trimEnd",
+    },
+  ],
+  [
+    "toLowerCase",
+    {
+      category: "string",
+      replacement: "String.toLowerCase",
+      pipeline: "|> String.toLowerCase",
+    },
+  ],
+  [
+    "toUpperCase",
+    {
+      category: "string",
+      replacement: "String.toUpperCase",
+      pipeline: "|> String.toUpperCase",
+    },
+  ],
+  [
+    "toLocaleLowerCase",
+    {
+      category: "string",
+      replacement: "String.toLocaleLowerCase",
+      pipeline: "|> String.toLocaleLowerCase",
+    },
+  ],
+  [
+    "toLocaleUpperCase",
+    {
+      category: "string",
+      replacement: "String.toLocaleUpperCase",
+      pipeline: "|> String.toLocaleUpperCase",
+    },
+  ],
+  [
+    "startsWith",
+    {
+      category: "string",
+      replacement: "String.startsWith",
+      pipeline: "|> String.startsWith(...)",
+    },
+  ],
+  [
+    "endsWith",
+    {
+      category: "string",
+      replacement: "String.endsWith",
+      pipeline: "|> String.endsWith(...)",
+    },
+  ],
+  [
+    "split",
+    {
+      category: "string",
+      replacement: "String.split",
+      pipeline: "|> String.split(...)",
+    },
+  ],
+  [
+    "replace",
+    {
+      category: "string",
+      replacement: "String.replace",
+      pipeline: "|> String.replace(...)",
+    },
+  ],
+  [
+    "replaceAll",
+    {
+      category: "string",
+      replacement: "String.replaceAll",
+      pipeline: "|> String.replaceAll(...)",
+    },
+  ],
+  [
+    "padStart",
+    {
+      category: "string",
+      replacement: "String.padStart",
+      pipeline: "|> String.padStart(...)",
+    },
+  ],
+  [
+    "padEnd",
+    {
+      category: "string",
+      replacement: "String.padEnd",
+      pipeline: "|> String.padEnd(...)",
+    },
+  ],
+  [
+    "repeat",
+    {
+      category: "string",
+      replacement: "String.repeat",
+      pipeline: "|> String.repeat(...)",
+    },
+  ],
 
   // Collection mutation methods
-  ["add", { category: "collection", replacement: "HashSet.add", pipeline: "|> HashSet.add(...)" }],
-  ["clear", { category: "collection", replacement: "HashMap.empty() / HashSet.empty()", pipeline: "HashMap.empty()" }],
-  ["delete", { category: "collection", replacement: "HashMap.remove / Record.remove", pipeline: "|> HashMap.remove(...)" }],
-  ["set", { category: "collection", replacement: "HashMap.set / Record.set", pipeline: "|> HashMap.set(...)" }],
+  [
+    "add",
+    {
+      category: "collection",
+      replacement: "HashSet.add",
+      pipeline: "|> HashSet.add(...)",
+    },
+  ],
+  [
+    "clear",
+    {
+      category: "collection",
+      replacement: "HashMap.empty() / HashSet.empty()",
+      pipeline: "HashMap.empty()",
+    },
+  ],
+  [
+    "delete",
+    {
+      category: "collection",
+      replacement: "HashMap.remove / Record.remove",
+      pipeline: "|> HashMap.remove(...)",
+    },
+  ],
+  [
+    "set",
+    {
+      category: "collection",
+      replacement: "HashMap.set / Record.set",
+      pipeline: "|> HashMap.set(...)",
+    },
+  ],
 
   // Date mutation methods
-  ["setFullYear", { category: "date", replacement: "DateTime.*", pipeline: "|> DateTime.*" }],
-  ["setMonth", { category: "date", replacement: "DateTime.*", pipeline: "|> DateTime.*" }],
-  ["setDate", { category: "date", replacement: "DateTime.*", pipeline: "|> DateTime.*" }],
-  ["setHours", { category: "date", replacement: "DateTime.*", pipeline: "|> DateTime.*" }],
-  ["setMinutes", { category: "date", replacement: "DateTime.*", pipeline: "|> DateTime.*" }],
-  ["setSeconds", { category: "date", replacement: "DateTime.*", pipeline: "|> DateTime.*" }],
-  ["setTime", { category: "date", replacement: "DateTime.*", pipeline: "|> DateTime.*" }],
-  ["setMilliseconds", { category: "date", replacement: "DateTime.*", pipeline: "|> DateTime.*" }],
+  [
+    "setFullYear",
+    { category: "date", replacement: "DateTime.*", pipeline: "|> DateTime.*" },
+  ],
+  [
+    "setMonth",
+    { category: "date", replacement: "DateTime.*", pipeline: "|> DateTime.*" },
+  ],
+  [
+    "setDate",
+    { category: "date", replacement: "DateTime.*", pipeline: "|> DateTime.*" },
+  ],
+  [
+    "setHours",
+    { category: "date", replacement: "DateTime.*", pipeline: "|> DateTime.*" },
+  ],
+  [
+    "setMinutes",
+    { category: "date", replacement: "DateTime.*", pipeline: "|> DateTime.*" },
+  ],
+  [
+    "setSeconds",
+    { category: "date", replacement: "DateTime.*", pipeline: "|> DateTime.*" },
+  ],
+  [
+    "setTime",
+    { category: "date", replacement: "DateTime.*", pipeline: "|> DateTime.*" },
+  ],
+  [
+    "setMilliseconds",
+    { category: "date", replacement: "DateTime.*", pipeline: "|> DateTime.*" },
+  ],
 ]);
 
 const BANNED_OBJECT_STATIC_METHODS = new Map<string, string>([
@@ -207,7 +519,10 @@ const BANNED_OBJECT_STATIC_METHODS = new Map<string, string>([
   ["entries", "Record.toEntries(...)"],
   ["fromEntries", "Record.fromEntries(...)"],
   ["assign", "Record.union(...) or object spread '{ ...a, ...b }'"],
-  ["freeze", "plain record literals '{ ... }' (FunScript records are already immutable)"],
+  [
+    "freeze",
+    "plain record literals '{ ... }' (FunScript records are already immutable)",
+  ],
   ["hasOwn", "Record.has(...)"],
 ]);
 
@@ -318,7 +633,12 @@ const EFFECT_BUILTIN_MODULES = new Set([
   "Tuple",
 ]);
 
-const NATIVE_CONSTRUCTOR_NAMES = new Set(["Number", "String", "Boolean", "Array"]);
+const NATIVE_CONSTRUCTOR_NAMES = new Set([
+  "Number",
+  "String",
+  "Boolean",
+  "Array",
+]);
 
 const EFFECT_TYPE_MODULES = new Set([
   "Option",
@@ -346,7 +666,9 @@ function emitPropertyKey(name: string): string {
 export class Emitter {
   private effectImports = new Set<string>();
   private parameterScopes: Array<Map<string, boolean>> = [];
-  private recordScopes: Array<Map<string, Map<string, RecordFieldInfo> | undefined>> = [];
+  private recordScopes: Array<
+    Map<string, Map<string, RecordFieldInfo> | undefined>
+  > = [];
   private userEffectBindings = new Set<string>();
   private effectModuleBindings = new Set<string>();
   private userEsToolkitBindings = new Set<string>();
@@ -373,14 +695,22 @@ export class Emitter {
   private activeSchemaParameters?: Set<string>;
   private unsafeSchemaBinding = false;
   private inPipelineStage = false;
-  private recordContracts = new Map<string, import("../ast/types.js").RecordTypeNode>();
+  private recordContracts = new Map<
+    string,
+    import("../ast/types.js").RecordTypeNode
+  >();
   private needsCheckedRecordDecoder = false;
   private checkedCallbackKinds = new Set<"sync" | "void" | "effect">();
   private identityRecordSchemas = new Set<string>();
   private checkedTaggedSchemas = new Map<string, TaggedUnionSchema>();
 
-  constructor(private program?: Program, contextProgram?: Program, private options: EmitterOptions = {}) {
-    for (const [name, contract] of options.importedRecordContracts ?? []) this.recordContracts.set(name, contract);
+  constructor(
+    private program?: Program,
+    contextProgram?: Program,
+    private options: EmitterOptions = {},
+  ) {
+    for (const [name, contract] of options.importedRecordContracts ?? [])
+      this.recordContracts.set(name, contract);
     // Source-map emission renders declarations individually, but resolution
     // still needs the bindings from the complete source program.
     const allItems = (contextProgram ?? program)?.body ?? [];
@@ -388,24 +718,45 @@ export class Emitter {
       const decl = item.kind === "ExportDeclaration" ? item.declaration : item;
       if (item.kind === "ImportDeclaration") {
         for (const spec of item.specifiers) {
-          if (spec.local.name === "Schema" && (item.isTypeOnly || spec.isTypeOnly || item.source.raw !== '"effect"' || spec.imported.name !== "Schema")) this.unsafeSchemaBinding = true;
+          if (
+            spec.local.name === "Schema" &&
+            (item.isTypeOnly ||
+              spec.isTypeOnly ||
+              item.source.raw !== '"effect"' ||
+              spec.imported.name !== "Schema")
+          )
+            this.unsafeSchemaBinding = true;
         }
-        if (item.namespaceBinding?.name === "Schema" && (item.isTypeOnly || item.source.raw !== '"effect/Schema"')) this.unsafeSchemaBinding = true;
+        if (
+          item.namespaceBinding?.name === "Schema" &&
+          (item.isTypeOnly || item.source.raw !== '"effect/Schema"')
+        )
+          this.unsafeSchemaBinding = true;
         if (!item.isTypeOnly) {
           for (const spec of item.specifiers) {
             if (!spec.isTypeOnly) this.userImportBindings.add(spec.local.name);
           }
-          if (item.namespaceBinding) this.userImportBindings.add(item.namespaceBinding.name);
+          if (item.namespaceBinding)
+            this.userImportBindings.add(item.namespaceBinding.name);
         }
       }
       if (item.kind === "ImportDeclaration" && item.source.raw === '"effect"') {
-        for (const spec of item.specifiers) this.userEffectBindings.add(spec.local.name);
+        for (const spec of item.specifiers)
+          this.userEffectBindings.add(spec.local.name);
       }
-      if (item.kind === "ImportDeclaration" && item.source.raw === '"es-toolkit"') {
-        for (const spec of item.specifiers) this.userEsToolkitBindings.add(spec.local.name);
+      if (
+        item.kind === "ImportDeclaration" &&
+        item.source.raw === '"es-toolkit"'
+      ) {
+        for (const spec of item.specifiers)
+          this.userEsToolkitBindings.add(spec.local.name);
       }
-      if (item.kind === "ImportDeclaration" && /^"effect(?:\/|\")/.test(item.source.raw)) {
-        for (const spec of item.specifiers) this.effectModuleBindings.add(spec.local.name);
+      if (
+        item.kind === "ImportDeclaration" &&
+        /^"effect(?:\/|")/.test(item.source.raw)
+      ) {
+        for (const spec of item.specifiers)
+          this.effectModuleBindings.add(spec.local.name);
         if (item.namespaceBinding) {
           this.effectModuleBindings.add(item.namespaceBinding.name);
           if (item.source.raw === `"effect/${item.namespaceBinding.name}"`) {
@@ -420,14 +771,18 @@ export class Emitter {
       ) {
         this.declaredTypeNames.add(decl.id.name);
       }
-      if (decl.kind === "BindingDeclaration" && "name" in decl.id) this.bindings.set(decl.id.name, decl);
+      if (decl.kind === "BindingDeclaration" && "name" in decl.id)
+        this.bindings.set(decl.id.name, decl);
     }
 
     const staticTypeNames = new Set<string>();
     for (const [name] of this.recordContracts) staticTypeNames.add(name);
     for (const item of allItems) {
       const decl = item.kind === "ExportDeclaration" ? item.declaration : item;
-      if (decl.kind === "SchemaDeclaration" && decl.body.kind === "TypeSignatureSchema") {
+      if (
+        decl.kind === "SchemaDeclaration" &&
+        decl.body.kind === "TypeSignatureSchema"
+      ) {
         staticTypeNames.add(decl.id.name);
       }
     }
@@ -437,17 +792,37 @@ export class Emitter {
     const identityType = (type: TypeNode): boolean => {
       if (type.kind === "LiteralTypeNode") return true;
       if (type.kind === "UnionTypeNode") return type.types.every(identityType);
-      if (type.kind === "ParenthesizedTypeNode") return identityType(type.typeNode);
-      return type.kind === "TypeReferenceNode" && !type.typeArgs?.length &&
-        ((["String", "Number", "Boolean"].includes(type.name.name) && !this.declaredTypeNames.has(type.name.name)) || this.identityRecordSchemas.has(type.name.name));
+      if (type.kind === "ParenthesizedTypeNode")
+        return identityType(type.typeNode);
+      return (
+        type.kind === "TypeReferenceNode" &&
+        !type.typeArgs?.length &&
+        ((["String", "Number", "Boolean"].includes(type.name.name) &&
+          !this.declaredTypeNames.has(type.name.name)) ||
+          this.identityRecordSchemas.has(type.name.name))
+      );
     };
     let addedIdentity = true;
     while (addedIdentity) {
       addedIdentity = false;
       for (const item of allItems) {
-        const decl = item.kind === "ExportDeclaration" ? item.declaration : item;
-        if (decl.kind !== "SchemaDeclaration" || decl.body.kind !== "RecordSchema" || decl.typeParams?.length || this.identityRecordSchemas.has(decl.id.name)) continue;
-        if (decl.body.fields.every(field => !field.optional && !field.defaultValue && identityType(field.typeAnnotation))) {
+        const decl =
+          item.kind === "ExportDeclaration" ? item.declaration : item;
+        if (
+          decl.kind !== "SchemaDeclaration" ||
+          decl.body.kind !== "RecordSchema" ||
+          decl.typeParams?.length ||
+          this.identityRecordSchemas.has(decl.id.name)
+        )
+          continue;
+        if (
+          decl.body.fields.every(
+            (field) =>
+              !field.optional &&
+              !field.defaultValue &&
+              identityType(field.typeAnnotation),
+          )
+        ) {
           this.identityRecordSchemas.add(decl.id.name);
           addedIdentity = true;
         }
@@ -457,14 +832,30 @@ export class Emitter {
     // Optional/defaulted, recursive, generic, and unverified imports stay excluded.
     for (const item of allItems) {
       const decl = item.kind === "ExportDeclaration" ? item.declaration : item;
-      if (decl.kind === "SchemaDeclaration" && decl.body.kind === "TaggedUnionSchema" &&
-          !decl.typeParams?.length && decl.body.variants.length > 0 &&
-          decl.body.variants.every(variant => variant.fields.every(field =>
-            field.name.name !== "_tag" && field.typeAnnotation.kind === "TypeReferenceNode" &&
-            !field.typeAnnotation.typeArgs?.length &&
-            ((["String", "Number", "Boolean"].includes(field.typeAnnotation.name.name) && !this.declaredTypeNames.has(field.typeAnnotation.name.name)) ||
-             this.identityRecordSchemas.has(field.typeAnnotation.name.name) ||
-             this.options.importedIdentitySchemas?.has(field.typeAnnotation.name.name) === true)))) {
+      if (
+        decl.kind === "SchemaDeclaration" &&
+        decl.body.kind === "TaggedUnionSchema" &&
+        !decl.typeParams?.length &&
+        decl.body.variants.length > 0 &&
+        decl.body.variants.every((variant) =>
+          variant.fields.every(
+            (field) =>
+              field.name.name !== "_tag" &&
+              field.typeAnnotation.kind === "TypeReferenceNode" &&
+              !field.typeAnnotation.typeArgs?.length &&
+              ((["String", "Number", "Boolean"].includes(
+                field.typeAnnotation.name.name,
+              ) &&
+                !this.declaredTypeNames.has(field.typeAnnotation.name.name)) ||
+                this.identityRecordSchemas.has(
+                  field.typeAnnotation.name.name,
+                ) ||
+                this.options.importedIdentitySchemas?.has(
+                  field.typeAnnotation.name.name,
+                ) === true),
+          ),
+        )
+      ) {
         this.checkedTaggedSchemas.set(decl.id.name, decl.body);
       }
     }
@@ -472,10 +863,16 @@ export class Emitter {
     while (changed) {
       changed = false;
       for (const item of allItems) {
-        const decl = item.kind === "ExportDeclaration" ? item.declaration : item;
-        if (decl.kind === "SchemaDeclaration" && decl.body.kind === "RecordSchema" && !staticTypeNames.has(decl.id.name)) {
+        const decl =
+          item.kind === "ExportDeclaration" ? item.declaration : item;
+        if (
+          decl.kind === "SchemaDeclaration" &&
+          decl.body.kind === "RecordSchema" &&
+          !staticTypeNames.has(decl.id.name)
+        ) {
           const visibleStatics = new Set(staticTypeNames);
-          for (const param of decl.typeParams ?? []) visibleStatics.delete(param.name.name);
+          for (const param of decl.typeParams ?? [])
+            visibleStatics.delete(param.name.name);
           if (isRecordContract(decl.body, visibleStatics)) {
             staticTypeNames.add(decl.id.name);
             changed = true;
@@ -487,10 +884,14 @@ export class Emitter {
     for (const item of allItems) {
       const decl = item.kind === "ExportDeclaration" ? item.declaration : item;
       if (decl.kind === "SchemaDeclaration") {
-        if (decl.body.kind === "RecordSchema" && staticTypeNames.has(decl.id.name)) {
+        if (
+          decl.body.kind === "RecordSchema" &&
+          staticTypeNames.has(decl.id.name)
+        ) {
           this.recordContracts.set(decl.id.name, recordContractType(decl.body));
         } else if (
-          (decl.body.kind === "RecordSchema" && !staticTypeNames.has(decl.id.name)) ||
+          (decl.body.kind === "RecordSchema" &&
+            !staticTypeNames.has(decl.id.name)) ||
           decl.body.kind === "StructuralUnionSchema" ||
           decl.body.kind === "RefinementSchema" ||
           decl.body.kind === "TsDerivedSchema" ||
@@ -502,7 +903,12 @@ export class Emitter {
     }
     for (const item of allItems) {
       const decl = item.kind === "ExportDeclaration" ? item.declaration : item;
-      if (decl.kind === "SchemaDeclaration" && decl.body.kind === "RecordSchema" && decl.typeParams?.length && !this.recordContracts.has(decl.id.name)) {
+      if (
+        decl.kind === "SchemaDeclaration" &&
+        decl.body.kind === "RecordSchema" &&
+        decl.typeParams?.length &&
+        !this.recordContracts.has(decl.id.name)
+      ) {
         this.genericDataSchemas.set(decl.id.name, decl.typeParams.length);
         this.genericSchemaDeclarations.set(decl.id.name, decl);
       }
@@ -520,7 +926,9 @@ export class Emitter {
 
     // Generate header imports
     let header = "";
-    const generatedEffectImports = Array.from(this.effectImports).filter((name) => !this.userEffectBindings.has(name));
+    const generatedEffectImports = Array.from(this.effectImports).filter(
+      (name) => !this.userEffectBindings.has(name),
+    );
     if (generatedEffectImports.length > 0) {
       const sorted = generatedEffectImports.sort().join(", ");
       header += `import { ${sorted} } from "effect";\n`;
@@ -534,9 +942,15 @@ export class Emitter {
     }
     if (this.needsCheckedRecordDecoder) {
       const helpers = ["decodeCheckedRecord as $funscriptDecodeCheckedRecord"];
-      if (this.checkedCallbackKinds.has("sync")) helpers.push("checkedSync as $funscriptCheckedSync");
-      if (this.checkedCallbackKinds.has("void")) helpers.push("checkedSyncVoid as $funscriptCheckedSyncVoid");
-      if (this.checkedCallbackKinds.has("effect")) helpers.push("checkedEffect as $funscriptCheckedEffect", "type CallbackBoundaryError as $funscriptCallbackBoundaryError");
+      if (this.checkedCallbackKinds.has("sync"))
+        helpers.push("checkedSync as $funscriptCheckedSync");
+      if (this.checkedCallbackKinds.has("void"))
+        helpers.push("checkedSyncVoid as $funscriptCheckedSyncVoid");
+      if (this.checkedCallbackKinds.has("effect"))
+        helpers.push(
+          "checkedEffect as $funscriptCheckedEffect",
+          "type CallbackBoundaryError as $funscriptCallbackBoundaryError",
+        );
       header += `import { ${helpers.join(", ")} } from "funscript/callback";\n`;
     }
     if (this.needsTsPattern) {
@@ -561,7 +975,10 @@ export class Emitter {
     return header + bodyCode.trim() + "\n";
   }
 
-  private emitTopLevelDeclaration(decl: TopLevelDeclaration, isExport = false): string {
+  private emitTopLevelDeclaration(
+    decl: TopLevelDeclaration,
+    isExport = false,
+  ): string {
     switch (decl.kind) {
       case "ImportDeclaration":
         return this.emitImportDeclaration(decl);
@@ -594,7 +1011,10 @@ export class Emitter {
     return renderImport(decl);
   }
 
-  private emitSchemaDeclaration(decl: SchemaDeclaration, isExport: boolean): string {
+  private emitSchemaDeclaration(
+    decl: SchemaDeclaration,
+    isExport: boolean,
+  ): string {
     const name = decl.id.name;
     const exp = isExport ? "export " : "";
 
@@ -604,7 +1024,10 @@ export class Emitter {
       decl.body.kind !== "TaggedUnionSchema" &&
       !(decl.body.kind === "RecordSchema")
     ) {
-      throw new FunScriptError("Generic runtime schemas are not supported yet; use a TypeScript type alias", decl.span);
+      throw new FunScriptError(
+        "Generic runtime schemas are not supported yet; use a TypeScript type alias",
+        decl.span,
+      );
     }
 
     switch (decl.body.kind) {
@@ -614,18 +1037,19 @@ export class Emitter {
           const typeParamsStr = this.emitTypeParameters(decl.typeParams);
           const contract = `declare const ${brand}: unique symbol;\n${exp}type ${name}${typeParamsStr} = ${this.emitTypeNode(recordContractType(decl.body))} & { readonly [${brand}]?: never };`;
           return contract + this.emitCheckedRecordDecoder(decl, exp);
-
         }
-        if (decl.typeParams?.length) return this.emitGenericDataSchema(decl, exp);
+        if (decl.typeParams?.length)
+          return this.emitGenericDataSchema(decl, exp);
         this.effectImports.add("Schema");
         const schemaFields = decl.body.fields
           .map((f) => {
             const fieldKey = emitPropertyKey(f.name.name);
             const schema = this.emitSchemaTypeField(f.typeAnnotation);
-            if (f.optional) return `  ${fieldKey}: Schema.OptionFromOptionalNullOr(${schema}, { onNoneEncoding: "omit" })`;
+            if (f.optional)
+              return `  ${fieldKey}: Schema.OptionFromOptionalNullOr(${schema}, { onNoneEncoding: "omit" })`;
             if (!f.defaultValue) return `  ${fieldKey}: ${schema}`;
             this.effectImports.add("Effect");
-            return `  ${fieldKey}: ${schema}.pipe(Schema.withDecodingDefaultType(Effect.sync(() => ${this.emitExpression(f.defaultValue!)})))`;
+            return `  ${fieldKey}: ${schema}.pipe(Schema.withDecodingDefaultType(Effect.sync(() => ${this.emitExpression(f.defaultValue)})))`;
           })
           .join(",\n");
         return `${exp}const ${name} = Schema.Struct({\n${schemaFields}\n});\n${exp}type ${name} = typeof ${name}.Type;\n${exp}const ${name}FromUnknown = (input: unknown): ${name} => Schema.decodeUnknownSync(${name})(input);`;
@@ -633,10 +1057,18 @@ export class Emitter {
       case "TaggedUnionSchema": {
         this.effectImports.add("Data");
         const typeParams = this.emitTypeParameters(decl.typeParams);
-        const hasTypeParams = Boolean(decl.typeParams && decl.typeParams.length > 0);
-        const anyArgs = hasTypeParams ? `<${decl.typeParams!.map(() => "any").join(", ")}>` : "";
-        const neverArgs = hasTypeParams ? `<${decl.typeParams!.map(() => "never").join(", ")}>` : "";
-        const typeArgs = hasTypeParams ? `<${decl.typeParams!.map((tp) => tp.name.name).join(", ")}>` : "";
+        const hasTypeParams = Boolean(
+          decl.typeParams && decl.typeParams.length > 0,
+        );
+        const anyArgs = hasTypeParams
+          ? `<${decl.typeParams!.map(() => "any").join(", ")}>`
+          : "";
+        const neverArgs = hasTypeParams
+          ? `<${decl.typeParams!.map(() => "never").join(", ")}>`
+          : "";
+        const typeArgs = hasTypeParams
+          ? `<${decl.typeParams!.map((tp) => tp.name.name).join(", ")}>`
+          : "";
 
         const collectTypeParamNames = (type: TypeNode): Set<string> => {
           const names = new Set<string>();
@@ -667,7 +1099,12 @@ export class Emitter {
             if (v.fields.length === 0) {
               return `  ${v.name.name}: {}`;
             }
-            const fields = v.fields.map((f) => `readonly ${f.name.name}: ${this.emitTypeNode(f.typeAnnotation)}`).join("; ");
+            const fields = v.fields
+              .map(
+                (f) =>
+                  `readonly ${f.name.name}: ${this.emitTypeNode(f.typeAnnotation)}`,
+              )
+              .join("; ");
             return `  ${v.name.name}: { ${fields} }`;
           })
           .join(";\n");
@@ -686,15 +1123,23 @@ export class Emitter {
             }
             let constrTypeParams = "";
             if (hasTypeParams) {
-              const requiredParams = decl.typeParams!.filter((tp) => usedParams.has(tp.name.name));
-              const optionalParams = decl.typeParams!.filter((tp) => !usedParams.has(tp.name.name));
+              const requiredParams = decl.typeParams!.filter((tp) =>
+                usedParams.has(tp.name.name),
+              );
+              const optionalParams = decl.typeParams!.filter(
+                (tp) => !usedParams.has(tp.name.name),
+              );
               const paramsList = [
                 ...requiredParams.map((tp) => tp.name.name),
                 ...optionalParams.map((tp) => `${tp.name.name} = never`),
               ];
               constrTypeParams = `<${paramsList.join(", ")}>`;
             }
-            const params = v.fields.map((f) => `${f.name.name}: ${this.emitTypeNode(f.typeAnnotation)}`).join(", ");
+            const params = v.fields
+              .map(
+                (f) => `${f.name.name}: ${this.emitTypeNode(f.typeAnnotation)}`,
+              )
+              .join(", ");
             const args = v.fields.map((f) => f.name.name).join(", ");
             const retType = hasTypeParams ? `${name}${typeArgs}` : name;
             return `${exp}const ${v.name.name} = ${constrTypeParams}(${params}): ${retType} => $${name}.${v.name.name}({ ${args} });`;
@@ -705,7 +1150,9 @@ export class Emitter {
       }
       case "StructuralUnionSchema": {
         this.effectImports.add("Schema");
-        const members = decl.body.members.map((member) => this.emitSchemaTypeField(member)).join(", ");
+        const members = decl.body.members
+          .map((member) => this.emitSchemaTypeField(member))
+          .join(", ");
         return `${exp}const ${name} = Schema.Union([${members}]);\n${exp}type ${name} = typeof ${name}.Type;\n${exp}const ${name}FromUnknown = (input: unknown): ${name} => Schema.decodeUnknownSync(${name})(input);`;
       }
       case "RefinementSchema": {
@@ -719,11 +1166,14 @@ export class Emitter {
           const emittedStages = stages.map((s) => this.emitRefinementStage(s));
 
           const baseTypeName =
-            decl.body.baseType.kind === "TypeReferenceNode" && decl.body.baseType.name.name === "Int"
+            decl.body.baseType.kind === "TypeReferenceNode" &&
+            decl.body.baseType.name.name === "Int"
               ? "number"
               : this.emitTypeNode(decl.body.baseType);
 
-          const brandTypeStr = brands.map((b) => `Brand.Brand<${JSON.stringify(b)}>`).join(" & ");
+          const brandTypeStr = brands
+            .map((b) => `Brand.Brand<${JSON.stringify(b)}>`)
+            .join(" & ");
           const typeDef = `${baseTypeName} & ${brandTypeStr}`;
 
           return `${exp}const ${name} = ${baseSchema}.pipe(${emittedStages.join(", ")});\n${exp}type ${name} = ${typeDef};\n${exp}const ${name}FromUnknown = (input: unknown): ${name} => Schema.decodeUnknownSync(${name})(input);`;
@@ -740,7 +1190,10 @@ export class Emitter {
         this.effectImports.add("Schema");
         let schemaExpr: string;
         const targetType = decl.body.targetType;
-        if (targetType.kind === "TypeReferenceNode" && this.options.importedSchemas?.has(decl.id.name)) {
+        if (
+          targetType.kind === "TypeReferenceNode" &&
+          this.options.importedSchemas?.has(decl.id.name)
+        ) {
           schemaExpr = this.options.importedSchemas.get(decl.id.name)!;
         } else if (
           targetType.kind === "TypeReferenceNode" &&
@@ -752,29 +1205,62 @@ export class Emitter {
           targetType.name.name !== "Array" &&
           targetType.name.name !== "Record"
         ) {
-          schemaExpr = this.options.importedSchemas?.get(decl.id.name) ?? `(Schema.Unknown as unknown as Schema.Codec<${this.emitTypeNode(targetType)}>)`;
+          schemaExpr =
+            this.options.importedSchemas?.get(decl.id.name) ??
+            `(Schema.Unknown as unknown as Schema.Codec<${this.emitTypeNode(targetType)}>)`;
         } else {
-          schemaExpr = this.options.importedSchemas?.get(decl.id.name) ?? this.emitSchemaTypeField(targetType);
+          schemaExpr =
+            this.options.importedSchemas?.get(decl.id.name) ??
+            this.emitSchemaTypeField(targetType);
         }
         return `${exp}const ${name} = ${schemaExpr};\n${exp}type ${name} = typeof ${name}.Type;\n${exp}const ${name}FromUnknown = (input: unknown): ${name} => Schema.decodeUnknownSync(${name})(input);`;
       }
       case "ImportedTsSchema": {
         this.effectImports.add("Schema");
-        const schemaExpr = this.options.importedSchemas?.get(decl.id.name) ?? `(Schema.Unknown as unknown as Schema.Codec<${this.emitTypeNode(decl.body.typeNode)}>)`;
+        const schemaExpr =
+          this.options.importedSchemas?.get(decl.id.name) ??
+          `(Schema.Unknown as unknown as Schema.Codec<${this.emitTypeNode(decl.body.typeNode)}>)`;
         return `${exp}const ${name} = ${schemaExpr};\n${exp}type ${name} = typeof ${name}.Type;\n${exp}const ${name}FromUnknown = (input: unknown): ${name} => Schema.decodeUnknownSync(${name})(input);`;
       }
     }
   }
 
   private emitGenericDataSchema(decl: SchemaDeclaration, exp: string): string {
-    if (decl.body.kind !== "RecordSchema" || !decl.typeParams?.length) throw new Error("Expected a generic record schema");
-    const parameters = decl.typeParams.map(param => param.name.name);
+    if (decl.body.kind !== "RecordSchema" || !decl.typeParams?.length)
+      throw new Error("Expected a generic record schema");
+    const parameters = decl.typeParams.map((param) => param.name.name);
     const names = new Set(parameters);
-    if (this.unsafeSchemaBinding || this.declaredTypeNames.has("Schema") || this.bindings.has("Schema")) {
-      throw new FunScriptError("Generic data schemas require 'Schema' to refer to Effect Schema; rename the conflicting declaration or import.", decl.span);
+    if (
+      this.unsafeSchemaBinding ||
+      this.declaredTypeNames.has("Schema") ||
+      this.bindings.has("Schema")
+    ) {
+      throw new FunScriptError(
+        "Generic data schemas require 'Schema' to refer to Effect Schema; rename the conflicting declaration or import.",
+        decl.span,
+      );
     }
-    if (names.size !== parameters.length || decl.typeParams.some(param => param.constraint || ["Schema", "String", "Number", "Boolean", "Array", "Option", "Record", decl.id.name].includes(param.name.name))) {
-      throw new FunScriptError("Generic data schemas require distinct, unconstrained type parameters that do not shadow built-in schema names.", decl.span);
+    if (
+      names.size !== parameters.length ||
+      decl.typeParams.some(
+        (param) =>
+          param.constraint ||
+          [
+            "Schema",
+            "String",
+            "Number",
+            "Boolean",
+            "Array",
+            "Option",
+            "Record",
+            decl.id.name,
+          ].includes(param.name.name),
+      )
+    ) {
+      throw new FunScriptError(
+        "Generic data schemas require distinct, unconstrained type parameters that do not shadow built-in schema names.",
+        decl.span,
+      );
     }
     // A generic factory is evaluated when called. Cycles would recurse forever,
     // including cycles formed by declarations that appear later in the file.
@@ -783,49 +1269,106 @@ export class Emitter {
       const target = this.genericSchemaDeclarations.get(name);
       if (!target || target.body.kind !== "RecordSchema") return true;
       const next = new Set(active).add(name);
-      const params = new Set(target.typeParams?.map(param => param.name.name));
+      const params = new Set(
+        target.typeParams?.map((param) => param.name.name),
+      );
       const visitType = (type: TypeNode): boolean => {
-        if (type.kind === "ParenthesizedTypeNode") return visitType(type.typeNode);
+        if (type.kind === "ParenthesizedTypeNode")
+          return visitType(type.typeNode);
         if (type.kind === "ArrayTypeNode") return visitType(type.elementType);
         if (type.kind === "UnionTypeNode") return type.types.every(visitType);
-        if (type.kind === "RecordTypeNode") return type.fields.every(field => visitType(field.typeAnnotation));
+        if (type.kind === "RecordTypeNode")
+          return type.fields.every((field) => visitType(field.typeAnnotation));
         if (type.kind !== "TypeReferenceNode") return true;
-        return (params.has(type.name.name) || !this.genericSchemaDeclarations.has(type.name.name) || visitFactory(type.name.name, next)) && (type.typeArgs?.every(visitType) ?? true);
+        return (
+          (params.has(type.name.name) ||
+            !this.genericSchemaDeclarations.has(type.name.name) ||
+            visitFactory(type.name.name, next)) &&
+          (type.typeArgs?.every(visitType) ?? true)
+        );
       };
-      return target.body.fields.every(field => visitType(field.typeAnnotation));
+      return target.body.fields.every((field) =>
+        visitType(field.typeAnnotation),
+      );
     };
     if (!visitFactory(decl.id.name, new Set())) {
-      throw new FunScriptError(`Generic data schema '${decl.id.name}' cannot use recursive generic schema factories.`, decl.span);
+      throw new FunScriptError(
+        `Generic data schema '${decl.id.name}' cannot use recursive generic schema factories.`,
+        decl.span,
+      );
     }
     const supportsArgument = (type: TypeNode): boolean => {
-      if (type.kind === "ParenthesizedTypeNode") return supportsArgument(type.typeNode);
+      if (type.kind === "ParenthesizedTypeNode")
+        return supportsArgument(type.typeNode);
       if (type.kind !== "TypeReferenceNode") return false;
       const name = type.name.name;
       if (names.has(name)) return !type.typeArgs?.length;
-      if (["String", "Number", "Boolean"].includes(name)) return !type.typeArgs?.length && !this.declaredTypeNames.has(name);
-      if (name === "Array") return type.typeArgs?.length === 1 && supportsArgument(type.typeArgs[0]);
-      const arity = this.genericDataSchemas.get(name) ?? this.options.importedGenericDataSchemas?.get(name);
-      if (arity !== undefined) return type.typeArgs?.length === arity && type.typeArgs.every(supportsArgument);
-      return !type.typeArgs?.length && ((this.runtimeSchemaNames.has(name) && !this.genericDataSchemas.has(name)) || this.options.importedDataSchemas?.has(name) === true);
+      if (["String", "Number", "Boolean"].includes(name))
+        return !type.typeArgs?.length && !this.declaredTypeNames.has(name);
+      if (name === "Array")
+        return (
+          type.typeArgs?.length === 1 && supportsArgument(type.typeArgs[0])
+        );
+      const arity =
+        this.genericDataSchemas.get(name) ??
+        this.options.importedGenericDataSchemas?.get(name);
+      if (arity !== undefined)
+        return (
+          type.typeArgs?.length === arity &&
+          type.typeArgs.every(supportsArgument)
+        );
+      return (
+        !type.typeArgs?.length &&
+        ((this.runtimeSchemaNames.has(name) &&
+          !this.genericDataSchemas.has(name)) ||
+          this.options.importedDataSchemas?.has(name) === true)
+      );
     };
     const supports = (type: TypeNode): boolean => {
       if (type.kind === "ParenthesizedTypeNode") return supports(type.typeNode);
       if (type.kind === "LiteralTypeNode") return true;
       if (type.kind === "ArrayTypeNode") return supports(type.elementType);
       if (type.kind === "UnionTypeNode") return type.types.every(supports);
-      if (type.kind === "RecordTypeNode") return type.fields.every(field => field.name.name !== "__proto__" && !field.optional && !field.defaultValue && supports(field.typeAnnotation));
+      if (type.kind === "RecordTypeNode")
+        return type.fields.every(
+          (field) =>
+            field.name.name !== "__proto__" &&
+            !field.optional &&
+            !field.defaultValue &&
+            supports(field.typeAnnotation),
+        );
       if (type.kind !== "TypeReferenceNode") return false;
       const name = type.name.name;
       if (names.has(name)) return !type.typeArgs?.length;
-      if (["String", "Number", "Boolean"].includes(name)) return !type.typeArgs?.length && !this.declaredTypeNames.has(name);
-      if (name === "Array") return type.typeArgs?.length === 1 && supports(type.typeArgs[0]);
-      const arity = this.genericDataSchemas.get(name) ?? this.options.importedGenericDataSchemas?.get(name);
-      if (arity !== undefined) return type.typeArgs?.length === arity && type.typeArgs.every(supportsArgument);
-      return !type.typeArgs?.length && ((this.runtimeSchemaNames.has(name) && !this.genericDataSchemas.has(name)) || this.options.importedDataSchemas?.has(name) === true);
+      if (["String", "Number", "Boolean"].includes(name))
+        return !type.typeArgs?.length && !this.declaredTypeNames.has(name);
+      if (name === "Array")
+        return type.typeArgs?.length === 1 && supports(type.typeArgs[0]);
+      const arity =
+        this.genericDataSchemas.get(name) ??
+        this.options.importedGenericDataSchemas?.get(name);
+      if (arity !== undefined)
+        return (
+          type.typeArgs?.length === arity &&
+          type.typeArgs.every(supportsArgument)
+        );
+      return (
+        !type.typeArgs?.length &&
+        ((this.runtimeSchemaNames.has(name) &&
+          !this.genericDataSchemas.has(name)) ||
+          this.options.importedDataSchemas?.has(name) === true)
+      );
     };
     for (const field of decl.body.fields) {
-      if (field.name.name === "__proto__" || field.defaultValue || !supports(field.typeAnnotation)) {
-        throw new FunScriptError(`Generic data schema '${decl.id.name}' currently supports required or optional fields with primitive, local data-schema, type-parameter, array, union, verified generic application, or nested required-record types. Field '${field.name.name}' needs an explicit non-generic schema or contract.`, field.span);
+      if (
+        field.name.name === "__proto__" ||
+        field.defaultValue ||
+        !supports(field.typeAnnotation)
+      ) {
+        throw new FunScriptError(
+          `Generic data schema '${decl.id.name}' currently supports required or optional fields with primitive, local data-schema, type-parameter, array, union, verified generic application, or nested required-record types. Field '${field.name.name}' needs an explicit non-generic schema or contract.`,
+          field.span,
+        );
       }
     }
     this.effectImports.add("Schema");
@@ -833,50 +1376,115 @@ export class Emitter {
     const previous = this.activeSchemaParameters;
     this.activeSchemaParameters = names;
     try {
-      const fields = decl.body.fields.map(field => {
-        const schema = this.emitSchemaTypeField(field.typeAnnotation);
-        return `  ${emitPropertyKey(field.name.name)}: ${field.optional ? `Schema.OptionFromOptionalNullOr(${schema}, { onNoneEncoding: "omit" })` : schema}`;
-      }).join(",\n");
-      const args = parameters.map(param => `${param} extends Schema.Constraint & { readonly "~type.optionality": "required"; readonly "~type.mutability": "readonly" }`).join(", ");
-      const values = parameters.map(param => `${param}: ${param}`).join(", ");
-      const checks = parameters.map(param => `  if (!Schema.isSchema(${param}) || $funscriptSchemaAST.isOptional($funscriptSchemaAST.toType(${param}.ast)) || $funscriptSchemaAST.toType(${param}.ast).context?.isMutable) throw new TypeError(${JSON.stringify(`${decl.id.name} requires a schema without optional-key or mutable-key modifiers for ${param}`)});`).join("\n");
-      const dataType = `{ ${decl.body.fields.map(field => {
-        const type = this.emitTypeNode(field.typeAnnotation);
-        return `readonly ${emitPropertyKey(field.name.name)}: ${field.optional ? `import("effect").Option.Option<${type}>` : type}`;
-      }).join("; ")} }`;
+      const fields = decl.body.fields
+        .map((field) => {
+          const schema = this.emitSchemaTypeField(field.typeAnnotation);
+          return `  ${emitPropertyKey(field.name.name)}: ${field.optional ? `Schema.OptionFromOptionalNullOr(${schema}, { onNoneEncoding: "omit" })` : schema}`;
+        })
+        .join(",\n");
+      const args = parameters
+        .map(
+          (param) =>
+            `${param} extends Schema.Constraint & { readonly "~type.optionality": "required"; readonly "~type.mutability": "readonly" }`,
+        )
+        .join(", ");
+      const values = parameters.map((param) => `${param}: ${param}`).join(", ");
+      const checks = parameters
+        .map(
+          (param) =>
+            `  if (!Schema.isSchema(${param}) || $funscriptSchemaAST.isOptional($funscriptSchemaAST.toType(${param}.ast)) || $funscriptSchemaAST.toType(${param}.ast).context?.isMutable) throw new TypeError(${JSON.stringify(`${decl.id.name} requires a schema without optional-key or mutable-key modifiers for ${param}`)});`,
+        )
+        .join("\n");
+      const dataType = `{ ${decl.body.fields
+        .map((field) => {
+          const type = this.emitTypeNode(field.typeAnnotation);
+          return `readonly ${emitPropertyKey(field.name.name)}: ${field.optional ? `import("effect").Option.Option<${type}>` : type}`;
+        })
+        .join("; ")} }`;
       return `${exp}const ${decl.id.name} = <${args}>(${values}) => {\n${checks}\n  return Schema.Struct({\n${fields}\n  });\n};\n${exp}type ${decl.id.name}<${parameters.join(", ")}> = ${dataType};`;
-    } finally { this.activeSchemaParameters = previous; }
+    } finally {
+      this.activeSchemaParameters = previous;
+    }
   }
 
   /** Generate only the subset for which every value has an unambiguous codec. */
-  private emitCheckedRecordDecoder(decl: SchemaDeclaration, exp: string): string {
+  private emitCheckedRecordDecoder(
+    decl: SchemaDeclaration,
+    exp: string,
+  ): string {
     if (decl.body.kind !== "RecordSchema" || decl.typeParams?.length) return "";
     const primitive = (type: TypeNode | undefined): boolean =>
-      type?.kind === "TypeReferenceNode" && !type.typeArgs?.length &&
-      ["String", "Number", "Boolean"].includes(type.name.name) && !this.declaredTypeNames.has(type.name.name);
+      type?.kind === "TypeReferenceNode" &&
+      !type.typeArgs?.length &&
+      ["String", "Number", "Boolean"].includes(type.name.name) &&
+      !this.declaredTypeNames.has(type.name.name);
     const codec = (type: TypeNode | undefined): type is TypeReferenceNode =>
-      !!type && type.kind === "TypeReferenceNode" && !type.typeArgs?.length && (primitive(type) || this.identityRecordSchemas.has(type.name.name) || this.checkedTaggedSchemas.has(type.name.name) || this.options.importedIdentitySchemas?.has(type.name.name) === true);
+      !!type &&
+      type.kind === "TypeReferenceNode" &&
+      !type.typeArgs?.length &&
+      (primitive(type) ||
+        this.identityRecordSchemas.has(type.name.name) ||
+        this.checkedTaggedSchemas.has(type.name.name) ||
+        this.options.importedIdentitySchemas?.has(type.name.name) === true);
     const fields = decl.body.fields;
-    const hasEffect = fields.some(field => field.typeAnnotation.kind === "FunctionTypeNode" && field.typeAnnotation.returnType.kind === "EffectTypeNode");
-    if (!fields.some(field => field.typeAnnotation.kind === "FunctionTypeNode")) return "";
+    const hasEffect = fields.some(
+      (field) =>
+        field.typeAnnotation.kind === "FunctionTypeNode" &&
+        field.typeAnnotation.returnType.kind === "EffectTypeNode",
+    );
+    if (
+      !fields.some((field) => field.typeAnnotation.kind === "FunctionTypeNode")
+    )
+      return "";
     for (const field of fields) {
-      if ((hasEffect && field.optional) || field.defaultValue || field.name.name === "__proto__") return "";
+      if (
+        (hasEffect && field.optional) ||
+        field.defaultValue ||
+        field.name.name === "__proto__"
+      )
+        return "";
       const type = field.typeAnnotation;
       if (type.kind === "FunctionTypeNode") {
-        if (type.typeParams?.length || type.params.some(param => param.optional || param.isRest || !codec(param.typeAnnotation))) return "";
+        if (
+          type.typeParams?.length ||
+          type.params.some(
+            (param) =>
+              param.optional || param.isRest || !codec(param.typeAnnotation),
+          )
+        )
+          return "";
         if (type.returnType.kind === "EffectTypeNode") {
           if (!codec(type.returnType.success)) return "";
-        } else if (hasEffect || !(primitive(type.returnType) || (type.returnType.kind === "TypeReferenceNode" && type.returnType.name.name === "Void" && !type.returnType.typeArgs?.length && !this.declaredTypeNames.has("Void")))) return "";
+        } else if (
+          hasEffect ||
+          !(
+            primitive(type.returnType) ||
+            (type.returnType.kind === "TypeReferenceNode" &&
+              type.returnType.name.name === "Void" &&
+              !type.returnType.typeArgs?.length &&
+              !this.declaredTypeNames.has("Void"))
+          )
+        )
+          return "";
       } else if (!codec(type)) return "";
     }
     const name = `${decl.id.name}DecodeChecked`;
-    if (this.bindings.has(name) || this.declaredTypeNames.has(name) || this.userImportBindings.has(name)) {
+    if (
+      this.bindings.has(name) ||
+      this.declaredTypeNames.has(name) ||
+      this.userImportBindings.has(name)
+    ) {
       // Do not shadow an existing user-defined boundary function.
       return "";
     }
     if (hasEffect) {
       const checkedName = `${decl.id.name}Checked`;
-      if (this.declaredTypeNames.has(checkedName) || this.bindings.has(checkedName) || this.userImportBindings.has(checkedName)) return "";
+      if (
+        this.declaredTypeNames.has(checkedName) ||
+        this.bindings.has(checkedName) ||
+        this.userImportBindings.has(checkedName)
+      )
+        return "";
     }
     this.effectImports.add("Schema");
     this.needsCheckedRecordDecoder = true;
@@ -884,64 +1492,112 @@ export class Emitter {
       if (type.kind === "TypeReferenceNode") {
         const tagged = this.checkedTaggedSchemas.get(type.name.name);
         if (tagged) {
-          const checks = tagged.variants.map(variant => {
-            const clauses = [`($value as { readonly _tag?: unknown })._tag === ${JSON.stringify(variant.name.name)}`];
-            for (const field of variant.fields) {
-              const fieldType = (field.typeAnnotation as TypeReferenceNode).name.name;
-              const access = `($value as { readonly [key: string]: unknown })[${JSON.stringify(field.name.name)}]`;
-              if (this.identityRecordSchemas.has(fieldType) || this.options.importedIdentitySchemas?.has(fieldType)) {
-                clauses.push(`Schema.is(${fieldType})(${access})`);
-              } else {
-                clauses.push(`typeof ${access} === ${JSON.stringify(fieldType.toLowerCase())}`);
+          const checks = tagged.variants
+            .map((variant) => {
+              const clauses = [
+                `($value as { readonly _tag?: unknown })._tag === ${JSON.stringify(variant.name.name)}`,
+              ];
+              for (const field of variant.fields) {
+                const fieldType = (field.typeAnnotation as TypeReferenceNode)
+                  .name.name;
+                const access = `($value as { readonly [key: string]: unknown })[${JSON.stringify(field.name.name)}]`;
+                if (
+                  this.identityRecordSchemas.has(fieldType) ||
+                  this.options.importedIdentitySchemas?.has(fieldType)
+                ) {
+                  clauses.push(`Schema.is(${fieldType})(${access})`);
+                } else {
+                  clauses.push(
+                    `typeof ${access} === ${JSON.stringify(fieldType.toLowerCase())}`,
+                  );
+                }
               }
-            }
-            return `(${clauses.join(" && ")})`;
-          }).join(" || ");
+              return `(${clauses.join(" && ")})`;
+            })
+            .join(" || ");
           return `Schema.declare(($value: unknown): $value is ${this.emitTypeNode(type)} => typeof $value === "object" && $value !== null && !globalThis.Array.isArray($value) && (${checks}))`;
         }
-        if (this.options.importedIdentitySchemas?.has(type.name.name)) return type.name.name;
+        if (this.options.importedIdentitySchemas?.has(type.name.name))
+          return type.name.name;
       }
       return this.emitSchemaTypeField(type);
     };
-    const data = fields.filter(field => field.typeAnnotation.kind !== "FunctionTypeNode")
-      .map(field => `${emitPropertyKey(field.name.name)}: ${field.optional ? `Schema.optional(${checkedCodec(field.typeAnnotation)})` : checkedCodec(field.typeAnnotation)}`).join(", ");
-    const callbacks = fields.filter(field => field.typeAnnotation.kind === "FunctionTypeNode")
-      .map(field => {
+    const data = fields
+      .filter((field) => field.typeAnnotation.kind !== "FunctionTypeNode")
+      .map(
+        (field) =>
+          `${emitPropertyKey(field.name.name)}: ${field.optional ? `Schema.optional(${checkedCodec(field.typeAnnotation)})` : checkedCodec(field.typeAnnotation)}`,
+      )
+      .join(", ");
+    const callbacks = fields
+      .filter((field) => field.typeAnnotation.kind === "FunctionTypeNode")
+      .map((field) => {
         const type = field.typeAnnotation as FunctionTypeNode;
-        const args = type.params.map(param => checkedCodec(param.typeAnnotation!)).join(", ");
+        const args = type.params
+          .map((param) => checkedCodec(param.typeAnnotation!))
+          .join(", ");
         if (type.returnType.kind === "EffectTypeNode") {
           this.checkedCallbackKinds.add("effect");
           const callbackType = `${decl.id.name}[${JSON.stringify(field.name.name)}]`;
           return `${emitPropertyKey(field.name.name)}: ($value: unknown) => $funscriptCheckedEffect($value as ${callbackType}, Schema.Tuple([${args}]), ${checkedCodec(type.returnType.success)})`;
         }
-        if (type.returnType.kind === "TypeReferenceNode" && type.returnType.name.name === "Void") {
+        if (
+          type.returnType.kind === "TypeReferenceNode" &&
+          type.returnType.name.name === "Void"
+        ) {
           this.checkedCallbackKinds.add("void");
           return `${emitPropertyKey(field.name.name)}: ($value: unknown) => $funscriptCheckedSyncVoid($value, Schema.Tuple([${args}]), ${type.params.length})`;
         }
         this.checkedCallbackKinds.add("sync");
         return `${emitPropertyKey(field.name.name)}: ($value: unknown) => $funscriptCheckedSync($value, Schema.Tuple([${args}]), ${this.emitSchemaTypeField(type.returnType)})`;
-      }).join(", ");
+      })
+      .join(", ");
     if (hasEffect) {
-      const callbackFields = fields.filter(field => field.typeAnnotation.kind === "FunctionTypeNode");
-      const keys = callbackFields.map(field => JSON.stringify(field.name.name)).join(" | ");
-      const checkedFields = callbackFields.map(field => {
-        const type = field.typeAnnotation as FunctionTypeNode;
-        const output = type.returnType as EffectTypeNode;
-        const params = type.params.map(param => `${this.emitBindingTarget(param.name)}: ${this.emitTypeNode(param.typeAnnotation!)}`).join(", ");
-        const error = output.error ? this.emitTypeNode(output.error) : "never";
-        const requirements = output.requirements ? this.emitTypeNode(output.requirements) : "never";
-        this.effectImports.add("Effect");
-        return `${emitPropertyKey(field.name.name)}: (${params}) => Effect.Effect<${this.emitTypeNode(output.success)}, ${error} | $funscriptCallbackBoundaryError, ${requirements}>`;
-      }).join("; ");
+      const callbackFields = fields.filter(
+        (field) => field.typeAnnotation.kind === "FunctionTypeNode",
+      );
+      const keys = callbackFields
+        .map((field) => JSON.stringify(field.name.name))
+        .join(" | ");
+      const checkedFields = callbackFields
+        .map((field) => {
+          const type = field.typeAnnotation as FunctionTypeNode;
+          const output = type.returnType as EffectTypeNode;
+          const params = type.params
+            .map(
+              (param) =>
+                `${this.emitBindingTarget(param.name)}: ${this.emitTypeNode(param.typeAnnotation!)}`,
+            )
+            .join(", ");
+          const error = output.error
+            ? this.emitTypeNode(output.error)
+            : "never";
+          const requirements = output.requirements
+            ? this.emitTypeNode(output.requirements)
+            : "never";
+          this.effectImports.add("Effect");
+          return `${emitPropertyKey(field.name.name)}: (${params}) => Effect.Effect<${this.emitTypeNode(output.success)}, ${error} | $funscriptCallbackBoundaryError, ${requirements}>`;
+        })
+        .join("; ");
       const checkedName = `${decl.id.name}Checked`;
       return `\n${exp}type ${checkedName} = Omit<${decl.id.name}, ${keys}> & { ${checkedFields} };\n${exp}const ${name} = ($input: ${decl.id.name}): ${checkedName} => $funscriptDecodeCheckedRecord($input, Schema.Struct({ ${data} }), { ${callbacks} });`;
     }
-    const optionalCallbacks = fields.filter(field => field.optional && field.typeAnnotation.kind === "FunctionTypeNode").map(field => JSON.stringify(field.name.name)).join(", ");
+    const optionalCallbacks = fields
+      .filter(
+        (field) =>
+          field.optional && field.typeAnnotation.kind === "FunctionTypeNode",
+      )
+      .map((field) => JSON.stringify(field.name.name))
+      .join(", ");
     return `\n${exp}const ${name} = ($input: unknown): ${decl.id.name} => $funscriptDecodeCheckedRecord($input, Schema.Struct({ ${data} }), { ${callbacks} }, [${optionalCallbacks}] as const);`;
   }
 
   private emitSchemaTypeField(typeNode: TypeNode): string {
-    if (typeNode.kind === "QualifiedTypeReferenceNode" || typeNode.kind === "TypeQueryNode" || typeNode.kind === "IndexedAccessTypeNode") {
+    if (
+      typeNode.kind === "QualifiedTypeReferenceNode" ||
+      typeNode.kind === "TypeQueryNode" ||
+      typeNode.kind === "IndexedAccessTypeNode"
+    ) {
       this.effectImports.add("Schema");
       return `(Schema.Unknown as unknown as Schema.Codec<${this.emitTypeNode(typeNode)}>)`;
     }
@@ -949,14 +1605,25 @@ export class Emitter {
       return this.emitSchemaTypeField(typeNode.typeNode);
     }
     this.effectImports.add("Schema");
-    if (typeNode.kind === "LiteralTypeNode") return `Schema.Literal(${JSON.stringify(typeNode.value)})`;
-    if (typeNode.kind === "FunctionTypeNode" || typeNode.kind === "EffectTypeNode") {
-      throw new FunScriptError("Runtime schema fields cannot validate function or Effect types; use a separate type or an explicit schema", typeNode.span);
+    if (typeNode.kind === "LiteralTypeNode")
+      return `Schema.Literal(${JSON.stringify(typeNode.value)})`;
+    if (
+      typeNode.kind === "FunctionTypeNode" ||
+      typeNode.kind === "EffectTypeNode"
+    ) {
+      throw new FunScriptError(
+        "Runtime schema fields cannot validate function or Effect types; use a separate type or an explicit schema",
+        typeNode.span,
+      );
     }
     if (typeNode.kind === "RecordTypeNode") {
       const inner = typeNode.fields
         .map((f) => {
-          if (f.defaultValue) throw new FunScriptError("Nested schema field defaults are not supported yet", f.span);
+          if (f.defaultValue)
+            throw new FunScriptError(
+              "Nested schema field defaults are not supported yet",
+              f.span,
+            );
           const schema = this.emitSchemaTypeField(f.typeAnnotation);
           return `  ${f.name.name}: ${f.optional ? `Schema.OptionFromOptionalNullOr(${schema}, { onNoneEncoding: "omit" })` : schema}`;
         })
@@ -973,9 +1640,12 @@ export class Emitter {
       const tName = typeNode.name.name;
       if (this.activeSchemaParameters?.has(tName)) return tName;
       if (tName === "SchemaInput" && !this.declaredTypeNames.has(tName)) {
-        throw new Error("SchemaInput is a static input type, not a runtime schema; use the schema itself for validation");
+        throw new Error(
+          "SchemaInput is a static input type, not a runtime schema; use the schema itself for validation",
+        );
       }
-      if (PRIMITIVE_TYPES[tName] || tName === "Duration") return `Schema.${tName}`;
+      if (PRIMITIVE_TYPES[tName] || tName === "Duration")
+        return `Schema.${tName}`;
       if (tName === "UUID") return "Schema.UUID";
       if (tName === "Int") return "Schema.Int";
       if (tName === "Option" && typeNode.typeArgs) {
@@ -987,43 +1657,87 @@ export class Emitter {
       if (tName === "Record" && typeNode.typeArgs?.length === 2) {
         return `Schema.Record(${this.emitSchemaTypeField(typeNode.typeArgs[0])}, ${this.emitSchemaTypeField(typeNode.typeArgs[1])})`;
       }
-      const genericArity = this.genericDataSchemas.get(tName) ?? this.options.importedGenericDataSchemas?.get(tName);
+      const genericArity =
+        this.genericDataSchemas.get(tName) ??
+        this.options.importedGenericDataSchemas?.get(tName);
       if (genericArity !== undefined) {
-        if (typeNode.typeArgs?.length !== genericArity) throw new FunScriptError(`Generic data schema '${tName}' requires ${genericArity} schema argument(s).`, typeNode.span);
-        return `${tName}(${typeNode.typeArgs.map(arg => this.emitGenericSchemaArgument(arg, this.options.importedGenericDataSchemas?.has(tName) === true)).join(", ")})`;
+        if (typeNode.typeArgs?.length !== genericArity)
+          throw new FunScriptError(
+            `Generic data schema '${tName}' requires ${genericArity} schema argument(s).`,
+            typeNode.span,
+          );
+        return `${tName}(${typeNode.typeArgs.map((arg) => this.emitGenericSchemaArgument(arg, this.options.importedGenericDataSchemas?.has(tName) === true)).join(", ")})`;
       }
       if (this.runtimeSchemaNames.has(tName)) return tName;
-      if (this.options.importedSchemas?.has(tName)) return this.options.importedSchemas.get(tName)!;
+      if (this.options.importedSchemas?.has(tName))
+        return this.options.importedSchemas.get(tName)!;
       if (this.userImportBindings.has(tName)) {
-        if (typeNode.typeArgs?.length) throw new FunScriptError(`Cannot derive a runtime schema for imported generic '${tName}' here. Instantiate its schema factory explicitly.`, typeNode.span);
+        if (typeNode.typeArgs?.length)
+          throw new FunScriptError(
+            `Cannot derive a runtime schema for imported generic '${tName}' here. Instantiate its schema factory explicitly.`,
+            typeNode.span,
+          );
         return tName;
       }
       if (this.recordContracts.has(tName)) {
-        throw new FunScriptError(`'${tName}' is a compile-time record contract, not a runtime schema; it cannot be used as a runtime schema field`, typeNode.span);
+        throw new FunScriptError(
+          `'${tName}' is a compile-time record contract, not a runtime schema; it cannot be used as a runtime schema field`,
+          typeNode.span,
+        );
       }
-      if (typeNode.typeArgs?.length) throw new FunScriptError(`Cannot derive a runtime schema for generic '${tName}' here. Provide a concrete runtime schema explicitly.`, typeNode.span);
+      if (typeNode.typeArgs?.length)
+        throw new FunScriptError(
+          `Cannot derive a runtime schema for generic '${tName}' here. Provide a concrete runtime schema explicitly.`,
+          typeNode.span,
+        );
       return `(Schema.Unknown as unknown as Schema.Codec<${this.emitTypeNode(typeNode)}>)`;
     }
     return this.emitTypeNode(typeNode);
   }
 
-  private emitGenericSchemaArgument(type: TypeNode, verifyImports = false): string {
-    if (type.kind === "ParenthesizedTypeNode") return this.emitGenericSchemaArgument(type.typeNode, verifyImports);
+  private emitGenericSchemaArgument(
+    type: TypeNode,
+    verifyImports = false,
+  ): string {
+    if (type.kind === "ParenthesizedTypeNode")
+      return this.emitGenericSchemaArgument(type.typeNode, verifyImports);
     if (type.kind === "TypeReferenceNode") {
       const name = type.name.name;
-      if (this.activeSchemaParameters?.has(name) && !type.typeArgs?.length) return name;
-      if (["String", "Number", "Boolean"].includes(name) && !type.typeArgs?.length && !this.declaredTypeNames.has(name)) return this.emitSchemaTypeField(type);
-      if (name === "Array" && type.typeArgs?.length === 1) return `Schema.Array(${this.emitGenericSchemaArgument(type.typeArgs[0], verifyImports)})`;
-      const arity = this.genericDataSchemas.get(name) ?? this.options.importedGenericDataSchemas?.get(name);
-      if (arity !== undefined && type.typeArgs?.length === arity) return `${name}(${type.typeArgs.map(arg => this.emitGenericSchemaArgument(arg, verifyImports || this.options.importedGenericDataSchemas?.has(name) === true)).join(", ")})`;
-      if (!type.typeArgs?.length && (this.runtimeSchemaNames.has(name) || (this.userImportBindings.has(name) && (!verifyImports || this.options.importedDataSchemas?.has(name))))) return this.emitSchemaTypeField(type);
+      if (this.activeSchemaParameters?.has(name) && !type.typeArgs?.length)
+        return name;
+      if (
+        ["String", "Number", "Boolean"].includes(name) &&
+        !type.typeArgs?.length &&
+        !this.declaredTypeNames.has(name)
+      )
+        return this.emitSchemaTypeField(type);
+      if (name === "Array" && type.typeArgs?.length === 1)
+        return `Schema.Array(${this.emitGenericSchemaArgument(type.typeArgs[0], verifyImports)})`;
+      const arity =
+        this.genericDataSchemas.get(name) ??
+        this.options.importedGenericDataSchemas?.get(name);
+      if (arity !== undefined && type.typeArgs?.length === arity)
+        return `${name}(${type.typeArgs.map((arg) => this.emitGenericSchemaArgument(arg, verifyImports || this.options.importedGenericDataSchemas?.has(name) === true)).join(", ")})`;
+      if (
+        !type.typeArgs?.length &&
+        (this.runtimeSchemaNames.has(name) ||
+          (this.userImportBindings.has(name) &&
+            (!verifyImports || this.options.importedDataSchemas?.has(name))))
+      )
+        return this.emitSchemaTypeField(type);
     }
-    throw new FunScriptError("Generic data schema arguments must name a runtime data schema or supported primitive; compile-time contracts and unknown types cannot validate data.", type.span);
+    throw new FunScriptError(
+      "Generic data schema arguments must name a runtime data schema or supported primitive; compile-time contracts and unknown types cannot validate data.",
+      type.span,
+    );
   }
 
   private flattenPipelineStages(expr: Expression): Expression[] {
     if (expr.kind === "PipelineExpression") {
-      return [...this.flattenPipelineStages(expr.left), ...this.flattenPipelineStages(expr.right)];
+      return [
+        ...this.flattenPipelineStages(expr.left),
+        ...this.flattenPipelineStages(expr.right),
+      ];
     }
     return [expr];
   }
@@ -1048,7 +1762,8 @@ export class Emitter {
       isBrand = true;
     } else if (
       callee.kind === "MemberExpression" &&
-      (callee.object.kind === "Identifier" || callee.object.kind === "UpperIdentifier") &&
+      (callee.object.kind === "Identifier" ||
+        callee.object.kind === "UpperIdentifier") &&
       (callee.object.name === "Schema" || callee.object.name === "Brand") &&
       callee.property.name === "brand"
     ) {
@@ -1057,7 +1772,9 @@ export class Emitter {
     if (!isBrand || stage.args.length === 0) return null;
     const first = stage.args[0];
     if (first.kind === "StringLiteral") {
-      return first.parts.map((p) => (p.kind === "StringRawPart" ? p.value : "")).join("");
+      return first.parts
+        .map((p) => (p.kind === "StringRawPart" ? p.value : ""))
+        .join("");
     }
     return null;
   }
@@ -1071,26 +1788,37 @@ export class Emitter {
     return this.emitExpression(stage);
   }
 
-  private emitErrorDeclaration(decl: ErrorDeclaration, isExport: boolean): string {
+  private emitErrorDeclaration(
+    decl: ErrorDeclaration,
+    isExport: boolean,
+  ): string {
     this.effectImports.add("Schema");
     const name = decl.id.name;
     const exp = isExport ? "export " : "";
     const fields = decl.fields
-      .map((f) => `  ${f.name.name}: ${this.emitSchemaTypeField(f.typeAnnotation)}`)
+      .map(
+        (f) =>
+          `  ${f.name.name}: ${this.emitSchemaTypeField(f.typeAnnotation)}`,
+      )
       .join(",\n");
 
     const className = `${name}$Class`;
     return `${exp}class ${className} extends Schema.TaggedError<${className}>()("${name}", {\n${fields}\n}) {}\n${exp}type ${name} = InstanceType<typeof ${className}>;\n${exp}const ${name} = (function(args: ConstructorParameters<typeof ${className}>[0]): ${name} { return new ${className}(args); }) as { (args: ConstructorParameters<typeof ${className}>[0]): ${name}; new (args: ConstructorParameters<typeof ${className}>[0]): ${name} };`;
   }
 
-  private emitServiceDeclaration(decl: ServiceDeclaration, isExport: boolean): string {
+  private emitServiceDeclaration(
+    decl: ServiceDeclaration,
+    isExport: boolean,
+  ): string {
     this.effectImports.add("Context");
     this.effectImports.add("Effect");
     const name = decl.id.name;
     const exp = isExport ? "export " : "";
     const tag = decl.customTag ? decl.customTag.raw : `"app/${name}"`;
     const members = decl.members
-      .map((m) => `  readonly ${m.name.name}: ${this.emitTypeNode(m.signature)};`)
+      .map(
+        (m) => `  readonly ${m.name.name}: ${this.emitTypeNode(m.signature)};`,
+      )
       .join("\n");
 
     return `${exp}class ${name} extends Context.Service<${name}, {\n${members}\n}>()(${tag}) {}`;
@@ -1112,13 +1840,23 @@ export class Emitter {
     if (!type) return false;
     if (type.kind === "TypeReferenceNode") {
       const name = type.name.name.toLowerCase();
-      return name === "number" || name === "string" || name === "boolean" || name === "int" || name === "float";
+      return (
+        name === "number" ||
+        name === "string" ||
+        name === "boolean" ||
+        name === "int" ||
+        name === "float"
+      );
     }
     return false;
   }
 
   private isPrimitive(expr: Expression): boolean {
-    if (expr.kind === "NumberLiteral" || expr.kind === "StringLiteral" || expr.kind === "BooleanLiteral") {
+    if (
+      expr.kind === "NumberLiteral" ||
+      expr.kind === "StringLiteral" ||
+      expr.kind === "BooleanLiteral"
+    ) {
       return true;
     }
     if (expr.kind === "UnaryExpression") {
@@ -1127,14 +1865,22 @@ export class Emitter {
     if (expr.kind === "BinaryExpression") {
       return true;
     }
-    if (expr.kind === "Identifier" && this.primitiveIdentifiers.has(expr.name)) {
+    if (
+      expr.kind === "Identifier" &&
+      this.primitiveIdentifiers.has(expr.name)
+    ) {
       return true;
     }
     return false;
   }
 
   private isOptionalParameter(name: string): boolean {
-    return [...this.parameterScopes].reverse().find((scope) => scope.has(name))?.get(name) ?? false;
+    return (
+      [...this.parameterScopes]
+        .reverse()
+        .find((scope) => scope.has(name))
+        ?.get(name) ?? false
+    );
   }
 
   private recordFields(name: string): Map<string, RecordFieldInfo> | undefined {
@@ -1146,13 +1892,17 @@ export class Emitter {
 
   private recordField(expr: Expression): RecordFieldInfo | undefined {
     if (expr.kind !== "MemberExpression") return undefined;
-    const fields = expr.object.kind === "Identifier" ? this.recordFields(expr.object.name) : this.recordField(expr.object)?.fields;
+    const fields =
+      expr.object.kind === "Identifier"
+        ? this.recordFields(expr.object.name)
+        : this.recordField(expr.object)?.fields;
     return fields?.get(expr.property.name);
   }
 
   private isHtmlPropsType(type?: TypeNode): boolean {
     if (!type) return false;
-    if (type.kind === "TypeReferenceNode" && type.name.name === "HtmlProps") return true;
+    if (type.kind === "TypeReferenceNode" && type.name.name === "HtmlProps")
+      return true;
     if (type.kind === "IntersectionTypeNode") {
       return type.types.some((t) => this.isHtmlPropsType(t));
     }
@@ -1174,121 +1924,345 @@ export class Emitter {
 
   private isOptionalValue(expr: Expression): boolean {
     if (expr.kind === "Identifier") return this.isOptionalParameter(expr.name);
-    if (expr.kind === "MemberExpression") return this.recordField(expr)?.optional ?? false;
+    if (expr.kind === "MemberExpression")
+      return this.recordField(expr)?.optional ?? false;
     if (expr.kind === "IndexExpression") return true;
     return false;
   }
 
-  private validateRecordParameterUse(expr: FunctionExpression, name: string, aliases: Set<BindingDeclaration>): void {
-    const shadowed = new Set(expr.params.flatMap((param) => this.collectBindingNames(param.name)));
+  private validateRecordParameterUse(
+    expr: FunctionExpression,
+    name: string,
+    aliases: Set<BindingDeclaration>,
+  ): void {
+    const shadowed = new Set(
+      expr.params.flatMap((param) => this.collectBindingNames(param.name)),
+    );
     const collectBindings = (value: unknown): void => {
       if (!value || typeof value !== "object") return;
-      if (Array.isArray(value)) { value.forEach(collectBindings); return; }
-      const node = value as Record<string, unknown>;
-      if ((node.kind === "BindingDeclaration" || node.kind === "EffectBindStatement") && node.id && typeof node.id === "object") shadowed.add((node.id as { name: string }).name);
-      if (node.kind === "VariablePattern" && node.name && typeof node.name === "object") shadowed.add((node.name as { name: string }).name);
-      if (node.kind === "FunctionExpression" && Array.isArray(node.params)) {
-        for (const param of node.params) if (param?.name) for (const n of this.collectBindingNames(param.name)) shadowed.add(n);
+      if (Array.isArray(value)) {
+        value.forEach(collectBindings);
+        return;
       }
-      for (const [key, child] of Object.entries(node)) if (key !== "span") collectBindings(child);
+      const node = value as Record<string, unknown>;
+      if (
+        (node.kind === "BindingDeclaration" ||
+          node.kind === "EffectBindStatement") &&
+        node.id &&
+        typeof node.id === "object"
+      )
+        shadowed.add((node.id as { name: string }).name);
+      if (
+        node.kind === "VariablePattern" &&
+        node.name &&
+        typeof node.name === "object"
+      )
+        shadowed.add((node.name as { name: string }).name);
+      if (node.kind === "FunctionExpression" && Array.isArray(node.params)) {
+        for (const param of node.params)
+          if (param?.name)
+            for (const n of this.collectBindingNames(param.name))
+              shadowed.add(n);
+      }
+      for (const [key, child] of Object.entries(node))
+        if (key !== "span") collectBindings(child);
     };
     collectBindings(expr.body);
-    const source = expr.params.find((param) => param.name.kind === "Identifier" && param.name.name === name)?.typeAnnotation;
+    const source = expr.params.find(
+      (param) => param.name.kind === "Identifier" && param.name.name === name,
+    )?.typeAnnotation;
     if (this.isHtmlPropsType(source)) return;
-    const hasDefaults = source?.kind === "RecordTypeNode" && source.fields.some((field) => field.defaultValue);
-    const isSafeLocalForward = (parent: Record<string, unknown>, index: number | undefined): boolean => {
-      if (hasDefaults || index === undefined || parent.kind !== "CallExpression") return false;
-      const callee = parent.callee as { kind?: string; name?: string; object?: { kind?: string; name?: string }; property?: { name?: string } } | undefined;
-      if (callee?.kind === "MemberExpression" && (callee.object?.kind === "Identifier" || callee.object?.kind === "UpperIdentifier") && callee.object.name && callee.property?.name && !shadowed.has(callee.object.name)) {
-        return this.options.importedRecordFunctions?.get(`${callee.object.name}.${callee.property.name}`)?.has(index) ?? false;
+    const hasDefaults =
+      source?.kind === "RecordTypeNode" &&
+      source.fields.some((field) => field.defaultValue);
+    const isSafeLocalForward = (
+      parent: Record<string, unknown>,
+      index: number | undefined,
+    ): boolean => {
+      if (
+        hasDefaults ||
+        index === undefined ||
+        parent.kind !== "CallExpression"
+      )
+        return false;
+      const callee = parent.callee as
+        | {
+            kind?: string;
+            name?: string;
+            object?: { kind?: string; name?: string };
+            property?: { name?: string };
+          }
+        | undefined;
+      if (
+        callee?.kind === "MemberExpression" &&
+        (callee.object?.kind === "Identifier" ||
+          callee.object?.kind === "UpperIdentifier") &&
+        callee.object.name &&
+        callee.property?.name &&
+        !shadowed.has(callee.object.name)
+      ) {
+        return (
+          this.options.importedRecordFunctions
+            ?.get(`${callee.object.name}.${callee.property.name}`)
+            ?.has(index) ?? false
+        );
       }
-      if ((callee?.kind !== "Identifier" && callee?.kind !== "UpperIdentifier") || !callee.name || shadowed.has(callee.name)) return false;
-      if (this.options.importedRecordFunctions?.get(callee.name)?.has(index)) return true;
+      if (
+        (callee?.kind !== "Identifier" && callee?.kind !== "UpperIdentifier") ||
+        !callee.name ||
+        shadowed.has(callee.name)
+      )
+        return false;
+      if (this.options.importedRecordFunctions?.get(callee.name)?.has(index))
+        return true;
       const target = this.bindings.get(callee.name);
-      if (!target || target.isMut || target.isJs || target.init.kind !== "FunctionExpression") return false;
+      if (
+        !target ||
+        target.isMut ||
+        target.isJs ||
+        target.init.kind !== "FunctionExpression"
+      )
+        return false;
       const targetType = target.init.params[index]?.typeAnnotation;
-      const type = targetType?.kind === "TypeReferenceNode" ? this.recordContracts.get(targetType.name.name) ?? targetType : targetType;
-      const hasOptionalFields = (node: TypeNode | undefined): boolean => node?.kind === "RecordTypeNode" &&
-        node.fields.some((field) => Boolean(field.optional || field.defaultValue) || hasOptionalFields(field.typeAnnotation));
+      const type =
+        targetType?.kind === "TypeReferenceNode"
+          ? (this.recordContracts.get(targetType.name.name) ?? targetType)
+          : targetType;
+      const hasOptionalFields = (node: TypeNode | undefined): boolean =>
+        node?.kind === "RecordTypeNode" &&
+        node.fields.some(
+          (field) =>
+            Boolean(field.optional || field.defaultValue) ||
+            hasOptionalFields(field.typeAnnotation),
+        );
       return hasOptionalFields(type);
     };
-    const visit = (value: unknown, parent?: Record<string, unknown>, key?: string, allowMember = true, inJs = false, index?: number, jsxTarget?: unknown): void => {
+    const visit = (
+      value: unknown,
+      parent?: Record<string, unknown>,
+      key?: string,
+      allowMember = true,
+      inJs = false,
+      index?: number,
+      jsxTarget?: unknown,
+    ): void => {
       if (!value || typeof value !== "object") return;
-      if (Array.isArray(value)) { value.forEach((child, i) => visit(child, parent, key, allowMember, inJs, i, jsxTarget)); return; }
+      if (Array.isArray(value)) {
+        value.forEach((child, i) =>
+          visit(child, parent, key, allowMember, inJs, i, jsxTarget),
+        );
+        return;
+      }
       const node = value as Record<string, unknown>;
-      if (node.kind === "FunctionExpression" && Array.isArray(node.params) && node.params.some((param: any) => param.name && this.collectBindingNames(param.name).includes(name))) return;
+      if (
+        node.kind === "FunctionExpression" &&
+        Array.isArray(node.params) &&
+        node.params.some(
+          (param: any) =>
+            param.name && this.collectBindingNames(param.name).includes(name),
+        )
+      )
+        return;
       if (node.kind === "MemberExpression") {
         const field = this.recordField(node as unknown as Expression);
-        const matchedOptional = field?.optional && parent?.kind === "MatchExpression" && key === "scrutinee";
-        const allowedNested = !field?.optional && ((parent?.kind === "MemberExpression" && key === "object") || (inJs && parent?.kind === "CallExpression" && key === "args"));
+        const matchedOptional =
+          field?.optional &&
+          parent?.kind === "MatchExpression" &&
+          key === "scrutinee";
+        const allowedNested =
+          !field?.optional &&
+          ((parent?.kind === "MemberExpression" && key === "object") ||
+            (inJs && parent?.kind === "CallExpression" && key === "args"));
         if (field?.fields && !matchedOptional && !allowedNested) {
-          throw new FunScriptError("A nested record with optional fields cannot be passed, returned, aliased, or indexed yet; access its fields directly", node.span as any);
+          throw new FunScriptError(
+            "A nested record with optional fields cannot be passed, returned, aliased, or indexed yet; access its fields directly",
+            node.span as any,
+          );
         }
       }
       if (node.kind === "Identifier" && node.name === name) {
-        if (parent && parent.kind === "BindingDeclaration" && aliases.has(parent as unknown as BindingDeclaration) && (key === "init" || key === "id")) return;
-        if (allowMember && parent?.kind === "MemberExpression" && key === "object") return;
-        if (allowMember && inJs && parent?.kind === "CallExpression" && key === "args") return;
-        if (allowMember && parent && key === "args" && isSafeLocalForward(parent, index)) return;
-        if (allowMember && parent?.kind === "JSXSpreadAttribute" && key === "argument" && (this.isDomOrExternalJsxTarget(jsxTarget) || isSafeLocalForward({ kind: "CallExpression", callee: jsxTarget }, 0))) return;
+        if (
+          parent &&
+          parent.kind === "BindingDeclaration" &&
+          aliases.has(parent as unknown as BindingDeclaration) &&
+          (key === "init" || key === "id")
+        )
+          return;
+        if (
+          allowMember &&
+          parent?.kind === "MemberExpression" &&
+          key === "object"
+        )
+          return;
+        if (
+          allowMember &&
+          inJs &&
+          parent?.kind === "CallExpression" &&
+          key === "args"
+        )
+          return;
+        if (
+          allowMember &&
+          parent &&
+          key === "args" &&
+          isSafeLocalForward(parent, index)
+        )
+          return;
+        if (
+          allowMember &&
+          parent?.kind === "JSXSpreadAttribute" &&
+          key === "argument" &&
+          (this.isDomOrExternalJsxTarget(jsxTarget) ||
+            isSafeLocalForward(
+              { kind: "CallExpression", callee: jsxTarget },
+              0,
+            ))
+        )
+          return;
         if (parent?.kind === "SpreadEntry" && key === "argument") return;
-        if ((parent?.kind === "MemberExpression" && key === "property") || (parent?.kind === "FieldEntry" && key === "key") || (parent?.kind === "JSXAttribute" && key === "name")) return;
-        throw new FunScriptError(`A record parameter with optional fields cannot be passed, returned, aliased, or indexed yet; access ${name}.field directly`, node.span as any);
+        if (
+          (parent?.kind === "MemberExpression" && key === "property") ||
+          (parent?.kind === "FieldEntry" && key === "key") ||
+          (parent?.kind === "JSXAttribute" && key === "name")
+        )
+          return;
+        throw new FunScriptError(
+          `A record parameter with optional fields cannot be passed, returned, aliased, or indexed yet; access ${name}.field directly`,
+          node.span as any,
+        );
       }
       for (const [childKey, child] of Object.entries(node)) {
-        const target = childKey === "attributes" && (node.kind === "JSXOpeningElement" || node.kind === "JSXSelfClosingElement") ? node.name : jsxTarget;
-        if (childKey !== "span" && childKey !== "typeAnnotation" && childKey !== "returnType") visit(child, node, childKey, allowMember, inJs || node.kind === "JsExpression", undefined, target);
+        const target =
+          childKey === "attributes" &&
+          (node.kind === "JSXOpeningElement" ||
+            node.kind === "JSXSelfClosingElement")
+            ? node.name
+            : jsxTarget;
+        if (
+          childKey !== "span" &&
+          childKey !== "typeAnnotation" &&
+          childKey !== "returnType"
+        )
+          visit(
+            child,
+            node,
+            childKey,
+            allowMember,
+            inJs || node.kind === "JsExpression",
+            undefined,
+            target,
+          );
       }
     };
     visit(expr.body);
-    const param = expr.params.find((item) => item.name.kind === "Identifier" && item.name.name === name);
+    const param = expr.params.find(
+      (item) => item.name.kind === "Identifier" && item.name.name === name,
+    );
     if (param?.typeAnnotation?.kind === "RecordTypeNode") {
-      for (const field of param.typeAnnotation.fields) if (field.defaultValue) visit(field.defaultValue, undefined, undefined, false);
+      for (const field of param.typeAnnotation.fields)
+        if (field.defaultValue)
+          visit(field.defaultValue, undefined, undefined, false);
     }
   }
 
-  private validateRecordDefault(value: Expression, parameterNames: Set<string>): void {
-    const visit = (item: unknown, parent?: Record<string, unknown>, key?: string): void => {
+  private validateRecordDefault(
+    value: Expression,
+    parameterNames: Set<string>,
+  ): void {
+    const visit = (
+      item: unknown,
+      parent?: Record<string, unknown>,
+      key?: string,
+    ): void => {
       if (!item || typeof item !== "object") return;
-      if (Array.isArray(item)) { for (const child of item) visit(child, parent, key); return; }
+      if (Array.isArray(item)) {
+        for (const child of item) visit(child, parent, key);
+        return;
+      }
       const node = item as Record<string, unknown>;
-      if (node.kind === "Identifier" && typeof node.name === "string" && parameterNames.has(node.name)) {
-        if ((parent?.kind === "MemberExpression" && key === "property") || (parent?.kind === "FieldEntry" && key === "key")) return;
-        throw new FunScriptError("Defaulted record fields cannot reference function parameters yet", node.span as any);
+      if (
+        node.kind === "Identifier" &&
+        typeof node.name === "string" &&
+        parameterNames.has(node.name)
+      ) {
+        if (
+          (parent?.kind === "MemberExpression" && key === "property") ||
+          (parent?.kind === "FieldEntry" && key === "key")
+        )
+          return;
+        throw new FunScriptError(
+          "Defaulted record fields cannot reference function parameters yet",
+          node.span as any,
+        );
       }
       for (const [childKey, child] of Object.entries(node)) {
-        if (childKey !== "span" && childKey !== "typeAnnotation" && childKey !== "returnType") visit(child, node, childKey);
+        if (
+          childKey !== "span" &&
+          childKey !== "typeAnnotation" &&
+          childKey !== "returnType"
+        )
+          visit(child, node, childKey);
       }
     };
     visit(value);
   }
 
-  private emitBindingDeclaration(decl: BindingDeclaration, isExport = false): string {
+  private emitBindingDeclaration(
+    decl: BindingDeclaration,
+    isExport = false,
+  ): string {
     const scope = this.parameterScopes.at(-1);
-    const idName = decl.id.kind === "Identifier" || decl.id.kind === "UpperIdentifier" ? decl.id.name : undefined;
+    const idName =
+      decl.id.kind === "Identifier" || decl.id.kind === "UpperIdentifier"
+        ? decl.id.name
+        : undefined;
     if (idName) {
       if (scope) scope.set(idName, this.isOptionalValue(decl.init));
-      const aliasedFields = !decl.isMut && decl.init.kind === "Identifier" ? this.recordFields(decl.init.name) : undefined;
+      const aliasedFields =
+        !decl.isMut && decl.init.kind === "Identifier"
+          ? this.recordFields(decl.init.name)
+          : undefined;
       this.recordScopes.at(-1)?.set(idName, aliasedFields);
-      if (this.isPrimitiveType(decl.typeAnnotation) || this.isPrimitive(decl.init)) {
+      if (
+        this.isPrimitiveType(decl.typeAnnotation) ||
+        this.isPrimitive(decl.init)
+      ) {
         this.primitiveIdentifiers.add(idName);
       }
     }
     const target = this.emitBindingTarget(decl.id);
     const exp = isExport ? "export " : "";
     const keyword = decl.isMut ? "let" : "const";
-    const typeAnn = decl.typeAnnotation ? `: ${this.emitTypeNode(decl.typeAnnotation)}` : "";
+    const typeAnn = decl.typeAnnotation
+      ? `: ${this.emitTypeNode(decl.typeAnnotation)}`
+      : "";
 
     if (decl.isJs) {
-      if (decl.init.kind === "FunctionExpression" && decl.init.params.some((p) => p.typeAnnotation?.kind === "TypeReferenceNode" && this.recordContracts.has(p.typeAnnotation.name.name))) {
-        throw new FunScriptError("Compile-time record contracts are not supported on js entry bindings", decl.span);
+      if (
+        decl.init.kind === "FunctionExpression" &&
+        decl.init.params.some(
+          (p) =>
+            p.typeAnnotation?.kind === "TypeReferenceNode" &&
+            this.recordContracts.has(p.typeAnnotation.name.name),
+        )
+      ) {
+        throw new FunScriptError(
+          "Compile-time record contracts are not supported on js entry bindings",
+          decl.span,
+        );
       }
       this.effectImports.add("Effect");
       if (decl.init.kind === "FunctionExpression") {
         const fn = decl.init;
         const validations = fn.params
-          .filter((p) => !p.optional && p.typeAnnotation && p.name.kind === "Identifier")
-          .map((p) => `  ${(p.name as Identifier).name} = Schema.decodeUnknownSync(${this.emitSchemaTypeField(p.typeAnnotation!)})(${(p.name as Identifier).name});`)
+          .filter(
+            (p) =>
+              !p.optional && p.typeAnnotation && p.name.kind === "Identifier",
+          )
+          .map(
+            (p) =>
+              `  ${(p.name as Identifier).name} = Schema.decodeUnknownSync(${this.emitSchemaTypeField(p.typeAnnotation!)})(${(p.name as Identifier).name});`,
+          )
           .join("\n");
         const optionalBindings = fn.params.flatMap((p, index) => {
           if (!p.optional) return [];
@@ -1297,11 +2271,16 @@ export class Emitter {
           const rawName = `$funscriptOptional${index}`;
           if (p.typeAnnotation && p.name.kind === "Identifier") {
             this.effectImports.add("Schema");
-            return [`  const ${targetName} = ${rawName} !== undefined ? Option.some(Schema.decodeUnknownSync(${this.emitSchemaTypeField(p.typeAnnotation)})(${rawName})) : Option.none();`];
+            return [
+              `  const ${targetName} = ${rawName} !== undefined ? Option.some(Schema.decodeUnknownSync(${this.emitSchemaTypeField(p.typeAnnotation)})(${rawName})) : Option.none();`,
+            ];
           }
-          return [`  const ${targetName} = Option.fromUndefinedOr(${rawName});`];
+          return [
+            `  const ${targetName} = Option.fromUndefinedOr(${rawName});`,
+          ];
         });
-        if (validations || optionalBindings.length > 0) this.effectImports.add("Schema");
+        if (validations || optionalBindings.length > 0)
+          this.effectImports.add("Schema");
         for (const p of fn.params) {
           if (this.isPrimitiveType(p.typeAnnotation)) {
             for (const n of this.collectBindingNames(p.name)) {
@@ -1312,20 +2291,32 @@ export class Emitter {
         const params = fn.params
           .map((p, index) => {
             const rest = p.isRest ? "..." : "";
-            const name = p.optional ? `$funscriptOptional${index}` : this.emitBindingTarget(p.name);
-            const t = p.typeAnnotation ? `: ${this.emitTypeNode(p.typeAnnotation)}` : "";
-            const def = p.defaultValue ? ` = ${this.emitExpression(p.defaultValue)}` : "";
+            const name = p.optional
+              ? `$funscriptOptional${index}`
+              : this.emitBindingTarget(p.name);
+            const t = p.typeAnnotation
+              ? `: ${this.emitTypeNode(p.typeAnnotation)}`
+              : "";
+            const def = p.defaultValue
+              ? ` = ${this.emitExpression(p.defaultValue)}`
+              : "";
             return `${rest}${name}${p.optional ? "?" : ""}${t}${def}`;
           })
           .join(", ");
-        const headerStatements = [validations, ...optionalBindings].filter(Boolean).join("\n");
+        const headerStatements = [validations, ...optionalBindings]
+          .filter(Boolean)
+          .join("\n");
         const prefix = headerStatements ? `${headerStatements}\n` : "";
         if (fn.body.kind === "BlockStatement") {
-          const retExpr = fn.body.finalExpression ? this.emitExpression(fn.body.finalExpression) : "undefined";
+          const retExpr = fn.body.finalExpression
+            ? this.emitExpression(fn.body.finalExpression)
+            : "undefined";
           if (fn.body.statements.length === 0) {
             return `${exp}${keyword} ${target} = (${params}) => {\n${prefix}  return Effect.runPromise(${retExpr});\n};`;
           }
-          const stmts = fn.body.statements.map((s) => "    " + this.emitStatement(s)).join("\n");
+          const stmts = fn.body.statements
+            .map((s) => "    " + this.emitStatement(s))
+            .join("\n");
           return `${exp}${keyword} ${target} = (${params}) => {\n${prefix}  return Effect.runPromise(Effect.gen(function* () {\n${stmts}\n    return ${retExpr};\n  }));\n};`;
         }
         return `${exp}${keyword} ${target} = (${params}) => {\n${prefix}  return Effect.runPromise(${this.emitExpression(fn.body)});\n};`;
@@ -1355,7 +2346,11 @@ export class Emitter {
         if (f.isRest) {
           return `...${f.key.name}`;
         }
-        if (!f.pattern || (f.pattern.kind === "VariablePattern" && f.pattern.name.name === f.key.name)) {
+        if (
+          !f.pattern ||
+          (f.pattern.kind === "VariablePattern" &&
+            f.pattern.name.name === f.key.name)
+        ) {
           return f.key.name;
         }
         return `${f.key.name}: ${this.emitBindingTarget(f.pattern)}`;
@@ -1373,11 +2368,15 @@ export class Emitter {
   }
 
   private collectBindingNames(target: BindingTarget | Pattern): string[] {
-    if (target.kind === "Identifier" || target.kind === "UpperIdentifier") return [target.name];
+    if (target.kind === "Identifier" || target.kind === "UpperIdentifier")
+      return [target.name];
     if (target.kind === "VariablePattern") return [target.name.name];
-    if (target.kind === "RestPattern") return this.collectBindingNames(target.argument);
+    if (target.kind === "RestPattern")
+      return this.collectBindingNames(target.argument);
     if (target.kind === "RecordPattern") {
-      return target.fields.flatMap((f) => (f.pattern ? this.collectBindingNames(f.pattern) : [f.key.name]));
+      return target.fields.flatMap((f) =>
+        f.pattern ? this.collectBindingNames(f.pattern) : [f.key.name],
+      );
     }
     if (target.kind === "ArrayPattern") {
       return target.elements.flatMap((el) => this.collectBindingNames(el));
@@ -1401,7 +2400,11 @@ export class Emitter {
         return expr.value ? "true" : "false";
       case "Identifier":
       case "UpperIdentifier":
-        if (this.recordContracts.has(expr.name)) throw new FunScriptError(`${expr.name} is a compile-time record contract, not a runtime schema. Validate data separately and use an explicit checked callback boundary for foreign functions.`, expr.span);
+        if (this.recordContracts.has(expr.name))
+          throw new FunScriptError(
+            `${expr.name} is a compile-time record contract, not a runtime schema. Validate data separately and use an explicit checked callback boundary for foreign functions.`,
+            expr.span,
+          );
         if (expr.name === "Unit") return "undefined";
         if (expr.name === "dbg" && !this.isUserBinding("dbg")) {
           return `((__v: any) => { console.log(__v); return __v; })`;
@@ -1437,7 +2440,8 @@ export class Emitter {
           this.effectImports.add("Schema");
           const schema = this.emitExpression(expr.object);
           let combinator = "Schema.decodeUnknownEffect";
-          if (prop === "decodeJsonSync") combinator = "Schema.decodeUnknownSync";
+          if (prop === "decodeJsonSync")
+            combinator = "Schema.decodeUnknownSync";
           else if (prop === "encodeJson") combinator = "Schema.encodeEffect";
           else if (prop === "encodeJsonSync") combinator = "Schema.encodeSync";
           return `${combinator}(Schema.fromJsonString(${schema}))`;
@@ -1499,7 +2503,10 @@ export class Emitter {
     } finally {
       this.tryContextDepth--;
     }
-    if (expr.expression.kind === "FunctionExpression" && (expr.expression as any).params?.length === 0) {
+    if (
+      expr.expression.kind === "FunctionExpression" &&
+      (expr.expression as any).params?.length === 0
+    ) {
       return `__funscriptJs(${inner}, false)`;
     }
     return `__funscriptJs(() => ${inner}, false)`;
@@ -1507,7 +2514,10 @@ export class Emitter {
 
   private emitMemberProperty(expr: MemberExpression): string {
     if (expr.object.kind === "UpperIdentifier") {
-      if (expr.object.name === "Effect") return EFFECT_V4_MEMBER_RENAMES[expr.property.name] ?? expr.property.name;
+      if (expr.object.name === "Effect")
+        return (
+          EFFECT_V4_MEMBER_RENAMES[expr.property.name] ?? expr.property.name
+        );
     }
     return expr.property.name;
   }
@@ -1518,11 +2528,12 @@ export class Emitter {
     // but returning that proxy selects the wrong create overload.
     this.activeDraftParams.add(expr.draftParam.name);
     try {
-      const recipeBody = expr.body.kind === "BlockStatement" &&
+      const recipeBody =
+        expr.body.kind === "BlockStatement" &&
         expr.body.finalExpression?.kind === "Identifier" &&
         expr.body.finalExpression.name === expr.draftParam.name
-        ? this.emitFunctionBody({ ...expr.body, finalExpression: undefined })
-        : this.emitFunctionBody(expr.body);
+          ? this.emitFunctionBody({ ...expr.body, finalExpression: undefined })
+          : this.emitFunctionBody(expr.body);
       return `(${expr.draftParam.name}) => {\n${recipeBody}\n}`;
     } finally {
       this.activeDraftParams.delete(expr.draftParam.name);
@@ -1535,7 +2546,8 @@ export class Emitter {
     }
     const template = lit.parts
       .map((p) => {
-        if (p.kind === "StringRawPart") return p.value.replace(/`/g, "\\`").replace(/\${/g, "\\${");
+        if (p.kind === "StringRawPart")
+          return p.value.replace(/`/g, "\\`").replace(/\${/g, "\\${");
         return `\${${this.emitExpression(p.expression)}}`;
       })
       .join("");
@@ -1545,7 +2557,8 @@ export class Emitter {
   private emitTemplateLiteral(lit: TemplateLiteral): string {
     const template = lit.parts
       .map((p) => {
-        if (p.kind === "StringRawPart") return p.value.replace(/`/g, "\\`").replace(/\${/g, "\\${");
+        if (p.kind === "StringRawPart")
+          return p.value.replace(/`/g, "\\`").replace(/\${/g, "\\${");
         return `\${${this.emitExpression(p.expression)}}`;
       })
       .join("");
@@ -1556,13 +2569,20 @@ export class Emitter {
     const tag = this.emitExpression(expr.tag);
     let typeArgs = "";
     if (expr.typeArguments && expr.typeArguments.length > 0) {
-      typeArgs = "<" + expr.typeArguments.map((t) => this.emitTypeNode(t)).join(", ") + ">";
+      typeArgs =
+        "<" +
+        expr.typeArguments.map((t) => this.emitTypeNode(t)).join(", ") +
+        ">";
     }
     return `${tag}${typeArgs}${this.emitTemplateLiteral(expr.template)}`;
   }
 
   private emitCallExpression(expr: CallExpression): string {
-    if (!this.isUserBinding("dbg") && expr.callee.kind === "Identifier" && expr.callee.name === "dbg") {
+    if (
+      !this.isUserBinding("dbg") &&
+      expr.callee.kind === "Identifier" &&
+      expr.callee.name === "dbg"
+    ) {
       if (expr.args.length === 1) {
         const val = this.emitExpression(expr.args[0]);
         return `((__v) => { console.log(__v); return __v; })(${val})`;
@@ -1575,11 +2595,22 @@ export class Emitter {
       return `((__v: any) => { console.log(__v); return __v; })`;
     }
 
-    if (expr.callee.kind === "Identifier" && !this.isUserBinding(expr.callee.name)) {
+    if (
+      expr.callee.kind === "Identifier" &&
+      !this.isUserBinding(expr.callee.name)
+    ) {
       const name = expr.callee.name;
-      if (name === "decodeJson" || name === "decodeJsonSync" || name === "encodeJson" || name === "encodeJsonSync") {
+      if (
+        name === "decodeJson" ||
+        name === "decodeJsonSync" ||
+        name === "encodeJson" ||
+        name === "encodeJsonSync"
+      ) {
         this.effectImports.add("Schema");
-        const schema = expr.args.length > 0 ? this.emitExpression(expr.args[0]) : "Schema.Unknown";
+        const schema =
+          expr.args.length > 0
+            ? this.emitExpression(expr.args[0])
+            : "Schema.Unknown";
         let combinator = "Schema.decodeUnknownEffect";
         if (name === "decodeJsonSync") combinator = "Schema.decodeUnknownSync";
         else if (name === "encodeJson") combinator = "Schema.encodeEffect";
@@ -1619,7 +2650,8 @@ export class Emitter {
 
     if (
       expr.callee.kind === "MemberExpression" &&
-      (expr.callee.object.kind === "Identifier" || expr.callee.object.kind === "UpperIdentifier") &&
+      (expr.callee.object.kind === "Identifier" ||
+        expr.callee.object.kind === "UpperIdentifier") &&
       expr.callee.object.name === "Option" &&
       expr.callee.property.name === "fromNullishOrElse"
     ) {
@@ -1629,7 +2661,8 @@ export class Emitter {
 
     if (
       expr.callee.kind === "MemberExpression" &&
-      (expr.callee.object.kind === "Identifier" || expr.callee.object.kind === "UpperIdentifier") &&
+      (expr.callee.object.kind === "Identifier" ||
+        expr.callee.object.kind === "UpperIdentifier") &&
       expr.callee.object.name === "Option" &&
       expr.callee.property.name === "fromNullishOr"
     ) {
@@ -1649,7 +2682,8 @@ export class Emitter {
     }
 
     if (
-      (expr.callee.kind === "UpperIdentifier" || expr.callee.kind === "Identifier") &&
+      (expr.callee.kind === "UpperIdentifier" ||
+        expr.callee.kind === "Identifier") &&
       expr.callee.name === "URL" &&
       this.tryContextDepth === 0
     ) {
@@ -1661,7 +2695,8 @@ export class Emitter {
 
     if (
       expr.callee.kind === "MemberExpression" &&
-      (expr.callee.object.kind === "Identifier" || expr.callee.object.kind === "UpperIdentifier") &&
+      (expr.callee.object.kind === "Identifier" ||
+        expr.callee.object.kind === "UpperIdentifier") &&
       expr.callee.object.name === "Option" &&
       expr.callee.property.name === "try"
     ) {
@@ -1677,7 +2712,8 @@ export class Emitter {
 
     if (
       expr.callee.kind === "MemberExpression" &&
-      (expr.callee.object.kind === "Identifier" || expr.callee.object.kind === "UpperIdentifier") &&
+      (expr.callee.object.kind === "Identifier" ||
+        expr.callee.object.kind === "UpperIdentifier") &&
       expr.callee.object.name === "Result" &&
       expr.callee.property.name === "try"
     ) {
@@ -1693,25 +2729,37 @@ export class Emitter {
     if (expr.callee.kind === "MemberExpression") {
       const prop = expr.callee.property.name;
       const root = getRootCalleeName(expr.callee.object);
-      const objName = (expr.callee.object.kind === "Identifier" || expr.callee.object.kind === "UpperIdentifier")
-        ? expr.callee.object.name
-        : null;
+      const objName =
+        expr.callee.object.kind === "Identifier" ||
+        expr.callee.object.kind === "UpperIdentifier"
+          ? expr.callee.object.name
+          : null;
 
-      if ((objName === "Number" || objName === "globalThis") && (prop === "parseInt" || prop === "parseFloat")) {
+      if (
+        (objName === "Number" || objName === "globalThis") &&
+        (prop === "parseInt" || prop === "parseFloat")
+      ) {
         throw new FunScriptError(
           `'${objName}.${prop}()' is banned by the Effect style guide because it produces NaN on invalid input. Use 'Number.parse(s)' instead for total parsing returning Option<number>.`,
           expr.callee.property.span,
         );
       }
 
-      if ((objName === "JSON" || objName === "globalThis") && prop === "parse" && this.tryContextDepth === 0) {
+      if (
+        (objName === "JSON" || objName === "globalThis") &&
+        prop === "parse" &&
+        this.tryContextDepth === 0
+      ) {
         throw new FunScriptError(
           `'JSON.parse()' is unsafe because it throws on malformed input. Guard it with 'js JSON.parse(...)', 'Result.try(() => JSON.parse(...))', or use 'Schema.decodeUnknown'.`,
           expr.callee.property.span,
         );
       }
 
-      if ((objName === "Math" || objName === "globalThis") && prop === "random") {
+      if (
+        (objName === "Math" || objName === "globalThis") &&
+        prop === "random"
+      ) {
         throw new FunScriptError(
           `'Math.random()' is banned by the Effect style guide because it is unmanaged and non-deterministic. Use 'Random.next' or 'Random.nextIntBetween' instead.`,
           expr.callee.property.span,
@@ -1719,7 +2767,8 @@ export class Emitter {
       }
 
       if (
-        (expr.callee.object.kind === "Identifier" || expr.callee.object.kind === "UpperIdentifier") &&
+        (expr.callee.object.kind === "Identifier" ||
+          expr.callee.object.kind === "UpperIdentifier") &&
         expr.callee.object.name === "Object" &&
         BANNED_OBJECT_STATIC_METHODS.has(prop)
       ) {
@@ -1736,12 +2785,18 @@ export class Emitter {
           EFFECT_MODULE_NAMES.has(root) ||
           EFFECT_BUILTIN_MODULES.has(root));
 
-      if (!isAllowed && !this.activeDraftParams.has(root ?? "") && BANNED_INSTANCE_METHODS.has(prop)) {
+      if (
+        !isAllowed &&
+        !this.activeDraftParams.has(root ?? "") &&
+        BANNED_INSTANCE_METHODS.has(prop)
+      ) {
         const info = BANNED_INSTANCE_METHODS.get(prop)!;
         const isWebMutable =
           (prop === "set" || prop === "delete") &&
           root !== null &&
-          /^(url|search|query|param|header|form|request|response|req|res)/i.test(root);
+          /^(url|search|query|param|header|form|request|response|req|res)/i.test(
+            root,
+          );
         if (!isWebMutable) {
           if (["push", "pop", "shift", "unshift", "splice"].includes(prop)) {
             throw new FunScriptError(
@@ -1758,7 +2813,8 @@ export class Emitter {
       }
 
       if (
-        (expr.callee.object.kind === "Identifier" || expr.callee.object.kind === "UpperIdentifier") &&
+        (expr.callee.object.kind === "Identifier" ||
+          expr.callee.object.kind === "UpperIdentifier") &&
         EFFECT_BUILTIN_MODULES.has(expr.callee.object.name)
       ) {
         this.effectImports.add(expr.callee.object.name);
@@ -1766,12 +2822,16 @@ export class Emitter {
     }
 
     if (
-      (expr.callee.kind === "UpperIdentifier" || expr.callee.kind === "Identifier") &&
+      (expr.callee.kind === "UpperIdentifier" ||
+        expr.callee.kind === "Identifier") &&
       AUTO_NEW_CONSTRUCTORS.has(expr.callee.name) &&
       !this.bindings.has(expr.callee.name) &&
       !this.declaredTypeNames.has(expr.callee.name)
     ) {
-      if ((expr.callee.name === "Map" || expr.callee.name === "WeakMap") && expr.args.length === 1) {
+      if (
+        (expr.callee.name === "Map" || expr.callee.name === "WeakMap") &&
+        expr.args.length === 1
+      ) {
         return `new ${expr.callee.name}(${this.emitExpression(expr.args[0])} as any)`;
       }
       return `new ${expr.callee.name}(${expr.args.map((a) => this.emitExpression(a)).join(", ")})`;
@@ -1781,13 +2841,15 @@ export class Emitter {
       expr.callee.kind === "MemberExpression" &&
       AUTO_NEW_CONSTRUCTORS.has(expr.callee.property.name) &&
       expr.callee.object.kind === "Identifier" &&
-      (expr.callee.object.name === "globalThis" || expr.callee.object.name === "window")
+      (expr.callee.object.name === "globalThis" ||
+        expr.callee.object.name === "window")
     ) {
       return `new ${this.emitExpression(expr.callee)}(${expr.args.map((a) => this.emitExpression(a)).join(", ")})`;
     }
 
     if (
-      (expr.callee.kind === "UpperIdentifier" || expr.callee.kind === "Identifier") &&
+      (expr.callee.kind === "UpperIdentifier" ||
+        expr.callee.kind === "Identifier") &&
       expr.callee.name === "Brand"
     ) {
       this.effectImports.add("Schema");
@@ -1813,7 +2875,9 @@ export class Emitter {
     }
 
     if (this.options.directCallResolutions?.has(expr.span.start.offset)) {
-      const res = this.options.directCallResolutions.get(expr.span.start.offset)!;
+      const res = this.options.directCallResolutions.get(
+        expr.span.start.offset,
+      )!;
       if (isEffectModule(res.module)) {
         this.effectImports.add(res.module);
       }
@@ -1829,18 +2893,22 @@ export class Emitter {
       this.esToolkitImports.add(expr.callee.name);
     }
 
-    return `${this.emitExpression(expr.callee)}(${expr.args.map((a) => {
-      const emitted = this.emitExpression(a);
-      if (this.options.forwardNullArguments?.has(a.span.start.offset)) {
-        this.effectImports.add("Option");
-        return `Option.getOrNull(${emitted})`;
-      }
-      if (this.options.forwardOptionalArguments?.has(a.span.start.offset)) {
-        this.effectImports.add("Option");
-        return `Option.getOrUndefined(${emitted})`;
-      }
-      return this.options.markCallArguments ? `__funscriptCallArgument(${a.span.start.offset}, ${emitted})` : emitted;
-    }).join(", ")})`;
+    return `${this.emitExpression(expr.callee)}(${expr.args
+      .map((a) => {
+        const emitted = this.emitExpression(a);
+        if (this.options.forwardNullArguments?.has(a.span.start.offset)) {
+          this.effectImports.add("Option");
+          return `Option.getOrNull(${emitted})`;
+        }
+        if (this.options.forwardOptionalArguments?.has(a.span.start.offset)) {
+          this.effectImports.add("Option");
+          return `Option.getOrUndefined(${emitted})`;
+        }
+        return this.options.markCallArguments
+          ? `__funscriptCallArgument(${a.span.start.offset}, ${emitted})`
+          : emitted;
+      })
+      .join(", ")})`;
   }
 
   private emitPipelineExpression(expr: PipelineExpression): string {
@@ -1853,7 +2921,9 @@ export class Emitter {
       isUserBinding: (name) => this.isUserBinding(name),
       effectImports: this.effectImports,
       esToolkitImports: this.esToolkitImports,
-      requireDecodeUnknown: () => { this.needsDecodeUnknown = true; },
+      requireDecodeUnknown: () => {
+        this.needsDecodeUnknown = true;
+      },
     });
 
     // Flatten left-nested pipelines: a |> b |> c
@@ -1887,9 +2957,16 @@ export class Emitter {
           if (s.kind === "Identifier" && s.name === "dbg") {
             return `((__v) => { console.log(__v); return __v; })`;
           }
-          if (s.kind === "CallExpression" && s.callee.kind === "Identifier" && s.callee.name === "dbg") {
-            const labelArg = s.args.length > 0 ? this.emitExpression(s.args[0]) : undefined;
-            const logCall = labelArg ? `console.log(${labelArg}, __v)` : `console.log(__v)`;
+          if (
+            s.kind === "CallExpression" &&
+            s.callee.kind === "Identifier" &&
+            s.callee.name === "dbg"
+          ) {
+            const labelArg =
+              s.args.length > 0 ? this.emitExpression(s.args[0]) : undefined;
+            const logCall = labelArg
+              ? `console.log(${labelArg}, __v)`
+              : `console.log(__v)`;
             return `((__v) => { ${logCall}; return __v; })`;
           }
         }
@@ -1900,7 +2977,12 @@ export class Emitter {
           if (isEffectModule(res.module)) {
             this.effectImports.add(res.module);
           }
-          if (res.module === "Effect" && (res.method === "retry" || (s.kind === "CallExpression" && (s.callee as Identifier).name === "retry"))) {
+          if (
+            res.module === "Effect" &&
+            (res.method === "retry" ||
+              (s.kind === "CallExpression" &&
+                (s.callee as Identifier).name === "retry"))
+          ) {
             const resolved = resolver.resolvePipelineStage(s, "Effect");
             return this.emitExpression(resolved);
           }
@@ -1909,19 +2991,28 @@ export class Emitter {
           }
           if (s.kind === "CallExpression") {
             const callee = s.callee as Identifier | UpperIdentifier;
-            if (res.module === "Schema" && (res.method === "decode" || (!res.method && callee.name === "decode"))) {
+            if (
+              res.module === "Schema" &&
+              (res.method === "decode" ||
+                (!res.method && callee.name === "decode"))
+            ) {
               this.needsDecodeUnknown = true;
             }
-            const method = res.module === "Schema" && (res.method === "decode" || (!res.method && callee.name === "decode"))
-              ? "decodeUnknown"
-              : res.method ?? callee.name;
+            const method =
+              res.module === "Schema" &&
+              (res.method === "decode" ||
+                (!res.method && callee.name === "decode"))
+                ? "decodeUnknown"
+                : (res.method ?? callee.name);
             const calleeName = `${res.module}.${method}`;
             if (resolver.hasPlaceholder(s)) {
               const placeholderParam = "__p";
               const prevPlaceholderParam = this.currentPlaceholderParam;
               this.currentPlaceholderParam = placeholderParam;
               try {
-                const args = s.args.map((a) => this.emitExpression(a)).join(", ");
+                const args = s.args
+                  .map((a) => this.emitExpression(a))
+                  .join(", ");
                 return `(${placeholderParam}) => ${calleeName}(${args})`;
               } finally {
                 this.currentPlaceholderParam = prevPlaceholderParam;
@@ -1934,10 +3025,14 @@ export class Emitter {
 
         // Auto-namespace resolution for pipeline stage callee
         resolver.assertPipelineStageIsNotAmbiguous(s, preferredCompanion);
-        const resolvedStage = resolver.resolvePipelineStage(s, preferredCompanion);
+        const resolvedStage = resolver.resolvePipelineStage(
+          s,
+          preferredCompanion,
+        );
 
         // `js` runs an Effect and leaves the Effect pipeline domain.
-        if (s.kind === "Identifier" && s.name === "js") preferredCompanion = undefined;
+        if (s.kind === "Identifier" && s.name === "js")
+          preferredCompanion = undefined;
 
         // Check if stage has placeholder '_'
         if (resolver.hasPlaceholder(resolvedStage)) {
@@ -1946,7 +3041,8 @@ export class Emitter {
           this.currentPlaceholderParam = placeholderParam;
           try {
             const body = this.emitExpression(resolvedStage);
-            const formattedBody = resolvedStage.kind === "RecordExpression" ? `(${body})` : body;
+            const formattedBody =
+              resolvedStage.kind === "RecordExpression" ? `(${body})` : body;
             return `(${placeholderParam}) => ${formattedBody}`;
           } finally {
             this.currentPlaceholderParam = prevPlaceholderParam;
@@ -1957,9 +3053,11 @@ export class Emitter {
       });
 
       const checkedStages = this.options.markPipelineSources
-        ? emittedStages.map((stage, index) => index === 0
-          ? stage
-          : `(__funscriptPipelineValue) => (${stage})(__funscriptPipelineStageInput(${stages[index].span.start.offset}, __funscriptPipelineValue))`)
+        ? emittedStages.map((stage, index) =>
+            index === 0
+              ? stage
+              : `(__funscriptPipelineValue) => (${stage})(__funscriptPipelineStageInput(${stages[index].span.start.offset}, __funscriptPipelineValue))`,
+          )
         : emittedStages;
       return `pipe(\n  ${checkedStages.join(",\n  ")}\n)`;
     } finally {
@@ -1992,13 +3090,17 @@ export class Emitter {
         return `(${left} || ${right})`;
       case "@=":
         if (this.isPrimitive(expr.left) || this.isPrimitive(expr.right)) {
-          throw new Error(`Reference identity operator '@=' cannot be used with primitive values; use '#=' or '#!' for value equality`);
+          throw new Error(
+            `Reference identity operator '@=' cannot be used with primitive values; use '#=' or '#!' for value equality`,
+          );
         }
         this.needsReferenceEquality = true;
         return `referenceEquals(${left}, ${right})`;
       case "@!":
         if (this.isPrimitive(expr.left) || this.isPrimitive(expr.right)) {
-          throw new Error(`Reference identity operator '@!' cannot be used with primitive values; use '#=' or '#!' for value equality`);
+          throw new Error(
+            `Reference identity operator '@!' cannot be used with primitive values; use '#=' or '#!' for value equality`,
+          );
         }
         this.needsReferenceEquality = true;
         return `(!referenceEquals(${left}, ${right}))`;
@@ -2041,7 +3143,9 @@ export class Emitter {
     if (hasDotPaths) {
       // Lower to Mutative create
       this.needsMutative = true;
-      const baseSpread = expr.entries.find((e) => e.kind === "SpreadEntry") as any;
+      const baseSpread = expr.entries.find(
+        (e) => e.kind === "SpreadEntry",
+      ) as any;
       const base = baseSpread ? this.emitExpression(baseSpread.argument) : "{}";
       const mutations = expr.entries
         .filter((e) => e.kind !== "SpreadEntry")
@@ -2050,7 +3154,9 @@ export class Emitter {
             return `  draft.${e.path.map((p) => p.name).join(".")} = ${this.emitExpression(e.value)};`;
           }
           if (e.kind === "FieldEntry") {
-            const keyAccess = /^[a-zA-Z_$][a-zA-Z0-9_$]*$/.test(e.key.name) ? `.${e.key.name}` : `[${JSON.stringify(e.key.name)}]`;
+            const keyAccess = /^[a-zA-Z_$][a-zA-Z0-9_$]*$/.test(e.key.name)
+              ? `.${e.key.name}`
+              : `[${JSON.stringify(e.key.name)}]`;
             return `  draft${keyAccess} = ${this.emitExpression(e.value)};`;
           }
           return `  draft.${e.key.name} = ${e.key.name};`;
@@ -2059,25 +3165,43 @@ export class Emitter {
       return `create(${base}, (draft) => {\n${mutations}\n})`;
     }
 
-    const DISCRIMINANT_RECORD_KEYS = new Set(["_tag", "type", "kind", "status", "code", "tag", "ok", "state"]);
+    const DISCRIMINANT_RECORD_KEYS = new Set([
+      "_tag",
+      "type",
+      "kind",
+      "status",
+      "code",
+      "tag",
+      "ok",
+      "state",
+    ]);
     const entries = expr.entries
       .map((e) => {
-        if (e.kind === "SpreadEntry") return `...${this.emitExpression(e.argument)}`;
+        if (e.kind === "SpreadEntry")
+          return `...${this.emitExpression(e.argument)}`;
         if (e.kind === "FieldEntry") {
           let val = this.emitExpression(e.value);
-          if (this.options.forwardNullProperties?.has(e.value.span.start.offset)) {
+          if (
+            this.options.forwardNullProperties?.has(e.value.span.start.offset)
+          ) {
             this.effectImports.add("Option");
             return `[${JSON.stringify(e.key.name)}]: Option.getOrNull(${val})`;
           }
-          if (this.options.forwardOptionalProperties?.has(e.value.span.start.offset)) {
+          if (
+            this.options.forwardOptionalProperties?.has(
+              e.value.span.start.offset,
+            )
+          ) {
             this.effectImports.add("Option");
             return `...((__value: import("effect").Option.Option<any>) => Option.isSome(__value) ? { [${JSON.stringify(e.key.name)}]: __value.value } : {})(${val})`;
           }
-          if (this.options.markCallArguments) val = `__funscriptCallArgument(${e.value.span.start.offset}, ${val})`;
+          if (this.options.markCallArguments)
+            val = `__funscriptCallArgument(${e.value.span.start.offset}, ${val})`;
           if (e.value.kind === "BooleanLiteral") {
             val = `${val} as const`;
           } else if (
-            (e.value.kind === "StringLiteral" || e.value.kind === "NumberLiteral") &&
+            (e.value.kind === "StringLiteral" ||
+              e.value.kind === "NumberLiteral") &&
             DISCRIMINANT_RECORD_KEYS.has(e.key.name)
           ) {
             val = `${val} as const`;
@@ -2102,22 +3226,30 @@ export class Emitter {
     const params = expr.params
       .map((p, index) => {
         const rest = p.isRest ? "..." : "";
-        const name = p.optional ? `$funscriptOptional${index}` : this.emitBindingTarget(p.name);
+        const name = p.optional
+          ? `$funscriptOptional${index}`
+          : this.emitBindingTarget(p.name);
         let typeAnn = "";
         if (p.typeAnnotation) {
           const base = this.emitTypeNode(p.typeAnnotation);
           typeAnn = `: ${base}`;
         }
-        const defaultValue = p.defaultValue ? ` = ${this.emitExpression(p.defaultValue)}` : "";
+        const defaultValue = p.defaultValue
+          ? ` = ${this.emitExpression(p.defaultValue)}`
+          : "";
         return `${rest}${name}${p.optional ? "?" : ""}${typeAnn}${defaultValue}`;
       })
       .join(", ");
     const typeParams = this.emitTypeParameters(expr.typeParams, true);
-    const retType = expr.returnType ? `: ${this.emitTypeNode(expr.returnType)}` : "";
+    const retType = expr.returnType
+      ? `: ${this.emitTypeNode(expr.returnType)}`
+      : "";
     const optionalBindings = expr.params.flatMap((p, index) => {
       if (!p.optional) return [];
       this.effectImports.add("Option");
-      return [`  const ${this.emitBindingTarget(p.name)} = Option.fromUndefinedOr($funscriptOptional${index});`];
+      return [
+        `  const ${this.emitBindingTarget(p.name)} = Option.fromUndefinedOr($funscriptOptional${index});`,
+      ];
     });
 
     const records = new Map<string, Map<string, RecordFieldInfo> | undefined>();
@@ -2126,50 +3258,118 @@ export class Emitter {
       if (param.name.kind !== "Identifier") return;
       const paramName = param.name.name;
       const declared = param.typeAnnotation;
-      if (this.isHtmlPropsType(declared)) { records.set(paramName, undefined); return; }
-      const recordType = declared?.kind === "TypeReferenceNode" ? this.recordContracts.get(declared.name.name) : declared;
-      if (param.optional || recordType?.kind !== "RecordTypeNode") { records.set(paramName, undefined); return; }
+      if (this.isHtmlPropsType(declared)) {
+        records.set(paramName, undefined);
+        return;
+      }
+      const recordType =
+        declared?.kind === "TypeReferenceNode"
+          ? this.recordContracts.get(declared.name.name)
+          : declared;
+      if (param.optional || recordType?.kind !== "RecordTypeNode") {
+        records.set(paramName, undefined);
+        return;
+      }
       const fields = recordType.fields;
-      const nestedFields = (type: TypeNode): Map<string, RecordFieldInfo> | undefined => {
+      const nestedFields = (
+        type: TypeNode,
+      ): Map<string, RecordFieldInfo> | undefined => {
         if (type.kind !== "RecordTypeNode") {
           const containsOptionalRecord = (value: unknown): boolean => {
             if (!value || typeof value !== "object") return false;
             if (Array.isArray(value)) return value.some(containsOptionalRecord);
             const node = value as Record<string, unknown>;
-            if (node.kind === "RecordTypeNode" && Array.isArray(node.fields) && node.fields.some((field: any) => field.optional || field.defaultValue)) return true;
-            return Object.entries(node).some(([key, child]) => key !== "span" && containsOptionalRecord(child));
+            if (
+              node.kind === "RecordTypeNode" &&
+              Array.isArray(node.fields) &&
+              node.fields.some(
+                (field: any) => field.optional || field.defaultValue,
+              )
+            )
+              return true;
+            return Object.entries(node).some(
+              ([key, child]) => key !== "span" && containsOptionalRecord(child),
+            );
           };
-          if (containsOptionalRecord(type)) throw new FunScriptError("Optional records inside callbacks or container types are not supported yet", type.span);
+          if (containsOptionalRecord(type))
+            throw new FunScriptError(
+              "Optional records inside callbacks or container types are not supported yet",
+              type.span,
+            );
           return undefined;
         }
         const result = new Map<string, RecordFieldInfo>();
         for (const field of type.fields) {
           const children = nestedFields(field.typeAnnotation);
-          result.set(field.name.name, { optional: Boolean(field.optional), fields: children });
+          result.set(field.name.name, {
+            optional: Boolean(field.optional),
+            fields: children,
+          });
         }
-        return [...result.values()].some((field) => field.optional || field.fields) ? result : undefined;
+        return [...result.values()].some(
+          (field) => field.optional || field.fields,
+        )
+          ? result
+          : undefined;
       };
-      if (!fields.some((field) => field.optional || field.defaultValue || nestedFields(field.typeAnnotation))) { records.set(paramName, undefined); return; }
+      if (
+        !fields.some(
+          (field) =>
+            field.optional ||
+            field.defaultValue ||
+            nestedFields(field.typeAnnotation),
+        )
+      ) {
+        records.set(paramName, undefined);
+        return;
+      }
       const mapped = new Map<string, RecordFieldInfo>();
       fields.forEach((field, fieldIndex) => {
-        const binding = field.defaultValue ? `$funscriptField${paramIndex}_${fieldIndex}` : undefined;
+        const binding = field.defaultValue
+          ? `$funscriptField${paramIndex}_${fieldIndex}`
+          : undefined;
         if (field.defaultValue) {
-          this.validateRecordDefault(field.defaultValue, new Set(expr.params.flatMap((p) => this.collectBindingNames(p.name))));
+          this.validateRecordDefault(
+            field.defaultValue,
+            new Set(
+              expr.params.flatMap((p) => this.collectBindingNames(p.name)),
+            ),
+          );
           const raw = `$funscriptFieldRaw${paramIndex}_${fieldIndex}`;
-          recordDefaults.push(`  const ${raw} = ${paramName}.${field.name.name};`);
-          recordDefaults.push(`  const ${binding} = ${raw} === undefined ? ${this.emitExpression(field.defaultValue)} : ${raw};`);
+          recordDefaults.push(
+            `  const ${raw} = ${paramName}.${field.name.name};`,
+          );
+          recordDefaults.push(
+            `  const ${binding} = ${raw} === undefined ? ${this.emitExpression(field.defaultValue)} : ${raw};`,
+          );
         }
         const children = nestedFields(field.typeAnnotation);
-        mapped.set(field.name.name, { optional: Boolean(field.optional), defaultBinding: binding, fields: children });
+        mapped.set(field.name.name, {
+          optional: Boolean(field.optional),
+          defaultBinding: binding,
+          fields: children,
+        });
       });
       records.set(paramName, mapped);
     });
     const aliases = new Set<BindingDeclaration>();
     if (expr.body.kind === "BlockStatement") {
       for (const stmt of expr.body.statements) {
-        if (stmt.kind !== "BindingDeclaration" || stmt.isMut || stmt.isJs || stmt.init.kind !== "Identifier" || !("name" in stmt.id) || records.has(stmt.id.name)) continue;
+        if (
+          stmt.kind !== "BindingDeclaration" ||
+          stmt.isMut ||
+          stmt.isJs ||
+          stmt.init.kind !== "Identifier" ||
+          !("name" in stmt.id) ||
+          records.has(stmt.id.name)
+        )
+          continue;
         const fields = records.get(stmt.init.name);
-        if (!fields || [...fields.values()].some((field) => field.defaultBinding)) continue;
+        if (
+          !fields ||
+          [...fields.values()].some((field) => field.defaultBinding)
+        )
+          continue;
         records.set(stmt.id.name, fields);
         aliases.add(stmt);
       }
@@ -2183,8 +3383,14 @@ export class Emitter {
     this.parameterScopes.push(new Map(paramScopeEntries));
     this.recordScopes.push(records);
     try {
-      for (const name of records.keys()) if (records.get(name)) this.validateRecordParameterUse(expr, name, aliases);
-      if (expr.body.kind === "BlockStatement" || optionalBindings.length || recordDefaults.length) {
+      for (const name of records.keys())
+        if (records.get(name))
+          this.validateRecordParameterUse(expr, name, aliases);
+      if (
+        expr.body.kind === "BlockStatement" ||
+        optionalBindings.length ||
+        recordDefaults.length
+      ) {
         const body = this.emitFunctionBody(expr.body);
         return `${typeParams}(${params})${retType} => {\n${[...optionalBindings, ...recordDefaults, body].filter(Boolean).join("\n")}\n}`;
       }
@@ -2197,19 +3403,27 @@ export class Emitter {
 
   private emitFunctionBody(body: FunctionBody): string {
     if (body.kind === "BlockStatement") {
-      const stmts = body.statements.map((s) => "  " + this.emitStatement(s)).join("\n");
-      const isUnit = body.finalExpression && (body.finalExpression.kind === "Identifier" || body.finalExpression.kind === "UpperIdentifier") && body.finalExpression.name === "Unit";
+      const stmts = body.statements
+        .map((s) => "  " + this.emitStatement(s))
+        .join("\n");
+      const isUnit =
+        body.finalExpression &&
+        (body.finalExpression.kind === "Identifier" ||
+          body.finalExpression.kind === "UpperIdentifier") &&
+        body.finalExpression.name === "Unit";
       const ret = isUnit
         ? "  return;"
         : body.finalExpression
-        ? `  return ${this.emitExpression(body.finalExpression)};`
-        : "";
+          ? `  return ${this.emitExpression(body.finalExpression)};`
+          : "";
       if (stmts && ret) return `${stmts}\n${ret}`;
       if (stmts) return stmts;
       if (ret) return ret;
       return "";
     }
-    const isUnit = (body.kind === "Identifier" || body.kind === "UpperIdentifier") && body.name === "Unit";
+    const isUnit =
+      (body.kind === "Identifier" || body.kind === "UpperIdentifier") &&
+      body.name === "Unit";
     if (isUnit) return "  return;";
     return `  return ${this.emitExpression(body)};`;
   }
@@ -2228,15 +3442,20 @@ export class Emitter {
       return this.emitBindingDeclaration(stmt);
     }
     if (stmt.kind === "AssignmentStatement") {
-      const target = stmt.target.kind === "Identifier"
-        ? stmt.target.name
-        : stmt.target.kind === "IndexExpression"
-        ? this.emitIndexTarget(stmt.target)
-        : stmt.target.path.map((p) => p.name).join(".");
+      const target =
+        stmt.target.kind === "Identifier"
+          ? stmt.target.name
+          : stmt.target.kind === "IndexExpression"
+            ? this.emitIndexTarget(stmt.target)
+            : stmt.target.path.map((p) => p.name).join(".");
       return `${target} = ${this.emitExpression(stmt.value)};`;
     }
     if (stmt.kind === "ReturnStatement") {
-      if ((stmt.argument.kind === "Identifier" || stmt.argument.kind === "UpperIdentifier") && stmt.argument.name === "Unit") {
+      if (
+        (stmt.argument.kind === "Identifier" ||
+          stmt.argument.kind === "UpperIdentifier") &&
+        stmt.argument.name === "Unit"
+      ) {
         return "return;";
       }
       const arg = this.emitExpression(stmt.argument);
@@ -2268,10 +3487,15 @@ export class Emitter {
       return `if (${cond}) return ${this.emitExpression(consequence)};`;
     }
     const body = stmt.consequent as BlockStatement;
-    const stmts = body.statements.map((s) => "  " + this.emitStatement(s)).join("\n");
-    const ret = body.finalExpression && (body.finalExpression.kind !== "Identifier" || (body.finalExpression as Identifier).name !== "_error")
-      ? `  ${this.emitExpression(body.finalExpression)};`
-      : "";
+    const stmts = body.statements
+      .map((s) => "  " + this.emitStatement(s))
+      .join("\n");
+    const ret =
+      body.finalExpression &&
+      (body.finalExpression.kind !== "Identifier" ||
+        body.finalExpression.name !== "_error")
+        ? `  ${this.emitExpression(body.finalExpression)};`
+        : "";
     const allStmts = [stmts, ret].filter(Boolean).join("\n");
     return `if (${cond}) {\n${allStmts}\n}`;
   }
@@ -2286,12 +3510,25 @@ export class Emitter {
       recordField: (expression) => this.recordField(expression),
       isOptionalParameter: (name) => this.isOptionalParameter(name),
       isOptionalValue: (expression) => this.isOptionalValue(expression),
-      requireTsPattern: () => { this.needsTsPattern = true; },
+      requireTsPattern: () => {
+        this.needsTsPattern = true;
+      },
       enterOptionalPayload: (name, fields, arm) => {
         this.recordScopes.push(new Map([[name, fields]]));
         this.parameterScopes.push(new Map([[name, false]]));
         const validateBody = (body: FunctionBody) => {
-          const synthetic = { kind: "FunctionExpression", params: [{ kind: "Parameter", name: { kind: "Identifier", name, span: arm.span }, span: arm.span }], body, span: arm.span } as FunctionExpression;
+          const synthetic = {
+            kind: "FunctionExpression",
+            params: [
+              {
+                kind: "Parameter",
+                name: { kind: "Identifier", name, span: arm.span },
+                span: arm.span,
+              },
+            ],
+            body,
+            span: arm.span,
+          } as FunctionExpression;
           this.validateRecordParameterUse(synthetic, name, new Set());
         };
         try {
@@ -2324,11 +3561,12 @@ export class Emitter {
           return `    ${this.emitBindingDeclaration(s)}`;
         }
         if (s.kind === "AssignmentStatement") {
-          const target = s.target.kind === "Identifier"
-            ? s.target.name
-            : s.target.kind === "IndexExpression"
-            ? this.emitIndexTarget(s.target)
-            : s.target.path.map((p) => p.name).join(".");
+          const target =
+            s.target.kind === "Identifier"
+              ? s.target.name
+              : s.target.kind === "IndexExpression"
+                ? this.emitIndexTarget(s.target)
+                : s.target.path.map((p) => p.name).join(".");
           return `    ${target} = ${this.emitExpression(s.value)};`;
         }
         if (s.kind === "WhenStatement") {
@@ -2338,7 +3576,10 @@ export class Emitter {
       })
       .join("\n");
 
-    const isUnit = (expr.finalExpression.kind === "Identifier" || expr.finalExpression.kind === "UpperIdentifier") && expr.finalExpression.name === "Unit";
+    const isUnit =
+      (expr.finalExpression.kind === "Identifier" ||
+        expr.finalExpression.kind === "UpperIdentifier") &&
+      expr.finalExpression.name === "Unit";
     const ret = isUnit
       ? `    return;`
       : `    return ${this.emitExpression(expr.finalExpression)};`;
@@ -2366,7 +3607,9 @@ export class Emitter {
       }
     }
 
-    const concurrencyArg = expr.concurrency ? this.emitExpression(expr.concurrency) : `"inherit"`;
+    const concurrencyArg = expr.concurrency
+      ? this.emitExpression(expr.concurrency)
+      : `"inherit"`;
     const dict = `{\n${entries.join(",\n")}\n    }`;
     const allCall = `Effect.all(${dict}, { concurrency: ${concurrencyArg} })`;
 
@@ -2379,7 +3622,11 @@ export class Emitter {
             return e.key.name === boundNames[i];
           }
           if (e.kind === "FieldEntry") {
-            return e.key.name === boundNames[i] && e.value.kind === "Identifier" && e.value.name === boundNames[i];
+            return (
+              e.key.name === boundNames[i] &&
+              e.value.kind === "Identifier" &&
+              e.value.name === boundNames[i]
+            );
           }
           return false;
         }));
@@ -2403,11 +3650,21 @@ export class Emitter {
       return this.emitEffectBlockExpression(effectExpr);
     }
     // Check if this is a direct service call: Service.method(args)
-    if (effectExpr.kind === "CallExpression" && effectExpr.callee.kind === "MemberExpression") {
+    if (
+      effectExpr.kind === "CallExpression" &&
+      effectExpr.callee.kind === "MemberExpression"
+    ) {
       const obj = effectExpr.callee.object;
       if (obj.kind === "UpperIdentifier") {
-        if (EFFECT_BUILTIN_MODULES.has(obj.name) || this.effectModuleBindings.has(obj.name) || obj.name === "Promise") {
-          if (EFFECT_BUILTIN_MODULES.has(obj.name) && !this.isUserBinding(obj.name)) {
+        if (
+          EFFECT_BUILTIN_MODULES.has(obj.name) ||
+          this.effectModuleBindings.has(obj.name) ||
+          obj.name === "Promise"
+        ) {
+          if (
+            EFFECT_BUILTIN_MODULES.has(obj.name) &&
+            !this.isUserBinding(obj.name)
+          ) {
             this.effectImports.add(obj.name);
           }
           return `${obj.name}.${this.emitMemberProperty(effectExpr.callee)}(${effectExpr.args.map((a) => this.emitExpression(a)).join(", ")})`;
@@ -2421,7 +3678,10 @@ export class Emitter {
 
   // --- Types ---
 
-  private emitTypeParameters(typeParams: TypeParameter[] | undefined, forArrowExpression = false): string {
+  private emitTypeParameters(
+    typeParams: TypeParameter[] | undefined,
+    forArrowExpression = false,
+  ): string {
     if (!typeParams || typeParams.length === 0) return "";
     const params = typeParams.map((param) =>
       param.constraint
@@ -2430,7 +3690,10 @@ export class Emitter {
     );
     // TypeScript parses `<A>(...)` as JSX in `.tsx` (and in JSX-enabled contexts like Vite);
     // a trailing comma keeps unconstrained generic arrow functions valid in both `.ts` and `.tsx`.
-    const needsTsxComma = forArrowExpression && (this.options.isJsx || typeParams.length === 1) && typeParams.every((param) => !param.constraint);
+    const needsTsxComma =
+      forArrowExpression &&
+      (this.options.isJsx || typeParams.length === 1) &&
+      typeParams.every((param) => !param.constraint);
     return `<${params.join(", ")}${needsTsxComma ? "," : ""}>`;
   }
 
@@ -2438,33 +3701,51 @@ export class Emitter {
     switch (node.kind) {
       case "QualifiedTypeReferenceNode": {
         const name = node.parts.map((part) => part.name).join(".");
-        return node.typeArgs?.length ? `${name}<${node.typeArgs.map((arg) => this.emitTypeNode(arg)).join(", ")}>` : name;
+        return node.typeArgs?.length
+          ? `${name}<${node.typeArgs.map((arg) => this.emitTypeNode(arg)).join(", ")}>`
+          : name;
       }
       case "TypeReferenceNode": {
         let name = node.name.name;
         if (name === "SchemaInput" && !this.declaredTypeNames.has(name)) {
           const arg = node.typeArgs?.[0];
-          if (node.typeArgs?.length !== 1 || arg?.kind !== "TypeReferenceNode" || arg.typeArgs?.length) {
-            throw new Error("SchemaInput requires one named schema, for example SchemaInput<User>");
+          if (
+            node.typeArgs?.length !== 1 ||
+            arg?.kind !== "TypeReferenceNode" ||
+            arg.typeArgs?.length
+          ) {
+            throw new Error(
+              "SchemaInput requires one named schema, for example SchemaInput<User>",
+            );
           }
           if (this.recordContracts.has(arg.name.name)) {
-            throw new FunScriptError(`${arg.name.name} is a compile-time record contract and has no encoded schema input type. Use the contract type directly or validate data with a separate runtime schema.`, node.span);
+            throw new FunScriptError(
+              `${arg.name.name} is a compile-time record contract and has no encoded schema input type. Use the contract type directly or validate data with a separate runtime schema.`,
+              node.span,
+            );
           }
           return `typeof ${arg.name.name}.Encoded`;
         }
         if (name === "HtmlProps") {
-          const tag = node.typeArgs?.[0] ? this.emitTypeNode(node.typeArgs[0]) : '"div"';
+          const tag = node.typeArgs?.[0]
+            ? this.emitTypeNode(node.typeArgs[0])
+            : '"div"';
           return `React.ComponentPropsWithoutRef<${tag}>`;
         }
         if (PRIMITIVE_TYPES[name]) return PRIMITIVE_TYPES[name];
-        if (name === "Array" && !this.declaredTypeNames.has(name)) name = "ReadonlyArray";
-        else if (name === "Map" && !this.declaredTypeNames.has(name)) name = "ReadonlyMap";
-        else if (name === "Set" && !this.declaredTypeNames.has(name)) name = "ReadonlySet";
+        if (name === "Array" && !this.declaredTypeNames.has(name))
+          name = "ReadonlyArray";
+        else if (name === "Map" && !this.declaredTypeNames.has(name))
+          name = "ReadonlyMap";
+        else if (name === "Set" && !this.declaredTypeNames.has(name))
+          name = "ReadonlySet";
         else if (name === "Record" && !this.declaredTypeNames.has(name)) {
           if (!this.isUserBinding(name)) this.effectImports.add("Record");
           name = "Record.ReadonlyRecord";
-        }
-        else if (EFFECT_TYPE_MODULES.has(name) && !this.declaredTypeNames.has(name)) {
+        } else if (
+          EFFECT_TYPE_MODULES.has(name) &&
+          !this.declaredTypeNames.has(name)
+        ) {
           if (!this.isUserBinding(name)) this.effectImports.add(name);
           name = `${name}.${name}`;
         }
@@ -2479,7 +3760,9 @@ export class Emitter {
             const rest = p.isRest ? "..." : "";
             const name = p.name ? this.emitBindingTarget(p.name) : "_";
             const opt = p.optional ? "?" : "";
-            return p.typeAnnotation ? `${rest}${name}${opt}: ${this.emitTypeNode(p.typeAnnotation)}` : `${rest}${name}${opt}`;
+            return p.typeAnnotation
+              ? `${rest}${name}${opt}: ${this.emitTypeNode(p.typeAnnotation)}`
+              : `${rest}${name}${opt}`;
           })
           .join(", ");
         return `${this.emitTypeParameters(node.typeParams)}(${params}) => ${this.emitTypeNode(node.returnType)}`;
@@ -2488,11 +3771,18 @@ export class Emitter {
         this.effectImports.add("Effect");
         const succ = this.emitTypeNode(node.success);
         const err = node.error ? this.emitTypeNode(node.error) : "never";
-        const req = node.requirements ? this.emitTypeNode(node.requirements) : "never";
+        const req = node.requirements
+          ? this.emitTypeNode(node.requirements)
+          : "never";
         return `Effect.Effect<${succ}, ${err}, ${req}>`;
       }
       case "RecordTypeNode": {
-        const fields = node.fields.map((f) => `readonly ${emitPropertyKey(f.name.name)}${f.optional || f.defaultValue ? "?" : ""}: ${this.emitTypeNode(f.typeAnnotation)}`).join("; ");
+        const fields = node.fields
+          .map(
+            (f) =>
+              `readonly ${emitPropertyKey(f.name.name)}${f.optional || f.defaultValue ? "?" : ""}: ${this.emitTypeNode(f.typeAnnotation)}`,
+          )
+          .join("; ");
         return `{ ${fields} }`;
       }
       case "ArrayTypeNode":
@@ -2518,7 +3808,9 @@ export class Emitter {
 
   public emitJsxElement(el: JSXElement): string {
     const tagName = this.emitJsxTagName(el.openingElement.name);
-    const attrs = el.openingElement.attributes.map((a) => this.emitJsxAttribute(a)).join(" ");
+    const attrs = el.openingElement.attributes
+      .map((a) => this.emitJsxAttribute(a))
+      .join(" ");
     const attrsStr = attrs.length > 0 ? ` ${attrs}` : "";
     const openTag = tagName === "" ? "<>" : `<${tagName}${attrsStr}>`;
     const closeTag = tagName === "" ? "</>" : `</${tagName}>`;
@@ -2549,13 +3841,16 @@ export class Emitter {
   }
 
   public emitJsxAttribute(attr: JSXAttribute): string {
-    if (attr.kind === "JSXSpreadAttribute") return `{...${this.emitExpression(attr.argument)}}`;
+    if (attr.kind === "JSXSpreadAttribute")
+      return `{...${this.emitExpression(attr.argument)}}`;
     const name = attr.name.name;
     if (attr.value === undefined) {
       return name;
     }
     if (attr.value.kind === "StringLiteral") {
-      const isSimple = attr.value.parts.every((p) => p.kind === "StringRawPart");
+      const isSimple = attr.value.parts.every(
+        (p) => p.kind === "StringRawPart",
+      );
       if (isSimple) {
         const rawVal = attr.value.parts.map((p) => (p as any).value).join("");
         return `${name}=${JSON.stringify(rawVal)}`;
@@ -2565,11 +3860,17 @@ export class Emitter {
     if (attr.value.kind === "JSXExpressionContainer") {
       const expression = attr.value.expression;
       const value = this.emitExpression(expression);
-      if (this.options.forwardNullProperties?.has(expression.span.start.offset)) {
+      if (
+        this.options.forwardNullProperties?.has(expression.span.start.offset)
+      ) {
         this.effectImports.add("Option");
         return `${name}={Option.getOrNull(${value})}`;
       }
-      if (this.options.forwardOptionalProperties?.has(expression.span.start.offset)) {
+      if (
+        this.options.forwardOptionalProperties?.has(
+          expression.span.start.offset,
+        )
+      ) {
         this.effectImports.add("Option");
         return `{...((__value: import("effect").Option.Option<any>) => Option.isSome(__value) ? { [${JSON.stringify(name)}]: __value.value } : {})(${value})}`;
       }

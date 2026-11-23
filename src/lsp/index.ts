@@ -38,7 +38,9 @@ export interface StartLspServerOptions {
   writer?: Writable;
 }
 
-export function startLspServer(options: StartLspServerOptions = {}): FunScriptLspServer {
+export function startLspServer(
+  options: StartLspServerOptions = {},
+): FunScriptLspServer {
   const server = new FunScriptLspServer();
   const reader = options.reader ?? process.stdin;
   const writer = options.writer ?? process.stdout;

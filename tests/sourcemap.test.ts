@@ -263,7 +263,7 @@ export start = (port: Number) => port + 1
       const defaultMapFile = path.join(TMP_DIR, "service.ts.map");
 
       await fs.writeFile(defaultFunFile, `export val = 42\n`, "utf-8");
-      await execFileAsync("node", [CLI_PATH, "build", defaultFunFile, "--sourcemap"]);
+      await execFileAsync("node", [CLI_PATH, "build", defaultFunFile, "--out", defaultTsFile, "--sourcemap"]);
 
       const defaultTsContent = await fs.readFile(defaultTsFile, "utf-8");
       const defaultMapContent = await fs.readFile(defaultMapFile, "utf-8");

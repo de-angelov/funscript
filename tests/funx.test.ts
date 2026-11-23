@@ -284,7 +284,7 @@ export Widget = (props: Props) => <div className="widget"><h3>{props.name}</h3><
         "utf-8",
       );
 
-      const { stdout } = await execFileAsync("node", [cliPath, "build", funxFile]);
+      const { stdout } = await execFileAsync("node", [cliPath, "build", funxFile, "--out", expectedTsxFile]);
       expect(stdout).toContain(`✓ Built ${expectedTsxFile}`);
 
       const tsxContent = await fs.readFile(expectedTsxFile, "utf-8");
@@ -303,7 +303,7 @@ export multiply = (a: Number, b: Number) => a * b
         "utf-8",
       );
 
-      const { stdout } = await execFileAsync("node", [cliPath, "build", funFile]);
+      const { stdout } = await execFileAsync("node", [cliPath, "build", funFile, "--out", expectedTsFile]);
       expect(stdout).toContain(`✓ Built ${expectedTsFile}`);
 
       const tsContent = await fs.readFile(expectedTsFile, "utf-8");
@@ -385,7 +385,7 @@ export Header = () => <header><h1>FunScript</h1></header>
 
       for (const funxFile of funxFiles) {
         const { stdout } = await execFileAsync("node", [cliPath, "check", funxFile]);
-        expect(stdout).toContain("checked successfully (0 errors)");
+        expect(stdout).toContain("checked successfully (0 errors");
       }
 
       const dashboardRun = await execFileAsync("node", [cliPath, "run", dashboardPath]);

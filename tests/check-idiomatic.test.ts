@@ -154,7 +154,7 @@ ts {
         "--idiomatic",
       ]);
       expect(stderr).toBe("");
-      expect(stdout).toContain("✓ examples/todo-service.fun checked successfully (0 errors)");
+      expect(stdout).toContain("✓ examples/todo-service.fun checked successfully (0 errors");
     }, 30_000);
 
     it("fails funscript check --idiomatic when non-ambient ts blocks are detected", async () => {

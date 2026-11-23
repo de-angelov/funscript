@@ -33,8 +33,11 @@ function isAmbientStatement(stmt: ts.Statement): boolean {
   if (ts.isTypeAliasDeclaration(stmt)) return true;
   if (ts.isInterfaceDeclaration(stmt)) return true;
   if (ts.isModuleDeclaration(stmt)) return true;
-  const modifiers = ts.canHaveModifiers(stmt) ? ts.getModifiers(stmt) : undefined;
-  if (modifiers?.some((m) => m.kind === ts.SyntaxKind.DeclareKeyword)) return true;
+  const modifiers = ts.canHaveModifiers(stmt)
+    ? ts.getModifiers(stmt)
+    : undefined;
+  if (modifiers?.some((m) => m.kind === ts.SyntaxKind.DeclareKeyword))
+    return true;
   return false;
 }
 
@@ -45,16 +48,20 @@ function checkTsBlockCode(
   filePath: string,
 ): IdiomaticDiagnostic[] {
   const diagnostics: IdiomaticDiagnostic[] = [];
-  const sourceFile = ts.createSourceFile("inline.ts", code, ts.ScriptTarget.Latest, true);
+  const sourceFile = ts.createSourceFile(
+    "inline.ts",
+    code,
+    ts.ScriptTarget.Latest,
+    true,
+  );
 
   for (const stmt of sourceFile.statements) {
     if (isAmbientStatement(stmt)) {
       continue;
     }
 
-    const { line: relLine, character: relCol } = sourceFile.getLineAndCharacterOfPosition(
-      stmt.getStart(sourceFile),
-    );
+    const { line: relLine, character: relCol } =
+      sourceFile.getLineAndCharacterOfPosition(stmt.getStart(sourceFile));
     const line = baseLine + relLine;
     const column = relLine === 0 ? baseCol + relCol : relCol + 1;
     const snippet = stmt.getText(sourceFile).split("\n")[0]?.trim();
@@ -95,7 +102,8 @@ function checkTsBlockCode(
         isAllowedPolyfill = false;
         const isFn =
           decl.initializer &&
-          (ts.isArrowFunction(decl.initializer) || ts.isFunctionExpression(decl.initializer));
+          (ts.isArrowFunction(decl.initializer) ||
+            ts.isFunctionExpression(decl.initializer));
 
         if (isFn) {
           diagnostics.push({
@@ -153,7 +161,10 @@ function traverseAst(node: any, visit: (n: any) => void) {
 /**
  * Audits a single FunScript source string for unjustified / non-ambient 'ts { ... }' blocks.
  */
-export function auditIdiomaticFunScript(source: string, filePath = "<source>"): IdiomaticAuditResult {
+export function auditIdiomaticFunScript(
+  source: string,
+  filePath = "<source>",
+): IdiomaticAuditResult {
   const diagnostics: IdiomaticDiagnostic[] = [];
 
   let program: Program;

@@ -69,12 +69,17 @@ import type {
 } from "../ast/types.js";
 import { Lexer } from "../lexer/lexer.js";
 import { Parser } from "../parser/parser.js";
-import type { Position, Range, Location, LocationLink } from "vscode-languageserver/node";
+import type {
+  Position,
+  Range,
+  Location,
+  LocationLink,
+} from "vscode-languageserver/node";
 
 export function isPositionInSpan(
   posLine: number,
   posCol: number,
-  span: Span
+  span: Span,
 ): boolean {
   if (posLine < span.start.line || posLine > span.end.line) {
     return false;
@@ -117,7 +122,7 @@ export class Scope {
     name: string,
     declarationNode: NodeBase,
     identifierNode: NodeBase,
-    kind: "function" | "variable" | "type" | "parameter" | "field" | "import"
+    kind: "function" | "variable" | "type" | "parameter" | "field" | "import",
   ): void {
     this.symbols.set(name, {
       name,
@@ -141,7 +146,12 @@ export interface DefinitionMatch {
   targetIdentifierNode: NodeBase;
 }
 
-function definePatternInScope(pat: Pattern | BindingTarget, scope: Scope, declNode: NodeBase, kind: "variable" | "function" = "variable"): void {
+function definePatternInScope(
+  pat: Pattern | BindingTarget,
+  scope: Scope,
+  declNode: NodeBase,
+  kind: "variable" | "function" = "variable",
+): void {
   if (pat.kind === "Identifier" || pat.kind === "UpperIdentifier") {
     scope.define(pat.name, declNode, pat, kind);
   } else if (pat.kind === "VariablePattern") {
@@ -152,7 +162,8 @@ function definePatternInScope(pat: Pattern | BindingTarget, scope: Scope, declNo
       else scope.define(f.key.name, declNode, f.key, kind);
     }
   } else if (pat.kind === "ArrayPattern") {
-    for (const el of pat.elements) definePatternInScope(el, scope, declNode, kind);
+    for (const el of pat.elements)
+      definePatternInScope(el, scope, declNode, kind);
   } else if (pat.kind === "RestPattern") {
     definePatternInScope(pat.argument, scope, declNode, kind);
   }
@@ -164,7 +175,7 @@ export class DefinitionFinder {
 
   constructor(
     private posLine: number,
-    private posCol: number
+    private posCol: number,
   ) {}
 
   public find(program: Program): DefinitionMatch | null {
@@ -183,7 +194,8 @@ export class DefinitionFinder {
 
   private collectMembers(program: Program): void {
     for (const topDecl of program.body) {
-      const decl = topDecl.kind === "ExportDeclaration" ? topDecl.declaration : topDecl;
+      const decl =
+        topDecl.kind === "ExportDeclaration" ? topDecl.declaration : topDecl;
 
       if (decl.kind === "SchemaDeclaration") {
         if (decl.body.kind === "RecordSchema") {
@@ -231,12 +243,14 @@ export class DefinitionFinder {
 
   private populateTopLevelScope(program: Program, scope: Scope): void {
     for (const topDecl of program.body) {
-      const decl = topDecl.kind === "ExportDeclaration" ? topDecl.declaration : topDecl;
+      const decl =
+        topDecl.kind === "ExportDeclaration" ? topDecl.declaration : topDecl;
       const declNode = topDecl;
 
       switch (decl.kind) {
         case "BindingDeclaration": {
-          const kind = decl.init.kind === "FunctionExpression" ? "function" : "variable";
+          const kind =
+            decl.init.kind === "FunctionExpression" ? "function" : "variable";
           definePatternInScope(decl.id, scope, declNode, kind);
           break;
         }
@@ -275,7 +289,10 @@ export class DefinitionFinder {
     return isPositionInSpan(this.posLine, this.posCol, node.span);
   }
 
-  private visitTopLevelDeclaration(topDecl: TopLevelDeclaration, scope: Scope): void {
+  private visitTopLevelDeclaration(
+    topDecl: TopLevelDeclaration,
+    scope: Scope,
+  ): void {
     if (this.found) return;
 
     if (topDecl.kind === "ExportDeclaration") {
@@ -285,7 +302,11 @@ export class DefinitionFinder {
     }
   }
 
-  private visitDeclaration(decl: TopLevelDeclaration, scope: Scope, outerNode: NodeBase): void {
+  private visitDeclaration(
+    decl: TopLevelDeclaration,
+    scope: Scope,
+    outerNode: NodeBase,
+  ): void {
     if (this.found) return;
 
     switch (decl.kind) {
@@ -437,11 +458,19 @@ export class DefinitionFinder {
       case "ExportFromDeclaration": {
         for (const spec of decl.specifiers) {
           if (this.isCursorIn(spec.imported)) {
-            this.found = { originNode: spec.imported, declarationNode: spec, targetIdentifierNode: spec.imported };
+            this.found = {
+              originNode: spec.imported,
+              declarationNode: spec,
+              targetIdentifierNode: spec.imported,
+            };
             return;
           }
           if (this.isCursorIn(spec.local)) {
-            this.found = { originNode: spec.local, declarationNode: spec, targetIdentifierNode: spec.local };
+            this.found = {
+              originNode: spec.local,
+              declarationNode: spec,
+              targetIdentifierNode: spec.local,
+            };
             return;
           }
         }
@@ -451,7 +480,11 @@ export class DefinitionFinder {
       case "ImportDeclaration": {
         for (const binding of [decl.defaultBinding, decl.namespaceBinding]) {
           if (binding && this.isCursorIn(binding)) {
-            this.found = { originNode: binding, declarationNode: decl, targetIdentifierNode: binding };
+            this.found = {
+              originNode: binding,
+              declarationNode: decl,
+              targetIdentifierNode: binding,
+            };
             return;
           }
         }
@@ -633,7 +666,10 @@ export class DefinitionFinder {
         }
 
         for (const param of expr.params) {
-          if (param.name.kind === "Identifier" || param.name.kind === "UpperIdentifier") {
+          if (
+            param.name.kind === "Identifier" ||
+            param.name.kind === "UpperIdentifier"
+          ) {
             if (this.isCursorIn(param.name)) {
               this.found = {
                 originNode: param.name,
@@ -645,7 +681,7 @@ export class DefinitionFinder {
             fnScope.define(param.name.name, param, param.name, "parameter");
           } else {
             definePatternInScope(param.name, fnScope, param, "variable");
-            this.collectAndVisitPattern(param.name as Pattern, fnScope);
+            this.collectAndVisitPattern(param.name, fnScope);
           }
           if (param.typeAnnotation) {
             this.visitTypeNode(param.typeAnnotation, fnScope);
@@ -670,7 +706,12 @@ export class DefinitionFinder {
           };
           return;
         }
-        mutScope.define(expr.draftParam.name, expr.draftParam, expr.draftParam, "parameter");
+        mutScope.define(
+          expr.draftParam.name,
+          expr.draftParam,
+          expr.draftParam,
+          "parameter",
+        );
         this.visitFunctionBody(expr.body, mutScope);
         break;
       }
@@ -758,7 +799,10 @@ export class DefinitionFinder {
             if (stmt.isEarlyReturn) {
               this.visitExpression(stmt.consequent as Expression, effectScope);
             } else {
-              this.visitBlockStatement(stmt.consequent as BlockStatement, effectScope);
+              this.visitBlockStatement(
+                stmt.consequent as BlockStatement,
+                effectScope,
+              );
             }
           }
           if (this.found) return;
@@ -782,7 +826,10 @@ export class DefinitionFinder {
           }
         }
         for (const attr of expr.openingElement.attributes) {
-          if (attr.kind === "JSXSpreadAttribute") { this.visitExpression(attr.argument, scope); continue; }
+          if (attr.kind === "JSXSpreadAttribute") {
+            this.visitExpression(attr.argument, scope);
+            continue;
+          }
           if (attr.value) {
             if (attr.value.kind === "JSXExpressionContainer") {
               this.visitExpression(attr.value.expression, scope);
@@ -795,7 +842,10 @@ export class DefinitionFinder {
           }
         }
         for (const child of expr.children) {
-          if (child.kind === "JSXElement" || child.kind === "JSXSelfClosingElement") {
+          if (
+            child.kind === "JSXElement" ||
+            child.kind === "JSXSelfClosingElement"
+          ) {
             this.visitExpression(child, scope);
           } else if (child.kind === "JSXExpressionContainer") {
             this.visitExpression(child.expression, scope);
@@ -819,7 +869,10 @@ export class DefinitionFinder {
           }
         }
         for (const attr of expr.attributes) {
-          if (attr.kind === "JSXSpreadAttribute") { this.visitExpression(attr.argument, scope); continue; }
+          if (attr.kind === "JSXSpreadAttribute") {
+            this.visitExpression(attr.argument, scope);
+            continue;
+          }
           if (attr.value) {
             if (attr.value.kind === "JSXExpressionContainer") {
               this.visitExpression(attr.value.expression, scope);
@@ -933,7 +986,10 @@ export class DefinitionFinder {
         if (stmt.isEarlyReturn) {
           this.visitExpression(stmt.consequent as Expression, blockScope);
         } else {
-          this.visitBlockStatement(stmt.consequent as BlockStatement, blockScope);
+          this.visitBlockStatement(
+            stmt.consequent as BlockStatement,
+            blockScope,
+          );
         }
       }
       if (this.found) return;
@@ -1021,11 +1077,16 @@ export class DefinitionFinder {
         if (this.isCursorIn(root)) {
           const sym = scope.lookup(root.name);
           if (sym) {
-            this.found = { originNode: root, declarationNode: sym.declarationNode, targetIdentifierNode: sym.identifierNode };
+            this.found = {
+              originNode: root,
+              declarationNode: sym.declarationNode,
+              targetIdentifierNode: sym.identifierNode,
+            };
             return;
           }
         }
-        for (const arg of typeNode.typeArgs ?? []) this.visitTypeNode(arg, scope);
+        for (const arg of typeNode.typeArgs ?? [])
+          this.visitTypeNode(arg, scope);
         break;
       }
       case "TypeReferenceNode": {
@@ -1111,7 +1172,7 @@ export function findDefinition(
   source: string,
   uri: string,
   position: Position,
-  linkSupport: boolean = false
+  linkSupport: boolean = false,
 ): Location | LocationLink[] | null {
   if (source.trim().length === 0) {
     return null;

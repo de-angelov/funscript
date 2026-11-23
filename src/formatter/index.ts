@@ -3,68 +3,68 @@ import { Lexer } from "../lexer/lexer.js";
 import { Parser } from "../parser/parser.js";
 import { ASSOCIATIVITY, PRECEDENCE } from "./operator-precedence.js";
 import {
-  Program,
-  TopLevelDeclaration,
-  ImportDeclaration,
+  type Program,
+  type TopLevelDeclaration,
+  type ImportDeclaration,
   ImportSpecifier,
   ExportDeclaration,
   ExportDefaultDeclaration,
-  BindingDeclaration,
-  BindingTarget,
-  SchemaDeclaration,
-  SchemaBody,
-  RecordSchema,
+  type BindingDeclaration,
+  type BindingTarget,
+  type SchemaDeclaration,
+  type SchemaBody,
+  type RecordSchema,
   RecordFieldSchema,
-  TaggedUnionSchema,
+  type TaggedUnionSchema,
   VariantDeclaration,
   VariantField,
   RefinementSchema,
   TypeSignatureSchema,
   TsDerivedSchema,
   ImportedTsSchema,
-  ErrorDeclaration,
+  type ErrorDeclaration,
   ErrorField,
-  ServiceDeclaration,
+  type ServiceDeclaration,
   ServiceMember,
-  Expression,
-  PipelineExpression,
-  BinaryExpression,
-  UnaryExpression,
-  CallExpression,
+  type Expression,
+  type PipelineExpression,
+  type BinaryExpression,
+  type UnaryExpression,
+  type CallExpression,
   MemberExpression,
   IndexExpression,
-  RecordExpression,
-  RecordEntry,
+  type RecordExpression,
+  type RecordEntry,
   SpreadEntry,
   FieldEntry,
   DotPathEntry,
   ShorthandEntry,
-  ArrayExpression,
-  FunctionExpression,
-  FunctionBody,
-  BlockStatement,
-  Statement,
+  type ArrayExpression,
+  type FunctionExpression,
+  type FunctionBody,
+  type BlockStatement,
+  type Statement,
   AssignmentStatement,
   ExpressionStatement,
   MutBlockExpression,
-  MatchExpression,
-  MatchArm,
-  Pattern,
+  type MatchExpression,
+  type MatchArm,
+  type Pattern,
   ConstructorPattern,
   RecordPattern,
   ArrayPattern,
   RestPattern,
   OrPattern,
-  EffectBlockExpression,
-  ParBlockExpression,
-  EffectStatement,
+  type EffectBlockExpression,
+  type ParBlockExpression,
+  type EffectStatement,
   EffectBindStatement,
   EffectDiscardStatement,
   EffectControlFlowStatement,
-  WhenStatement,
-  TypeNode,
+  type WhenStatement,
+  type TypeNode,
   TypeReferenceNode,
-  TypeParameter,
+  type TypeParameter,
   Parameter,
   FunctionTypeNode,
   EffectTypeNode,
@@ -73,13 +73,13 @@ import {
   ArrayTypeNode,
   UnionTypeNode,
   IntersectionTypeNode,
-  Literal,
+  type Literal,
   NumberLiteral,
-  StringLiteral,
-  TemplateLiteral,
-  TaggedTemplateExpression,
+  type StringLiteral,
+  type TemplateLiteral,
+  type TaggedTemplateExpression,
   BooleanLiteral,
-  Identifier,
+  type Identifier,
   UpperIdentifier,
   Placeholder,
   TypedHole,
@@ -124,7 +124,10 @@ export function extractComments(source: string): Comment[] {
         escape = true;
       } else if (c === '"') {
         inString = false;
-        if (braceStack.length > 0 && braceStack[braceStack.length - 1] === "string") {
+        if (
+          braceStack.length > 0 &&
+          braceStack[braceStack.length - 1] === "string"
+        ) {
           braceStack.pop();
         }
       } else if (c === "{" && !escape) {
@@ -143,7 +146,11 @@ export function extractComments(source: string): Comment[] {
       continue;
     }
 
-    if (c === "}" && braceStack.length > 0 && braceStack[braceStack.length - 1] === "interpolation") {
+    if (
+      c === "}" &&
+      braceStack.length > 0 &&
+      braceStack[braceStack.length - 1] === "interpolation"
+    ) {
       braceStack.pop();
       inString = true;
       col++;
@@ -152,7 +159,11 @@ export function extractComments(source: string): Comment[] {
 
     if (c === "/" && source[i + 1] === "/") {
       let end = i;
-      while (end < source.length && source[end] !== "\n" && source[end] !== "\r") {
+      while (
+        end < source.length &&
+        source[end] !== "\n" &&
+        source[end] !== "\r"
+      ) {
         end++;
       }
       const rawText = source.slice(i, end).trimEnd();
@@ -170,7 +181,7 @@ export function extractComments(source: string): Comment[] {
         isTrailing: lineHasCode,
       });
       i = end - 1;
-      col += (end - i);
+      col += end - i;
       continue;
     }
 
@@ -194,7 +205,7 @@ export class Formatter {
   constructor(
     private source: string,
     private ast: Program,
-    options?: FormatOptions
+    options?: FormatOptions,
   ) {
     this.indentSize = options?.indentSize ?? 2;
     this.lineWidth = options?.lineWidth ?? 100;
@@ -215,11 +226,21 @@ export class Formatter {
       const node = value as Record<string, unknown>;
       const kind = node.kind;
       if (
-        (kind === "TsEscapeDeclaration" || kind === "TsEscapeExpression" || kind === "TsEscapeTypeNode" || kind === "AsDeclaration") &&
-        node.span && typeof node.span === "object"
+        (kind === "TsEscapeDeclaration" ||
+          kind === "TsEscapeExpression" ||
+          kind === "TsEscapeTypeNode" ||
+          kind === "AsDeclaration") &&
+        node.span &&
+        typeof node.span === "object"
       ) {
-        const span = node.span as { start?: { line?: number }; end?: { line?: number } };
-        if (typeof span.start?.line === "number" && typeof span.end?.line === "number") {
+        const span = node.span as {
+          start?: { line?: number };
+          end?: { line?: number };
+        };
+        if (
+          typeof span.start?.line === "number" &&
+          typeof span.end?.line === "number"
+        ) {
           rawCodeRanges.push({ start: span.start.line, end: span.end.line });
         }
         return;
@@ -234,7 +255,12 @@ export class Formatter {
     for (const c of this.comments) {
       // Comments in raw TypeScript escapes are already preserved verbatim by
       // formatTsEscape; attaching them to surrounding FunScript nodes duplicates them.
-      if (rawCodeRanges.some(range => c.line >= range.start && c.line <= range.end)) continue;
+      if (
+        rawCodeRanges.some(
+          (range) => c.line >= range.start && c.line <= range.end,
+        )
+      )
+        continue;
       if (c.isTrailing) {
         this.trailingComments.set(c.line, c);
       } else {
@@ -304,16 +330,25 @@ export class Formatter {
       case "ServiceDeclaration":
         return node.members;
       case "BlockStatement":
-        return [...node.statements, ...(node.finalExpression ? [node.finalExpression] : [])];
+        return [
+          ...node.statements,
+          ...(node.finalExpression ? [node.finalExpression] : []),
+        ];
       case "EffectBlockExpression":
-        return [...node.body, ...(node.finalExpression ? [node.finalExpression] : [])];
+        return [
+          ...node.body,
+          ...(node.finalExpression ? [node.finalExpression] : []),
+        ];
       case "MatchExpression":
         return node.arms;
       case "MatchArm":
         return [node.body];
       case "FunctionExpression":
         if (node.body.kind === "BlockStatement") {
-          return [...node.body.statements, ...(node.body.finalExpression ? [node.body.finalExpression] : [])];
+          return [
+            ...node.body.statements,
+            ...(node.body.finalExpression ? [node.body.finalExpression] : []),
+          ];
         }
         return [node.body];
       case "RecordExpression":
@@ -391,16 +426,36 @@ export class Formatter {
       if (i < parts.length - 1) {
         const curr = this.ast.body[i];
         const next = this.ast.body[i + 1];
-        const currInner = curr.kind === "ExportDeclaration" ? curr.declaration : curr;
-        const nextInner = next.kind === "ExportDeclaration" ? next.declaration : next;
-        const currIsMulti = currInner.kind === "ServiceDeclaration" ||
-          (currInner.kind === "SchemaDeclaration" && currInner.body.kind !== "TypeSignatureSchema" && currInner.body.kind !== "TsDerivedSchema" && currInner.body.kind !== "ImportedTsSchema") ||
-          (currInner.kind === "BindingDeclaration" && currInner.init.span && currInner.init.span.end.line > currInner.init.span.start.line) ||
-          (currInner.kind === "ExportDefaultDeclaration" && currInner.expression.span && currInner.expression.span.end.line > currInner.expression.span.start.line);
-        const nextIsMulti = nextInner.kind === "ServiceDeclaration" ||
-          (nextInner.kind === "SchemaDeclaration" && nextInner.body.kind !== "TypeSignatureSchema" && nextInner.body.kind !== "TsDerivedSchema" && nextInner.body.kind !== "ImportedTsSchema") ||
-          (nextInner.kind === "BindingDeclaration" && nextInner.init.span && nextInner.init.span.end.line > nextInner.init.span.start.line) ||
-          (nextInner.kind === "ExportDefaultDeclaration" && nextInner.expression.span && nextInner.expression.span.end.line > nextInner.expression.span.start.line);
+        const currInner =
+          curr.kind === "ExportDeclaration" ? curr.declaration : curr;
+        const nextInner =
+          next.kind === "ExportDeclaration" ? next.declaration : next;
+        const currIsMulti =
+          currInner.kind === "ServiceDeclaration" ||
+          (currInner.kind === "SchemaDeclaration" &&
+            currInner.body.kind !== "TypeSignatureSchema" &&
+            currInner.body.kind !== "TsDerivedSchema" &&
+            currInner.body.kind !== "ImportedTsSchema") ||
+          (currInner.kind === "BindingDeclaration" &&
+            currInner.init.span &&
+            currInner.init.span.end.line > currInner.init.span.start.line) ||
+          (currInner.kind === "ExportDefaultDeclaration" &&
+            currInner.expression.span &&
+            currInner.expression.span.end.line >
+              currInner.expression.span.start.line);
+        const nextIsMulti =
+          nextInner.kind === "ServiceDeclaration" ||
+          (nextInner.kind === "SchemaDeclaration" &&
+            nextInner.body.kind !== "TypeSignatureSchema" &&
+            nextInner.body.kind !== "TsDerivedSchema" &&
+            nextInner.body.kind !== "ImportedTsSchema") ||
+          (nextInner.kind === "BindingDeclaration" &&
+            nextInner.init.span &&
+            nextInner.init.span.end.line > nextInner.init.span.start.line) ||
+          (nextInner.kind === "ExportDefaultDeclaration" &&
+            nextInner.expression.span &&
+            nextInner.expression.span.end.line >
+              nextInner.expression.span.start.line);
 
         if (currIsMulti || nextIsMulti) {
           result += "\n\n";
@@ -417,7 +472,7 @@ export class Formatter {
 
     if (this.eofComments.length > 0) {
       if (result.length > 0) result += "\n\n";
-      result += this.eofComments.map(c => c.text).join("\n");
+      result += this.eofComments.map((c) => c.text).join("\n");
     }
 
     return result.trimEnd() + "\n";
@@ -434,7 +489,10 @@ export class Formatter {
       case "ExportFromDeclaration": {
         const part = decl.source.parts[0];
         const value = part && part.kind === "StringRawPart" ? part.value : "";
-        return renderExportFrom(decl, `"${this.escapeStringPart(value)}"`).slice(0, -1);
+        return renderExportFrom(
+          decl,
+          `"${this.escapeStringPart(value)}"`,
+        ).slice(0, -1);
       }
       case "SchemaDeclaration":
         return this.formatSchemaDeclaration(decl, 0);
@@ -449,11 +507,20 @@ export class Formatter {
       case "TsEscapeDeclaration":
         return this.formatTsEscape(decl.code);
       case "AsDeclaration":
-        return decl.code.includes("\n") ? `as {\n${decl.code}\n}` : `as { ${decl.code} }`;
+        return decl.code.includes("\n")
+          ? `as {\n${decl.code}\n}`
+          : `as { ${decl.code} }`;
     }
   }
 
-  private formatDeclaration(decl: SchemaDeclaration | ErrorDeclaration | ServiceDeclaration | BindingDeclaration | WhenStatement): string {
+  private formatDeclaration(
+    decl:
+      | SchemaDeclaration
+      | ErrorDeclaration
+      | ServiceDeclaration
+      | BindingDeclaration
+      | WhenStatement,
+  ): string {
     switch (decl.kind) {
       case "SchemaDeclaration":
         return this.formatSchemaDeclaration(decl, 0);
@@ -470,18 +537,23 @@ export class Formatter {
 
   private formatImportDeclaration(decl: ImportDeclaration): string {
     const firstPart = decl.source.parts[0];
-    const rawVal = firstPart && firstPart.kind === "StringRawPart" ? firstPart.value : "";
+    const rawVal =
+      firstPart && firstPart.kind === "StringRawPart" ? firstPart.value : "";
     const source = `"${this.escapeStringPart(rawVal)}"`;
     return renderImport(decl, source).slice(0, -1);
   }
 
-  private formatTypeParameters(typeParams: TypeParameter[] | undefined): string {
+  private formatTypeParameters(
+    typeParams: TypeParameter[] | undefined,
+  ): string {
     if (!typeParams || typeParams.length === 0) return "";
-    return `<${typeParams.map((param) =>
-      param.constraint
-        ? `${param.name.name} extends ${this.formatType(param.constraint)}`
-        : param.name.name,
-    ).join(", ")}>`;
+    return `<${typeParams
+      .map((param) =>
+        param.constraint
+          ? `${param.name.name} extends ${this.formatType(param.constraint)}`
+          : param.name.name,
+      )
+      .join(", ")}>`;
   }
 
   private formatSchemaDeclaration(decl: SchemaDeclaration, indent = 0): string {
@@ -499,7 +571,15 @@ export class Formatter {
       case "TaggedUnionSchema":
         return this.formatTaggedUnionSchema(body, indent);
       case "StructuralUnionSchema":
-        return "\n" + body.members.map((member) => `${this.spaces(indent + this.indentSize)}| ${this.formatType(member, indent + this.indentSize)}`).join("\n");
+        return (
+          "\n" +
+          body.members
+            .map(
+              (member) =>
+                `${this.spaces(indent + this.indentSize)}| ${this.formatType(member, indent + this.indentSize)}`,
+            )
+            .join("\n")
+        );
       case "RefinementSchema":
         return `${this.formatType(body.baseType)} |> ${this.formatExpression(body.refinement, indent)}`;
       case "TypeSignatureSchema":
@@ -507,7 +587,7 @@ export class Formatter {
       case "TsDerivedSchema":
         return this.formatType(body.targetType, indent);
       case "ImportedTsSchema":
-        return `from ts<${body.typeArguments.map(t => this.formatType(t, indent)).join(", ")}>`;
+        return `from ts<${body.typeArguments.map((t) => this.formatType(t, indent)).join(", ")}>`;
     }
   }
 
@@ -515,81 +595,126 @@ export class Formatter {
     if (schema.fields.length === 0) return "{}";
     const fieldIndent = this.spaces(indent + this.indentSize);
     const closingIndent = this.spaces(indent);
-    const fields = schema.fields.map(f => {
-      const leading = this.formatLeadingComments(f, fieldIndent);
-      const trailing = this.getTrailingComment(f.span.end.line);
-      const def = f.defaultValue ? ` = ${this.formatExpression(f.defaultValue, indent + this.indentSize)}` : "";
-      return `${leading}${fieldIndent}${f.name.name}${f.optional ? "?" : ""}: ${this.formatType(f.typeAnnotation, indent + this.indentSize)}${def}${trailing}`;
-    }).join("\n");
+    const fields = schema.fields
+      .map((f) => {
+        const leading = this.formatLeadingComments(f, fieldIndent);
+        const trailing = this.getTrailingComment(f.span.end.line);
+        const def = f.defaultValue
+          ? ` = ${this.formatExpression(f.defaultValue, indent + this.indentSize)}`
+          : "";
+        return `${leading}${fieldIndent}${f.name.name}${f.optional ? "?" : ""}: ${this.formatType(f.typeAnnotation, indent + this.indentSize)}${def}${trailing}`;
+      })
+      .join("\n");
     return `{\n${fields}\n${closingIndent}}`;
   }
 
-  private formatTaggedUnionSchema(schema: TaggedUnionSchema, indent = 0): string {
+  private formatTaggedUnionSchema(
+    schema: TaggedUnionSchema,
+    indent = 0,
+  ): string {
     const variantIndent = this.spaces(indent + this.indentSize);
-    const variants = schema.variants.map(v => {
-      const leading = this.formatLeadingComments(v, variantIndent);
-      const trailing = this.getTrailingComment(v.span.end.line);
-      const fields = v.fields.length > 0
-        ? `(${v.fields.map(f => `${f.name.name}: ${this.formatType(f.typeAnnotation)}`).join(", ")})`
-        : "";
-      return `${leading}${variantIndent}| ${v.name.name}${fields}${trailing}`;
-    }).join("\n");
+    const variants = schema.variants
+      .map((v) => {
+        const leading = this.formatLeadingComments(v, variantIndent);
+        const trailing = this.getTrailingComment(v.span.end.line);
+        const fields =
+          v.fields.length > 0
+            ? `(${v.fields.map((f) => `${f.name.name}: ${this.formatType(f.typeAnnotation)}`).join(", ")})`
+            : "";
+        return `${leading}${variantIndent}| ${v.name.name}${fields}${trailing}`;
+      })
+      .join("\n");
     return `\n${variants}`;
   }
 
   private formatErrorDeclaration(decl: ErrorDeclaration): string {
-    const fields = decl.fields.length > 0
-      ? `(${decl.fields.map(f => `${f.name.name}: ${this.formatType(f.typeAnnotation)}`).join(", ")})`
-      : "";
+    const fields =
+      decl.fields.length > 0
+        ? `(${decl.fields.map((f) => `${f.name.name}: ${this.formatType(f.typeAnnotation)}`).join(", ")})`
+        : "";
     return `error ${decl.id.name}${fields}`;
   }
 
-  private formatServiceDeclaration(decl: ServiceDeclaration, indent = 0): string {
+  private formatServiceDeclaration(
+    decl: ServiceDeclaration,
+    indent = 0,
+  ): string {
     let tag = "";
     if (decl.customTag) {
       const firstPart = decl.customTag.parts[0];
-      const rawVal = firstPart && firstPart.kind === "StringRawPart" ? firstPart.value : "";
+      const rawVal =
+        firstPart && firstPart.kind === "StringRawPart" ? firstPart.value : "";
       tag = ` "${this.escapeStringPart(rawVal)}"`;
     }
     const memberIndent = this.spaces(indent + this.indentSize);
-    const members = decl.members.map(m => {
-      const leading = this.formatLeadingComments(m, memberIndent);
-      const trailing = this.getTrailingComment(m.span.end.line);
-      return `${leading}${memberIndent}${m.name.name}: ${this.formatType(m.signature)}${trailing}`;
-    }).join("\n");
+    const members = decl.members
+      .map((m) => {
+        const leading = this.formatLeadingComments(m, memberIndent);
+        const trailing = this.getTrailingComment(m.span.end.line);
+        return `${leading}${memberIndent}${m.name.name}: ${this.formatType(m.signature)}${trailing}`;
+      })
+      .join("\n");
     return `service ${decl.id.name}${tag}\n${members}`;
   }
 
-  private formatBindingDeclaration(decl: BindingDeclaration, indent = 0): string {
+  private formatBindingDeclaration(
+    decl: BindingDeclaration,
+    indent = 0,
+  ): string {
     const js = decl.isJs ? "js " : "";
     const mut = decl.isMut ? "mut " : "";
-    const typeAnn = decl.typeAnnotation ? `: ${this.formatType(decl.typeAnnotation)}` : "";
-    const idStr = decl.id.kind === "Identifier" || decl.id.kind === "UpperIdentifier" ? decl.id.name : this.formatPattern(decl.id);
+    const typeAnn = decl.typeAnnotation
+      ? `: ${this.formatType(decl.typeAnnotation)}`
+      : "";
+    const idStr =
+      decl.id.kind === "Identifier" || decl.id.kind === "UpperIdentifier"
+        ? decl.id.name
+        : this.formatPattern(decl.id);
     const prefix = `${js}${mut}${idStr}${typeAnn} =`;
     const init = this.formatBindingInit(decl, indent);
     return `${prefix}${init}`;
   }
 
   private formatBindingTarget(target: BindingTarget): string {
-    return target.kind === "Identifier" || target.kind === "UpperIdentifier" ? target.name : this.formatPattern(target);
+    return target.kind === "Identifier" || target.kind === "UpperIdentifier"
+      ? target.name
+      : this.formatPattern(target);
   }
 
   private formatBindingInit(decl: BindingDeclaration, indent = 0): string {
     const init = decl.init;
     if (init.kind === "FunctionExpression") {
       const typeParams = this.formatTypeParameters(init.typeParams);
-      const params = init.params.map(p => {
-        const rest = p.isRest ? "..." : "";
-        const type = p.typeAnnotation ? `: ${this.formatType(p.typeAnnotation)}` : "";
-        const defaultValue = p.defaultValue ? ` = ${this.formatExpression(p.defaultValue, indent)}` : "";
-        return `${rest}${this.formatBindingTarget(p.name)}${p.optional ? "?" : ""}${type}${defaultValue}`;
-      }).join(", ");
-      const ret = init.returnType ? `: ${this.formatType(init.returnType)}` : "";
-      const isArrowOnly = init.params.length === 0 && !init.returnType && init.span && this.source.slice(init.span.start.offset, init.span.start.offset + 2) === "=>";
+      const params = init.params
+        .map((p) => {
+          const rest = p.isRest ? "..." : "";
+          const type = p.typeAnnotation
+            ? `: ${this.formatType(p.typeAnnotation)}`
+            : "";
+          const defaultValue = p.defaultValue
+            ? ` = ${this.formatExpression(p.defaultValue, indent)}`
+            : "";
+          return `${rest}${this.formatBindingTarget(p.name)}${p.optional ? "?" : ""}${type}${defaultValue}`;
+        })
+        .join(", ");
+      const ret = init.returnType
+        ? `: ${this.formatType(init.returnType)}`
+        : "";
+      const isArrowOnly =
+        init.params.length === 0 &&
+        !init.returnType &&
+        init.span &&
+        this.source.slice(
+          init.span.start.offset,
+          init.span.start.offset + 2,
+        ) === "=>";
       const sig = isArrowOnly ? ` =>` : ` ${typeParams}(${params})${ret} =>`;
 
       if (init.body.kind === "BlockStatement") {
-        const body = this.formatBlockStatement(init.body, indent + this.indentSize);
+        const body = this.formatBlockStatement(
+          init.body,
+          indent + this.indentSize,
+        );
         return `${sig}\n${body}`;
       } else {
         const body = this.formatExpression(init.body, indent);
@@ -598,9 +723,10 @@ export class Formatter {
     }
 
     if (init.kind === "RecordExpression") {
-      const isMultiline = init.entries.length > 0 &&
+      const isMultiline =
+        init.entries.length > 0 &&
         (init.entries[0].span.start.line > init.span.start.line ||
-         init.entries.some(e => e.span.end.line > e.span.start.line));
+          init.entries.some((e) => e.span.end.line > e.span.start.line));
       if (isMultiline) {
         return ` ${this.formatRecordExpression(init, indent)}`;
       }
@@ -618,7 +744,10 @@ export class Formatter {
     }
 
     if (init.kind === "MatchExpression") {
-      const isSingleLine = init.arms.length > 0 && init.arms[0].span.start.line === init.span.start.line && init.arms.every(a => a.body.kind !== "BlockStatement");
+      const isSingleLine =
+        init.arms.length > 0 &&
+        init.arms[0].span.start.line === init.span.start.line &&
+        init.arms.every((a) => a.body.kind !== "BlockStatement");
       if (!isSingleLine) {
         return `\n${this.spaces(indent + this.indentSize)}${this.formatMatchExpression(init, indent + this.indentSize)}`;
       }
@@ -644,12 +773,19 @@ export class Formatter {
 
   private shouldExpandPipeline(chain: Expression[], indent: number): boolean {
     if (chain.length > 2) return true;
-    if (chain[0].span.end.line < chain[1].span.start.line || chain[0].kind === "EffectBlockExpression") return true;
+    if (
+      chain[0].span.end.line < chain[1].span.start.line ||
+      chain[0].kind === "EffectBlockExpression"
+    )
+      return true;
     const text = `${this.formatExpression(chain[0], indent)} |> ${this.formatExpression(chain[1], indent)}`;
     return !text.includes("\n") && indent + text.length > this.lineWidth;
   }
 
-  private formatPipelineExpression(expr: PipelineExpression, indent = 0): string {
+  private formatPipelineExpression(
+    expr: PipelineExpression,
+    indent = 0,
+  ): string {
     const chain = this.unrollPipeline(expr);
     const isMulti = this.shouldExpandPipeline(chain, indent);
 
@@ -659,20 +795,29 @@ export class Formatter {
 
     const head = this.formatExpression(chain[0], indent);
     const stepIndent = this.spaces(indent);
-    const steps = chain.slice(1).map(step => {
-      const trailing = this.getTrailingComment(step.span.end.line);
-      return `${stepIndent}|> ${this.formatExpression(step, indent)}${trailing}`;
-    }).join("\n");
+    const steps = chain
+      .slice(1)
+      .map((step) => {
+        const trailing = this.getTrailingComment(step.span.end.line);
+        return `${stepIndent}|> ${this.formatExpression(step, indent)}${trailing}`;
+      })
+      .join("\n");
 
     return `${head}\n${steps}`;
   }
 
-  private formatTarget(target: Identifier | import("../ast/types.js").DotPathExpression | import("../ast/types.js").IndexExpression): string {
+  private formatTarget(
+    target:
+      | Identifier
+      | import("../ast/types.js").DotPathExpression
+      | import("../ast/types.js").IndexExpression,
+  ): string {
     if (target.kind === "Identifier") {
       return target.name;
     }
-    if (target.kind === "IndexExpression") return this.formatExpression(target, 0);
-    return target.path.map(p => p.name).join(".");
+    if (target.kind === "IndexExpression")
+      return this.formatExpression(target, 0);
+    return target.path.map((p) => p.name).join(".");
   }
 
   private formatStatement(stmt: Statement, indent: number): string {
@@ -705,7 +850,9 @@ export class Formatter {
       const s = stmt.statements[i];
       const leading = this.formatLeadingComments(s, lineIndent);
       const trailing = this.getTrailingComment(s.span.end.line);
-      lines.push(`${leading}${lineIndent}${this.formatStatement(s, indent)}${trailing}`);
+      lines.push(
+        `${leading}${lineIndent}${this.formatStatement(s, indent)}${trailing}`,
+      );
       if (i < stmt.statements.length - 1) {
         const next = stmt.statements[i + 1];
         if (next.span && s.span && next.span.start.line - s.span.end.line > 1) {
@@ -717,14 +864,25 @@ export class Formatter {
     if (stmt.finalExpression) {
       if (stmt.statements.length > 0) {
         const last = stmt.statements[stmt.statements.length - 1];
-        if (stmt.finalExpression.span && last.span && stmt.finalExpression.span.start.line - last.span.end.line > 1) {
+        if (
+          stmt.finalExpression.span &&
+          last.span &&
+          stmt.finalExpression.span.start.line - last.span.end.line > 1
+        ) {
           lines.push("");
         }
       }
 
-      const leadingFinal = this.formatLeadingComments(stmt.finalExpression, lineIndent);
-      const trailingFinal = this.getTrailingComment(stmt.finalExpression.span.end.line);
-      lines.push(`${leadingFinal}${lineIndent}${this.formatExpression(stmt.finalExpression, indent)}${trailingFinal}`);
+      const leadingFinal = this.formatLeadingComments(
+        stmt.finalExpression,
+        lineIndent,
+      );
+      const trailingFinal = this.getTrailingComment(
+        stmt.finalExpression.span.end.line,
+      );
+      lines.push(
+        `${leadingFinal}${lineIndent}${this.formatExpression(stmt.finalExpression, indent)}${trailingFinal}`,
+      );
     }
 
     return lines.join("\n");
@@ -738,11 +896,18 @@ export class Formatter {
       const stmt = expr.body[i];
       const leading = this.formatLeadingComments(stmt, stmtIndent);
       const trailing = this.getTrailingComment(stmt.span.end.line);
-      const formatted = this.formatEffectStatement(stmt, indent + this.indentSize);
+      const formatted = this.formatEffectStatement(
+        stmt,
+        indent + this.indentSize,
+      );
       lines.push(`${leading}${stmtIndent}${formatted}${trailing}`);
       if (i < expr.body.length - 1) {
         const next = expr.body[i + 1];
-        if (next.span && stmt.span && next.span.start.line - stmt.span.end.line > 1) {
+        if (
+          next.span &&
+          stmt.span &&
+          next.span.start.line - stmt.span.end.line > 1
+        ) {
           lines.push("");
         }
       }
@@ -750,14 +915,25 @@ export class Formatter {
 
     if (expr.body.length > 0) {
       const last = expr.body[expr.body.length - 1];
-      if (expr.finalExpression.span && last.span && expr.finalExpression.span.start.line - last.span.end.line > 1) {
+      if (
+        expr.finalExpression.span &&
+        last.span &&
+        expr.finalExpression.span.start.line - last.span.end.line > 1
+      ) {
         lines.push("");
       }
     }
 
-    const leadingFinal = this.formatLeadingComments(expr.finalExpression, stmtIndent);
-    const trailingFinal = this.getTrailingComment(expr.finalExpression.span.end.line);
-    lines.push(`${leadingFinal}${stmtIndent}=> ${this.formatExpression(expr.finalExpression, indent + this.indentSize)}${trailingFinal}`);
+    const leadingFinal = this.formatLeadingComments(
+      expr.finalExpression,
+      stmtIndent,
+    );
+    const trailingFinal = this.getTrailingComment(
+      expr.finalExpression.span.end.line,
+    );
+    lines.push(
+      `${leadingFinal}${stmtIndent}=> ${this.formatExpression(expr.finalExpression, indent + this.indentSize)}${trailingFinal}`,
+    );
 
     const prefix = expr.unscoped ? "effect (unscoped)" : "effect";
     return `${prefix} {\n${lines.join("\n")}\n${this.spaces(indent)}}`;
@@ -771,11 +947,18 @@ export class Formatter {
       const stmt = expr.body[i];
       const leading = this.formatLeadingComments(stmt, stmtIndent);
       const trailing = this.getTrailingComment(stmt.span.end.line);
-      const formatted = this.formatEffectStatement(stmt, indent + this.indentSize);
+      const formatted = this.formatEffectStatement(
+        stmt,
+        indent + this.indentSize,
+      );
       lines.push(`${leading}${stmtIndent}${formatted}${trailing}`);
       if (i < expr.body.length - 1) {
         const next = expr.body[i + 1];
-        if (next.span && stmt.span && next.span.start.line - stmt.span.end.line > 1) {
+        if (
+          next.span &&
+          stmt.span &&
+          next.span.start.line - stmt.span.end.line > 1
+        ) {
           lines.push("");
         }
       }
@@ -784,24 +967,40 @@ export class Formatter {
     if (expr.hasExplicitReturn) {
       if (expr.body.length > 0) {
         const last = expr.body[expr.body.length - 1];
-        if (expr.finalExpression.span && last.span && expr.finalExpression.span.start.line - last.span.end.line > 1) {
+        if (
+          expr.finalExpression.span &&
+          last.span &&
+          expr.finalExpression.span.start.line - last.span.end.line > 1
+        ) {
           lines.push("");
         }
       }
 
-      const leadingFinal = this.formatLeadingComments(expr.finalExpression, stmtIndent);
-      const trailingFinal = this.getTrailingComment(expr.finalExpression.span.end.line);
-      lines.push(`${leadingFinal}${stmtIndent}=> ${this.formatExpression(expr.finalExpression, indent + this.indentSize)}${trailingFinal}`);
+      const leadingFinal = this.formatLeadingComments(
+        expr.finalExpression,
+        stmtIndent,
+      );
+      const trailingFinal = this.getTrailingComment(
+        expr.finalExpression.span.end.line,
+      );
+      lines.push(
+        `${leadingFinal}${stmtIndent}=> ${this.formatExpression(expr.finalExpression, indent + this.indentSize)}${trailingFinal}`,
+      );
     }
 
-    const opt = expr.concurrency ? ` (${this.formatExpression(expr.concurrency)})` : "";
+    const opt = expr.concurrency
+      ? ` (${this.formatExpression(expr.concurrency)})`
+      : "";
     return `par${opt} {\n${lines.join("\n")}\n${this.spaces(indent)}}`;
   }
 
   private formatEffectStatement(stmt: EffectStatement, indent: number): string {
     switch (stmt.kind) {
       case "EffectBindStatement": {
-        const idStr = stmt.id.kind === "Identifier" ? stmt.id.name : this.formatPattern(stmt.id);
+        const idStr =
+          stmt.id.kind === "Identifier"
+            ? stmt.id.name
+            : this.formatPattern(stmt.id);
         return `${idStr} <- ${this.formatExpression(stmt.effect, indent)}`;
       }
       case "EffectDiscardStatement":
@@ -823,27 +1022,44 @@ export class Formatter {
 
   private formatMatchExpression(expr: MatchExpression, indent = 0): string {
     const isSubjectless = expr.scrutinee === undefined && !expr.isPipeline;
-    const isSingleLine = expr.arms.length > 0 &&
+    const isSingleLine =
+      expr.arms.length > 0 &&
       expr.arms[0].span.start.line === expr.span.start.line &&
-      expr.arms.every(a => a.body.kind !== "BlockStatement");
+      expr.arms.every((a) => a.body.kind !== "BlockStatement");
 
     if (isSingleLine) {
-      const scrutinee = expr.scrutinee ? ` ${this.formatExpression(expr.scrutinee, indent)}` : "";
-      const arms = expr.arms.map(a => this.formatMatchArmInline(a, isSubjectless)).join(" ");
+      const scrutinee = expr.scrutinee
+        ? ` ${this.formatExpression(expr.scrutinee, indent)}`
+        : "";
+      const arms = expr.arms
+        .map((a) => this.formatMatchArmInline(a, isSubjectless))
+        .join(" ");
       return `match${scrutinee} ${arms}`;
     }
 
-    const scrutinee = expr.scrutinee ? ` ${this.formatExpression(expr.scrutinee, indent)}` : "";
-    const arms = expr.arms.map(a => this.formatMatchArm(a, indent + this.indentSize, isSubjectless)).join("\n");
+    const scrutinee = expr.scrutinee
+      ? ` ${this.formatExpression(expr.scrutinee, indent)}`
+      : "";
+    const arms = expr.arms
+      .map((a) =>
+        this.formatMatchArm(a, indent + this.indentSize, isSubjectless),
+      )
+      .join("\n");
     return `match${scrutinee}\n${arms}`;
   }
 
-  private formatMatchArm(arm: MatchArm, indent: number, isSubjectless: boolean): string {
+  private formatMatchArm(
+    arm: MatchArm,
+    indent: number,
+    isSubjectless: boolean,
+  ): string {
     const armIndent = this.spaces(indent);
     const leading = this.formatLeadingComments(arm, armIndent);
     const trailing = this.getTrailingComment(arm.span.end.line);
     const pat = this.formatPattern(arm.pattern, isSubjectless);
-    const guard = arm.guard ? ` when ${this.formatExpression(arm.guard, indent)}` : "";
+    const guard = arm.guard
+      ? ` when ${this.formatExpression(arm.guard, indent)}`
+      : "";
     const arrow = this.getMatchArmArrow(arm);
 
     if (arm.body.kind === "BlockStatement") {
@@ -858,11 +1074,14 @@ export class Formatter {
 
   private formatMatchArmInline(arm: MatchArm, isSubjectless: boolean): string {
     const pat = this.formatPattern(arm.pattern, isSubjectless);
-    const guard = arm.guard ? ` when ${this.formatExpression(arm.guard, 0)}` : "";
+    const guard = arm.guard
+      ? ` when ${this.formatExpression(arm.guard, 0)}`
+      : "";
     const arrow = this.getMatchArmArrow(arm);
-    const body = arm.body.kind === "BlockStatement"
-      ? this.formatBlockStatement(arm.body, 0)
-      : this.formatExpression(arm.body, 0);
+    const body =
+      arm.body.kind === "BlockStatement"
+        ? this.formatBlockStatement(arm.body, 0)
+        : this.formatExpression(arm.body, 0);
     return `| ${pat}${guard} ${arrow} ${body}`;
   }
 
@@ -880,29 +1099,39 @@ export class Formatter {
       case "VariablePattern":
         return pat.name.name;
       case "ConstructorPattern": {
-        const args = pat.args.length > 0 ? `(${pat.args.map(a => this.formatPattern(a)).join(", ")})` : "";
+        const args =
+          pat.args.length > 0
+            ? `(${pat.args.map((a) => this.formatPattern(a)).join(", ")})`
+            : "";
         return `${pat.constructorName.name}${args}`;
       }
       case "RecordPattern":
-        return `{ ${pat.fields.map(f => f.isRest ? `...${f.key.name}` : f.pattern ? `${f.key.name}: ${this.formatPattern(f.pattern)}` : f.key.name).join(", ")} }`;
+        return `{ ${pat.fields.map((f) => (f.isRest ? `...${f.key.name}` : f.pattern ? `${f.key.name}: ${this.formatPattern(f.pattern)}` : f.key.name)).join(", ")} }`;
       case "ArrayPattern":
-        return `[${pat.elements.map(e => this.formatPattern(e)).join(", ")}]`;
+        return `[${pat.elements.map((e) => this.formatPattern(e)).join(", ")}]`;
       case "RestPattern":
         return `...${this.formatPattern(pat.argument)}`;
       case "OrPattern":
-        return pat.patterns.map(p => this.formatPattern(p)).join(" | ");
+        return pat.patterns.map((p) => this.formatPattern(p)).join(" | ");
     }
   }
 
   private formatRecordExpression(expr: RecordExpression, indent = 0): string {
     if (expr.entries.length === 0) return "{}";
 
-    const isMultiline = expr.entries.length > 0 &&
+    const isMultiline =
+      expr.entries.length > 0 &&
       (expr.entries[0].span.start.line > expr.span.start.line ||
-       expr.entries.some(e => e.span.end.line > e.span.start.line));
+        expr.entries.some((e) => e.span.end.line > e.span.start.line));
 
-    const entriesStr = expr.entries.map(e => this.formatRecordEntry(e, indent)).join(", ");
-    if (!isMultiline && indent + entriesStr.length + 4 <= this.lineWidth && !entriesStr.includes("\n")) {
+    const entriesStr = expr.entries
+      .map((e) => this.formatRecordEntry(e, indent))
+      .join(", ");
+    if (
+      !isMultiline &&
+      indent + entriesStr.length + 4 <= this.lineWidth &&
+      !entriesStr.includes("\n")
+    ) {
       return `{ ${entriesStr} }`;
     }
 
@@ -913,7 +1142,9 @@ export class Formatter {
       const e = expr.entries[i];
       const leading = this.formatLeadingComments(e, entryIndent);
       const trailing = this.getTrailingComment(e.span.end.line);
-      lines.push(`${leading}${entryIndent}${this.formatRecordEntry(e, indent + this.indentSize)}${trailing}`);
+      lines.push(
+        `${leading}${entryIndent}${this.formatRecordEntry(e, indent + this.indentSize)}${trailing}`,
+      );
       if (i < expr.entries.length - 1) {
         const next = expr.entries[i + 1];
         if (next.span && e.span && next.span.start.line - e.span.end.line > 1) {
@@ -931,7 +1162,7 @@ export class Formatter {
       case "FieldEntry":
         return `${entry.key.name}: ${this.formatExpression(entry.value, indent)}`;
       case "DotPathEntry":
-        return `${entry.path.map(p => p.name).join(".")}: ${this.formatExpression(entry.value, indent)}`;
+        return `${entry.path.map((p) => p.name).join(".")}: ${this.formatExpression(entry.value, indent)}`;
       case "ShorthandEntry":
         return entry.key.name;
     }
@@ -940,21 +1171,37 @@ export class Formatter {
   private formatArrayExpression(expr: ArrayExpression, indent = 0): string {
     if (expr.elements.length === 0) return "[]";
 
-    const isMultiline = expr.elements.some(e => e.span.end.line > e.span.start.line) ||
-      (expr.elements.length > 0 && expr.elements[0].span.start.line > expr.span.start.line);
+    const isMultiline =
+      expr.elements.some((e) => e.span.end.line > e.span.start.line) ||
+      (expr.elements.length > 0 &&
+        expr.elements[0].span.start.line > expr.span.start.line);
 
-    const elements = expr.elements.map(e => this.formatExpression(e, indent)).join(", ");
-    if (!isMultiline && indent + elements.length + 2 <= this.lineWidth && !elements.includes("\n")) {
+    const elements = expr.elements
+      .map((e) => this.formatExpression(e, indent))
+      .join(", ");
+    if (
+      !isMultiline &&
+      indent + elements.length + 2 <= this.lineWidth &&
+      !elements.includes("\n")
+    ) {
       return `[${elements}]`;
     }
 
     const elemIndent = this.spaces(indent + this.indentSize);
     const closingIndent = this.spaces(indent);
-    const lines = expr.elements.map(e => `${elemIndent}${this.formatExpression(e, indent + this.indentSize)}`);
+    const lines = expr.elements.map(
+      (e) =>
+        `${elemIndent}${this.formatExpression(e, indent + this.indentSize)}`,
+    );
     return `[\n${lines.join(",\n")}\n${closingIndent}]`;
   }
 
-  private formatBinaryExpression(expr: BinaryExpression, indent = 0, parentOp?: string, isRightSide?: boolean): string {
+  private formatBinaryExpression(
+    expr: BinaryExpression,
+    indent = 0,
+    parentOp?: string,
+    isRightSide?: boolean,
+  ): string {
     const currentPrec = PRECEDENCE[expr.operator] ?? 0;
     const parentPrec = parentOp ? (PRECEDENCE[parentOp] ?? 0) : 0;
 
@@ -964,19 +1211,37 @@ export class Formatter {
         needsParens = true;
       } else if (currentPrec === parentPrec) {
         const associativity = ASSOCIATIVITY[parentOp] ?? "left";
-        if ((associativity === "left" && isRightSide) || (associativity === "right" && !isRightSide)) {
+        if (
+          (associativity === "left" && isRightSide) ||
+          (associativity === "right" && !isRightSide)
+        ) {
           needsParens = true;
         }
       }
     }
 
-    const left = this.formatBinaryOperand(expr.left, indent, expr.operator, false);
-    const right = this.formatBinaryOperand(expr.right, indent, expr.operator, true);
+    const left = this.formatBinaryOperand(
+      expr.left,
+      indent,
+      expr.operator,
+      false,
+    );
+    const right = this.formatBinaryOperand(
+      expr.right,
+      indent,
+      expr.operator,
+      true,
+    );
     const res = `${left} ${expr.operator} ${right}`;
     return needsParens ? `(${res})` : res;
   }
 
-  private formatBinaryOperand(expr: Expression, indent: number, parentOp: string, isRightSide: boolean): string {
+  private formatBinaryOperand(
+    expr: Expression,
+    indent: number,
+    parentOp: string,
+    isRightSide: boolean,
+  ): string {
     if (expr.kind === "BinaryExpression") {
       return this.formatBinaryExpression(expr, indent, parentOp, isRightSide);
     }
@@ -989,7 +1254,10 @@ export class Formatter {
   private formatUnaryExpression(expr: UnaryExpression, indent = 0): string {
     const op = expr.operator === "not" ? "not " : "-";
     let arg: string;
-    if (expr.argument.kind === "BinaryExpression" || expr.argument.kind === "PipelineExpression") {
+    if (
+      expr.argument.kind === "BinaryExpression" ||
+      expr.argument.kind === "PipelineExpression"
+    ) {
       arg = `(${this.formatExpression(expr.argument, indent)})`;
     } else {
       arg = this.formatExpression(expr.argument, indent);
@@ -1008,18 +1276,25 @@ export class Formatter {
     if (expr.args.length === 0) return `${callee}()`;
 
     const lastArg = expr.args[expr.args.length - 1];
-    const isMultilineBlock = lastArg.kind === "FunctionExpression" &&
-      (lastArg.body.kind === "BlockStatement" || lastArg.body.kind === "MatchExpression");
+    const isMultilineBlock =
+      lastArg.kind === "FunctionExpression" &&
+      (lastArg.body.kind === "BlockStatement" ||
+        lastArg.body.kind === "MatchExpression");
 
     if (isMultilineBlock) {
       if (expr.args.length === 1) {
         return `${callee}(${this.formatExpression(lastArg, indent)}\n${this.spaces(indent)})`;
       }
-      const otherArgs = expr.args.slice(0, -1).map(a => this.formatExpression(a, indent)).join(", ");
+      const otherArgs = expr.args
+        .slice(0, -1)
+        .map((a) => this.formatExpression(a, indent))
+        .join(", ");
       return `${callee}(${otherArgs}, ${this.formatExpression(lastArg, indent)}\n${this.spaces(indent)})`;
     }
 
-    const args = expr.args.map(a => this.formatExpression(a, indent)).join(", ");
+    const args = expr.args
+      .map((a) => this.formatExpression(a, indent))
+      .join(", ");
     return `${callee}(${args})`;
   }
 
@@ -1052,7 +1327,9 @@ export class Formatter {
       case "ParBlockExpression":
         return this.formatParBlock(expr, indent);
       case "TypedHole":
-        return expr.label ? `??? "${this.escapeStringPart(expr.label)}"` : "???";
+        return expr.label
+          ? `??? "${this.escapeStringPart(expr.label)}"`
+          : "???";
       case "Placeholder":
         return "_";
       case "NumberLiteral":
@@ -1113,11 +1390,17 @@ export class Formatter {
     return result;
   }
 
-  private formatTaggedTemplateExpression(expr: TaggedTemplateExpression, indent: number): string {
+  private formatTaggedTemplateExpression(
+    expr: TaggedTemplateExpression,
+    indent: number,
+  ): string {
     const tag = this.formatExpression(expr.tag, indent);
     let typeArgs = "";
     if (expr.typeArguments && expr.typeArguments.length > 0) {
-      typeArgs = "<" + expr.typeArguments.map((t) => this.formatType(t)).join(", ") + ">";
+      typeArgs =
+        "<" +
+        expr.typeArguments.map((t) => this.formatType(t)).join(", ") +
+        ">";
     }
     return `${tag}${typeArgs}${this.formatTemplateLiteral(expr.template)}`;
   }
@@ -1133,20 +1416,37 @@ export class Formatter {
     }
   }
 
-  private formatFunctionExpression(expr: FunctionExpression, indent = 0): string {
+  private formatFunctionExpression(
+    expr: FunctionExpression,
+    indent = 0,
+  ): string {
     const typeParams = this.formatTypeParameters(expr.typeParams);
-    const params = expr.params.map(p => {
-      const rest = p.isRest ? "..." : "";
-      const type = p.typeAnnotation ? `: ${this.formatType(p.typeAnnotation)}` : "";
-      const defaultValue = p.defaultValue ? ` = ${this.formatExpression(p.defaultValue, indent)}` : "";
-      return `${rest}${this.formatBindingTarget(p.name)}${p.optional ? "?" : ""}${type}${defaultValue}`;
-    }).join(", ");
+    const params = expr.params
+      .map((p) => {
+        const rest = p.isRest ? "..." : "";
+        const type = p.typeAnnotation
+          ? `: ${this.formatType(p.typeAnnotation)}`
+          : "";
+        const defaultValue = p.defaultValue
+          ? ` = ${this.formatExpression(p.defaultValue, indent)}`
+          : "";
+        return `${rest}${this.formatBindingTarget(p.name)}${p.optional ? "?" : ""}${type}${defaultValue}`;
+      })
+      .join(", ");
     const ret = expr.returnType ? `: ${this.formatType(expr.returnType)}` : "";
-    const isArrowOnly = expr.params.length === 0 && !expr.returnType && expr.span && this.source.slice(expr.span.start.offset, expr.span.start.offset + 2) === "=>";
+    const isArrowOnly =
+      expr.params.length === 0 &&
+      !expr.returnType &&
+      expr.span &&
+      this.source.slice(expr.span.start.offset, expr.span.start.offset + 2) ===
+        "=>";
     const sig = isArrowOnly ? `=>` : `${typeParams}(${params})${ret} =>`;
 
     if (expr.body.kind === "BlockStatement") {
-      const body = this.formatBlockStatement(expr.body, indent + this.indentSize);
+      const body = this.formatBlockStatement(
+        expr.body,
+        indent + this.indentSize,
+      );
       return `${sig}\n${body}`;
     } else {
       const body = this.formatExpression(expr.body, indent);
@@ -1157,21 +1457,30 @@ export class Formatter {
   public formatType(node: TypeNode, indent = 0): string {
     switch (node.kind) {
       case "QualifiedTypeReferenceNode": {
-        const args = node.typeArgs?.length ? `<${node.typeArgs.map((arg) => this.formatType(arg, indent)).join(", ")}>` : "";
+        const args = node.typeArgs?.length
+          ? `<${node.typeArgs.map((arg) => this.formatType(arg, indent)).join(", ")}>`
+          : "";
         return `${node.parts.map((part) => part.name).join(".")}${args}`;
       }
       case "TypeReferenceNode": {
-        const typeArgs = node.typeArgs && node.typeArgs.length > 0
-          ? `<${node.typeArgs.map(t => this.formatType(t, indent)).join(", ")}>`
-          : "";
+        const typeArgs =
+          node.typeArgs && node.typeArgs.length > 0
+            ? `<${node.typeArgs.map((t) => this.formatType(t, indent)).join(", ")}>`
+            : "";
         return `${node.name.name[0].toUpperCase()}${node.name.name.slice(1)}${typeArgs}`;
       }
       case "FunctionTypeNode": {
-        const params = node.params.map(p => {
-          const rest = p.isRest ? "..." : "";
-          const typeStr = p.typeAnnotation ? this.formatType(p.typeAnnotation, indent) : "Unknown";
-          return p.name ? `${rest}${this.formatBindingTarget(p.name)}${p.optional ? "?" : ""}: ${typeStr}` : `${rest}${typeStr}`;
-        }).join(", ");
+        const params = node.params
+          .map((p) => {
+            const rest = p.isRest ? "..." : "";
+            const typeStr = p.typeAnnotation
+              ? this.formatType(p.typeAnnotation, indent)
+              : "Unknown";
+            return p.name
+              ? `${rest}${this.formatBindingTarget(p.name)}${p.optional ? "?" : ""}: ${typeStr}`
+              : `${rest}${typeStr}`;
+          })
+          .join(", ");
         return `${this.formatTypeParameters(node.typeParams)}(${params}) => ${this.formatType(node.returnType, indent)}`;
       }
       case "EffectTypeNode": {
@@ -1190,18 +1499,28 @@ export class Formatter {
         if (isMultiline) {
           const fieldIndent = this.spaces(indent + this.indentSize);
           const closingIndent = this.spaces(indent);
-          const fields = node.fields.map(f => `${fieldIndent}${f.name.name}${f.optional ? "?" : ""}: ${this.formatType(f.typeAnnotation, indent + this.indentSize)}${f.defaultValue ? ` = ${this.formatExpression(f.defaultValue, indent + this.indentSize)}` : ""}`).join("\n");
+          const fields = node.fields
+            .map(
+              (f) =>
+                `${fieldIndent}${f.name.name}${f.optional ? "?" : ""}: ${this.formatType(f.typeAnnotation, indent + this.indentSize)}${f.defaultValue ? ` = ${this.formatExpression(f.defaultValue, indent + this.indentSize)}` : ""}`,
+            )
+            .join("\n");
           return `{\n${fields}\n${closingIndent}}`;
         }
-        const fields = node.fields.map(f => `${f.name.name}${f.optional ? "?" : ""}: ${this.formatType(f.typeAnnotation, indent)}${f.defaultValue ? ` = ${this.formatExpression(f.defaultValue, indent)}` : ""}`).join(", ");
+        const fields = node.fields
+          .map(
+            (f) =>
+              `${f.name.name}${f.optional ? "?" : ""}: ${this.formatType(f.typeAnnotation, indent)}${f.defaultValue ? ` = ${this.formatExpression(f.defaultValue, indent)}` : ""}`,
+          )
+          .join(", ");
         return `{ ${fields} }`;
       }
       case "ArrayTypeNode":
         return `Array<${this.formatType(node.elementType, indent)}>`;
       case "UnionTypeNode":
-        return node.types.map(t => this.formatType(t, indent)).join(" | ");
+        return node.types.map((t) => this.formatType(t, indent)).join(" | ");
       case "IntersectionTypeNode":
-        return node.types.map(t => this.formatType(t, indent)).join(" & ");
+        return node.types.map((t) => this.formatType(t, indent)).join(" & ");
       case "LiteralTypeNode":
         return JSON.stringify(node.value);
       case "TypeQueryNode":
@@ -1230,7 +1549,10 @@ export function format(source: string, options?: FormatOptions): string {
   return formatter.format();
 }
 
-export function checkFormat(source: string, options?: FormatOptions): { isFormatted: boolean; formatted: string } {
+export function checkFormat(
+  source: string,
+  options?: FormatOptions,
+): { isFormatted: boolean; formatted: string } {
   const formatted = format(source, options);
   return {
     isFormatted: formatted === source,

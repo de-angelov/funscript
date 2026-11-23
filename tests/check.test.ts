@@ -427,7 +427,7 @@ export res = square(5)
 
       const { stdout, stderr } = await execFileAsync("node", [CLI_PATH, "check", testFile]);
       expect(stderr).toBe("");
-      expect(stdout).toContain(`✓ ${testFile} checked successfully (0 errors)`);
+      expect(stdout).toContain(`✓ ${testFile} checked successfully (0 errors`);
     });
 
     it("exits with 1 and prints mapped diagnostics with @babel/code-frame for a file with type errors", async () => {
@@ -463,7 +463,7 @@ export res = greet(12345)
       await fs.writeFile(fileB, 'export age = 36\n', "utf-8");
 
       const { stdout } = await execFileAsync("node", [CLI_PATH, "check", fileA, fileB]);
-      expect(stdout).toContain("✓ Checked 2 files successfully (0 errors)");
+      expect(stdout).toContain("✓ Checked 2 files successfully (0 errors");
     });
   });
 

@@ -1,7 +1,12 @@
 import { type Plugin, createFilter } from "vite";
 import { Effect } from "effect";
 import { compileString } from "../compiler.js";
-import { loadProjectConfig, isEffectOnlyFile, isPathPolicyEnabled, type FunScriptProjectConfig } from "../compiler/project-config.js";
+import {
+  loadProjectConfig,
+  isEffectOnlyFile,
+  isPathPolicyEnabled,
+  type FunScriptProjectConfig,
+} from "../compiler/project-config.js";
 import { TypeView, type TypeViewOptions } from "./type-view.js";
 import * as path from "node:path";
 import * as fs from "node:fs";
@@ -55,10 +60,15 @@ export interface FunscriptPluginOptions {
 }
 
 function matchesPattern(value: string, pattern: string | RegExp): boolean {
-  return typeof pattern === "string" ? value.includes(pattern) : pattern.test(value);
+  return typeof pattern === "string"
+    ? value.includes(pattern)
+    : pattern.test(value);
 }
 
-function matchesAnyPattern(value: string, patterns: (string | RegExp)[]): boolean {
+function matchesAnyPattern(
+  value: string,
+  patterns: (string | RegExp)[],
+): boolean {
   return patterns.some((p) => matchesPattern(value, p));
 }
 
@@ -75,7 +85,9 @@ export function funscriptPlugin(options: FunscriptPluginOptions = {}): Plugin {
   let policyRoot = process.cwd();
   let projectPolicy: FunScriptProjectConfig = {};
   let policyLoaded = false;
-  const context = new TypeScriptCompilationContext(path.resolve("__funscript_vite__.fun"));
+  const context = new TypeScriptCompilationContext(
+    path.resolve("__funscript_vite__.fun"),
+  );
   return {
     name: "vite-plugin-funscript",
     enforce: "pre",
@@ -92,7 +104,15 @@ export function funscriptPlugin(options: FunscriptPluginOptions = {}): Plugin {
       return {
         resolve: {
           extensions: [
-            ...(config.resolve?.extensions ?? [".mjs", ".js", ".mts", ".ts", ".jsx", ".tsx", ".json"]),
+            ...(config.resolve?.extensions ?? [
+              ".mjs",
+              ".js",
+              ".mts",
+              ".ts",
+              ".jsx",
+              ".tsx",
+              ".json",
+            ]),
             ".fun",
             ".funx",
           ],
@@ -109,21 +129,26 @@ export function funscriptPlugin(options: FunscriptPluginOptions = {}): Plugin {
       const boundaryEnabled =
         typeof boundaryOption === "boolean"
           ? boundaryOption
-          : (boundaryOption ? boundaryOption.enabled !== false : false);
+          : boundaryOption
+            ? boundaryOption.enabled !== false
+            : false;
 
       if (boundaryEnabled && importer && !resolveOptions?.ssr) {
-        const serverPatterns =
-          (typeof boundaryOption === "object" && boundaryOption?.serverPatterns) ||
-          [/\.server(\.|$)/];
+        const serverPatterns = (typeof boundaryOption === "object" &&
+          boundaryOption?.serverPatterns) || [/\.server(\.|$)/];
 
         if (matchesAnyPattern(source, serverPatterns)) {
           const isServerImporter = matchesAnyPattern(importer, serverPatterns);
           if (!isServerImporter) {
             const allowedImporters =
-              (typeof boundaryOption === "object" && boundaryOption?.allowedImporters) ||
+              (typeof boundaryOption === "object" &&
+                boundaryOption?.allowedImporters) ||
               [];
 
-            const isAllowedImporter = matchesAnyPattern(importer, allowedImporters);
+            const isAllowedImporter = matchesAnyPattern(
+              importer,
+              allowedImporters,
+            );
             if (!isAllowedImporter) {
               throw new Error(
                 `[vite-plugin-funscript] Server module '${source}' cannot be imported into client module '${importer}'. FunScript enforces strict server/client boundary separation. To permit framework bridge modules (e.g. route loaders), configure 'serverBoundary.allowedImporters' in funscriptPlugin().`,
@@ -133,11 +158,23 @@ export function funscriptPlugin(options: FunscriptPluginOptions = {}): Plugin {
         }
       }
 
-      if (!importer || !source.endsWith(".js") || (!source.startsWith(".") && !path.isAbsolute(source))) return null;
-      const existing = await this.resolve(source, importer, { ...resolveOptions, skipSelf: true });
+      if (
+        !importer ||
+        !source.endsWith(".js") ||
+        (!source.startsWith(".") && !path.isAbsolute(source))
+      )
+        return null;
+      const existing = await this.resolve(source, importer, {
+        ...resolveOptions,
+        skipSelf: true,
+      });
       if (existing) return existing;
       for (const extension of [".fun", ".funx"]) {
-        const resolved = await this.resolve(source.slice(0, -3) + extension, importer, { ...resolveOptions, skipSelf: true });
+        const resolved = await this.resolve(
+          source.slice(0, -3) + extension,
+          importer,
+          { ...resolveOptions, skipSelf: true },
+        );
         if (resolved) return resolved;
       }
       return null;
@@ -148,11 +185,22 @@ export function funscriptPlugin(options: FunscriptPluginOptions = {}): Plugin {
       const view = typeView;
       let pending = Promise.resolve();
       const enqueue = (work: () => Promise<void>) => {
-        pending = pending.then(work).catch((error) => server.config.logger.error(`FunScript type view: ${error.message}`));
+        pending = pending
+          .then(work)
+          .catch((error) =>
+            server.config.logger.error(`FunScript type view: ${error.message}`),
+          );
       };
-      const update = (file: string) => { if (/\.funx?$/.test(file)) enqueue(() => view.refresh(file)); };
-      const remove = (file: string) => { if (/\.funx?$/.test(file)) enqueue(() => view.forget(file)); };
-      server.watcher.on("add", update).on("change", update).on("unlink", remove);
+      const update = (file: string) => {
+        if (/\.funx?$/.test(file)) enqueue(() => view.refresh(file));
+      };
+      const remove = (file: string) => {
+        if (/\.funx?$/.test(file)) enqueue(() => view.forget(file));
+      };
+      server.watcher
+        .on("add", update)
+        .on("change", update)
+        .on("unlink", remove);
     },
 
     async transform(code: string, id: string) {
@@ -173,10 +221,26 @@ export function funscriptPlugin(options: FunscriptPluginOptions = {}): Plugin {
       }
       const res = await Effect.runPromise(
         compileString(code, cleanId, {
-          noTs: options.noTs || isPathPolicyEnabled(projectPolicy.noTs, policyRoot, cleanId),
-          noGlobalThis: options.noGlobalThis || isPathPolicyEnabled(projectPolicy.noGlobalThis, policyRoot, cleanId),
-          noOptional: options.noOptional || isPathPolicyEnabled(projectPolicy.noOptional, policyRoot, cleanId),
-          barePipelines: options.barePipelines || isPathPolicyEnabled(projectPolicy.barePipelines, policyRoot, cleanId),
+          noTs:
+            options.noTs ||
+            isPathPolicyEnabled(projectPolicy.noTs, policyRoot, cleanId),
+          noGlobalThis:
+            options.noGlobalThis ||
+            isPathPolicyEnabled(
+              projectPolicy.noGlobalThis,
+              policyRoot,
+              cleanId,
+            ),
+          noOptional:
+            options.noOptional ||
+            isPathPolicyEnabled(projectPolicy.noOptional, policyRoot, cleanId),
+          barePipelines:
+            options.barePipelines ||
+            isPathPolicyEnabled(
+              projectPolicy.barePipelines,
+              policyRoot,
+              cleanId,
+            ),
           effectOnly: isEffectOnlyFile(projectPolicy, policyRoot, cleanId),
           effectOnlyDirectories: projectPolicy.effectOnly,
           policyRoot,

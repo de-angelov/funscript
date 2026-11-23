@@ -6,7 +6,11 @@ import { transformSync } from "esbuild";
 import { Effect, Console, Option, Result, Duration, pipe } from "effect";
 import { compileString, type CompileResult } from "../compiler.js";
 import { typeCheckSource } from "../compiler/check.js";
-import { isEffectOnlyFile, isPathPolicyEnabled, loadProjectConfig } from "../compiler/project-config.js";
+import {
+  isEffectOnlyFile,
+  isPathPolicyEnabled,
+  loadProjectConfig,
+} from "../compiler/project-config.js";
 import { FUNSCRIPT_VERSION } from "../version.js";
 
 const replProjectRoot = process.cwd();
@@ -14,15 +18,28 @@ const replProjectConfig = loadProjectConfig(replProjectRoot);
 const replFile = path.join(replProjectRoot, "repl.fun");
 const replPolicyOptions = {
   noTs: isPathPolicyEnabled(replProjectConfig.noTs, replProjectRoot, replFile),
-  noGlobalThis: isPathPolicyEnabled(replProjectConfig.noGlobalThis, replProjectRoot, replFile),
-  noOptional: isPathPolicyEnabled(replProjectConfig.noOptional, replProjectRoot, replFile),
-  barePipelines: isPathPolicyEnabled(replProjectConfig.barePipelines, replProjectRoot, replFile),
+  noGlobalThis: isPathPolicyEnabled(
+    replProjectConfig.noGlobalThis,
+    replProjectRoot,
+    replFile,
+  ),
+  noOptional: isPathPolicyEnabled(
+    replProjectConfig.noOptional,
+    replProjectRoot,
+    replFile,
+  ),
+  barePipelines: isPathPolicyEnabled(
+    replProjectConfig.barePipelines,
+    replProjectRoot,
+    replFile,
+  ),
   effectOnly: isEffectOnlyFile(replProjectConfig, replProjectRoot, replFile),
   effectOnlyDirectories: replProjectConfig.effectOnly,
   policyRoot: replProjectRoot,
 };
 
-const compileReplSource = (source: string) => compileString(source, replFile, { sourcemap: false, ...replPolicyOptions });
+const compileReplSource = (source: string) =>
+  compileString(source, replFile, { sourcemap: false, ...replPolicyOptions });
 
 export interface ReplOptions {
   input?: NodeJS.ReadableStream;
@@ -116,8 +133,9 @@ export async function compileReplCode(
   }
 
   const isLikelyDecl =
-    /^\s*(export\s+|schema\s+|error\s+|service\s+|import\s+|mut\s+|[a-z_][a-zA-Z0-9_]*\s*(\:[^=]+)?=(?!=))/.test(trimmed) &&
-    !/^\s*(match\b|effect\b)/.test(trimmed);
+    /^\s*(export\s+|schema\s+|error\s+|service\s+|import\s+|mut\s+|[a-z_][a-zA-Z0-9_]*\s*(:[^=]+)?=(?!=))/.test(
+      trimmed,
+    ) && !/^\s*(match\b|effect\b)/.test(trimmed);
 
   let compiled: CompileResult;
   let checkedSource = trimmed;
@@ -132,7 +150,9 @@ export async function compileReplCode(
       isExpression = false;
     } catch (declErr: any) {
       try {
-        const res = await Effect.runPromise(compileReplSource(wrapExpression(trimmed)));
+        const res = await Effect.runPromise(
+          compileReplSource(wrapExpression(trimmed)),
+        );
         compiled = res;
         tsCode = res.typescript;
         isExpression = true;
@@ -142,7 +162,9 @@ export async function compileReplCode(
     }
   } else {
     try {
-      const res = await Effect.runPromise(compileReplSource(wrapExpression(trimmed)));
+      const res = await Effect.runPromise(
+        compileReplSource(wrapExpression(trimmed)),
+      );
       compiled = res;
       tsCode = res.typescript;
       isExpression = true;
@@ -161,19 +183,42 @@ export async function compileReplCode(
   checkedSource = isExpression ? wrapExpression(trimmed) : trimmed;
   const nextDeclarations = new Map(declarations);
   for (const [index, node] of compiled!.ast.body.entries()) {
-    const declaration = node.kind === "ExportDeclaration" ? node.declaration : node;
-    const snippet = checkedSource.slice(node.span.start.offset, compiled!.ast.body[index + 1]?.span.start.offset);
-    const key = "id" in declaration && "name" in declaration.id ? declaration.id.name : snippet;
+    const declaration =
+      node.kind === "ExportDeclaration" ? node.declaration : node;
+    const snippet = checkedSource.slice(
+      node.span.start.offset,
+      compiled!.ast.body[index + 1]?.span.start.offset,
+    );
+    const key =
+      "id" in declaration && "name" in declaration.id
+        ? declaration.id.name
+        : snippet;
     nextDeclarations.set(key, snippet);
   }
   // These modules are provided by setupReplContext. Ambient globals avoid
   // duplicate imports when the emitter also injects an Effect helper.
-  const globals = `ts { declare global { ${["Effect", "Console", "Option", "Result", "Duration", "pipe"]
-    .map((name) => `const ${name}: typeof import('effect').${name};`).join(" ")} } export {}; }`;
-  const result = await Effect.runPromise(typeCheckSource(
-    [globals, ...nextDeclarations.values()].join("\n"), replFile,
-    { noGlobalThis: replPolicyOptions.noGlobalThis, noOptional: replPolicyOptions.noOptional, barePipelines: replPolicyOptions.barePipelines, cwd: replProjectRoot },
-  ));
+  const globals = `ts { declare global { ${[
+    "Effect",
+    "Console",
+    "Option",
+    "Result",
+    "Duration",
+    "pipe",
+  ]
+    .map((name) => `const ${name}: typeof import('effect').${name};`)
+    .join(" ")} } export {}; }`;
+  const result = await Effect.runPromise(
+    typeCheckSource(
+      [globals, ...nextDeclarations.values()].join("\n"),
+      replFile,
+      {
+        noGlobalThis: replPolicyOptions.noGlobalThis,
+        noOptional: replPolicyOptions.noOptional,
+        barePipelines: replPolicyOptions.barePipelines,
+        cwd: replProjectRoot,
+      },
+    ),
+  );
   if (!result.success) throw new Error(result.formattedOutput);
 
   if (!isExpression) {
@@ -182,7 +227,10 @@ export async function compileReplCode(
   }
 
   const transformed = transformSync(tsCode, { loader: "ts", format: "cjs" });
-  let jsCode = transformed.code.replace(/\b(const|let)\s+([a-zA-Z0-9_$]+)/g, "var $2");
+  let jsCode = transformed.code.replace(
+    /\b(const|let)\s+([a-zA-Z0-9_$]+)/g,
+    "var $2",
+  );
   if (isExpression) {
     jsCode += "\n;__repl_res;";
   }
@@ -194,7 +242,10 @@ export async function compileReplCode(
  * Evaluates a line or block of FunScript code in a given VM context,
  * auto-awaiting Effect and Promise values.
  */
-export async function evaluateReplLine(input: string, context: vm.Context): Promise<any> {
+export async function evaluateReplLine(
+  input: string,
+  context: vm.Context,
+): Promise<any> {
   const trimmed = input.trim();
   if (!trimmed) {
     return undefined;
@@ -222,7 +273,7 @@ export async function evaluateReplLine(input: string, context: vm.Context): Prom
   let value = vm.runInContext(compiled.jsCode, context);
   if (Effect.isEffect(value)) {
     value = await Effect.runPromise(value as Effect.Effect<any, any, never>);
-  } else if (value != null && typeof (value as any).then === "function") {
+  } else if (value != null && typeof value.then === "function") {
     value = await value;
   }
 
@@ -235,7 +286,9 @@ export async function evaluateReplLine(input: string, context: vm.Context): Prom
  */
 export function setupReplContext(context: vm.Context): void {
   try {
-    context.require = createRequire(path.resolve(process.cwd(), "package.json"));
+    context.require = createRequire(
+      path.resolve(process.cwd(), "package.json"),
+    );
   } catch {
     context.require = createRequire(import.meta.url);
   }
@@ -260,7 +313,7 @@ export function createReplEvaluator(): repl.REPLEval {
     cmd: string,
     context: vm.Context,
     _filename: string,
-    callback: (err: Error | null, result?: any) => void
+    callback: (err: Error | null, result?: any) => void,
   ) {
     const trimmed = cmd.trim();
     if (!trimmed) {
@@ -278,7 +331,10 @@ export function createReplEvaluator(): repl.REPLEval {
         callback(err);
       }
     });
-    pendingEvaluations = evaluation.then(() => undefined, () => undefined);
+    pendingEvaluations = evaluation.then(
+      () => undefined,
+      () => undefined,
+    );
     await evaluation;
   };
 }
@@ -288,11 +344,14 @@ export function createReplEvaluator(): repl.REPLEval {
  */
 export function startRepl(options: ReplOptions = {}): REPLServer {
   const prompt = options.prompt ?? "funscript> ";
-  const isTty = options.terminal ?? (process.stdin.isTTY && process.stdout.isTTY);
+  const isTty =
+    options.terminal ?? (process.stdin.isTTY && process.stdout.isTTY);
 
   if (options.showBanner ?? isTty) {
     const outputStream = options.output ?? process.stdout;
-    outputStream.write(`FunScript ${FUNSCRIPT_VERSION} Interactive REPL\nType expressions, pipelines, or declarations. Press Ctrl+C or Ctrl+D to exit.\n\n`);
+    outputStream.write(
+      `FunScript ${FUNSCRIPT_VERSION} Interactive REPL\nType expressions, pipelines, or declarations. Press Ctrl+C or Ctrl+D to exit.\n\n`,
+    );
   }
 
   const server = repl.start({

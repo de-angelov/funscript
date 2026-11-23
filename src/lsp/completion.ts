@@ -93,10 +93,12 @@ export function complete(
       if (doc.uri === uri) {
         for (const found of priorSource.matchAll(
           /^\s*(?!export\s)(?:mut\s+)?([a-z_$][\w$]*)\s*(?:=|:)/gm,
-        )) visible.add(found[1]);
+        ))
+          visible.add(found[1]);
         for (const found of doc.text.matchAll(
           /^\s*export\s+(?:(?:schema|error|service)\s+)?([A-Za-z_$][\w$]*)\s*(?:=|\(|:)/gm,
-        )) visible.add(found[1]);
+        ))
+          visible.add(found[1]);
         for (const found of doc.text.matchAll(
           /\b(?:export\s+)?(?:schema|error|service)\s+([A-Z][\w$]*)/g,
         ))
@@ -139,18 +141,30 @@ export function complete(
     }
     if (pipelineContext) {
       const pipeOffset = priorSource.lastIndexOf("|>");
-      const cachedPrefixMatches = pipelineAnalysis && pipeOffset >= 0 &&
-        pipelineAnalysis.source.slice(0, pipeOffset).trimEnd() === priorSource.slice(0, pipeOffset).trimEnd();
+      const cachedPrefixMatches =
+        pipelineAnalysis &&
+        pipeOffset >= 0 &&
+        pipelineAnalysis.source.slice(0, pipeOffset).trimEnd() ===
+          priorSource.slice(0, pipeOffset).trimEnd();
       let inputCompanion: string | undefined;
       if (cachedPrefixMatches) {
-        const cachedPipe = pipelineAnalysis!.source.indexOf("|>", pipeOffset);
+        const cachedPipe = pipelineAnalysis.source.indexOf("|>", pipeOffset);
         let stageOffset = cachedPipe + 2;
-        while (/\s/.test(pipelineAnalysis!.source[stageOffset] ?? "")) stageOffset++;
-        inputCompanion = pipelineAnalysis!.inputs.find(([offset]) => offset === stageOffset)?.[1];
+        while (/\s/.test(pipelineAnalysis.source[stageOffset] ?? ""))
+          stageOffset++;
+        inputCompanion = pipelineAnalysis.inputs.find(
+          ([offset]) => offset === stageOffset,
+        )?.[1];
       }
       if (inputCompanion && inputCompanion in PIPELINE_COMPANION_CATALOG) {
-        for (const operation of PIPELINE_COMPANION_CATALOG[inputCompanion as keyof typeof PIPELINE_COMPANION_CATALOG]) {
-          if (typedPrefix && !operation.toLowerCase().startsWith(typedPrefix.toLowerCase())) continue;
+        for (const operation of PIPELINE_COMPANION_CATALOG[
+          inputCompanion as keyof typeof PIPELINE_COMPANION_CATALOG
+        ]) {
+          if (
+            typedPrefix &&
+            !operation.toLowerCase().startsWith(typedPrefix.toLowerCase())
+          )
+            continue;
           items.set(operation, {
             label: operation,
             kind: CompletionItemKind.Function,
@@ -161,9 +175,15 @@ export function complete(
           });
         }
       } else {
-        const operations = new Set(Object.values(PIPELINE_COMPANION_CATALOG).flat());
+        const operations = new Set(
+          Object.values(PIPELINE_COMPANION_CATALOG).flat(),
+        );
         for (const operation of operations) {
-          if (typedPrefix && !operation.toLowerCase().startsWith(typedPrefix.toLowerCase())) continue;
+          if (
+            typedPrefix &&
+            !operation.toLowerCase().startsWith(typedPrefix.toLowerCase())
+          )
+            continue;
           const candidates = pipelineCompanionCandidates(operation);
           if (candidates.length < 2) continue;
           for (const module of candidates) {

@@ -1,10 +1,16 @@
 import { pathToFileURL } from "node:url";
-import { DiagnosticSeverity, type Diagnostic } from "vscode-languageserver/node";
+import {
+  DiagnosticSeverity,
+  type Diagnostic,
+} from "vscode-languageserver/node";
 import { Lexer } from "../lexer/lexer.js";
 import { Parser } from "../parser/parser.js";
 import { TypeScriptCompilationContext } from "../compiler/typescript-context.js";
 import { validateNumericComparisons } from "../compiler/numeric-comparisons.js";
-import { ImportedSchemaError, resolveImportedSchemas } from "../compiler/imported-schemas.js";
+import {
+  ImportedSchemaError,
+  resolveImportedSchemas,
+} from "../compiler/imported-schemas.js";
 import type { Span } from "../ast/types.js";
 
 export function toDiagnostic(error: any): Diagnostic {
@@ -51,26 +57,50 @@ export function toDiagnostic(error: any): Diagnostic {
     },
     severity: DiagnosticSeverity.Error,
     source: "funscript",
-    code: error?.code ?? (error?.constructor?.name === "LexerError" ? "FS_LEXER" : "FS_SYNTAX"),
+    code:
+      error?.code ??
+      (error?.constructor?.name === "LexerError" ? "FS_LEXER" : "FS_SYNTAX"),
     message: rawMessage,
-    ...(error instanceof ImportedSchemaError && error.related ? {
-      relatedInformation: [{
-        location: {
-          uri: pathToFileURL(error.related.file).href,
-          range: { start: { line: error.related.line, character: error.related.column }, end: { line: error.related.endLine, character: error.related.endColumn } },
-        },
-        message: "Unsupported TypeScript field declared here.",
-      }],
-    } : {}),
+    ...(error instanceof ImportedSchemaError && error.related
+      ? {
+          relatedInformation: [
+            {
+              location: {
+                uri: pathToFileURL(error.related.file).href,
+                range: {
+                  start: {
+                    line: error.related.line,
+                    character: error.related.column,
+                  },
+                  end: {
+                    line: error.related.endLine,
+                    character: error.related.endColumn,
+                  },
+                },
+              },
+              message: "Unsupported TypeScript field declared here.",
+            },
+          ],
+        }
+      : {}),
     data: {
       primaryMessage: rawMessage,
-      explanation: error instanceof ImportedSchemaError ? error.explanation : "The FunScript source could not be parsed.",
-      suggestedAction: error instanceof ImportedSchemaError ? error.suggestedAction : "Fix the highlighted syntax and validate the file again.",
+      explanation:
+        error instanceof ImportedSchemaError
+          ? error.explanation
+          : "The FunScript source could not be parsed.",
+      suggestedAction:
+        error instanceof ImportedSchemaError
+          ? error.suggestedAction
+          : "Fix the highlighted syntax and validate the file again.",
     },
   };
 }
 
-export function validateSyntax(source: string, uri: string): { diagnostics: Diagnostic[]; ast?: import("../ast/types.js").Program } {
+export function validateSyntax(
+  source: string,
+  uri: string,
+): { diagnostics: Diagnostic[]; ast?: import("../ast/types.js").Program } {
   const diagnostics: Diagnostic[] = [];
   try {
     const lexer = new Lexer(source, uri);
@@ -87,12 +117,16 @@ export function validateSyntax(source: string, uri: string): { diagnostics: Diag
   }
 }
 
-export function validateFunScript(source: string, uri: string = "<anonymous>"): Diagnostic[] {
+export function validateFunScript(
+  source: string,
+  uri: string = "<anonymous>",
+): Diagnostic[] {
   const { diagnostics, ast } = validateSyntax(source, uri);
   if (!diagnostics.length && ast) {
     try {
       const context = new TypeScriptCompilationContext(uri);
-      if (!ast.body.some(decl => decl.kind === "AsDeclaration")) validateNumericComparisons(ast, source, context);
+      if (!ast.body.some((decl) => decl.kind === "AsDeclaration"))
+        validateNumericComparisons(ast, source, context);
       resolveImportedSchemas(ast, source, context);
     } catch (error: any) {
       diagnostics.push(toDiagnostic(error));
@@ -100,4 +134,3 @@ export function validateFunScript(source: string, uri: string = "<anonymous>"): 
   }
   return diagnostics;
 }
-

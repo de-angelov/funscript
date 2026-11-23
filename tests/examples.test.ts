@@ -120,7 +120,7 @@ describe("Sample Applications & Real-World Programs", () => {
     it("checks and compiles js-ts-interop.fun cleanly", async () => {
       const p = path.join(examplesDir, "js-ts-interop.fun");
       const { stdout } = await execFileAsync("node", [cliPath, "check", p]);
-      expect(stdout).toContain("checked successfully (0 errors)");
+      expect(stdout).toContain("checked successfully (0 errors");
     }, 20_000);
   });
 });

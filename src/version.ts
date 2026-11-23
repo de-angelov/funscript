@@ -11,7 +11,9 @@ import { fileURLToPath } from "node:url";
 const readPackageVersion = (): string => {
   try {
     const manifest = fileURLToPath(new URL("../package.json", import.meta.url));
-    const parsed = JSON.parse(readFileSync(manifest, "utf8")) as { version?: unknown };
+    const parsed = JSON.parse(readFileSync(manifest, "utf8")) as {
+      version?: unknown;
+    };
     return typeof parsed.version === "string" ? parsed.version : "0.0.0";
   } catch {
     return "0.0.0";

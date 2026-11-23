@@ -3,7 +3,7 @@
  */
 
 export interface Position {
-  line: number;   // 1-indexed
+  line: number; // 1-indexed
   column: number; // 1-indexed
   offset: number; // 0-indexed byte offset
 }
@@ -66,7 +66,11 @@ export interface ImportSpecifier extends NodeBase {
 
 export interface ExportDeclaration extends NodeBase {
   kind: "ExportDeclaration";
-  declaration: SchemaDeclaration | ErrorDeclaration | ServiceDeclaration | BindingDeclaration;
+  declaration:
+    | SchemaDeclaration
+    | ErrorDeclaration
+    | ServiceDeclaration
+    | BindingDeclaration;
 }
 
 export interface ExportFromDeclaration extends NodeBase {
@@ -81,7 +85,8 @@ export interface ExportDefaultDeclaration extends NodeBase {
   expression: Expression;
 }
 
-export type BindingTarget = Identifier | UpperIdentifier | RecordPattern | ArrayPattern;
+export type BindingTarget =
+  Identifier | UpperIdentifier | RecordPattern | ArrayPattern;
 
 export interface BindingDeclaration extends NodeBase {
   kind: "BindingDeclaration";
@@ -246,7 +251,23 @@ export interface PipelineExpression extends NodeBase {
 
 export interface BinaryExpression extends NodeBase {
   kind: "BinaryExpression";
-  operator: "or" | "and" | "#=" | "#!" | "@=" | "@!" | "<" | "<=" | ">" | ">=" | "+" | "-" | "*" | "/" | "%" | "**";
+  operator:
+    | "or"
+    | "and"
+    | "#="
+    | "#!"
+    | "@="
+    | "@!"
+    | "<"
+    | "<="
+    | ">"
+    | ">="
+    | "+"
+    | "-"
+    | "*"
+    | "/"
+    | "%"
+    | "**";
   left: Expression;
   right: Expression;
 }
@@ -281,10 +302,7 @@ export interface RecordExpression extends NodeBase {
 }
 
 export type RecordEntry =
-  | SpreadEntry
-  | FieldEntry
-  | DotPathEntry
-  | ShorthandEntry;
+  SpreadEntry | FieldEntry | DotPathEntry | ShorthandEntry;
 
 export interface SpreadEntry extends NodeBase {
   kind: "SpreadEntry";
@@ -321,9 +339,7 @@ export interface FunctionExpression extends NodeBase {
   body: FunctionBody;
 }
 
-export type FunctionBody =
-  | Expression
-  | BlockStatement;
+export type FunctionBody = Expression | BlockStatement;
 
 export interface BlockStatement extends NodeBase {
   kind: "BlockStatement";
@@ -489,10 +505,7 @@ export interface EffectControlFlowStatement extends NodeBase {
   statement: MatchExpression;
 }
 
-export type Literal =
-  | NumberLiteral
-  | StringLiteral
-  | BooleanLiteral;
+export type Literal = NumberLiteral | StringLiteral | BooleanLiteral;
 
 export interface NumberLiteral extends NodeBase {
   kind: "NumberLiteral";
@@ -519,9 +532,7 @@ export interface TaggedTemplateExpression extends NodeBase {
   template: TemplateLiteral;
 }
 
-export type StringPart =
-  | StringRawPart
-  | StringInterpolationPart;
+export type StringPart = StringRawPart | StringInterpolationPart;
 
 export interface StringRawPart {
   kind: "StringRawPart";
@@ -666,7 +677,8 @@ export interface IntersectionTypeNode extends NodeBase {
 
 export type JSXTagName = Identifier | UpperIdentifier | MemberExpression;
 
-export type JSXAttributeValue = StringLiteral | JSXExpressionContainer | Expression;
+export type JSXAttributeValue =
+  StringLiteral | JSXExpressionContainer | Expression;
 
 export interface JSXNamedAttribute extends NodeBase {
   kind: "JSXAttribute";
@@ -693,10 +705,7 @@ export interface JSXText extends NodeBase {
 }
 
 export type JSXChild =
-  | JSXElement
-  | JSXSelfClosingElement
-  | JSXText
-  | JSXExpressionContainer;
+  JSXElement | JSXSelfClosingElement | JSXText | JSXExpressionContainer;
 
 export interface JSXOpeningElement extends NodeBase {
   kind: "JSXOpeningElement";
@@ -721,4 +730,3 @@ export interface JSXElement extends NodeBase {
   children: JSXChild[];
   closingElement: JSXClosingElement;
 }
-

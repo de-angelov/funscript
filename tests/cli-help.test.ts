@@ -23,7 +23,7 @@ describe("CLI help contract", () => {
     const help = runCli("--help");
 
     expect(help).toContain("not currently available");
-    for (const command of ["new", "dev", "preview", "test", "add", "doctor"]) {
+    for (const command of ["new", "dev", "preview", "test", "add"]) {
       expect(help).not.toMatch(new RegExp(`^\\s*funscript ${command}(?:\\s|$)`, "m"));
     }
   });

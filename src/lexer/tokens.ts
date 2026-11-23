@@ -1,4 +1,4 @@
-import { Position, Span } from "../ast/types.js";
+import { type Position, type Span } from "../ast/types.js";
 
 export enum TokenType {
   // Layout
@@ -128,26 +128,34 @@ export const KEYWORDS: Record<string, TokenType> = {
 
 export const BANNED_KEYWORDS: Record<string, string> = {
   fn: "FunScript functions use the arrow syntax: 'name = (args) => body'.",
-  extern: "FunScript has retired 'extern service'. Declare interfaces using 'service Name' and implement them in a Layer using 'js' for foreign calls.",
+  extern:
+    "FunScript has retired 'extern service'. Declare interfaces using 'service Name' and implement them in a Layer using 'js' for foreign calls.",
   let: "FunScript has no 'let'; use 'name = value' for immutable bindings, or 'mut name = value' for local mutable drafts.",
   var: "FunScript has no 'var'; use 'name = value' for immutable bindings, or 'mut name = value' for local mutable drafts.",
   const: "FunScript bindings are const by default; write 'name = value'.",
   function: "FunScript functions use the arrow syntax: '(args) => body'.",
-  class: "FunScript has no classes; use 'schema' for data, 'error' for errors, and 'service' for services.",
-  return: "FunScript uses '=> value' for explicit returns in function and effect blocks; replace 'return x' with '=> x'. See docs/syntax.md#311-explicit-returns-and-conditional-execution.",
-  throw: "FunScript has no 'throw'; recoverable failures use Effect typed errors, and defects use 'Effect.die' or '|> orDie'.",
+  class:
+    "FunScript has no classes; use 'schema' for data, 'error' for errors, and 'service' for services.",
+  return:
+    "FunScript uses '=> value' for explicit returns in function and effect blocks; replace 'return x' with '=> x'. See docs/syntax.md#311-explicit-returns-and-conditional-execution.",
+  throw:
+    "FunScript has no 'throw'; recoverable failures use Effect typed errors, and defects use 'Effect.die' or '|> orDie'.",
   try: "FunScript has no 'try/catch'; use typed errors in the E channel or 'Effect.tryPromise'.",
-  catch: "FunScript has no 'try/catch'; handle errors with 'Effect.catchTag' or 'match'.",
-  finally: "Use 'Effect.ensuring' or 'Effect.acquireRelease' for deterministic finalizers.",
+  catch:
+    "FunScript has no 'try/catch'; handle errors with 'Effect.catchTag' or 'match'.",
+  finally:
+    "Use 'Effect.ensuring' or 'Effect.acquireRelease' for deterministic finalizers.",
   async: "FunScript has no 'async/await'; use 'effect' blocks with '<-'.",
-  await: "FunScript has no 'await'; execute effects inside 'effect' blocks using '<-'.",
+  await:
+    "FunScript has no 'await'; execute effects inside 'effect' blocks using '<-'.",
   null: "FunScript has no 'null'; use Option.none() or Option<T> for optional values.",
   undefined: "FunScript has no 'undefined'; use Option<T> or explicit types.",
   if: "FunScript has no 'if'; use 'match' for both pattern matching and boolean branching.",
   else: "FunScript has no 'else'; use '| _ =>' in 'match'.",
   switch: "FunScript has no 'switch'; use 'match'.",
   for: "FunScript has no 'for' loops; use Array pipelines (map, filter) or Effect.forEach.",
-  while: "FunScript has no 'while' loops; use Effect.repeat, Schedule, or recursion.",
+  while:
+    "FunScript has no 'while' loops; use Effect.repeat, Schedule, or recursion.",
   type: "FunScript replaces 'type' with 'schema' (export schema Name = ...).",
   data: "FunScript uses 'schema' for all data modeling and tagged unions.",
   interface: "FunScript has no 'interface'; use 'schema' or 'service'.",
@@ -172,4 +180,3 @@ export const JsxClosingTagOpen = TokenType.JsxClosingTagOpen;
 export const JsxAttributeName = TokenType.JsxAttributeName;
 export const JsxText = TokenType.JsxText;
 export const JsxTagName = TokenType.JsxTagName;
-

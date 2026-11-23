@@ -11,8 +11,20 @@ import {
   ES_TOOLKIT_MATH_COLLECTION,
   ES_TOOLKIT_TIMING_DATA_LAST,
 } from "../emitter/emitter.js";
-import { type PipelineCompanionModule, PIPELINE_COMPANION_CATALOG, pipelineCompanionCandidates, EFFECT_PIPELINE_COMPATIBILITY_ALIASES } from "../emitter/pipeline-catalog.js";
-import { Program, type Expression, type PipelineExpression, type CallExpression, type BindingTarget, type Pattern } from "../ast/types.js";
+import {
+  type PipelineCompanionModule,
+  PIPELINE_COMPANION_CATALOG,
+  pipelineCompanionCandidates,
+  EFFECT_PIPELINE_COMPATIBILITY_ALIASES,
+} from "../emitter/pipeline-catalog.js";
+import {
+  type Program,
+  type Expression,
+  type PipelineExpression,
+  type CallExpression,
+  type BindingTarget,
+  type Pattern,
+} from "../ast/types.js";
 
 function addPatternNames(pat: Pattern, names: Set<string>): void {
   if (pat.kind === "VariablePattern") names.add(pat.name.name);
@@ -40,10 +52,13 @@ function addBindingNames(target: BindingTarget, names: Set<string>): void {
     for (const el of target.elements) addPatternNames(el, names);
   }
 }
-import { TypeScriptCompilationContext } from "./typescript-context.js";
+import { type TypeScriptCompilationContext } from "./typescript-context.js";
 import { FunScriptError } from "../errors.js";
 
-export interface PipelineCompanionMap extends ReadonlyMap<number, PipelineCompanionModule> {
+export interface PipelineCompanionMap extends ReadonlyMap<
+  number,
+  PipelineCompanionModule
+> {
   readonly pipelineCompanions: ReadonlyMap<number, PipelineCompanionModule>;
   readonly stageResolutions: ReadonlyMap<number, StageResolution>;
   readonly stageInputCompanions: ReadonlyMap<number, string>;
@@ -51,16 +66,46 @@ export interface PipelineCompanionMap extends ReadonlyMap<number, PipelineCompan
   readonly directCallResolutions: ReadonlyMap<number, StageResolution>;
 }
 
-const STRING_COMPANION_METHODS = new Set(["trim", "trimStart", "trimEnd", "split", "lines", "toUpperCase", "toLowerCase"]);
-const DURATION_COMPANION_METHODS = new Set(["seconds", "millis", "minutes", "hours", "days"]);
+const STRING_COMPANION_METHODS = new Set([
+  "trim",
+  "trimStart",
+  "trimEnd",
+  "split",
+  "lines",
+  "toUpperCase",
+  "toLowerCase",
+]);
+const DURATION_COMPANION_METHODS = new Set([
+  "seconds",
+  "millis",
+  "minutes",
+  "hours",
+  "days",
+]);
 const NUMBER_COMPANION_METHODS = new Set([
-  "isGreaterThan", "isGreaterThanOrEqualTo", "isLessThan", "isLessThanOrEqualTo",
-  "greaterThan", "greaterThanOrEqualTo", "lessThan", "lessThanOrEqualTo",
-  "between", "clamp", "increment", "decrement",
+  "isGreaterThan",
+  "isGreaterThanOrEqualTo",
+  "isLessThan",
+  "isLessThanOrEqualTo",
+  "greaterThan",
+  "greaterThanOrEqualTo",
+  "lessThan",
+  "lessThanOrEqualTo",
+  "between",
+  "clamp",
+  "increment",
+  "decrement",
 ]);
 const DATETIME_COMPANION_METHODS = new Set([
-  "lessThan", "lessThanOrEqualTo", "greaterThan", "greaterThanOrEqualTo", "between",
-  "isLessThan", "isLessThanOrEqualTo", "isGreaterThan", "isGreaterThanOrEqualTo",
+  "lessThan",
+  "lessThanOrEqualTo",
+  "greaterThan",
+  "greaterThanOrEqualTo",
+  "between",
+  "isLessThan",
+  "isLessThanOrEqualTo",
+  "isGreaterThan",
+  "isGreaterThanOrEqualTo",
 ]);
 
 function unrollPipeline(expr: PipelineExpression): Expression[] {
@@ -74,7 +119,10 @@ function unrollPipeline(expr: PipelineExpression): Expression[] {
   return chain;
 }
 
-function collectPipelines(node: any, pipelines: PipelineExpression[] = []): PipelineExpression[] {
+function collectPipelines(
+  node: any,
+  pipelines: PipelineExpression[] = [],
+): PipelineExpression[] {
   if (!node || typeof node !== "object") return pipelines;
   if (node.kind === "PipelineExpression") {
     pipelines.push(node);
@@ -98,7 +146,11 @@ function collectPipelines(node: any, pipelines: PipelineExpression[] = []): Pipe
   return pipelines;
 }
 
-function collectDirectCalls(node: any, inPipeline = false, calls: CallExpression[] = []): CallExpression[] {
+function collectDirectCalls(
+  node: any,
+  inPipeline = false,
+  calls: CallExpression[] = [],
+): CallExpression[] {
   if (!node || typeof node !== "object") return calls;
   if (node.kind === "PipelineExpression") {
     let curr = node;
@@ -139,7 +191,10 @@ export function inferPipelineCompanions(
   ast: Program,
   context: TypeScriptCompilationContext,
   importedRecordFunctions?: ReadonlyMap<string, ReadonlySet<number>>,
-  importedRecordContracts?: ReadonlyMap<string, import("../ast/types.js").RecordTypeNode>,
+  importedRecordContracts?: ReadonlyMap<
+    string,
+    import("../ast/types.js").RecordTypeNode
+  >,
   importedGenericDataSchemas?: ReadonlyMap<string, number>,
   importedIdentitySchemas?: ReadonlySet<string>,
   importedDataSchemas?: ReadonlySet<string>,
@@ -151,11 +206,17 @@ export function inferPipelineCompanions(
   for (const decl of ast.body) {
     if (decl.kind === "SchemaDeclaration") {
       schemaNames.add(decl.id.name);
-    } else if (decl.kind === "ExportDeclaration" && decl.declaration.kind === "SchemaDeclaration") {
+    } else if (
+      decl.kind === "ExportDeclaration" &&
+      decl.declaration.kind === "SchemaDeclaration"
+    ) {
       schemaNames.add(decl.declaration.id.name);
     } else if (decl.kind === "BindingDeclaration") {
       addBindingNames(decl.id, localBindings);
-    } else if (decl.kind === "ExportDeclaration" && decl.declaration.kind === "BindingDeclaration") {
+    } else if (
+      decl.kind === "ExportDeclaration" &&
+      decl.declaration.kind === "BindingDeclaration"
+    ) {
       addBindingNames(decl.declaration.id, localBindings);
     } else if (decl.kind === "ImportDeclaration") {
       for (const spec of decl.specifiers) {
@@ -174,7 +235,10 @@ export function inferPipelineCompanions(
     importedDataSchemas,
   }).emit();
 
-  const emptyResult = new Map<number, PipelineCompanionModule>() as Map<number, PipelineCompanionModule> & {
+  const emptyResult = new Map<number, PipelineCompanionModule>() as Map<
+    number,
+    PipelineCompanionModule
+  > & {
     pipelineCompanions: ReadonlyMap<number, PipelineCompanionModule>;
     stageResolutions: ReadonlyMap<number, StageResolution>;
     stageInputCompanions: ReadonlyMap<number, string>;
@@ -187,7 +251,10 @@ export function inferPipelineCompanions(
   emptyResult.bareStageResolutions = new Map();
   emptyResult.directCallResolutions = new Map();
 
-  if (!marked.includes("__funscriptPipelineSource(") && !marked.includes("__funscriptDirectCall(")) {
+  if (
+    !marked.includes("__funscriptPipelineSource(") &&
+    !marked.includes("__funscriptDirectCall(")
+  ) {
     return emptyResult;
   }
 
@@ -195,21 +262,33 @@ export function inferPipelineCompanions(
   // every possible companion namespace in scope. Rewrite Effect's barrel
   // imports in the checker-only source to module subpaths; loading `effect`
   // pulls its entire export graph into the TypeScript program.
-  const checkerMarked = marked.replace(/import\s*\{([\s\S]*?)\}\s*from\s*(["'])effect\2\s*;?/g, (_match, bindings: string) => {
-    const namespaces: string[] = [];
-    const remaining: string[] = [];
-    for (const binding of bindings.split(",").map((item: string) => item.trim()).filter(Boolean)) {
-      const parsed = /^(type\s+)?([A-Za-z_$][\w$]*)(?:\s+as\s+([A-Za-z_$][\w$]*))?$/.exec(binding);
-      if (!parsed || !/^[A-Z]/.test(parsed[2])) {
-        remaining.push(binding);
-        continue;
+  const checkerMarked = marked.replace(
+    /import\s*\{([\s\S]*?)\}\s*from\s*(["'])effect\2\s*;?/g,
+    (_match, bindings: string) => {
+      const namespaces: string[] = [];
+      const remaining: string[] = [];
+      for (const binding of bindings
+        .split(",")
+        .map((item: string) => item.trim())
+        .filter(Boolean)) {
+        const parsed =
+          /^(type\s+)?([A-Za-z_$][\w$]*)(?:\s+as\s+([A-Za-z_$][\w$]*))?$/.exec(
+            binding,
+          );
+        if (!parsed || !/^[A-Z]/.test(parsed[2])) {
+          remaining.push(binding);
+          continue;
+        }
+        const [, typeOnly, imported, local = imported] = parsed;
+        namespaces.push(
+          `import ${typeOnly ?? ""}* as ${local} from "effect/${imported}";`,
+        );
       }
-      const [, typeOnly, imported, local = imported] = parsed;
-      namespaces.push(`import ${typeOnly ?? ""}* as ${local} from \"effect/${imported}\";`);
-    }
-    if (remaining.length) namespaces.push(`import { ${remaining.join(", ")} } from \"effect\";`);
-    return namespaces.join("\n");
-  });
+      if (remaining.length)
+        namespaces.push(`import { ${remaining.join(", ")} } from "effect";`);
+      return namespaces.join("\n");
+    },
+  );
   const source = `declare const decode: any;\nconst __funscriptPipelineSource = <T,>(_id: number, value: T): T => value;\nconst __funscriptPipelineStageInput = <T,>(_id: number, value: T): T => value;\nconst __funscriptDirectCall = <T,>(_id: number, value: T): T => value;\n${checkerMarked}`;
   const checked = context.check(source);
   if (!checked) return emptyResult;
@@ -222,17 +301,28 @@ export function inferPipelineCompanions(
   const directCallResolutions = new Map<number, StageResolution>();
 
   const isSchemaType = (type: ts.Type): boolean => {
-    if (Boolean(type.getProperty("ast") && type.getProperty("Type"))) return true;
+    if (type.getProperty("ast") && type.getProperty("Type")) return true;
     const printed = checker.typeToString(type);
     return /^Schema(?:<|$)/.test(printed) || /^Struct(?:<|$)/.test(printed);
   };
 
   const isDateTimeType = (type: ts.Type): boolean => {
-    if (type.flags & (ts.TypeFlags.Any | ts.TypeFlags.Unknown | ts.TypeFlags.Never)) return false;
+    if (
+      type.flags &
+      (ts.TypeFlags.Any | ts.TypeFlags.Unknown | ts.TypeFlags.Never)
+    )
+      return false;
     const name = type.aliasSymbol?.getName() ?? type.symbol?.getName();
-    if (name === "DateTime" || name === "Utc" || name === "Zoned" || name === "TimeZone") return true;
+    if (
+      name === "DateTime" ||
+      name === "Utc" ||
+      name === "Zoned" ||
+      name === "TimeZone"
+    )
+      return true;
     const printed = checker.typeToString(type);
-    if (/^DateTime(?:<|$)/.test(printed) || /^Utc(?:<|$)/.test(printed)) return true;
+    if (/^DateTime(?:<|$)/.test(printed) || /^Utc(?:<|$)/.test(printed))
+      return true;
     const decl = type.symbol?.declarations?.[0];
     const fileName = decl?.getSourceFile()?.fileName ?? "";
     return /DateTime(?:\.d)?\.ts$/.test(fileName);
@@ -245,15 +335,27 @@ export function inferPipelineCompanions(
       const tag = checker.getPropertyOfType(type, "_tag");
       if (tag) {
         const tagType = checker.getTypeOfSymbolAtLocation(tag, sourceFile);
-        const tagNames = new Set((tagType.isUnion() ? tagType.types : [tagType]).flatMap(member =>
-          member.flags & ts.TypeFlags.StringLiteral ? [String((member as ts.StringLiteralType).value)] : [],
-        ));
-        if (tagNames.has("None") && tagNames.has("Some") && tagNames.size === 2) return "Option";
-        if (tagNames.has("Success") && tagNames.has("Failure") && tagNames.size === 2) return "Result";
+        const tagNames = new Set(
+          (tagType.isUnion() ? tagType.types : [tagType]).flatMap((member) =>
+            member.flags & ts.TypeFlags.StringLiteral
+              ? [String((member as ts.StringLiteralType).value)]
+              : [],
+          ),
+        );
+        if (tagNames.has("None") && tagNames.has("Some") && tagNames.size === 2)
+          return "Option";
+        if (
+          tagNames.has("Success") &&
+          tagNames.has("Failure") &&
+          tagNames.size === 2
+        )
+          return "Result";
       }
       const members = type.types.map(companionForType);
       const first = members[0];
-      return first && members.every((member) => member === first) ? first : undefined;
+      return first && members.every((member) => member === first)
+        ? first
+        : undefined;
     }
     const printed = checker.typeToString(type);
     if (/^Option(?:<|$)/.test(printed)) return "Option";
@@ -263,12 +365,13 @@ export function inferPipelineCompanions(
     if (/^Schedule(?:<|$)/.test(printed)) return "Schedule";
     if (/^Layer(?:<|$)/.test(printed)) return "Layer";
     if (/^Stream(?:<|$)/.test(printed)) return "Stream";
-    if (/^Schema(?:<|$)/.test(printed)) return "Schema";
-    if (type.flags & (ts.TypeFlags.Any | ts.TypeFlags.Unknown)) return undefined;
+    if (/^Schema(?:<|$)/.test(printed) || isSchemaType(type)) return "Schema";
+    if (type.flags & (ts.TypeFlags.Any | ts.TypeFlags.Unknown))
+      return undefined;
     if (checker.isArrayType(type) || checker.isTupleType(type)) return "Array";
-    if (Boolean(type.flags & ts.TypeFlags.NumberLike)) return "Number";
-    if (Boolean(type.flags & ts.TypeFlags.StringLike)) return "String";
-    if (Boolean(type.flags & ts.TypeFlags.BooleanLike)) return "Boolean";
+    if (type.flags & ts.TypeFlags.NumberLike) return "Number";
+    if (type.flags & ts.TypeFlags.StringLike) return "String";
+    if (type.flags & ts.TypeFlags.BooleanLike) return "Boolean";
     if (isDateTimeType(type)) return "DateTime";
 
     const symbol = type.aliasSymbol ?? type.getSymbol();
@@ -295,12 +398,21 @@ export function inferPipelineCompanions(
       for (const child of node) collectPipelineBindings(child);
       return;
     }
-    if (node.kind === "BindingDeclaration" && node.id?.kind === "Identifier" && node.init?.kind === "PipelineExpression") {
+    if (
+      node.kind === "BindingDeclaration" &&
+      node.id?.kind === "Identifier" &&
+      node.init?.kind === "PipelineExpression"
+    ) {
       pipelineBindingNames.set(node.init.span.start.offset, node.id.name);
-    } else if (node.kind === "AssignmentStatement" && node.target?.kind === "Identifier" && node.value?.kind === "PipelineExpression") {
+    } else if (
+      node.kind === "AssignmentStatement" &&
+      node.target?.kind === "Identifier" &&
+      node.value?.kind === "PipelineExpression"
+    ) {
       pipelineBindingNames.set(node.value.span.start.offset, node.target.name);
     }
-    for (const [key, child] of Object.entries(node)) if (key !== "span") collectPipelineBindings(child);
+    for (const [key, child] of Object.entries(node))
+      if (key !== "span") collectPipelineBindings(child);
   };
   collectPipelineBindings(ast);
   const bindingCompanions = new Map<string, PipelineCompanionModule>();
@@ -309,7 +421,12 @@ export function inferPipelineCompanions(
     const names = new Set<string>();
     for (const param of fn.params ?? []) addBindingNames(param.name, names);
     const visitScope = (node: any): void => {
-      if (!node || typeof node !== "object" || (node !== fn && node.kind === "FunctionExpression")) return;
+      if (
+        !node ||
+        typeof node !== "object" ||
+        (node !== fn && node.kind === "FunctionExpression")
+      )
+        return;
       if (node.kind === "BindingDeclaration") addBindingNames(node.id, names);
       for (const [key, child] of Object.entries(node)) {
         if (key === "span") continue;
@@ -320,10 +437,13 @@ export function inferPipelineCompanions(
     visitScope(fn.body);
     return names;
   };
-  const collectPipelineScopes = (node: any, inherited: ReadonlySet<string> = new Set()): void => {
+  const collectPipelineScopes = (
+    node: any,
+    inherited: ReadonlySet<string> = new Set(),
+  ): void => {
     if (!node || typeof node !== "object") return;
     if (Array.isArray(node)) {
-      node.forEach(child => collectPipelineScopes(child, inherited));
+      node.forEach((child) => collectPipelineScopes(child, inherited));
       return;
     }
     let scope = inherited;
@@ -332,26 +452,42 @@ export function inferPipelineCompanions(
     }
     if (node.kind === "PipelineExpression") {
       for (const stage of unrollPipeline(node).slice(1)) {
-        const names = pipelineScopeBindings.get(stage.span.start.offset) ?? new Set<string>();
+        const names =
+          pipelineScopeBindings.get(stage.span.start.offset) ??
+          new Set<string>();
         for (const name of scope) names.add(name);
         pipelineScopeBindings.set(stage.span.start.offset, names);
       }
     }
     for (const [key, child] of Object.entries(node)) {
       if (key === "span") continue;
-      if (Array.isArray(child)) child.forEach(item => collectPipelineScopes(item, scope));
-      else if (child && typeof child === "object") collectPipelineScopes(child, scope);
+      if (Array.isArray(child))
+        child.forEach((item) => collectPipelineScopes(item, scope));
+      else if (child && typeof child === "object")
+        collectPipelineScopes(child, scope);
     }
   };
   collectPipelineScopes(ast, new Set(localBindings));
 
   const visitNodes = (node: ts.Node): void => {
     if (ts.isCallExpression(node) && ts.isIdentifier(node.expression)) {
-      if (node.expression.text === "__funscriptPipelineSource" && node.arguments.length === 2 && ts.isNumericLiteral(node.arguments[0])) {
+      if (
+        node.expression.text === "__funscriptPipelineSource" &&
+        node.arguments.length === 2 &&
+        ts.isNumericLiteral(node.arguments[0])
+      ) {
         pipelineSourceNodes.set(Number(node.arguments[0].text), node);
-      } else if (node.expression.text === "__funscriptPipelineStageInput" && node.arguments.length === 2 && ts.isNumericLiteral(node.arguments[0])) {
+      } else if (
+        node.expression.text === "__funscriptPipelineStageInput" &&
+        node.arguments.length === 2 &&
+        ts.isNumericLiteral(node.arguments[0])
+      ) {
         pipelineStageInputNodes.set(Number(node.arguments[0].text), node);
-      } else if (node.expression.text === "__funscriptDirectCall" && node.arguments.length === 2 && ts.isNumericLiteral(node.arguments[0])) {
+      } else if (
+        node.expression.text === "__funscriptDirectCall" &&
+        node.arguments.length === 2 &&
+        ts.isNumericLiteral(node.arguments[0])
+      ) {
         directCallNodes.set(Number(node.arguments[0].text), node);
       }
     }
@@ -372,7 +508,9 @@ export function inferPipelineCompanions(
     if (
       s0.kind === "Identifier" &&
       !currentCompanion &&
-      (currentType.flags & (ts.TypeFlags.Any | ts.TypeFlags.Unknown | ts.TypeFlags.Never)) !== 0
+      (currentType.flags &
+        (ts.TypeFlags.Any | ts.TypeFlags.Unknown | ts.TypeFlags.Never)) !==
+        0
     ) {
       currentCompanion = bindingCompanions.get(s0.name);
     }
@@ -392,9 +530,11 @@ export function inferPipelineCompanions(
       for (const stage of sourceNode.parent.arguments.slice(1)) {
         if (
           ts.isCallExpression(stage) &&
-          ((ts.isIdentifier(stage.expression) && stage.expression.text === "decode") ||
+          ((ts.isIdentifier(stage.expression) &&
+            stage.expression.text === "decode") ||
             (ts.isPropertyAccessExpression(stage.expression) &&
-              (stage.expression.name.text === "decode" || stage.expression.name.text === "decodeUnknown"))) &&
+              (stage.expression.name.text === "decode" ||
+                stage.expression.name.text === "decodeUnknown"))) &&
           stage.arguments.length >= 1
         ) {
           const targetArg = stage.arguments[0];
@@ -410,61 +550,104 @@ export function inferPipelineCompanions(
     }
 
     if (currentCompanion && currentCompanion in PIPELINE_COMPANION_CATALOG) {
-      companions.set(s0.span.start.offset, currentCompanion as PipelineCompanionModule);
+      companions.set(
+        s0.span.start.offset,
+        currentCompanion as PipelineCompanionModule,
+      );
     }
 
     // Resolve subsequent stages
     for (let i = 1; i < stages.length; i++) {
       const stage = stages[i];
-      const stageInputNode = pipelineStageInputNodes.get(stage.span.start.offset);
+      const stageInputNode = pipelineStageInputNodes.get(
+        stage.span.start.offset,
+      );
       if (stageInputNode) {
-        const stageInputType = checker.getTypeAtLocation(stageInputNode.arguments[1]);
+        const stageInputType = checker.getTypeAtLocation(
+          stageInputNode.arguments[1],
+        );
         // The wrapper used to expose the stage input to TypeScript can lose
         // the concrete type at the first pipe boundary (Effect.pipe's
         // overloads may infer `any`). Preserve the type we already tracked
         // from the pipeline source or preceding stage in that case.
         currentCompanion = companionForType(stageInputType) ?? currentCompanion;
-        currentType = stageInputType.flags & (ts.TypeFlags.Any | ts.TypeFlags.Unknown)
-          ? currentType
-          : stageInputType;
-        stageInputCompanions.set(stage.span.start.offset, currentCompanion ?? "Unknown");
-      }
-      else if (currentCompanion) stageInputCompanions.set(stage.span.start.offset, currentCompanion);
+        currentType =
+          stageInputType.flags & (ts.TypeFlags.Any | ts.TypeFlags.Unknown)
+            ? currentType
+            : stageInputType;
+        stageInputCompanions.set(
+          stage.span.start.offset,
+          currentCompanion ?? "Unknown",
+        );
+      } else if (currentCompanion)
+        stageInputCompanions.set(stage.span.start.offset, currentCompanion);
       let fnName: string | undefined;
       let isExplicit = false;
       let explicitModule: string | undefined;
 
       if (stage.kind === "Identifier" || stage.kind === "UpperIdentifier") {
         fnName = stage.name;
-      } else if (stage.kind === "CallExpression" && (stage.callee.kind === "Identifier" || stage.callee.kind === "UpperIdentifier")) {
+      } else if (
+        stage.kind === "CallExpression" &&
+        (stage.callee.kind === "Identifier" ||
+          stage.callee.kind === "UpperIdentifier")
+      ) {
         fnName = stage.callee.name;
-      } else if (stage.kind === "CallExpression" && stage.callee.kind === "MemberExpression" && (stage.callee.object.kind === "UpperIdentifier" || stage.callee.object.kind === "Identifier")) {
+      } else if (
+        stage.kind === "CallExpression" &&
+        stage.callee.kind === "MemberExpression" &&
+        (stage.callee.object.kind === "UpperIdentifier" ||
+          stage.callee.object.kind === "Identifier")
+      ) {
         explicitModule = stage.callee.object.name;
         fnName = stage.callee.property.name;
         isExplicit = true;
-      } else if (stage.kind === "MemberExpression" && (stage.object.kind === "UpperIdentifier" || stage.object.kind === "Identifier")) {
+      } else if (
+        stage.kind === "MemberExpression" &&
+        (stage.object.kind === "UpperIdentifier" ||
+          stage.object.kind === "Identifier")
+      ) {
         explicitModule = stage.object.name;
         fnName = stage.property.name;
         isExplicit = true;
       }
 
       if (isExplicit && explicitModule) {
-        stageResolutions.set(stage.span.start.offset, { module: explicitModule, method: fnName });
+        stageResolutions.set(stage.span.start.offset, {
+          module: explicitModule,
+          method: fnName,
+        });
         if (
           fnName &&
           !pipelineScopeBindings.get(stage.span.start.offset)?.has(fnName) &&
           currentCompanion === explicitModule &&
-          (PIPELINE_COMPANION_CATALOG[currentCompanion as PipelineCompanionModule]?.includes(fnName) ||
-            (currentCompanion === "Effect" && fnName in EFFECT_PIPELINE_COMPATIBILITY_ALIASES))
+          (PIPELINE_COMPANION_CATALOG[
+            currentCompanion as PipelineCompanionModule
+          ]?.includes(fnName) ||
+            (currentCompanion === "Effect" &&
+              fnName in EFFECT_PIPELINE_COMPATIBILITY_ALIASES))
         ) {
-          bareStageResolutions.set(stage.span.start.offset, { module: currentCompanion, method: fnName });
+          bareStageResolutions.set(stage.span.start.offset, {
+            module: currentCompanion,
+            method: fnName,
+          });
         }
-        const sym = checker.resolveName(explicitModule, sourceFile, ts.SymbolFlags.Value | ts.SymbolFlags.Namespace, false);
+        const sym = checker.resolveName(
+          explicitModule,
+          sourceFile,
+          ts.SymbolFlags.Value | ts.SymbolFlags.Namespace,
+          false,
+        );
         if (sym && fnName) {
           const symType = checker.getTypeOfSymbolAtLocation(sym, sourceFile);
-          const prop = checker.getPropertyOfType(symType, fnName) ?? sym.exports?.get(ts.escapeLeadingUnderscores(fnName));
+          const prop =
+            checker.getPropertyOfType(symType, fnName) ??
+            sym.exports?.get(ts.escapeLeadingUnderscores(fnName));
           if (prop) {
-            const propType = checker.getTypeOfSymbolAtLocation(prop, sourceFile);
+            const propType = checker.getTypeOfSymbolAtLocation(
+              prop,
+              sourceFile,
+            );
             let ret = propType.getCallSignatures()[0]?.getReturnType();
             if (ret && ret.getCallSignatures().length > 0) {
               ret = ret.getCallSignatures()[0].getReturnType();
@@ -489,7 +672,8 @@ export function inferPipelineCompanions(
         fnName === "decodeJsonSync" ||
         fnName === "encodeJson" ||
         fnName === "encodeJsonSync"
-      ) continue;
+      )
+        continue;
 
       // User scope wins: local bindings and explicit imports take precedence
       // over type-directed companion dispatch.
@@ -501,21 +685,38 @@ export function inferPipelineCompanions(
       // 1. Comparison operations (lessThan, greaterThan, between, etc.)
       if (fnName in COMPARISON_METHOD_MAP) {
         const method = COMPARISON_METHOD_MAP[fnName];
-        if (currentCompanion === "Number" || Boolean(currentType.flags & ts.TypeFlags.NumberLike)) {
-          stageResolutions.set(stage.span.start.offset, { module: "Number", method, isComparison: true });
+        if (
+          currentCompanion === "Number" ||
+          Boolean(currentType.flags & ts.TypeFlags.NumberLike)
+        ) {
+          stageResolutions.set(stage.span.start.offset, {
+            module: "Number",
+            method,
+            isComparison: true,
+          });
           currentCompanion = "Boolean";
           currentType = checker.getBooleanType();
           continue;
         }
         if (currentCompanion === "DateTime" || isDateTimeType(currentType)) {
-          stageResolutions.set(stage.span.start.offset, { module: "DateTime", method, isComparison: true });
+          stageResolutions.set(stage.span.start.offset, {
+            module: "DateTime",
+            method,
+            isComparison: true,
+          });
           currentCompanion = "Boolean";
           currentType = checker.getBooleanType();
           continue;
         }
-        if (currentType && !(currentType.flags & (ts.TypeFlags.Any | ts.TypeFlags.Unknown))) {
+        if (
+          currentType &&
+          !(currentType.flags & (ts.TypeFlags.Any | ts.TypeFlags.Unknown))
+        ) {
           const typeStr = checker.typeToString(currentType);
-          if (tolerateUnresolvedStages) { currentCompanion = undefined; continue; }
+          if (tolerateUnresolvedStages) {
+            currentCompanion = undefined;
+            continue;
+          }
           throw new PipelineResolutionError(
             `< or comparison '${fnName}' is only available for supported ordered types (Number, DateTime); this operand has type ${typeStr}. Use Order.isLessThan(...) or an explicit domain Order. See docs/syntax.md#42-equality-and-comparisons.`,
             stage.span,
@@ -524,9 +725,16 @@ export function inferPipelineCompanions(
       }
 
       // 2. String companion operations
-      if (currentCompanion === "String" && STRING_COMPANION_METHODS.has(fnName) && !ES_TOOLKIT_STRING_METHODS.has(fnName)) {
+      if (
+        currentCompanion === "String" &&
+        STRING_COMPANION_METHODS.has(fnName) &&
+        !ES_TOOLKIT_STRING_METHODS.has(fnName)
+      ) {
         const method = fnName === "lines" ? "linesIterator" : fnName;
-        stageResolutions.set(stage.span.start.offset, { module: "String", method });
+        stageResolutions.set(stage.span.start.offset, {
+          module: "String",
+          method,
+        });
         if (fnName === "lines" || fnName === "split") {
           currentCompanion = "Array";
         } else {
@@ -536,35 +744,63 @@ export function inferPipelineCompanions(
       }
 
       // 3. Duration operations
-      if (currentCompanion === "Number" && DURATION_COMPANION_METHODS.has(fnName)) {
-        stageResolutions.set(stage.span.start.offset, { module: "Duration", method: fnName });
+      if (
+        currentCompanion === "Number" &&
+        DURATION_COMPANION_METHODS.has(fnName)
+      ) {
+        stageResolutions.set(stage.span.start.offset, {
+          module: "Duration",
+          method: fnName,
+        });
         currentCompanion = "Duration";
         continue;
       }
 
       // 4. Catalog module operations (Array, Option, Effect, etc.)
       if (currentCompanion && currentCompanion in PIPELINE_COMPANION_CATALOG) {
-        const catalog = PIPELINE_COMPANION_CATALOG[currentCompanion as PipelineCompanionModule];
+        const catalog =
+          PIPELINE_COMPANION_CATALOG[
+            currentCompanion as PipelineCompanionModule
+          ];
         if (
           !ES_TOOLKIT_STRING_METHODS.has(fnName) &&
-          (catalog.includes(fnName) || (currentCompanion === "Effect" && fnName in EFFECT_PIPELINE_COMPATIBILITY_ALIASES))
+          (catalog.includes(fnName) ||
+            (currentCompanion === "Effect" &&
+              fnName in EFFECT_PIPELINE_COMPATIBILITY_ALIASES))
         ) {
-          const method = currentCompanion === "Effect" && fnName in EFFECT_PIPELINE_COMPATIBILITY_ALIASES
-            ? EFFECT_PIPELINE_COMPATIBILITY_ALIASES[fnName]
-            : fnName;
-          stageResolutions.set(stage.span.start.offset, { module: currentCompanion, method });
+          const method =
+            currentCompanion === "Effect" &&
+            fnName in EFFECT_PIPELINE_COMPATIBILITY_ALIASES
+              ? EFFECT_PIPELINE_COMPATIBILITY_ALIASES[fnName]
+              : fnName;
+          stageResolutions.set(stage.span.start.offset, {
+            module: currentCompanion,
+            method,
+          });
           if (currentCompanion === "Array") {
-            if (fnName === "head" || fnName === "last" || fnName === "findFirst" || fnName === "findLast") {
+            if (
+              fnName === "head" ||
+              fnName === "last" ||
+              fnName === "findFirst" ||
+              fnName === "findLast"
+            ) {
               currentCompanion = "Option";
             } else if (fnName === "length" || fnName === "countBy") {
               currentCompanion = "Number";
             }
           } else if (currentCompanion === "Option") {
             if (fnName === "toArray") currentCompanion = "Array";
-            else if (fnName === "getOrElse" || fnName === "getOrNull" || fnName === "getOrUndefined") currentCompanion = undefined;
+            else if (
+              fnName === "getOrElse" ||
+              fnName === "getOrNull" ||
+              fnName === "getOrUndefined"
+            )
+              currentCompanion = undefined;
           } else if (currentCompanion === "Chunk") {
-            if (fnName === "head" || fnName === "last") currentCompanion = "Option";
-            else if (fnName === "toArray" || fnName === "toReadonlyArray") currentCompanion = "Array";
+            if (fnName === "head" || fnName === "last")
+              currentCompanion = "Option";
+            else if (fnName === "toArray" || fnName === "toReadonlyArray")
+              currentCompanion = "Array";
           }
           continue;
         }
@@ -594,14 +830,33 @@ export function inferPipelineCompanions(
 
       // 5. Custom Abstractions (e.g. HttpClient, HttpResponse)
       if (currentCompanion) {
-        const sym = checker.resolveName(currentCompanion, sourceFile, ts.SymbolFlags.Value | ts.SymbolFlags.Namespace, false) ??
-          checker.resolveName(currentCompanion, sourceFile, ts.SymbolFlags.Type, false);
+        const sym =
+          checker.resolveName(
+            currentCompanion,
+            sourceFile,
+            ts.SymbolFlags.Value | ts.SymbolFlags.Namespace,
+            false,
+          ) ??
+          checker.resolveName(
+            currentCompanion,
+            sourceFile,
+            ts.SymbolFlags.Type,
+            false,
+          );
         if (sym) {
           const symType = checker.getTypeOfSymbolAtLocation(sym, sourceFile);
-          const prop = checker.getPropertyOfType(symType, fnName) ?? sym.exports?.get(ts.escapeLeadingUnderscores(fnName));
+          const prop =
+            checker.getPropertyOfType(symType, fnName) ??
+            sym.exports?.get(ts.escapeLeadingUnderscores(fnName));
           if (prop) {
-            stageResolutions.set(stage.span.start.offset, { module: currentCompanion, method: fnName });
-            const propType = checker.getTypeOfSymbolAtLocation(prop, sourceFile);
+            stageResolutions.set(stage.span.start.offset, {
+              module: currentCompanion,
+              method: fnName,
+            });
+            const propType = checker.getTypeOfSymbolAtLocation(
+              prop,
+              sourceFile,
+            );
             let ret = propType.getCallSignatures()[0]?.getReturnType();
             if (ret && ret.getCallSignatures().length > 0) {
               ret = ret.getCallSignatures()[0].getReturnType();
@@ -614,7 +869,10 @@ export function inferPipelineCompanions(
           }
         }
         if (!localBindings.has(fnName)) {
-          if (tolerateUnresolvedStages) { currentCompanion = undefined; continue; }
+          if (tolerateUnresolvedStages) {
+            currentCompanion = undefined;
+            continue;
+          }
           throw new PipelineResolutionError(
             `${fnName} cannot be resolved for ${currentCompanion}. Explicit Module.${fnName} qualification is available.`,
             stage.span,
@@ -624,8 +882,16 @@ export function inferPipelineCompanions(
 
       // 6. Undefined companion: check candidate ambiguity
       if (!currentCompanion) {
-        if (fnName === "retry" && stage.kind === "CallExpression" && stage.args.length === 1 && stage.args[0].kind === "RecordExpression") {
-          stageResolutions.set(stage.span.start.offset, { module: "Effect", method: "retry" });
+        if (
+          fnName === "retry" &&
+          stage.kind === "CallExpression" &&
+          stage.args.length === 1 &&
+          stage.args[0].kind === "RecordExpression"
+        ) {
+          stageResolutions.set(stage.span.start.offset, {
+            module: "Effect",
+            method: "retry",
+          });
           currentCompanion = "Effect";
           continue;
         }
@@ -637,7 +903,10 @@ export function inferPipelineCompanions(
             stage.span,
           );
         } else if (candidates.length === 1) {
-          stageResolutions.set(stage.span.start.offset, { module: candidates[0], method: fnName });
+          stageResolutions.set(stage.span.start.offset, {
+            module: candidates[0],
+            method: fnName,
+          });
           currentCompanion = candidates[0];
           continue;
         }
@@ -645,8 +914,15 @@ export function inferPipelineCompanions(
     }
 
     const bindingName = pipelineBindingNames.get(pipeline.span.start.offset);
-    if (bindingName && currentCompanion && currentCompanion in PIPELINE_COMPANION_CATALOG) {
-      bindingCompanions.set(bindingName, currentCompanion as PipelineCompanionModule);
+    if (
+      bindingName &&
+      currentCompanion &&
+      currentCompanion in PIPELINE_COMPANION_CATALOG
+    ) {
+      bindingCompanions.set(
+        bindingName,
+        currentCompanion as PipelineCompanionModule,
+      );
     }
   }
 
@@ -661,12 +937,20 @@ export function inferPipelineCompanions(
 
     if (name in COMPARISON_METHOD_MAP) {
       const method = COMPARISON_METHOD_MAP[name];
-      if (Boolean(argType.flags & ts.TypeFlags.NumberLike)) {
-        directCallResolutions.set(call.span.start.offset, { module: "Number", method, isComparison: true });
+      if (argType.flags & ts.TypeFlags.NumberLike) {
+        directCallResolutions.set(call.span.start.offset, {
+          module: "Number",
+          method,
+          isComparison: true,
+        });
         continue;
       }
       if (isDateTimeType(argType)) {
-        directCallResolutions.set(call.span.start.offset, { module: "DateTime", method, isComparison: true });
+        directCallResolutions.set(call.span.start.offset, {
+          module: "DateTime",
+          method,
+          isComparison: true,
+        });
         continue;
       }
       const typeStr = checker.typeToString(argType);
@@ -679,12 +963,22 @@ export function inferPipelineCompanions(
     if (!localBindings.has(name)) {
       const comp = companionForType(argType);
       if (comp) {
-        const sym = checker.resolveName(comp, sourceFile, ts.SymbolFlags.Value | ts.SymbolFlags.Namespace, false);
+        const sym = checker.resolveName(
+          comp,
+          sourceFile,
+          ts.SymbolFlags.Value | ts.SymbolFlags.Namespace,
+          false,
+        );
         if (sym) {
           const symType = checker.getTypeOfSymbolAtLocation(sym, sourceFile);
-          const prop = checker.getPropertyOfType(symType, name) ?? sym.exports?.get(ts.escapeLeadingUnderscores(name));
+          const prop =
+            checker.getPropertyOfType(symType, name) ??
+            sym.exports?.get(ts.escapeLeadingUnderscores(name));
           if (prop) {
-            directCallResolutions.set(call.span.start.offset, { module: comp, method: name });
+            directCallResolutions.set(call.span.start.offset, {
+              module: comp,
+              method: name,
+            });
           }
         }
       }

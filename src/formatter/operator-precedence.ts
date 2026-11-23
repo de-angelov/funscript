@@ -1,6 +1,9 @@
-const OPERATOR_CATALOG: Record<string, { precedence: number; associativity: "left" | "right" }> = {
-  "or": { precedence: 1, associativity: "left" },
-  "and": { precedence: 2, associativity: "left" },
+const OPERATOR_CATALOG: Record<
+  string,
+  { precedence: number; associativity: "left" | "right" }
+> = {
+  or: { precedence: 1, associativity: "left" },
+  and: { precedence: 2, associativity: "left" },
   "#=": { precedence: 4, associativity: "left" },
   "#!": { precedence: 4, associativity: "left" },
   "@=": { precedence: 4, associativity: "left" },
@@ -18,9 +21,16 @@ const OPERATOR_CATALOG: Record<string, { precedence: number; associativity: "lef
 };
 
 export const PRECEDENCE: Record<string, number> = Object.fromEntries(
-  Object.entries(OPERATOR_CATALOG).map(([operator, metadata]) => [operator, metadata.precedence]),
+  Object.entries(OPERATOR_CATALOG).map(([operator, metadata]) => [
+    operator,
+    metadata.precedence,
+  ]),
 );
 
-export const ASSOCIATIVITY: Record<string, "left" | "right"> = Object.fromEntries(
-  Object.entries(OPERATOR_CATALOG).map(([operator, metadata]) => [operator, metadata.associativity]),
-);
+export const ASSOCIATIVITY: Record<string, "left" | "right"> =
+  Object.fromEntries(
+    Object.entries(OPERATOR_CATALOG).map(([operator, metadata]) => [
+      operator,
+      metadata.associativity,
+    ]),
+  );

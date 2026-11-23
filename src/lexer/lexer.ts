@@ -1,7 +1,7 @@
-import { Position, Span } from "../ast/types.js";
+import { type Position, type Span } from "../ast/types.js";
 import { FunScriptError } from "../errors.js";
 import {
-  Token,
+  type Token,
   TokenType,
   KEYWORDS,
   BANNED_KEYWORDS,
@@ -26,8 +26,13 @@ export class Lexer {
   private indentStack: number[] = [0];
   private parenLevel = 0;
   private bracketLevel = 0;
-  private braceStack: ("record" | "interpolation" | "template_interpolation" | "jsx_expr")[] = [];
-  private jsxStack: Array<{ kind: "tag" | "closing_tag" | "children" | "expr"; hasTagName?: boolean }> = [];
+  private braceStack: (
+    "record" | "interpolation" | "template_interpolation" | "jsx_expr"
+  )[] = [];
+  private jsxStack: Array<{
+    kind: "tag" | "closing_tag" | "children" | "expr";
+    hasTagName?: boolean;
+  }> = [];
   private isFunx: boolean;
   private tokens: Token[] = [];
   private atLineStart = true;
@@ -67,7 +72,11 @@ export class Lexer {
 
       if (this.isAtEnd()) break;
 
-      if (this.isFunx && this.jsxStack.length > 0 && !this.braceStack.includes("interpolation")) {
+      if (
+        this.isFunx &&
+        this.jsxStack.length > 0 &&
+        !this.braceStack.includes("interpolation")
+      ) {
         const top = this.jsxStack[this.jsxStack.length - 1];
         if (top.kind === "children") {
           this.readJsxChildren();
@@ -83,7 +92,10 @@ export class Lexer {
       // Whitespace (inline)
       if (char === " " || char === "\t") {
         if (char === "\t") {
-          throw new LexerError("Tabs are not allowed for indentation or spacing; use 2 spaces", this.currentSpan(1));
+          throw new LexerError(
+            "Tabs are not allowed for indentation or spacing; use 2 spaces",
+            this.currentSpan(1),
+          );
         }
         this.advance();
         continue;
@@ -251,17 +263,30 @@ export class Lexer {
           this.emitToken(TokenType.LBRACE, "{", 1);
           break;
         case "}":
-          if (this.braceStack.length > 0 && this.braceStack[this.braceStack.length - 1] === "template_interpolation") {
+          if (
+            this.braceStack.length > 0 &&
+            this.braceStack[this.braceStack.length - 1] ===
+              "template_interpolation"
+          ) {
             this.braceStack.pop();
             this.emitToken(TokenType.INTERPOLATION_END, "}", 1);
             this.continueTemplateAfterInterpolation();
-          } else if (this.braceStack.length > 0 && this.braceStack[this.braceStack.length - 1] === "interpolation") {
+          } else if (
+            this.braceStack.length > 0 &&
+            this.braceStack[this.braceStack.length - 1] === "interpolation"
+          ) {
             this.braceStack.pop();
             this.emitToken(TokenType.INTERPOLATION_END, "}", 1);
             this.continueStringAfterInterpolation();
-          } else if (this.braceStack.length > 0 && this.braceStack[this.braceStack.length - 1] === "jsx_expr") {
+          } else if (
+            this.braceStack.length > 0 &&
+            this.braceStack[this.braceStack.length - 1] === "jsx_expr"
+          ) {
             this.braceStack.pop();
-            if (this.jsxStack.length > 0 && this.jsxStack[this.jsxStack.length - 1].kind === "expr") {
+            if (
+              this.jsxStack.length > 0 &&
+              this.jsxStack[this.jsxStack.length - 1].kind === "expr"
+            ) {
               this.jsxStack.pop();
             }
             this.emitToken(TokenType.RBRACE, "}", 1);
@@ -279,17 +304,28 @@ export class Lexer {
             this.jsxStack.push({ kind: "tag", hasTagName: false });
           } else {
             const isEqual = this.matchAhead("<=");
-            this.emitToken(isEqual ? TokenType.LTE : TokenType.LT, isEqual ? "<=" : "<", isEqual ? 2 : 1);
+            this.emitToken(
+              isEqual ? TokenType.LTE : TokenType.LT,
+              isEqual ? "<=" : "<",
+              isEqual ? 2 : 1,
+            );
           }
           break;
         case ">":
           const isEqual = this.matchAhead(">=");
-          this.emitToken(isEqual ? TokenType.GTE : TokenType.GT, isEqual ? ">=" : ">", isEqual ? 2 : 1);
+          this.emitToken(
+            isEqual ? TokenType.GTE : TokenType.GT,
+            isEqual ? ">=" : ">",
+            isEqual ? 2 : 1,
+          );
           break;
         case "!":
           throw new LexerError(BANNED_SYMBOLS["!"], this.currentSpan(1));
         default:
-          throw new LexerError(`Unexpected character '${char}'`, this.currentSpan(1));
+          throw new LexerError(
+            `Unexpected character '${char}'`,
+            this.currentSpan(1),
+          );
       }
     }
 
@@ -328,14 +364,22 @@ export class Lexer {
         spaces++;
         this.advance();
       } else if (c === "\t") {
-        throw new LexerError("Tabs are not allowed for indentation; use 2 spaces", this.currentSpan(1));
+        throw new LexerError(
+          "Tabs are not allowed for indentation; use 2 spaces",
+          this.currentSpan(1),
+        );
       } else {
         break;
       }
     }
 
     // If entire line is blank or a comment, ignore indentation.
-    if (this.peek() === "\r" || this.peek() === "\n" || this.matchAhead("//") || this.isAtEnd()) {
+    if (
+      this.peek() === "\r" ||
+      this.peek() === "\n" ||
+      this.matchAhead("//") ||
+      this.isAtEnd()
+    ) {
       this.atLineStart = false;
       return;
     }
@@ -352,7 +396,10 @@ export class Lexer {
         span: { start: startPos, end: this.currentPosition() },
       });
     } else if (spaces < currentIndent) {
-      while (this.indentStack.length > 1 && this.indentStack[this.indentStack.length - 1] > spaces) {
+      while (
+        this.indentStack.length > 1 &&
+        this.indentStack[this.indentStack.length - 1] > spaces
+      ) {
         this.indentStack.pop();
         this.tokens.push({
           type: TokenType.DEDENT,
@@ -379,7 +426,11 @@ export class Lexer {
     this.atLineStart = true;
 
     const lastToken = this.tokens[this.tokens.length - 1];
-    if (lastToken && lastToken.type !== TokenType.NEWLINE && lastToken.type !== TokenType.INDENT) {
+    if (
+      lastToken &&
+      lastToken.type !== TokenType.NEWLINE &&
+      lastToken.type !== TokenType.INDENT
+    ) {
       this.tokens.push({
         type: TokenType.NEWLINE,
         value: "\n",
@@ -398,10 +449,13 @@ export class Lexer {
       const c = this.peek();
 
       if (c === "\n" || c === "\r") {
-        throw new LexerError("Unterminated string literal (newline in string)", {
-          start: startPos,
-          end: this.currentPosition(),
-        });
+        throw new LexerError(
+          "Unterminated string literal (newline in string)",
+          {
+            start: startPos,
+            end: this.currentPosition(),
+          },
+        );
       }
 
       if (c === "\\") {
@@ -420,7 +474,10 @@ export class Lexer {
 
       if (c === "{") {
         // Start of interpolation
-        const inJsxTag = this.isFunx && this.jsxStack.length > 0 && this.jsxStack[this.jsxStack.length - 1].kind === "tag";
+        const inJsxTag =
+          this.isFunx &&
+          this.jsxStack.length > 0 &&
+          this.jsxStack[this.jsxStack.length - 1].kind === "tag";
         if (inJsxTag && buffer.endsWith("$")) {
           buffer = buffer.slice(0, -1);
         }
@@ -629,7 +686,10 @@ export class Lexer {
     const startPos = this.currentPosition();
 
     if (this.peek() !== "{") {
-      throw new LexerError(`Expected '{ ... }' after '${language}'`, this.currentSpan(1));
+      throw new LexerError(
+        `Expected '{ ... }' after '${language}'`,
+        this.currentSpan(1),
+      );
     }
 
     this.advance(); // opening '{'
@@ -647,22 +707,47 @@ export class Lexer {
         this.column = 1;
         lineComment = false;
       }
-      if (lineComment) { code += c; continue; }
+      if (lineComment) {
+        code += c;
+        continue;
+      }
       if (blockComment) {
         code += c;
-        if (c === "*" && next === "/") { code += this.advance(); blockComment = false; }
+        if (c === "*" && next === "/") {
+          code += this.advance();
+          blockComment = false;
+        }
         continue;
       }
       if (quote) {
         code += c;
-        if (c === "\\") { code += this.advance(); continue; }
+        if (c === "\\") {
+          code += this.advance();
+          continue;
+        }
         if (c === quote) quote = null;
         continue;
       }
-      if (c === "/" && next === "/") { code += c + this.advance(); lineComment = true; continue; }
-      if (c === "/" && next === "*") { code += c + this.advance(); blockComment = true; continue; }
-      if (c === '"' || c === "'" || c === "`") { quote = c; code += c; continue; }
-      if (c === "{") { depth++; code += c; continue; }
+      if (c === "/" && next === "/") {
+        code += c + this.advance();
+        lineComment = true;
+        continue;
+      }
+      if (c === "/" && next === "*") {
+        code += c + this.advance();
+        blockComment = true;
+        continue;
+      }
+      if (c === '"' || c === "'" || c === "`") {
+        quote = c;
+        code += c;
+        continue;
+      }
+      if (c === "{") {
+        depth++;
+        code += c;
+        continue;
+      }
       if (c === "}") {
         depth--;
         if (depth > 0) code += c;
@@ -671,16 +756,32 @@ export class Lexer {
       code += c;
     }
 
-    if (depth !== 0) throw new LexerError(`Unterminated '${language} { ... }' block`, { start: startPos, end: this.currentPosition() });
-    if (code.trim() === "") throw new LexerError(`Empty '${language} { ... }' block`, { start: startPos, end: this.currentPosition() });
+    if (depth !== 0)
+      throw new LexerError(`Unterminated '${language} { ... }' block`, {
+        start: startPos,
+        end: this.currentPosition(),
+      });
+    if (code.trim() === "")
+      throw new LexerError(`Empty '${language} { ... }' block`, {
+        start: startPos,
+        end: this.currentPosition(),
+      });
     const leading = code.slice(0, code.search(/\S/));
     const lines = leading.split("\n");
     const contentStart: Position = {
       offset: startPos.offset + 1 + leading.length,
       line: startPos.line + lines.length - 1,
-      column: lines.length === 1 ? startPos.column + 1 + leading.length : lines[lines.length - 1].length + 1,
+      column:
+        lines.length === 1
+          ? startPos.column + 1 + leading.length
+          : lines[lines.length - 1].length + 1,
     };
-    this.tokens.push({ type: language === "ts" ? TokenType.TS_CODE : TokenType.AS_CODE, value: code.trim(), contentStart, span: { start: startPos, end: this.currentPosition() } });
+    this.tokens.push({
+      type: language === "ts" ? TokenType.TS_CODE : TokenType.AS_CODE,
+      value: code.trim(),
+      contentStart,
+      span: { start: startPos, end: this.currentPosition() },
+    });
   }
 
   private continueStringAfterInterpolation(): void {
@@ -690,7 +791,10 @@ export class Lexer {
     while (!this.isAtEnd() && this.peek() !== '"') {
       const c = this.peek();
       if (c === "{" && this.peekPrev() !== "\\") {
-        const inJsxTag = this.isFunx && this.jsxStack.length > 0 && this.jsxStack[this.jsxStack.length - 1].kind === "tag";
+        const inJsxTag =
+          this.isFunx &&
+          this.jsxStack.length > 0 &&
+          this.jsxStack[this.jsxStack.length - 1].kind === "tag";
         if (inJsxTag && buffer.endsWith("$")) {
           buffer = buffer.slice(0, -1);
         }
@@ -733,11 +837,22 @@ export class Lexer {
 
     raw += this.readDigitsWithSeparators();
 
-    if (!this.isAtEnd() && this.peek() === "." && this.isDigit(this.peekAhead(1))) {
+    if (
+      !this.isAtEnd() &&
+      this.peek() === "." &&
+      this.isDigit(this.peekAhead(1))
+    ) {
       raw += this.advance(); // consume '.'
       raw += this.readDigitsWithSeparators();
-    } else if (!this.isAtEnd() && this.peek() === "." && this.peekAhead(1) === "_") {
-      throw new LexerError("Numeric separator must appear between two digits", this.currentSpan(2));
+    } else if (
+      !this.isAtEnd() &&
+      this.peek() === "." &&
+      this.peekAhead(1) === "_"
+    ) {
+      throw new LexerError(
+        "Numeric separator must appear between two digits",
+        this.currentSpan(2),
+      );
     }
 
     this.tokens.push({
@@ -753,10 +868,14 @@ export class Lexer {
     while (!this.isAtEnd() && this.isDigit(this.peek())) raw += this.advance();
     while (!this.isAtEnd() && this.peek() === "_") {
       if (!this.isDigit(this.peekAhead(1))) {
-        throw new LexerError("Numeric separator must appear between two digits", this.currentSpan(1));
+        throw new LexerError(
+          "Numeric separator must appear between two digits",
+          this.currentSpan(1),
+        );
       }
       raw += this.advance();
-      while (!this.isAtEnd() && this.isDigit(this.peek())) raw += this.advance();
+      while (!this.isAtEnd() && this.isDigit(this.peek()))
+        raw += this.advance();
     }
     return raw;
   }
@@ -765,7 +884,10 @@ export class Lexer {
     const startPos = this.currentPosition();
     let raw = "";
 
-    while (!this.isAtEnd() && (this.isAlphaNumeric(this.peek()) || this.peek() === "_")) {
+    while (
+      !this.isAtEnd() &&
+      (this.isAlphaNumeric(this.peek()) || this.peek() === "_")
+    ) {
       raw += this.advance();
     }
 
@@ -785,7 +907,9 @@ export class Lexer {
       if (raw === "type" || raw === "data") {
         if (
           (lastToken && lastToken.type === TokenType.IMPORT) ||
-          (raw === "type" && lastToken?.type === TokenType.EXPORT && /^[ \t]*\{/.test(this.source.slice(this.offset))) ||
+          (raw === "type" &&
+            lastToken?.type === TokenType.EXPORT &&
+            /^[ \t]*\{/.test(this.source.slice(this.offset))) ||
           this.braceStack.includes("record")
         ) {
           this.tokens.push({
@@ -795,7 +919,11 @@ export class Lexer {
           });
           return;
         }
-        if (lastToken && (lastToken.type === TokenType.LBRACE || lastToken.type === TokenType.COMMA)) {
+        if (
+          lastToken &&
+          (lastToken.type === TokenType.LBRACE ||
+            lastToken.type === TokenType.COMMA)
+        ) {
           for (let j = this.tokens.length - 1; j >= 0; j--) {
             if (this.tokens[j].type === TokenType.NEWLINE) break;
             if (this.tokens[j].type === TokenType.IMPORT) {
@@ -828,7 +956,11 @@ export class Lexer {
       });
       if (raw === "ts") {
         let prevIdx = this.tokens.length - 2;
-        while (prevIdx >= 0 && (this.tokens[prevIdx].type === TokenType.NEWLINE || this.tokens[prevIdx].type === TokenType.INDENT)) {
+        while (
+          prevIdx >= 0 &&
+          (this.tokens[prevIdx].type === TokenType.NEWLINE ||
+            this.tokens[prevIdx].type === TokenType.INDENT)
+        ) {
           prevIdx--;
         }
         const prev = prevIdx >= 0 ? this.tokens[prevIdx] : undefined;
@@ -837,12 +969,16 @@ export class Lexer {
         }
 
         let p = this.offset;
-        while (p < this.source.length && (this.source[p] === " " || this.source[p] === "\t")) {
+        while (
+          p < this.source.length &&
+          (this.source[p] === " " || this.source[p] === "\t")
+        ) {
           p++;
         }
         if (
           this.source.slice(p, p + 6) === "schema" &&
-          (p + 6 >= this.source.length || !/[a-zA-Z0-9_]/.test(this.source[p + 6]))
+          (p + 6 >= this.source.length ||
+            !/[a-zA-Z0-9_]/.test(this.source[p + 6]))
         ) {
           return;
         }
@@ -959,7 +1095,11 @@ export class Lexer {
   private isInJsxChildrenOrTag(): boolean {
     if (this.jsxStack.length === 0) return false;
     const top = this.jsxStack[this.jsxStack.length - 1];
-    return top.kind === "tag" || top.kind === "closing_tag" || top.kind === "children";
+    return (
+      top.kind === "tag" ||
+      top.kind === "closing_tag" ||
+      top.kind === "children"
+    );
   }
 
   private isGenericFunctionStart(): boolean {
@@ -970,14 +1110,20 @@ export class Lexer {
     while (i < 4096) {
       const c = this.peekAhead(i);
       if (c === "\0" || c === "\n" || c === "\r") return false;
-      if (c === "\"" || c === "'" || c === "`") {
+      if (c === '"' || c === "'" || c === "`") {
         const quote = c;
         i++;
         while (i < 4096) {
           const inner = this.peekAhead(i);
           if (inner === "\0" || inner === "\n" || inner === "\r") return false;
-          if (inner === "\\") { i += 2; continue; }
-          if (inner === quote) { i++; break; }
+          if (inner === "\\") {
+            i += 2;
+            continue;
+          }
+          if (inner === quote) {
+            i++;
+            break;
+          }
           i++;
         }
         continue;
@@ -1003,15 +1149,23 @@ export class Lexer {
           let k = j + 1;
           while (k < 4096) {
             const param = this.peekAhead(k);
-            if (param === "\0" || param === "\n" || param === "\r") return false;
-            if (param === "\"" || param === "'" || param === "`") {
+            if (param === "\0" || param === "\n" || param === "\r")
+              return false;
+            if (param === '"' || param === "'" || param === "`") {
               const quote = param;
               k++;
               while (k < 4096) {
                 const inner = this.peekAhead(k);
-                if (inner === "\0" || inner === "\n" || inner === "\r") return false;
-                if (inner === "\\") { k += 2; continue; }
-                if (inner === quote) { k++; break; }
+                if (inner === "\0" || inner === "\n" || inner === "\r")
+                  return false;
+                if (inner === "\\") {
+                  k += 2;
+                  continue;
+                }
+                if (inner === quote) {
+                  k++;
+                  break;
+                }
                 k++;
               }
               continue;
@@ -1022,7 +1176,11 @@ export class Lexer {
               if (parenDepth === 0) {
                 let after = k + 1;
                 while (this.peekAhead(after) === " ") after++;
-                return this.peekAhead(after) === ":" || (this.peekAhead(after) === "=" && this.peekAhead(after + 1) === ">");
+                return (
+                  this.peekAhead(after) === ":" ||
+                  (this.peekAhead(after) === "=" &&
+                    this.peekAhead(after + 1) === ">")
+                );
               }
             }
             k++;
@@ -1053,7 +1211,8 @@ export class Lexer {
     if (next === "/") return true;
 
     // Disambiguate from comparison operator (<) and generics
-    const prevToken = this.tokens.length > 0 ? this.tokens[this.tokens.length - 1] : null;
+    const prevToken =
+      this.tokens.length > 0 ? this.tokens[this.tokens.length - 1] : null;
     if (!prevToken) {
       return true;
     }
@@ -1136,7 +1295,10 @@ export class Lexer {
     }
   }
 
-  private readJsxTag(top: { kind: "tag" | "closing_tag" | "children" | "expr"; hasTagName?: boolean }): void {
+  private readJsxTag(top: {
+    kind: "tag" | "closing_tag" | "children" | "expr";
+    hasTagName?: boolean;
+  }): void {
     const char = this.peek();
 
     // Whitespace (inline)
@@ -1166,7 +1328,10 @@ export class Lexer {
           top.kind = "children";
         } else {
           this.jsxStack.pop();
-          if (this.jsxStack.length > 0 && this.jsxStack[this.jsxStack.length - 1].kind === "children") {
+          if (
+            this.jsxStack.length > 0 &&
+            this.jsxStack[this.jsxStack.length - 1].kind === "children"
+          ) {
             this.jsxStack.pop();
           }
         }
@@ -1176,11 +1341,19 @@ export class Lexer {
       if (this.isAlpha(char) || char === "_") {
         const startPos = this.currentPosition();
         let name = "";
-        while (!this.isAtEnd() && (this.isAlphaNumeric(this.peek()) || this.peek() === "_" || this.peek() === "-")) {
+        while (
+          !this.isAtEnd() &&
+          (this.isAlphaNumeric(this.peek()) ||
+            this.peek() === "_" ||
+            this.peek() === "-")
+        ) {
           name += this.advance();
         }
         top.hasTagName = true;
-        const type = name[0] >= "A" && name[0] <= "Z" ? TokenType.UPPER_IDENTIFIER : TokenType.IDENTIFIER;
+        const type =
+          name[0] >= "A" && name[0] <= "Z"
+            ? TokenType.UPPER_IDENTIFIER
+            : TokenType.IDENTIFIER;
         this.tokens.push({
           type,
           value: name,
@@ -1189,7 +1362,10 @@ export class Lexer {
         return;
       }
 
-      throw new LexerError(`Expected tag name after '<', found '${char}'`, this.currentSpan(1));
+      throw new LexerError(
+        `Expected tag name after '<', found '${char}'`,
+        this.currentSpan(1),
+      );
     }
 
     // Member access in tag name (e.g. <Namespace.Component />)
@@ -1213,7 +1389,10 @@ export class Lexer {
         top.kind = "children";
       } else {
         this.jsxStack.pop();
-        if (this.jsxStack.length > 0 && this.jsxStack[this.jsxStack.length - 1].kind === "children") {
+        if (
+          this.jsxStack.length > 0 &&
+          this.jsxStack[this.jsxStack.length - 1].kind === "children"
+        ) {
           this.jsxStack.pop();
         }
       }
@@ -1246,7 +1425,10 @@ export class Lexer {
       let attrName = "";
       while (
         !this.isAtEnd() &&
-        (this.isAlphaNumeric(this.peek()) || this.peek() === "_" || this.peek() === "-" || this.peek() === ":")
+        (this.isAlphaNumeric(this.peek()) ||
+          this.peek() === "_" ||
+          this.peek() === "-" ||
+          this.peek() === ":")
       ) {
         attrName += this.advance();
       }
@@ -1258,6 +1440,9 @@ export class Lexer {
       return;
     }
 
-    throw new LexerError(`Unexpected character '${char}' in JSX tag`, this.currentSpan(1));
+    throw new LexerError(
+      `Unexpected character '${char}' in JSX tag`,
+      this.currentSpan(1),
+    );
   }
 }

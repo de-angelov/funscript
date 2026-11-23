@@ -25,37 +25,74 @@ import { compileString, type CompileResult } from "../compiler.js";
 import ts from "typescript";
 
 function symbolHover(source: string, uri: string, token: Token): Hover | null {
-  if (token.type !== TokenType.IDENTIFIER && token.type !== TokenType.UPPER_IDENTIFIER) return null;
+  if (
+    token.type !== TokenType.IDENTIFIER &&
+    token.type !== TokenType.UPPER_IDENTIFIER
+  )
+    return null;
   try {
     const filename = uri.startsWith("file:") ? fileURLToPath(uri) : uri;
     const context = new TypeScriptCompilationContext(filename);
-    const result = Effect.runSync(compileString(source, filename, { context, sourcemap: false }));
+    const result = Effect.runSync(
+      compileString(source, filename, { context, sourcemap: false }),
+    );
     return symbolHoverFromResult(source, token, context, result);
   } catch {
     return null;
   }
 }
 
-function symbolHoverFromResult(source: string, token: Token, context: TypeScriptCompilationContext, result: CompileResult): Hover | null {
+function symbolHoverFromResult(
+  source: string,
+  token: Token,
+  context: TypeScriptCompilationContext,
+  result: CompileResult,
+): Hover | null {
   try {
-    const schema = result.ast.body.flatMap(entry => {
-      const decl = entry.kind === "ExportDeclaration" ? entry.declaration : entry;
-      return decl.kind === "SchemaDeclaration" && decl.body.kind === "RecordSchema" && decl.id.span.start.offset === token.span.start.offset ? [decl] : [];
+    const schema = result.ast.body.flatMap((entry) => {
+      const decl =
+        entry.kind === "ExportDeclaration" ? entry.declaration : entry;
+      return decl.kind === "SchemaDeclaration" &&
+        decl.body.kind === "RecordSchema" &&
+        decl.id.span.start.offset === token.span.start.offset
+        ? [decl]
+        : [];
     });
     if (schema.length === 1) {
       const decl = schema[0];
-      const generated = ts.createSourceFile("hover.tsx", result.typescript, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
-      const hasValue = generated.statements.some(statement => ts.isVariableStatement(statement) && statement.declarationList.declarations.some(binding => ts.isIdentifier(binding.name) && binding.name.text === decl.id.name));
-      const hasType = generated.statements.some(statement => ts.isTypeAliasDeclaration(statement) && statement.name.text === decl.id.name);
+      const generated = ts.createSourceFile(
+        "hover.tsx",
+        result.typescript,
+        ts.ScriptTarget.Latest,
+        true,
+        ts.ScriptKind.TSX,
+      );
+      const hasValue = generated.statements.some(
+        (statement) =>
+          ts.isVariableStatement(statement) &&
+          statement.declarationList.declarations.some(
+            (binding) =>
+              ts.isIdentifier(binding.name) &&
+              binding.name.text === decl.id.name,
+          ),
+      );
+      const hasType = generated.statements.some(
+        (statement) =>
+          ts.isTypeAliasDeclaration(statement) &&
+          statement.name.text === decl.id.name,
+      );
       if (hasType) {
-        const params = decl.typeParams?.map(param => param.name.name) ?? [];
+        const params = decl.typeParams?.map((param) => param.name.name) ?? [];
         const name = `${decl.id.name}${params.length ? `<${params.join(", ")}>` : ""}`;
         const detail = hasValue
           ? params.length
-            ? `**Generic data schema** \`${name}\`\n\nCall \`${decl.id.name}(${params.map(param => `schemaFor${param}`).join(", ")})\` with runtime schemas to create a decoder. The type describes decoded data.`
+            ? `**Generic data schema** \`${name}\`\n\nCall \`${decl.id.name}(${params.map((param) => `schemaFor${param}`).join(", ")})\` with runtime schemas to create a decoder. The type describes decoded data.`
             : `**Data schema** \`${name}\`\n\nThis declaration provides a runtime schema and a decoded data type.`
           : `**Compile-time contract** \`${name}\`\n\nThis declaration provides a type only. It does not validate data or callbacks at runtime.`;
-        return { contents: { kind: MarkupKind.Markdown, value: detail }, range: spanToRange(token.span) };
+        return {
+          contents: { kind: MarkupKind.Markdown, value: detail },
+          range: spanToRange(token.span),
+        };
       }
     }
     const checked = context.check(result.typescript);
@@ -73,63 +110,129 @@ function symbolHoverFromResult(source: string, token: Token, context: TypeScript
     if (found.size !== 1) return null;
     const [symbol, node] = [...found.entries()][0];
     const type = checked.checker.typeToString(
-      checked.checker.getTypeOfSymbolAtLocation(symbol, node), node,
+      checked.checker.getTypeOfSymbolAtLocation(symbol, node),
+      node,
       ts.TypeFormatFlags.NoTruncation,
     );
-    const documented = symbol.flags & ts.SymbolFlags.Alias ? checked.checker.getAliasedSymbol(symbol) : symbol;
-    let docs = ts.displayPartsToString(documented.getDocumentationComment(checked.checker));
+    const documented =
+      symbol.flags & ts.SymbolFlags.Alias
+        ? checked.checker.getAliasedSymbol(symbol)
+        : symbol;
+    let docs = ts.displayPartsToString(
+      documented.getDocumentationComment(checked.checker),
+    );
     // FunScript comments are not emitted into TypeScript; recover a doc block
     // only when this name has one unambiguous top-level declaration.
     const declarations = result.ast.body.flatMap((entry) => {
-      const decl = entry.kind === "ExportDeclaration" ? entry.declaration : entry;
-      return decl.kind === "BindingDeclaration" && "name" in decl.id && decl.id.name === token.value ? [entry] : [];
+      const decl =
+        entry.kind === "ExportDeclaration" ? entry.declaration : entry;
+      return decl.kind === "BindingDeclaration" &&
+        "name" in decl.id &&
+        decl.id.name === token.value
+        ? [entry]
+        : [];
     });
     if (declarations.length === 1) {
       const before = source.slice(0, declarations[0].span.start.offset);
-      const comment = before.match(/(?:^|\n)((?:[ \t]*\/\/\/[^\n]*\n)+)[ \t]*$/);
-      if (comment) docs = comment[1].split("\n").map((line) => line.replace(/^\s*\/\/\/ ?/, "")).join("\n").trim();
+      const comment = before.match(
+        /(?:^|\n)((?:[ \t]*\/\/\/[^\n]*\n)+)[ \t]*$/,
+      );
+      if (comment)
+        docs = comment[1]
+          .split("\n")
+          .map((line) => line.replace(/^\s*\/\/\/ ?/, ""))
+          .join("\n")
+          .trim();
     }
-    const tags = documented.getJsDocTags(checked.checker).map((tag) => `@${tag.name}${tag.text ? ` ${ts.displayPartsToString(tag.text)}` : ""}`).join("\n");
+    const tags = documented
+      .getJsDocTags(checked.checker)
+      .map(
+        (tag) =>
+          `@${tag.name}${tag.text ? ` ${ts.displayPartsToString(tag.text)}` : ""}`,
+      )
+      .join("\n");
     const details = [docs, tags].filter(Boolean).join("\n\n");
-    return { contents: { kind: MarkupKind.Markdown, value: `\`\`\`ts\n${token.value}: ${type}\n\`\`\`${details ? `\n\n${details}` : ""}` }, range: spanToRange(token.span) };
+    return {
+      contents: {
+        kind: MarkupKind.Markdown,
+        value: `\`\`\`ts\n${token.value}: ${type}\n\`\`\`${details ? `\n\n${details}` : ""}`,
+      },
+      range: spanToRange(token.span),
+    };
   } catch {
     return null;
   }
 }
 
-function importedSchemaHover(source: string, uri: string, position: Position): Hover | null {
+function importedSchemaHover(
+  source: string,
+  uri: string,
+  position: Position,
+): Hover | null {
   try {
-    const program = new Parser(new Lexer(source, uri).tokenize(), uri, source).parse();
+    const program = new Parser(
+      new Lexer(source, uri).tokenize(),
+      uri,
+      source,
+    ).parse();
     const decls = program.body.flatMap((item) => {
       const decl = item.kind === "ExportDeclaration" ? item.declaration : item;
-      return decl.kind === "SchemaDeclaration" && decl.body.kind === "ImportedTsSchema" ? [decl] : [];
+      return decl.kind === "SchemaDeclaration" &&
+        decl.body.kind === "ImportedTsSchema"
+        ? [decl]
+        : [];
     });
     const target = decls.find((decl) => {
       const p = decl.id.span.start;
       const e = decl.id.span.end;
-      return position.line === p.line - 1 && position.character >= p.column - 1 && position.character <= e.column - 1;
+      return (
+        position.line === p.line - 1 &&
+        position.character >= p.column - 1 &&
+        position.character <= e.column - 1
+      );
     });
     if (!target) return null;
 
     const context = new TypeScriptCompilationContext(uri);
     const schemas = resolveImportedSchemas(program, source, context);
-    const checked = context.check(new Emitter(program, undefined, { importedSchemas: schemas }).emit());
-    if (!checked) return null;
-    const typeName = target.body.kind === "ImportedTsSchema" && target.body.typeNode.kind === "TypeReferenceNode"
-      ? target.body.typeNode.name.name
-      : target.id.name;
-    const alias = checked.sourceFile.statements.find((node): node is ts.TypeAliasDeclaration =>
-      ts.isTypeAliasDeclaration(node) && node.name.text === typeName,
+    const checked = context.check(
+      new Emitter(program, undefined, { importedSchemas: schemas }).emit(),
     );
-    const importedType = alias ? checked.checker.getTypeFromTypeNode(alias.type) : undefined;
-    const structure = importedType && importedType.getProperties().length > 0
-      ? `{ ${importedType.getProperties().map((property) => `${property.name}${property.flags & ts.SymbolFlags.Optional ? "?" : ""}: ${checked.checker.typeToString(checked.checker.getTypeOfSymbolAtLocation(property, alias!), alias!, ts.TypeFormatFlags.NoTruncation)}`).join("; ")} }`
-      : importedType
-        ? checked.checker.typeToString(importedType, alias, ts.TypeFormatFlags.NoTruncation)
-        : "unknown";
+    if (!checked) return null;
+    const typeName =
+      target.body.kind === "ImportedTsSchema" &&
+      target.body.typeNode.kind === "TypeReferenceNode"
+        ? target.body.typeNode.name.name
+        : target.id.name;
+    const alias = checked.sourceFile.statements.find(
+      (node): node is ts.TypeAliasDeclaration =>
+        ts.isTypeAliasDeclaration(node) && node.name.text === typeName,
+    );
+    const importedType = alias
+      ? checked.checker.getTypeFromTypeNode(alias.type)
+      : undefined;
+    const structure =
+      importedType && importedType.getProperties().length > 0
+        ? `{ ${importedType
+            .getProperties()
+            .map(
+              (property) =>
+                `${property.name}${property.flags & ts.SymbolFlags.Optional ? "?" : ""}: ${checked.checker.typeToString(checked.checker.getTypeOfSymbolAtLocation(property, alias!), alias, ts.TypeFormatFlags.NoTruncation)}`,
+            )
+            .join("; ")} }`
+        : importedType
+          ? checked.checker.typeToString(
+              importedType,
+              alias,
+              ts.TypeFormatFlags.NoTruncation,
+            )
+          : "unknown";
     const schema = schemas.get(target.id.name);
     return {
-      contents: { kind: MarkupKind.Markdown, value: `**${target.id.name}**\n\nTypeScript type:\n\n\`\`\`ts\n${structure}\n\`\`\`\n\nEffect Schema:\n\n\`\`\`ts\n${schema ?? "Schema.Unknown"}\n\`\`\`` },
+      contents: {
+        kind: MarkupKind.Markdown,
+        value: `**${target.id.name}**\n\nTypeScript type:\n\n\`\`\`ts\n${structure}\n\`\`\`\n\nEffect Schema:\n\n\`\`\`ts\n${schema ?? "Schema.Unknown"}\n\`\`\``,
+      },
       range: spanToRange(target.id.span),
     };
   } catch {
@@ -293,11 +396,16 @@ function findHoverInTokens(
       try {
         const filename = uri.startsWith("file:") ? fileURLToPath(uri) : uri;
         const ast = new Parser(tokens, filename, source).parse();
-        const resolution = inferPipelineCompanions(ast, new TypeScriptCompilationContext(filename))
-          .stageResolutions.get(token.span.start.offset);
+        const resolution = inferPipelineCompanions(
+          ast,
+          new TypeScriptCompilationContext(filename),
+        ).stageResolutions.get(token.span.start.offset);
         if (resolution) {
           return {
-            contents: { kind: MarkupKind.Markdown, value: `Resolves to \`${resolution.module}.${resolution.method}\`.` },
+            contents: {
+              kind: MarkupKind.Markdown,
+              value: `Resolves to \`${resolution.module}.${resolution.method}\`.`,
+            },
             range: spanToRange(token.span),
           };
         }
@@ -326,7 +434,9 @@ function findHoverInTokens(
     };
   }
 
-  return !skipSymbol && posCol < token.span.end.column ? symbolHover(source, uri, token) : null;
+  return !skipSymbol && posCol < token.span.end.column
+    ? symbolHover(source, uri, token)
+    : null;
 }
 
 function findHoverInLineText(
@@ -336,7 +446,17 @@ function findHoverInLineText(
 ): Hover | null {
   // 1. Check multi-character operators first (e.g. `???`, `|>`, `<-`, `=>`, and banned symbols)
   const bannedOps = Object.keys(BANNED_SYMBOLS);
-  const operators = ["???", "|>", "<-", "=>", "<=", ">=", "<", ">", ...bannedOps];
+  const operators = [
+    "???",
+    "|>",
+    "<-",
+    "=>",
+    "<=",
+    ">=",
+    "<",
+    ">",
+    ...bannedOps,
+  ];
   for (const op of operators) {
     let searchIdx = 0;
     while (searchIdx < currentLine.length) {
@@ -381,7 +501,10 @@ function findHoverInLineText(
       prefixStart--;
     }
     let suffixEnd = charIndex + 1;
-    while (suffixEnd < currentLine.length && isWordChar(currentLine[suffixEnd])) {
+    while (
+      suffixEnd < currentLine.length &&
+      isWordChar(currentLine[suffixEnd])
+    ) {
       suffixEnd++;
     }
     const prefix = currentLine.slice(prefixStart, charIndex);
@@ -415,7 +538,11 @@ function findHoverInLineText(
   }
 
   // If charIndex was right after a word boundary
-  if (start === end && charIndex > 0 && isWordChar(currentLine[charIndex - 1])) {
+  if (
+    start === end &&
+    charIndex > 0 &&
+    isWordChar(currentLine[charIndex - 1])
+  ) {
     end = charIndex;
     start = charIndex - 1;
     while (start > 0 && isWordChar(currentLine[start - 1])) {
@@ -483,7 +610,10 @@ function findHoverInLineText(
     // Check if followed by a dot: `Word.Suffix`
     if (end < currentLine.length && currentLine[end] === ".") {
       let suffixEnd = end + 1;
-      while (suffixEnd < currentLine.length && isWordChar(currentLine[suffixEnd])) {
+      while (
+        suffixEnd < currentLine.length &&
+        isWordChar(currentLine[suffixEnd])
+      ) {
         suffixEnd++;
       }
       const suffix = currentLine.slice(end + 1, suffixEnd);
@@ -567,17 +697,33 @@ export function findHover(
 }
 
 /** Async hover retains synchronous behavior for ordinary sources and compiles Wasm blocks when needed. */
-export async function findHoverAsync(source: string, uri: string, position: Position): Promise<Hover | null> {
+export async function findHoverAsync(
+  source: string,
+  uri: string,
+  position: Position,
+): Promise<Hover | null> {
   if (!/\bas[ \t]*\{/.test(source)) return findHover(source, uri, position);
   const immediate = findHover(source, uri, position, true);
   if (immediate) return immediate;
   try {
     const tokens = new Lexer(source, uri).tokenize();
-    const token = tokens.find(t => t.span.start.line === position.line + 1 && t.span.start.column <= position.character + 1 && t.span.end.column > position.character + 1);
-    if (!token || (token.type !== TokenType.IDENTIFIER && token.type !== TokenType.UPPER_IDENTIFIER)) return null;
+    const token = tokens.find(
+      (t) =>
+        t.span.start.line === position.line + 1 &&
+        t.span.start.column <= position.character + 1 &&
+        t.span.end.column > position.character + 1,
+    );
+    if (
+      !token ||
+      (token.type !== TokenType.IDENTIFIER &&
+        token.type !== TokenType.UPPER_IDENTIFIER)
+    )
+      return null;
     const filename = uri.startsWith("file:") ? fileURLToPath(uri) : uri;
     const context = new TypeScriptCompilationContext(filename);
-    const result = await Effect.runPromise(compileString(source, filename, { context, sourcemap: false }));
+    const result = await Effect.runPromise(
+      compileString(source, filename, { context, sourcemap: false }),
+    );
     return symbolHoverFromResult(source, token, context, result);
   } catch {
     return null;

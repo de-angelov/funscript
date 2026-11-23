@@ -8,7 +8,11 @@ export * from "./compiler.js";
 export * from "./compiler/check.js";
 export * from "./compiler/incremental-build.js";
 export * as lsp from "./lsp/index.js";
-export { FunScriptLspServer, startLspServer, validateFunScript } from "./lsp/index.js";
+export {
+  FunScriptLspServer,
+  startLspServer,
+  validateFunScript,
+} from "./lsp/index.js";
 export * from "./formatter/index.js";
 export * as prettierPlugin from "./formatter/prettier.js";
 export { default as prettierPluginFunscript } from "./formatter/prettier.js";
@@ -17,6 +21,11 @@ export { funscriptPlugin } from "./plugins/vite.js";
 export * as bunPlugin from "./plugins/bun.js";
 export { funscriptBunPlugin } from "./plugins/bun.js";
 export * as migrate from "./tooling/migrate.js";
-export { migrateSource, migrateFile, migrateFiles, formatMigrationReport } from "./tooling/migrate.js";
+export {
+  migrateSource,
+  migrateFile,
+  migrateFiles,
+  formatMigrationReport,
+} from "./tooling/migrate.js";
 export * as zodInterop from "./interop/zod.js";
 export { fromZod, toZod } from "./interop/zod.js";

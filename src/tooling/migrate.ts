@@ -71,7 +71,10 @@ export interface MigrationResult {
  * without explicit => returns), applies safe transformations, and reports
  * ambiguous constructs without modifying them.
  */
-export function migrateSource(source: string, options: MigrateOptions = {}): MigrationResult {
+export function migrateSource(
+  source: string,
+  options: MigrateOptions = {},
+): MigrationResult {
   const filename = options.filename ?? "<anonymous>";
   const allowPartial = options.allowPartial ?? true;
   const dryRun = options.dryRun ?? false;
@@ -103,7 +106,10 @@ export function migrateSource(source: string, options: MigrateOptions = {}): Mig
   }
 
   // Step 2: Parse allowing legacy return patterns
-  const parser = new Parser(tokens, filename, source, { allowLegacyReturns: true, throwOnError: false });
+  const parser = new Parser(tokens, filename, source, {
+    allowLegacyReturns: true,
+    throwOnError: false,
+  });
   let ast: Program;
   try {
     ast = parser.parse({ allowLegacyReturns: true, throwOnError: false });
@@ -205,12 +211,17 @@ export function migrateSource(source: string, options: MigrateOptions = {}): Mig
   try {
     const verifyLexer = new Lexer(newCode, filename);
     const verifyTokens = verifyLexer.tokenize();
-    const hasAmbiguous = diagnostics.some((d) => d.kind.startsWith("ambiguous"));
+    const hasAmbiguous = diagnostics.some((d) =>
+      d.kind.startsWith("ambiguous"),
+    );
     const verifyParser = new Parser(verifyTokens, filename, newCode, {
       allowLegacyReturns: hasAmbiguous,
       throwOnError: true,
     });
-    verifyParser.parse({ allowLegacyReturns: hasAmbiguous, throwOnError: true });
+    verifyParser.parse({
+      allowLegacyReturns: hasAmbiguous,
+      throwOnError: true,
+    });
   } catch (err: any) {
     return {
       code: source,
@@ -285,12 +296,16 @@ export function formatMigrationReport(result: MigrationResult): string {
   }
 
   if (result.diagnostics.length > 0) {
-    lines.push(`\nReported ${result.diagnostics.length} diagnostic(s) / ambiguous construct(s):`);
+    lines.push(
+      `\nReported ${result.diagnostics.length} diagnostic(s) / ambiguous construct(s):`,
+    );
     for (const diag of result.diagnostics) {
       const loc = diag.span
         ? `[line ${diag.span.start.line}, col ${diag.span.start.column}]`
         : "";
-      lines.push(`  - [${diag.severity.toUpperCase()}] ${diag.kind} ${loc}: ${diag.message}`);
+      lines.push(
+        `  - [${diag.severity.toUpperCase()}] ${diag.kind} ${loc}: ${diag.message}`,
+      );
     }
   }
 
@@ -308,7 +323,14 @@ function traverseAST(
   filename: string,
 ): void {
   for (const decl of ast.body) {
-    visitTopLevelDeclaration(decl, source, options, changes, diagnostics, filename);
+    visitTopLevelDeclaration(
+      decl,
+      source,
+      options,
+      changes,
+      diagnostics,
+      filename,
+    );
   }
 }
 
@@ -323,17 +345,38 @@ function visitTopLevelDeclaration(
   switch (decl.kind) {
     case "ExportDeclaration":
       if (decl.declaration) {
-        visitTopLevelDeclaration(decl.declaration, source, options, changes, diagnostics, filename);
+        visitTopLevelDeclaration(
+          decl.declaration,
+          source,
+          options,
+          changes,
+          diagnostics,
+          filename,
+        );
       }
       break;
     case "ExportDefaultDeclaration":
       if (decl.expression) {
-        visitExpression(decl.expression, source, options, changes, diagnostics, filename);
+        visitExpression(
+          decl.expression,
+          source,
+          options,
+          changes,
+          diagnostics,
+          filename,
+        );
       }
       break;
     case "BindingDeclaration":
       if (decl.init) {
-        visitExpression(decl.init, source, options, changes, diagnostics, filename);
+        visitExpression(
+          decl.init,
+          source,
+          options,
+          changes,
+          diagnostics,
+          filename,
+        );
       }
       break;
     case "WhenStatement":
@@ -346,12 +389,26 @@ function visitTopLevelDeclaration(
       if (decl.body?.kind === "RecordSchema") {
         for (const field of decl.body.fields) {
           if (field.defaultValue) {
-            visitExpression(field.defaultValue, source, options, changes, diagnostics, filename);
+            visitExpression(
+              field.defaultValue,
+              source,
+              options,
+              changes,
+              diagnostics,
+              filename,
+            );
           }
         }
       } else if (decl.body?.kind === "RefinementSchema") {
         if (decl.body.refinement) {
-          visitExpression(decl.body.refinement, source, options, changes, diagnostics, filename);
+          visitExpression(
+            decl.body.refinement,
+            source,
+            options,
+            changes,
+            diagnostics,
+            filename,
+          );
         }
       }
       break;
@@ -378,22 +435,39 @@ function visitExpression(
       if (
         expr.body.kind === "RecordExpression" &&
         expr.body.entries.length === 0 &&
-        source.slice(expr.body.span.start.offset, expr.body.span.end.offset).trim() === "{}"
+        source
+          .slice(expr.body.span.start.offset, expr.body.span.end.offset)
+          .trim() === "{}"
       ) {
         diagnostics.push({
           kind: "ambiguous-empty-block",
           severity: "warning",
-          message: "Empty braces in a function body are ambiguous; cannot infer whether this is an empty block or an empty record.",
+          message:
+            "Empty braces in a function body are ambiguous; cannot infer whether this is an empty block or an empty record.",
           span: expr.body.span,
           filename,
         });
         break;
       }
-      handleFunctionExpression(expr, source, options, changes, diagnostics, filename);
+      handleFunctionExpression(
+        expr,
+        source,
+        options,
+        changes,
+        diagnostics,
+        filename,
+      );
       break;
 
     case "EffectBlockExpression":
-      handleEffectBlockExpression(expr, source, options, changes, diagnostics, filename);
+      handleEffectBlockExpression(
+        expr,
+        source,
+        options,
+        changes,
+        diagnostics,
+        filename,
+      );
       break;
 
     case "MutBlockExpression":
@@ -403,59 +477,164 @@ function visitExpression(
           visitStatement(stmt, source, options, changes, diagnostics, filename);
         }
       } else if (expr.body) {
-        visitExpression(expr.body, source, options, changes, diagnostics, filename);
+        visitExpression(
+          expr.body,
+          source,
+          options,
+          changes,
+          diagnostics,
+          filename,
+        );
       }
       break;
 
     case "MatchExpression":
       if (expr.scrutinee) {
-        visitExpression(expr.scrutinee, source, options, changes, diagnostics, filename);
+        visitExpression(
+          expr.scrutinee,
+          source,
+          options,
+          changes,
+          diagnostics,
+          filename,
+        );
       }
       for (const arm of expr.arms) {
         if (arm.guard) {
-          visitExpression(arm.guard, source, options, changes, diagnostics, filename);
+          visitExpression(
+            arm.guard,
+            source,
+            options,
+            changes,
+            diagnostics,
+            filename,
+          );
         }
         if (arm.body?.kind === "BlockStatement") {
           for (const stmt of arm.body.statements) {
-            visitStatement(stmt, source, options, changes, diagnostics, filename);
+            visitStatement(
+              stmt,
+              source,
+              options,
+              changes,
+              diagnostics,
+              filename,
+            );
           }
           if (arm.body.finalExpression) {
-            visitExpression(arm.body.finalExpression, source, options, changes, diagnostics, filename);
+            visitExpression(
+              arm.body.finalExpression,
+              source,
+              options,
+              changes,
+              diagnostics,
+              filename,
+            );
           }
         } else if (arm.body) {
-          visitExpression(arm.body, source, options, changes, diagnostics, filename);
+          visitExpression(
+            arm.body,
+            source,
+            options,
+            changes,
+            diagnostics,
+            filename,
+          );
         }
       }
       break;
 
     case "PipelineExpression":
-      visitExpression(expr.left, source, options, changes, diagnostics, filename);
-      visitExpression(expr.right, source, options, changes, diagnostics, filename);
+      visitExpression(
+        expr.left,
+        source,
+        options,
+        changes,
+        diagnostics,
+        filename,
+      );
+      visitExpression(
+        expr.right,
+        source,
+        options,
+        changes,
+        diagnostics,
+        filename,
+      );
       break;
 
     case "BinaryExpression":
-      visitExpression(expr.left, source, options, changes, diagnostics, filename);
-      visitExpression(expr.right, source, options, changes, diagnostics, filename);
+      visitExpression(
+        expr.left,
+        source,
+        options,
+        changes,
+        diagnostics,
+        filename,
+      );
+      visitExpression(
+        expr.right,
+        source,
+        options,
+        changes,
+        diagnostics,
+        filename,
+      );
       break;
 
     case "UnaryExpression":
-      visitExpression(expr.argument, source, options, changes, diagnostics, filename);
+      visitExpression(
+        expr.argument,
+        source,
+        options,
+        changes,
+        diagnostics,
+        filename,
+      );
       break;
 
     case "CallExpression":
-      visitExpression(expr.callee, source, options, changes, diagnostics, filename);
+      visitExpression(
+        expr.callee,
+        source,
+        options,
+        changes,
+        diagnostics,
+        filename,
+      );
       for (const arg of expr.args) {
         visitExpression(arg, source, options, changes, diagnostics, filename);
       }
       break;
 
     case "MemberExpression":
-      visitExpression(expr.object, source, options, changes, diagnostics, filename);
+      visitExpression(
+        expr.object,
+        source,
+        options,
+        changes,
+        diagnostics,
+        filename,
+      );
       break;
 
     case "IndexExpression":
-      visitExpression(expr.object, source, options, changes, diagnostics, filename);
-      visitExpression(expr.index, source, options, changes, diagnostics, filename);
+      visitExpression(
+        expr.object,
+        source,
+        options,
+        changes,
+        diagnostics,
+        filename,
+      );
+      visitExpression(
+        expr.index,
+        source,
+        options,
+        changes,
+        diagnostics,
+        filename,
+      );
       break;
 
     case "ArrayExpression":
@@ -465,15 +644,36 @@ function visitExpression(
       break;
 
     case "SpreadElement":
-      visitExpression(expr.argument, source, options, changes, diagnostics, filename);
+      visitExpression(
+        expr.argument,
+        source,
+        options,
+        changes,
+        diagnostics,
+        filename,
+      );
       break;
 
     case "RecordExpression":
       for (const entry of expr.entries) {
         if ("value" in entry && entry.value) {
-          visitExpression(entry.value, source, options, changes, diagnostics, filename);
+          visitExpression(
+            entry.value,
+            source,
+            options,
+            changes,
+            diagnostics,
+            filename,
+          );
         } else if (entry.kind === "SpreadEntry" && entry.argument) {
-          visitExpression(entry.argument, source, options, changes, diagnostics, filename);
+          visitExpression(
+            entry.argument,
+            source,
+            options,
+            changes,
+            diagnostics,
+            filename,
+          );
         }
       }
       break;
@@ -483,18 +683,52 @@ function visitExpression(
         visitJSXChild(child, source, options, changes, diagnostics, filename);
       }
       for (const attr of expr.openingElement.attributes) {
-        if (attr.kind === "JSXSpreadAttribute") { visitExpression(attr.argument, source, options, changes, diagnostics, filename); continue; }
+        if (attr.kind === "JSXSpreadAttribute") {
+          visitExpression(
+            attr.argument,
+            source,
+            options,
+            changes,
+            diagnostics,
+            filename,
+          );
+          continue;
+        }
         if (attr.value && "expression" in attr.value && attr.value.expression) {
-          visitExpression(attr.value.expression, source, options, changes, diagnostics, filename);
+          visitExpression(
+            attr.value.expression,
+            source,
+            options,
+            changes,
+            diagnostics,
+            filename,
+          );
         }
       }
       break;
 
     case "JSXSelfClosingElement":
       for (const attr of expr.attributes) {
-        if (attr.kind === "JSXSpreadAttribute") { visitExpression(attr.argument, source, options, changes, diagnostics, filename); continue; }
+        if (attr.kind === "JSXSpreadAttribute") {
+          visitExpression(
+            attr.argument,
+            source,
+            options,
+            changes,
+            diagnostics,
+            filename,
+          );
+          continue;
+        }
         if (attr.value && "expression" in attr.value && attr.value.expression) {
-          visitExpression(attr.value.expression, source, options, changes, diagnostics, filename);
+          visitExpression(
+            attr.value.expression,
+            source,
+            options,
+            changes,
+            diagnostics,
+            filename,
+          );
         }
       }
       break;
@@ -502,14 +736,28 @@ function visitExpression(
     case "StringLiteral":
       for (const part of expr.parts) {
         if (part.kind === "StringInterpolationPart" && part.expression) {
-          visitExpression(part.expression, source, options, changes, diagnostics, filename);
+          visitExpression(
+            part.expression,
+            source,
+            options,
+            changes,
+            diagnostics,
+            filename,
+          );
         }
       }
       break;
 
     case "JsExpression":
       if (expr.expression) {
-        visitExpression(expr.expression, source, options, changes, diagnostics, filename);
+        visitExpression(
+          expr.expression,
+          source,
+          options,
+          changes,
+          diagnostics,
+          filename,
+        );
       }
       break;
 
@@ -527,7 +775,14 @@ function visitJSXChild(
   filename: string,
 ): void {
   if (child.kind === "JSXExpressionContainer" && child.expression) {
-    visitExpression(child.expression, source, options, changes, diagnostics, filename);
+    visitExpression(
+      child.expression,
+      source,
+      options,
+      changes,
+      diagnostics,
+      filename,
+    );
   } else if (child.kind === "JSXElement") {
     visitExpression(child, source, options, changes, diagnostics, filename);
   } else if (child.kind === "JSXSelfClosingElement") {
@@ -553,7 +808,11 @@ function handleFunctionExpression(
 
   // The legacy parser represents an empty indented block with a synthetic
   // `_error` final expression; it is not source text and cannot be migrated.
-  if (block.statements.length === 0 && block.finalExpression?.kind === "Identifier" && block.finalExpression.name === "_error") {
+  if (
+    block.statements.length === 0 &&
+    block.finalExpression?.kind === "Identifier" &&
+    block.finalExpression.name === "_error"
+  ) {
     diagnostics.push({
       kind: "ambiguous-empty-block",
       severity: "warning",
@@ -569,7 +828,14 @@ function handleFunctionExpression(
     visitStatement(stmt, source, options, changes, diagnostics, filename);
   }
   if (block.finalExpression) {
-    visitExpression(block.finalExpression, source, options, changes, diagnostics, filename);
+    visitExpression(
+      block.finalExpression,
+      source,
+      options,
+      changes,
+      diagnostics,
+      filename,
+    );
   }
 
   // Check function block termination
@@ -589,11 +855,11 @@ function handleFunctionExpression(
       lastStmt.id === block.finalExpression);
 
   if (isTrailingBinding) {
-    const bind = lastStmt as BindingDeclaration;
+    const bind = lastStmt;
     diagnostics.push({
       kind: "ambiguous-trailing-binding",
       severity: "warning",
-      message: `Function block ends with variable declaration '${("name" in bind.id ? bind.id.name : "")}'. Safe automated migration cannot assume this was intended as the return value.`,
+      message: `Function block ends with variable declaration '${"name" in bind.id ? bind.id.name : ""}'. Safe automated migration cannot assume this was intended as the return value.`,
       span: bind.span,
       filename,
     });
@@ -614,7 +880,8 @@ function handleFunctionExpression(
       diagnostics.push({
         kind: "ambiguous-missing-return",
         severity: "warning",
-        message: "Function block does not end with an expression; cannot infer explicit return value.",
+        message:
+          "Function block does not end with an expression; cannot infer explicit return value.",
         span: block.span,
         filename,
       });
@@ -664,21 +931,56 @@ function handleEffectBlockExpression(
   // Visit effect statements
   for (const stmt of expr.body) {
     if ("effect" in stmt && stmt.effect) {
-      visitExpression(stmt.effect, source, options, changes, diagnostics, filename);
+      visitExpression(
+        stmt.effect,
+        source,
+        options,
+        changes,
+        diagnostics,
+        filename,
+      );
     }
     if ("init" in stmt && stmt.init) {
-      visitExpression(stmt.init, source, options, changes, diagnostics, filename);
+      visitExpression(
+        stmt.init,
+        source,
+        options,
+        changes,
+        diagnostics,
+        filename,
+      );
     }
     if ("value" in stmt && stmt.value) {
-      visitExpression(stmt.value, source, options, changes, diagnostics, filename);
+      visitExpression(
+        stmt.value,
+        source,
+        options,
+        changes,
+        diagnostics,
+        filename,
+      );
     }
     if ("condition" in stmt && stmt.condition) {
-      visitExpression(stmt.condition, source, options, changes, diagnostics, filename);
+      visitExpression(
+        stmt.condition,
+        source,
+        options,
+        changes,
+        diagnostics,
+        filename,
+      );
     }
   }
 
   if (expr.finalExpression && expr.legacyReturnKind !== "missing") {
-    visitExpression(expr.finalExpression, source, options, changes, diagnostics, filename);
+    visitExpression(
+      expr.finalExpression,
+      source,
+      options,
+      changes,
+      diagnostics,
+      filename,
+    );
   }
 }
 
@@ -693,22 +995,50 @@ function visitStatement(
   switch (stmt.kind) {
     case "BindingDeclaration":
       if (stmt.init) {
-        visitExpression(stmt.init, source, options, changes, diagnostics, filename);
+        visitExpression(
+          stmt.init,
+          source,
+          options,
+          changes,
+          diagnostics,
+          filename,
+        );
       }
       break;
     case "AssignmentStatement":
       if (stmt.value) {
-        visitExpression(stmt.value, source, options, changes, diagnostics, filename);
+        visitExpression(
+          stmt.value,
+          source,
+          options,
+          changes,
+          diagnostics,
+          filename,
+        );
       }
       break;
     case "ExpressionStatement":
       if (stmt.expression) {
-        visitExpression(stmt.expression, source, options, changes, diagnostics, filename);
+        visitExpression(
+          stmt.expression,
+          source,
+          options,
+          changes,
+          diagnostics,
+          filename,
+        );
       }
       break;
     case "ReturnStatement":
       if (stmt.argument) {
-        visitExpression(stmt.argument, source, options, changes, diagnostics, filename);
+        visitExpression(
+          stmt.argument,
+          source,
+          options,
+          changes,
+          diagnostics,
+          filename,
+        );
       }
       break;
     case "WhenStatement":
@@ -728,7 +1058,14 @@ function visitWhenStatement(
   filename: string,
 ): void {
   if (when.condition) {
-    visitExpression(when.condition, source, options, changes, diagnostics, filename);
+    visitExpression(
+      when.condition,
+      source,
+      options,
+      changes,
+      diagnostics,
+      filename,
+    );
   }
   if (when.consequent) {
     if (when.consequent.kind === "BlockStatement") {
@@ -737,10 +1074,24 @@ function visitWhenStatement(
         visitStatement(stmt, source, options, changes, diagnostics, filename);
       }
       if (when.consequent.finalExpression) {
-        visitExpression(when.consequent.finalExpression, source, options, changes, diagnostics, filename);
+        visitExpression(
+          when.consequent.finalExpression,
+          source,
+          options,
+          changes,
+          diagnostics,
+          filename,
+        );
       }
     } else {
-      visitExpression(when.consequent, source, options, changes, diagnostics, filename);
+      visitExpression(
+        when.consequent,
+        source,
+        options,
+        changes,
+        diagnostics,
+        filename,
+      );
     }
   }
 }

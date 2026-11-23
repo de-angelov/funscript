@@ -34,11 +34,20 @@ jobs:
       - name: Build package artifacts
         run: npm run build 2>&1 | tee build.log
 
+      - name: Type check (tsc --noEmit)
+        run: npm run check
+
       - name: Check generated reference documentation
         run: npm run docs:check
 
       - name: Check FunScript formatting
         run: npm run fmt:check
+
+      - name: Check TypeScript source formatting
+        run: npm run fmt:ts:check
+
+      - name: Lint TypeScript source (ESLint + Effect rules)
+        run: npm run lint
 
       - name: Check Markdown formatting
         run: npm run prettier:check

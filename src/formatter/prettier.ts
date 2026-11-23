@@ -1,7 +1,7 @@
 import type { Plugin, SupportLanguage, Parser, Printer } from "prettier";
 import { Lexer } from "../lexer/lexer.js";
 import { Parser as FunScriptParser } from "../parser/parser.js";
-import { format, FormatOptions } from "./index.js";
+import { format, type FormatOptions } from "./index.js";
 
 export const languages: SupportLanguage[] = [
   {
@@ -39,7 +39,10 @@ export const printers: Record<string, Printer> = {
       const formatOptions: FormatOptions = {
         indentSize: options?.tabWidth ?? 2,
       };
-      return format(node.text, { ...formatOptions, filename: options?.filepath });
+      return format(node.text, {
+        ...formatOptions,
+        filename: options?.filepath,
+      });
     },
   },
 };

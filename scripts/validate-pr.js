@@ -10,6 +10,11 @@ export const CHECKS = [
     args: ["run", "build"],
   },
   {
+    name: "Type Check (tsc --noEmit)",
+    cmd: "npm",
+    args: ["run", "check"],
+  },
+  {
     name: "Generated Documentation Check",
     cmd: "npm",
     args: ["run", "docs:check"],
@@ -18,6 +23,16 @@ export const CHECKS = [
     name: "FunScript CLI Formatting Check",
     cmd: "npm",
     args: ["run", "fmt:check"],
+  },
+  {
+    name: "TypeScript Formatting Check",
+    cmd: "npm",
+    args: ["run", "fmt:ts:check"],
+  },
+  {
+    name: "ESLint Check",
+    cmd: "npm",
+    args: ["run", "lint"],
   },
   {
     name: "Prettier Formatting Check",

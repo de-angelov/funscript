@@ -2,7 +2,11 @@ import { Effect } from "effect";
 import * as fs from "node:fs";
 import * as path from "node:path";
 import { compileString } from "../compiler.js";
-import { loadProjectConfig, isEffectOnlyFile, isPathPolicyEnabled } from "../compiler/project-config.js";
+import {
+  loadProjectConfig,
+  isEffectOnlyFile,
+  isPathPolicyEnabled,
+} from "../compiler/project-config.js";
 import { TypeScriptCompilationContext } from "../compiler/typescript-context.js";
 
 export interface BunPluginOptions {
@@ -32,15 +36,48 @@ export interface BunPluginBuilder {
   onLoad(
     args: { filter: RegExp; namespace?: string },
     callback: (args: { path: string; namespace: string; loader: string }) =>
-      | { contents?: string; loader?: "js" | "jsx" | "ts" | "tsx" | "json" | "toml" | "text" | "wasm" | "napi"; exports?: Record<string, any> }
-      | Promise<{ contents?: string; loader?: "js" | "jsx" | "ts" | "tsx" | "json" | "toml" | "text" | "wasm" | "napi"; exports?: Record<string, any> }>,
+      | {
+          contents?: string;
+          loader?:
+            | "js"
+            | "jsx"
+            | "ts"
+            | "tsx"
+            | "json"
+            | "toml"
+            | "text"
+            | "wasm"
+            | "napi";
+          exports?: Record<string, any>;
+        }
+      | Promise<{
+          contents?: string;
+          loader?:
+            | "js"
+            | "jsx"
+            | "ts"
+            | "tsx"
+            | "json"
+            | "toml"
+            | "text"
+            | "wasm"
+            | "napi";
+          exports?: Record<string, any>;
+        }>,
   ): void;
   onResolve(
     args: { filter: RegExp; namespace?: string },
-    callback: (args: { path: string; importer: string; namespace: string; resolveDir: string }) =>
+    callback: (args: {
+      path: string;
+      importer: string;
+      namespace: string;
+      resolveDir: string;
+    }) =>
       | { path?: string; namespace?: string; external?: boolean }
       | undefined
-      | Promise<{ path?: string; namespace?: string; external?: boolean } | undefined>,
+      | Promise<
+          { path?: string; namespace?: string; external?: boolean } | undefined
+        >,
   ): void;
   config?: any;
 }
@@ -58,7 +95,9 @@ export function funscriptBunPlugin(options: BunPluginOptions = {}): BunPlugin {
   const projectPolicy = loadProjectConfig(process.cwd());
   const filter = options.filter ?? /\.funx?$/;
   const resolveJsToFun = options.resolveJsToFun ?? true;
-  const context = new TypeScriptCompilationContext(path.resolve("__funscript_bun__.fun"));
+  const context = new TypeScriptCompilationContext(
+    path.resolve("__funscript_bun__.fun"),
+  );
 
   return {
     name: "bun-plugin-funscript",
@@ -71,8 +110,12 @@ export function funscriptBunPlugin(options: BunPluginOptions = {}): BunPlugin {
           if (!args.path.startsWith(".") && !path.isAbsolute(args.path)) {
             return undefined;
           }
-          const dir = args.importer ? path.dirname(args.importer) : args.resolveDir || process.cwd();
-          const target = path.isAbsolute(args.path) ? args.path : path.resolve(dir, args.path);
+          const dir = args.importer
+            ? path.dirname(args.importer)
+            : args.resolveDir || process.cwd();
+          const target = path.isAbsolute(args.path)
+            ? args.path
+            : path.resolve(dir, args.path);
           const base = target.slice(0, target.lastIndexOf("."));
 
           for (const ext of [".fun", ".funx"]) {
@@ -98,11 +141,35 @@ export function funscriptBunPlugin(options: BunPluginOptions = {}): BunPlugin {
 
         const res = await Effect.runPromise(
           compileString(text, args.path, {
-            noTs: options.noTs || isPathPolicyEnabled(projectPolicy.noTs, process.cwd(), args.path),
-            noGlobalThis: options.noGlobalThis || isPathPolicyEnabled(projectPolicy.noGlobalThis, process.cwd(), args.path),
-            noOptional: options.noOptional || isPathPolicyEnabled(projectPolicy.noOptional, process.cwd(), args.path),
-            barePipelines: options.barePipelines || isPathPolicyEnabled(projectPolicy.barePipelines, process.cwd(), args.path),
-            effectOnly: isEffectOnlyFile(projectPolicy, process.cwd(), args.path),
+            noTs:
+              options.noTs ||
+              isPathPolicyEnabled(projectPolicy.noTs, process.cwd(), args.path),
+            noGlobalThis:
+              options.noGlobalThis ||
+              isPathPolicyEnabled(
+                projectPolicy.noGlobalThis,
+                process.cwd(),
+                args.path,
+              ),
+            noOptional:
+              options.noOptional ||
+              isPathPolicyEnabled(
+                projectPolicy.noOptional,
+                process.cwd(),
+                args.path,
+              ),
+            barePipelines:
+              options.barePipelines ||
+              isPathPolicyEnabled(
+                projectPolicy.barePipelines,
+                process.cwd(),
+                args.path,
+              ),
+            effectOnly: isEffectOnlyFile(
+              projectPolicy,
+              process.cwd(),
+              args.path,
+            ),
             effectOnlyDirectories: projectPolicy.effectOnly,
             policyRoot: process.cwd(),
             sourcemap: options.sourcemap ?? true,

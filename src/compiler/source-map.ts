@@ -14,10 +14,10 @@ export function generateSourceMap(
   const outTarget = outputFile
     ? outputFile
     : filename.endsWith(".funx")
-    ? `${filename.slice(0, -5)}.tsx`
-    : filename.endsWith(".fun")
-    ? `${filename.slice(0, -4)}.ts`
-    : `${filename}.ts`;
+      ? `${filename.slice(0, -5)}.tsx`
+      : filename.endsWith(".fun")
+        ? `${filename.slice(0, -4)}.ts`
+        : `${filename}.ts`;
 
   const s = new MagicString(source);
 
