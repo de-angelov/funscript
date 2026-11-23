@@ -13,6 +13,7 @@ import {
   type RecordSchema,
   type RecordFieldSchema,
   type TaggedUnionSchema,
+  type StructuralUnionSchema,
   type ImportedTsSchema,
   type VariantDeclaration,
   type VariantField,
@@ -122,6 +123,33 @@ import {
   isGenericCallableStart,
   parseTypeParameters,
 } from "./types.js";
+import {
+  parsePattern as parsePatternImpl,
+  parsePrimaryPattern as parsePrimaryPatternImpl,
+  parseBindingPattern as parseBindingPatternImpl,
+  collectPatternVariables as collectPatternVariablesImpl,
+  isDestructuringBindingStart as isDestructuringBindingStartImpl,
+  isDestructuringEffectBindStart as isDestructuringEffectBindStartImpl,
+} from "./patterns.js";
+import {
+  parseTopLevelDeclaration as parseTopLevelDeclarationImpl,
+  isExportFrom as isExportFromImpl,
+  parseExportFrom as parseExportFromImpl,
+  parseExportDefaultDeclaration as parseExportDefaultDeclarationImpl,
+  parseDeclaration as parseDeclarationImpl,
+  parseImportDeclaration as parseImportDeclarationImpl,
+  parseImportSource as parseImportSourceImpl,
+  parseSchemaDeclaration as parseSchemaDeclarationImpl,
+  parseTsDerivedSchema as parseTsDerivedSchemaImpl,
+  parseSchemaBody as parseSchemaBodyImpl,
+  parseImportedTsSchema as parseImportedTsSchemaImpl,
+  parseRecordSchema as parseRecordSchemaImpl,
+  parseStructuralUnionSchema as parseStructuralUnionSchemaImpl,
+  parseTaggedUnionSchema as parseTaggedUnionSchemaImpl,
+  parseErrorDeclaration as parseErrorDeclarationImpl,
+  parseServiceDeclaration as parseServiceDeclarationImpl,
+  parseBindingDeclaration as parseBindingDeclarationImpl,
+} from "./declarations.js";
 
 import {
   ParseError,
@@ -155,7 +183,7 @@ export class Parser {
     this.scopeStack.exitScope();
   }
 
-  private addMutableVariable(name: string): void {
+  public addMutableVariable(name: string): void {
     this.scopeStack.addMutableVariable(name);
   }
 
@@ -172,18 +200,11 @@ export class Parser {
   }
 
   public parseBindingPattern(): RecordPattern | ArrayPattern {
-    const pat = this.parsePattern();
-    if (pat.kind !== "RecordPattern" && pat.kind !== "ArrayPattern") {
-      throw new ParseError(
-        "Expected record or array destructuring pattern",
-        pat.span,
-      );
-    }
-    return pat;
+    return parseBindingPatternImpl(this);
   }
 
   private parsingBraceEffect = false;
-  private hasDefaultExport = false;
+  public hasDefaultExport = false;
   public allowOptionalRecordFields = false;
   public recordTypeDepth = 0;
   private options: ParserOptions;
@@ -266,185 +287,26 @@ export class Parser {
 
   // --- Top-Level Declarations ---
 
-  private parseTopLevelDeclaration(): TopLevelDeclaration {
-    if (this.match(TokenType.EXPORT)) {
-      const exportStart = this.previous().span.start;
-      if (this.match(TokenType.DEFAULT)) {
-        return this.parseExportDefaultDeclaration(exportStart);
-      }
-      if (this.isExportFrom()) return this.parseExportFrom(exportStart);
-      const isJs = this.match(TokenType.JS);
-      const isTs = !isJs && this.match(TokenType.TS);
-      const decl = this.parseDeclaration(isJs, isTs);
-      if (
-        decl.kind !== "SchemaDeclaration" &&
-        decl.kind !== "ErrorDeclaration" &&
-        decl.kind !== "ServiceDeclaration" &&
-        decl.kind !== "BindingDeclaration"
-      ) {
-        throw new ParseError("Invalid declaration for export", decl.span);
-      }
-      return {
-        kind: "ExportDeclaration",
-        declaration: decl,
-        span: { start: exportStart, end: decl.span.end },
-      };
-    }
-    return this.parseDeclaration();
+  public parseTopLevelDeclaration(): TopLevelDeclaration {
+    return parseTopLevelDeclarationImpl(this);
   }
 
-  private isExportFrom(): boolean {
-    let offset =
-      this.check(TokenType.IDENTIFIER) && this.peek().value === "type" ? 1 : 0;
-    if (this.peekAhead(offset).type !== TokenType.LBRACE) return false;
-    while (
-      this.peekAhead(offset).type !== TokenType.RBRACE &&
-      this.peekAhead(offset).type !== TokenType.NEWLINE &&
-      this.peekAhead(offset).type !== TokenType.EOF
-    )
-      offset++;
-    return (
-      this.peekAhead(offset).type === TokenType.RBRACE &&
-      this.peekAhead(offset + 1).type === TokenType.FROM
-    );
+  public isExportFrom(): boolean {
+    return isExportFromImpl(this);
   }
 
-  private parseExportFrom(start: Position): ExportFromDeclaration {
-    const isTypeOnly =
-      this.check(TokenType.IDENTIFIER) && this.peek().value === "type";
-    if (isTypeOnly) this.advance();
-    this.consume(TokenType.LBRACE, "Expected '{' in re-export");
-    const specifiers: ImportSpecifier[] = [];
-    if (!this.check(TokenType.RBRACE)) {
-      do {
-        let specTypeOnly = false;
-        if (
-          !isTypeOnly &&
-          this.check(TokenType.IDENTIFIER) &&
-          this.peek().value === "type" &&
-          this.peekAhead(1).type !== TokenType.COMMA &&
-          this.peekAhead(1).type !== TokenType.RBRACE &&
-          this.peekAhead(1).value !== "as"
-        ) {
-          this.advance();
-          specTypeOnly = true;
-        }
-        const imported = this.parseAnyIdentifier();
-        let local = imported;
-        if (this.check(TokenType.IDENTIFIER) && this.peek().value === "as") {
-          this.advance();
-          local = this.parseAnyIdentifier();
-        }
-        specifiers.push({
-          kind: "ImportSpecifier",
-          imported,
-          local,
-          isTypeOnly: specTypeOnly,
-          span: { start: imported.span.start, end: local.span.end },
-        });
-      } while (this.match(TokenType.COMMA) && !this.check(TokenType.RBRACE));
-    }
-    this.consume(TokenType.RBRACE, "Expected '}' after re-export specifiers");
-    this.consume(TokenType.FROM, "Expected 'from' after re-export specifiers");
-    const source = this.parseImportSource();
-    this.consumeNewlineOrEof("Expected newline after re-export");
-    return {
-      kind: "ExportFromDeclaration",
-      isTypeOnly,
-      specifiers,
-      source,
-      span: { start, end: source.span.end },
-    };
+  public parseExportFrom(start: Position): ExportFromDeclaration {
+    return parseExportFromImpl(this, start);
   }
 
-  private parseExportDefaultDeclaration(
+  public parseExportDefaultDeclaration(
     start: Position,
   ): ExportDefaultDeclaration {
-    if (this.hasDefaultExport) {
-      throw new ParseError("Multiple default exports are not allowed", {
-        start,
-        end: this.previous().span.end,
-      });
-    }
-    this.hasDefaultExport = true;
-    let hasIndent = false;
-    if (this.match(TokenType.NEWLINE)) {
-      hasIndent = this.match(TokenType.INDENT);
-    }
-    const expression = this.parseExpression();
-    if (hasIndent) {
-      this.skipNewlines();
-      if (!this.isAtEnd() && !this.check(TokenType.EOF)) {
-        this.consume(
-          TokenType.DEDENT,
-          "Expected unindent after default export",
-        );
-      }
-    }
-    this.consumeNewlineOrEof("Expected newline after default export");
-    return {
-      kind: "ExportDefaultDeclaration",
-      expression,
-      span: { start, end: expression.span.end },
-    };
+    return parseExportDefaultDeclarationImpl(this, start);
   }
 
-  private parseDeclaration(isJs = false, isTs = false): TopLevelDeclaration {
-    if (this.check(TokenType.IMPORT)) {
-      return this.parseImportDeclaration();
-    }
-    if (isTs) {
-      if (this.check(TokenType.SCHEMA)) {
-        return this.parseSchemaDeclaration(true);
-      }
-      throw new ParseError(
-        "Expected 'schema' after 'export ts'",
-        this.peek().span,
-      );
-    }
-    if (this.match(TokenType.AS)) {
-      const start = this.previous().span.start;
-      const code = this.consume(
-        TokenType.AS_CODE,
-        "Expected '{ ... }' after 'as'",
-      );
-      this.consumeNewlineOrEof("Expected newline after as declaration");
-      return {
-        kind: "AsDeclaration",
-        code: code.value,
-        codeStart: code.contentStart,
-        span: { start, end: code.span.end },
-      };
-    }
-    if (this.match(TokenType.TS)) {
-      const start = this.previous().span.start;
-      if (this.check(TokenType.SCHEMA)) {
-        return this.parseSchemaDeclaration(true, start);
-      }
-      const code = this.consumeTsCode();
-      this.consumeNewlineOrEof("Expected newline after ts declaration");
-      return {
-        kind: "TsEscapeDeclaration",
-        code: code.value,
-        span: { start, end: code.span.end },
-      };
-    }
-    if (this.match(TokenType.JS)) {
-      return this.parseBindingDeclaration(true);
-    }
-    if (this.check(TokenType.SCHEMA)) {
-      return this.parseSchemaDeclaration();
-    }
-    if (this.check(TokenType.ERROR)) {
-      return this.parseErrorDeclaration();
-    }
-    if (this.check(TokenType.SERVICE)) {
-      return this.parseServiceDeclaration();
-    }
-    if (this.check(TokenType.WHEN)) {
-      return this.parseWhenStatement();
-    }
-    return this.parseBindingDeclaration(isJs);
+  public parseDeclaration(isJs = false, isTs = false): TopLevelDeclaration {
+    return parseDeclarationImpl(this, isJs, isTs);
   }
 
   /** Consumes the raw TypeScript payload the lexer captured after 'ts'. */
@@ -452,591 +314,55 @@ export class Parser {
     return this.consume(TokenType.TS_CODE, "Expected '{ ... }' after 'ts'");
   }
 
-  private parseImportDeclaration(): ImportDeclaration {
-    const start = this.consume(TokenType.IMPORT, "Expected 'import'").span
-      .start;
-    if (this.check(TokenType.STRING)) {
-      const source = this.parseImportSource();
-      this.consumeNewlineOrEof("Expected newline after import declaration");
-      return {
-        kind: "ImportDeclaration",
-        isTypeOnly: false,
-        isSideEffect: true,
-        specifiers: [],
-        source,
-        span: { start, end: source.span.end },
-      };
-    }
-    const isTypeOnly =
-      this.check(TokenType.IDENTIFIER) &&
-      this.peek().value === "type" &&
-      this.peekAhead(1).type !== TokenType.FROM;
-    if (isTypeOnly) this.advance();
-    let defaultBinding: Identifier | UpperIdentifier | undefined;
-    let namespaceBinding: Identifier | UpperIdentifier | undefined;
-    const specifiers: ImportSpecifier[] = [];
-    if (
-      this.check(TokenType.IDENTIFIER) ||
-      this.check(TokenType.UPPER_IDENTIFIER)
-    ) {
-      defaultBinding = this.parseAnyIdentifier();
-      if (this.match(TokenType.COMMA)) {
-        if (isTypeOnly)
-          throw new ParseError(
-            "A type-only import cannot combine a default binding with other bindings",
-            this.peek().span,
-          );
-      } else {
-        this.consume(TokenType.FROM, "Expected 'from' after import binding");
-        const source = this.parseImportSource();
-        this.consumeNewlineOrEof("Expected newline after import declaration");
-        return {
-          kind: "ImportDeclaration",
-          isTypeOnly,
-          isSideEffect: false,
-          defaultBinding,
-          specifiers,
-          source,
-          span: { start, end: source.span.end },
-        };
-      }
-    }
-    if (this.match(TokenType.STAR)) {
-      if (!(this.check(TokenType.IDENTIFIER) && this.peek().value === "as")) {
-        throw new ParseError(
-          "Expected 'as' after '*' in namespace import",
-          this.peek().span,
-        );
-      }
-      this.advance();
-      namespaceBinding = this.parseAnyIdentifier();
-    } else {
-      this.consume(
-        TokenType.LBRACE,
-        "Expected '{' or '*' in import declaration",
-      );
-      if (!this.check(TokenType.RBRACE)) {
-        do {
-          let specTypeOnly = false;
-          if (
-            this.check(TokenType.IDENTIFIER) &&
-            this.peek().value === "type" &&
-            this.peekAhead(1).type !== TokenType.COMMA &&
-            this.peekAhead(1).type !== TokenType.RBRACE &&
-            this.peekAhead(1).value !== "as"
-          ) {
-            this.advance();
-            specTypeOnly = true;
-            if (isTypeOnly)
-              throw new ParseError(
-                "A type-only import cannot contain a type-only specifier",
-                this.previous().span,
-              );
-          }
-          let importedId: Identifier | UpperIdentifier;
-          if (this.match(TokenType.DEFAULT)) {
-            const token = this.previous();
-            importedId = {
-              kind: "Identifier",
-              name: token.value,
-              span: token.span,
-            };
-          } else importedId = this.parseAnyIdentifier();
-          let localId = importedId;
-          if (this.check(TokenType.IDENTIFIER) && this.peek().value === "as") {
-            this.advance();
-            localId = this.parseAnyIdentifier();
-          } else if (importedId.name === "default") {
-            throw new ParseError(
-              "A default import specifier requires an alias",
-              importedId.span,
-            );
-          }
-          specifiers.push({
-            kind: "ImportSpecifier",
-            isTypeOnly: specTypeOnly,
-            imported: importedId,
-            local: localId,
-            span: { start: importedId.span.start, end: localId.span.end },
-          });
-        } while (this.match(TokenType.COMMA) && !this.check(TokenType.RBRACE));
-      }
-      this.consume(TokenType.RBRACE, "Expected '}' after import specifiers");
-    }
-    this.consume(TokenType.FROM, "Expected 'from' after import specifiers");
-    const source = this.parseImportSource();
-    this.consumeNewlineOrEof("Expected newline after import declaration");
-    return {
-      kind: "ImportDeclaration",
-      isTypeOnly,
-      isSideEffect: false,
-      defaultBinding,
-      namespaceBinding,
-      specifiers,
-      source,
-      span: { start, end: source.span.end },
-    };
+  public parseImportDeclaration(): ImportDeclaration {
+    return parseImportDeclarationImpl(this);
   }
 
-  private parseImportSource(): StringLiteral {
-    if (!this.check(TokenType.STRING)) {
-      throw new ParseError(
-        "Expected a non-interpolated string module specifier",
-        this.peek().span,
-      );
-    }
-    return this.parseStringLiteral();
+  public parseImportSource(): StringLiteral {
+    return parseImportSourceImpl(this);
   }
 
-  private parseSchemaDeclaration(
+  public parseSchemaDeclaration(
     isTs = false,
     tsStart?: Position,
   ): SchemaDeclaration {
-    const start =
-      tsStart ?? this.consume(TokenType.SCHEMA, "Expected 'schema'").span.start;
-    if (tsStart) {
-      this.consume(TokenType.SCHEMA, "Expected 'schema'");
-    }
-    const id = this.parseUpperIdentifier();
-    let typeParams: TypeParameter[] | undefined;
-
-    if (this.check(TokenType.LT)) {
-      typeParams = this.parseTypeParameters();
-    }
-
-    this.consume(TokenType.EQ, "Expected '=' after schema name");
-
-    const body = isTs ? this.parseTsDerivedSchema() : this.parseSchemaBody();
-    this.consumeNewlineOrEof("Expected newline after schema declaration");
-
-    return {
-      kind: "SchemaDeclaration",
-      id,
-      typeParams,
-      body,
-      isTs: isTs ? true : undefined,
-      span: { start, end: body.span.end },
-    };
+    return parseSchemaDeclarationImpl(this, isTs, tsStart);
   }
 
-  private parseTsDerivedSchema(): TsDerivedSchema {
-    this.skipNewlines();
-    const targetType = this.parseTypeNode();
-    return {
-      kind: "TsDerivedSchema",
-      targetType,
-      span: targetType.span,
-    };
+  public parseTsDerivedSchema(): TsDerivedSchema {
+    return parseTsDerivedSchemaImpl(this);
   }
 
-  private parseSchemaBody(): SchemaBody {
-    this.skipNewlines();
-
-    // 0. Imported TypeScript Schema: from ts<Type>
-    if (this.check(TokenType.FROM)) {
-      return this.parseImportedTsSchema();
-    }
-
-    // 1. Tagged Union: | Variant(...)
-    if (
-      this.check(TokenType.BAR) ||
-      (this.check(TokenType.INDENT) && this.peekAhead(1).type === TokenType.BAR)
-    ) {
-      const first = this.check(TokenType.INDENT)
-        ? this.peekAhead(2)
-        : this.peekAhead(1);
-      if (
-        [
-          TokenType.STRING,
-          TokenType.NUMBER,
-          TokenType.TRUE,
-          TokenType.FALSE,
-          TokenType.LBRACE,
-        ].includes(first.type)
-      ) {
-        return this.parseStructuralUnionSchema();
-      }
-      return this.parseTaggedUnionSchema();
-    }
-
-    // 2. Struct Schema: { ... }
-    if (this.check(TokenType.LBRACE)) {
-      return this.parseRecordSchema();
-    }
-
-    // 3. Function / Effect type alias or Refinement
-    const typeNode = this.parseTypeNode();
-    if (this.match(TokenType.PIPE)) {
-      const refinement = this.parseExpression();
-      return {
-        kind: "RefinementSchema",
-        baseType: typeNode,
-        refinement,
-        span: { start: typeNode.span.start, end: refinement.span.end },
-      };
-    }
-
-    return {
-      kind: "TypeSignatureSchema",
-      signature: typeNode,
-      span: typeNode.span,
-    };
+  public parseSchemaBody(): SchemaBody {
+    return parseSchemaBodyImpl(this);
   }
 
-  private parseImportedTsSchema(): ImportedTsSchema {
-    const fromToken = this.consume(TokenType.FROM, "Expected 'from'");
-    const tsToken = this.consume(TokenType.TS, "Expected 'ts' after 'from'");
-    const ltToken = this.consume(TokenType.LT, "Expected '<' after 'ts'");
-
-    if (this.check(TokenType.GT)) {
-      throw new ParseError(
-        "Expected type argument inside 'ts<...>'",
-        this.peek().span,
-      );
-    }
-
-    const typeArgs: TypeNode[] = [];
-    do {
-      typeArgs.push(this.parseTypeNode());
-    } while (this.match(TokenType.COMMA) && !this.check(TokenType.GT));
-
-    const gtToken = this.consume(
-      TokenType.GT,
-      "Expected '>' after type argument",
-    );
-
-    return {
-      kind: "ImportedTsSchema",
-      typeNode: typeArgs[0],
-      typeArgs,
-      typeArguments: typeArgs,
-      span: { start: fromToken.span.start, end: gtToken.span.end },
-    };
+  public parseImportedTsSchema(): ImportedTsSchema {
+    return parseImportedTsSchemaImpl(this);
   }
 
-  private parseRecordSchema(): RecordSchema {
-    const start = this.consume(TokenType.LBRACE, "Expected '{'").span.start;
-    const fields: RecordFieldSchema[] = [];
-
-    this.skipNewlines();
-    const hasIndent = this.match(TokenType.INDENT);
-
-    while (
-      !this.check(TokenType.RBRACE) &&
-      !this.check(TokenType.DEDENT) &&
-      !this.isAtEnd()
-    ) {
-      this.skipNewlines();
-      if (this.check(TokenType.RBRACE) || this.check(TokenType.DEDENT)) break;
-
-      const fieldName: Identifier = this.parseRecordKeyIdentifier();
-      const optional = this.match(TokenType.QUESTION);
-      this.consume(TokenType.COLON, "Expected ':' after field name");
-      const previous = this.allowOptionalRecordFields;
-      this.allowOptionalRecordFields = true;
-      let fieldType: TypeNode;
-      try {
-        fieldType = this.parseTypeNode();
-      } finally {
-        this.allowOptionalRecordFields = previous;
-      }
-      let defaultValue: Expression | undefined;
-
-      if (this.match(TokenType.EQ)) {
-        if (optional)
-          throw new ParseError(
-            "A schema field cannot be both optional and defaulted",
-            fieldName.span,
-          );
-        defaultValue = this.parseExpression();
-      }
-
-      fields.push({
-        kind: "RecordFieldSchema",
-        name: fieldName,
-        typeAnnotation: fieldType,
-        optional,
-        defaultValue,
-        span: {
-          start: fieldName.span.start,
-          end: (defaultValue || fieldType).span.end,
-        },
-      });
-
-      this.match(TokenType.COMMA);
-      this.skipNewlines();
-    }
-
-    if (hasIndent) {
-      this.consume(TokenType.DEDENT, "Expected unindent after schema fields");
-    }
-    this.skipNewlines();
-    const end = this.consume(
-      TokenType.RBRACE,
-      "Expected '}' after record schema",
-    ).span.end;
-
-    return {
-      kind: "RecordSchema",
-      fields,
-      span: { start, end },
-    };
+  public parseRecordSchema(): RecordSchema {
+    return parseRecordSchemaImpl(this);
   }
 
-  private parseStructuralUnionSchema(): import("../ast/types.js").StructuralUnionSchema {
-    const start = this.peek().span.start;
-    const hasIndent = this.match(TokenType.INDENT);
-    const members: TypeNode[] = [];
-    while (this.match(TokenType.BAR)) {
-      const previous = this.allowOptionalRecordFields;
-      this.allowOptionalRecordFields = true;
-      try {
-        members.push(this.parsePrimaryType());
-      } finally {
-        this.allowOptionalRecordFields = previous;
-      }
-      this.skipNewlines();
-    }
-    if (hasIndent)
-      this.consume(TokenType.DEDENT, "Expected unindent after union members");
-    return {
-      kind: "StructuralUnionSchema",
-      members,
-      span: { start, end: members[members.length - 1].span.end },
-    };
+  public parseStructuralUnionSchema(): StructuralUnionSchema {
+    return parseStructuralUnionSchemaImpl(this);
   }
 
-  private parseTaggedUnionSchema(): TaggedUnionSchema {
-    const start = this.peek().span.start;
-    const variants: VariantDeclaration[] = [];
-    const hasIndent = this.match(TokenType.INDENT);
-
-    while (
-      this.match(TokenType.BAR) ||
-      (variants.length === 0 && this.check(TokenType.UPPER_IDENTIFIER))
-    ) {
-      const varStart = this.previous().span.start;
-      const varName = this.parseUpperIdentifier();
-      const fields: VariantField[] = [];
-
-      if (this.match(TokenType.LPAREN)) {
-        if (!this.check(TokenType.RPAREN)) {
-          do {
-            const fName = this.parseIdentifier();
-            this.consume(
-              TokenType.COLON,
-              "Expected ':' after variant field name",
-            );
-            const fType = this.parseTypeNode();
-            fields.push({
-              kind: "VariantField",
-              name: fName,
-              typeAnnotation: fType,
-              span: { start: fName.span.start, end: fType.span.end },
-            });
-          } while (
-            this.match(TokenType.COMMA) &&
-            !this.check(TokenType.RPAREN)
-          );
-        }
-        this.consume(TokenType.RPAREN, "Expected ')' after variant fields");
-      }
-
-      variants.push({
-        kind: "VariantDeclaration",
-        name: varName,
-        fields,
-        span: { start: varStart, end: this.previous().span.end },
-      });
-
-      this.skipNewlines();
-      if (!this.check(TokenType.BAR)) break;
-    }
-
-    if (hasIndent) {
-      this.consume(
-        TokenType.DEDENT,
-        "Expected unindent after tagged union variants",
-      );
-    }
-
-    return {
-      kind: "TaggedUnionSchema",
-      variants,
-      span: { start, end: variants[variants.length - 1].span.end },
-    };
+  public parseTaggedUnionSchema(): TaggedUnionSchema {
+    return parseTaggedUnionSchemaImpl(this);
   }
 
-  private parseErrorDeclaration(): ErrorDeclaration {
-    const start = this.consume(TokenType.ERROR, "Expected 'error'").span.start;
-    const id = this.parseUpperIdentifier();
-    const fields: ErrorField[] = [];
-
-    if (this.match(TokenType.LPAREN)) {
-      if (!this.check(TokenType.RPAREN)) {
-        do {
-          const fName = this.parseIdentifier();
-          this.consume(TokenType.COLON, "Expected ':' after error field name");
-          const fType = this.parseTypeNode();
-          fields.push({
-            kind: "ErrorField",
-            name: fName,
-            typeAnnotation: fType,
-            span: { start: fName.span.start, end: fType.span.end },
-          });
-        } while (this.match(TokenType.COMMA) && !this.check(TokenType.RPAREN));
-      }
-      this.consume(TokenType.RPAREN, "Expected ')' after error fields");
-    }
-
-    this.consumeNewlineOrEof("Expected newline after error declaration");
-
-    return {
-      kind: "ErrorDeclaration",
-      id,
-      fields,
-      span: { start, end: this.previous().span.end },
-    };
+  public parseErrorDeclaration(): ErrorDeclaration {
+    return parseErrorDeclarationImpl(this);
   }
 
-  private parseServiceDeclaration(): ServiceDeclaration {
-    const start = this.consume(TokenType.SERVICE, "Expected 'service'").span
-      .start;
-    const id = this.parseUpperIdentifier();
-    let customTag: StringLiteral | undefined;
-
-    if (this.check(TokenType.STRING)) {
-      customTag = this.parseStringLiteral();
-    }
-
-    this.consume(TokenType.NEWLINE, "Expected newline before service members");
-    this.consume(TokenType.INDENT, "Expected indent before service members");
-
-    const members: ServiceMember[] = [];
-    while (!this.check(TokenType.DEDENT) && !this.isAtEnd()) {
-      this.skipNewlines();
-      if (this.check(TokenType.DEDENT)) break;
-
-      const mStart = this.peek().span.start;
-      const mName = this.parseIdentifier();
-      this.consume(TokenType.COLON, "Expected ':' after service member name");
-      const sig = this.parseFunctionTypeNode();
-      if (sig.kind !== "FunctionTypeNode") {
-        throw new ParseError(
-          "Expected function type signature for service member",
-          sig.span,
-        );
-      }
-
-      members.push({
-        kind: "ServiceMember",
-        name: mName,
-        signature: sig,
-        span: { start: mStart, end: sig.span.end },
-      });
-
-      this.skipNewlines();
-    }
-
-    this.consume(TokenType.DEDENT, "Expected unindent after service members");
-
-    return {
-      kind: "ServiceDeclaration",
-      id,
-      customTag,
-      members,
-      span: { start, end: this.previous().span.end },
-    };
+  public parseServiceDeclaration(): ServiceDeclaration {
+    return parseServiceDeclarationImpl(this);
   }
 
-  private parseBindingDeclaration(isJs = false): BindingDeclaration {
-    const start = this.peek().span.start;
-    const isMut = this.match(TokenType.MUT);
-    let id: BindingTarget;
-    if (this.check(TokenType.LBRACE) || this.check(TokenType.LBRACKET)) {
-      id = this.parseBindingPattern();
-      if (isMut) {
-        for (const name of this.collectPatternVariables(id)) {
-          this.addMutableVariable(name);
-        }
-      }
-    } else {
-      id = this.parseAnyIdentifier();
-      if (isMut) {
-        this.addMutableVariable(id.name);
-      }
-    }
-    let typeParams: TypeParameter[] | undefined;
-    if (
-      (id.kind === "Identifier" || id.kind === "UpperIdentifier") &&
-      this.check(TokenType.LT)
-    ) {
-      typeParams = this.parseTypeParameters();
-    }
-    let typeAnnotation: TypeNode | undefined;
-
-    if (this.match(TokenType.COLON)) {
-      typeAnnotation = this.parseTypeNode();
-    }
-
-    this.consume(TokenType.EQ, "Expected '=' in binding declaration");
-    let hasIndent = false;
-    if (this.match(TokenType.NEWLINE)) {
-      hasIndent = this.match(TokenType.INDENT);
-    }
-    const init = this.parseExpression();
-    if (typeParams) {
-      if (init.kind !== "FunctionExpression") {
-        throw new ParseError(
-          "Generic type parameters require a function initializer",
-          typeParams[0].span,
-        );
-      }
-      if (init.typeParams?.length) {
-        throw new ParseError(
-          "Generic type parameters may be declared either after the binding name or before the parameter list, not both",
-          typeParams[0].span,
-        );
-      }
-      init.typeParams = typeParams;
-      init.span = { start: typeParams[0].span.start, end: init.span.end };
-    }
-    if (
-      isJs &&
-      init.kind === "FunctionExpression" &&
-      init.params.some(
-        (p) =>
-          p.typeAnnotation?.kind === "RecordTypeNode" &&
-          p.typeAnnotation.fields.some(
-            (field) => field.optional || field.defaultValue,
-          ),
-      )
-    ) {
-      throw new ParseError(
-        "Optional and defaulted parameters inside record contracts are not yet supported on js entry bindings",
-        init.span,
-      );
-    }
-    if (hasIndent) {
-      this.skipNewlines();
-      if (!this.isAtEnd() && !this.check(TokenType.EOF)) {
-        this.consume(
-          TokenType.DEDENT,
-          "Expected unindent after binding expression",
-        );
-      }
-    }
-    this.consumeNewlineOrEof("Expected newline after binding");
-
-    return {
-      kind: "BindingDeclaration",
-      isMut,
-      isJs,
-      id,
-      typeAnnotation,
-      init,
-      span: { start, end: init.span.end },
-    };
+  public parseBindingDeclaration(isJs = false): BindingDeclaration {
+    return parseBindingDeclarationImpl(this, isJs);
   }
 
   private expressionToBindingTarget(expr: Expression): BindingTarget | null {
@@ -1213,7 +539,7 @@ export class Parser {
     }
   }
 
-  private parseWhenStatement(): WhenStatement {
+  public parseWhenStatement(): WhenStatement {
     const start = this.consume(TokenType.WHEN, "Expected 'when'").span.start;
     let condition: Expression;
     if (this.match(TokenType.LPAREN)) {
@@ -2151,193 +1477,7 @@ export class Parser {
   }
 
   public parsePattern(): Pattern {
-    const pat = this.parsePrimaryPattern();
-    if (this.match(TokenType.BAR)) {
-      const patterns: Pattern[] = [pat];
-      do {
-        patterns.push(this.parsePrimaryPattern());
-      } while (this.match(TokenType.BAR));
-      return {
-        kind: "OrPattern",
-        patterns,
-        span: {
-          start: pat.span.start,
-          end: patterns[patterns.length - 1].span.end,
-        },
-      };
-    }
-    return pat;
-  }
-
-  private parsePrimaryPattern(): Pattern {
-    if (this.match(TokenType.UNDERSCORE)) {
-      return { kind: "WildcardPattern", span: this.previous().span };
-    }
-    if (this.match(TokenType.NUMBER)) {
-      return {
-        kind: "LiteralPattern",
-        literal: {
-          kind: "NumberLiteral",
-          value: parseFloat(this.previous().value.replaceAll("_", "")),
-          raw: this.previous().value,
-          span: this.previous().span,
-        },
-        span: this.previous().span,
-      };
-    }
-    if (this.check(TokenType.STRING)) {
-      const lit = this.parseStringLiteral();
-      return {
-        kind: "LiteralPattern",
-        literal: lit,
-        span: lit.span,
-      };
-    }
-    if (this.match(TokenType.TRUE, TokenType.FALSE)) {
-      return {
-        kind: "LiteralPattern",
-        literal: {
-          kind: "BooleanLiteral",
-          value: this.previous().value === "true",
-          span: this.previous().span,
-        },
-        span: this.previous().span,
-      };
-    }
-    if (this.match(TokenType.UPPER_IDENTIFIER)) {
-      const start = this.previous().span.start;
-      const constructorName: UpperIdentifier = {
-        kind: "UpperIdentifier",
-        name: this.previous().value,
-        span: this.previous().span,
-      };
-      const args: Pattern[] = [];
-
-      if (this.match(TokenType.LPAREN)) {
-        if (!this.check(TokenType.RPAREN)) {
-          do {
-            args.push(this.parsePattern());
-          } while (
-            this.match(TokenType.COMMA) &&
-            !this.check(TokenType.RPAREN)
-          );
-        }
-        this.consume(
-          TokenType.RPAREN,
-          "Expected ')' after constructor pattern args",
-        );
-      }
-
-      return {
-        kind: "ConstructorPattern",
-        constructorName,
-        args,
-        span: { start, end: this.previous().span.end },
-      };
-    }
-    if (this.match(TokenType.IDENTIFIER)) {
-      return {
-        kind: "VariablePattern",
-        name: {
-          kind: "Identifier",
-          name: this.previous().value,
-          span: this.previous().span,
-        },
-        span: this.previous().span,
-      };
-    }
-    if (this.match(TokenType.LBRACE)) {
-      const start = this.previous().span.start;
-      const fields: RecordPatternField[] = [];
-      this.skipNewlines();
-      const hasIndent = this.match(TokenType.INDENT);
-
-      while (
-        !this.check(TokenType.RBRACE) &&
-        !this.check(TokenType.DEDENT) &&
-        !this.isAtEnd()
-      ) {
-        this.skipNewlines();
-        if (this.check(TokenType.RBRACE) || this.check(TokenType.DEDENT)) break;
-
-        const isRest = this.match(TokenType.DOTDOTDOT);
-        const key = this.parseIdentifier();
-        let pattern: Pattern | undefined;
-        if (!isRest && this.match(TokenType.COLON)) {
-          pattern = this.parsePattern();
-        }
-        fields.push({
-          kind: "RecordPatternField",
-          key,
-          pattern,
-          isRest: isRest || undefined,
-          span: {
-            start: isRest ? this.previous().span.start : key.span.start,
-            end: pattern ? pattern.span.end : key.span.end,
-          },
-        });
-
-        this.match(TokenType.COMMA);
-        this.skipNewlines();
-      }
-
-      if (hasIndent) {
-        this.consume(TokenType.DEDENT, "Expected unindent in record pattern");
-      }
-      this.skipNewlines();
-      const end = this.consume(
-        TokenType.RBRACE,
-        "Expected '}' after record pattern",
-      ).span.end;
-      return {
-        kind: "RecordPattern",
-        fields,
-        span: { start, end },
-      };
-    }
-    if (this.match(TokenType.LBRACKET)) {
-      const start = this.previous().span.start;
-      const elements: Pattern[] = [];
-      this.skipNewlines();
-      while (!this.check(TokenType.RBRACKET) && !this.isAtEnd()) {
-        this.skipNewlines();
-        if (this.check(TokenType.RBRACKET)) break;
-        if (this.match(TokenType.COMMA)) {
-          elements.push({
-            kind: "WildcardPattern",
-            span: this.previous().span,
-          });
-          continue;
-        }
-        if (this.match(TokenType.DOTDOTDOT)) {
-          const restStart = this.previous().span.start;
-          const arg = this.parsePattern();
-          elements.push({
-            kind: "RestPattern",
-            argument: arg,
-            span: { start: restStart, end: arg.span.end },
-          });
-        } else {
-          elements.push(this.parsePattern());
-        }
-        this.match(TokenType.COMMA);
-        this.skipNewlines();
-      }
-      const end = this.consume(
-        TokenType.RBRACKET,
-        "Expected ']' after array pattern",
-      ).span.end;
-      return {
-        kind: "ArrayPattern",
-        elements,
-        span: { start, end },
-      };
-    }
-
-    throw new ParseError(
-      `Unexpected pattern token '${this.peek().value}'`,
-      this.peek().span,
-    );
+    return parsePatternImpl(this);
   }
 
   // --- Effect Blocks ---
@@ -2763,98 +1903,16 @@ export class Parser {
     throw new ParseError("Invalid assignment target", expr.span);
   }
 
-  private collectPatternVariables(pat: Pattern | BindingTarget): string[] {
-    if (pat.kind === "Identifier" || pat.kind === "UpperIdentifier") {
-      return [pat.name];
-    }
-    if (pat.kind === "VariablePattern") {
-      return [pat.name.name];
-    }
-    if (pat.kind === "RecordPattern") {
-      const vars: string[] = [];
-      for (const f of pat.fields) {
-        if (!f.pattern) {
-          vars.push(f.key.name);
-        } else {
-          vars.push(...this.collectPatternVariables(f.pattern));
-        }
-      }
-      return vars;
-    }
-    if (pat.kind === "ArrayPattern") {
-      const vars: string[] = [];
-      for (const el of pat.elements) {
-        vars.push(...this.collectPatternVariables(el));
-      }
-      return vars;
-    }
-    if (pat.kind === "RestPattern") {
-      return this.collectPatternVariables(pat.argument);
-    }
-    return [];
+  public collectPatternVariables(pat: Pattern | BindingTarget): string[] {
+    return collectPatternVariablesImpl(pat);
   }
 
-  private isDestructuringBindingStart(): boolean {
-    if (!this.check(TokenType.LBRACE) && !this.check(TokenType.LBRACKET))
-      return false;
-    const stack: TokenType[] = [];
-    for (let i = 0; i < 512; i++) {
-      const tok = this.peekAhead(i);
-      if (tok.type === TokenType.EOF) return false;
-      if (tok.type === TokenType.LBRACE) {
-        stack.push(TokenType.RBRACE);
-      } else if (tok.type === TokenType.LBRACKET) {
-        stack.push(TokenType.RBRACKET);
-      } else if (
-        tok.type === TokenType.RBRACE ||
-        tok.type === TokenType.RBRACKET
-      ) {
-        if (stack.length === 0 || stack[stack.length - 1] !== tok.type) {
-          return false;
-        }
-        stack.pop();
-        if (stack.length === 0) {
-          let nextIdx = i + 1;
-          while (this.peekAhead(nextIdx).type === TokenType.NEWLINE) {
-            nextIdx++;
-          }
-          const next = this.peekAhead(nextIdx).type;
-          return next === TokenType.EQ || next === TokenType.COLON;
-        }
-      }
-    }
-    return false;
+  public isDestructuringBindingStart(): boolean {
+    return isDestructuringBindingStartImpl(this);
   }
 
-  private isDestructuringEffectBindStart(): boolean {
-    if (!this.check(TokenType.LBRACE) && !this.check(TokenType.LBRACKET))
-      return false;
-    const stack: TokenType[] = [];
-    for (let i = 0; i < 512; i++) {
-      const tok = this.peekAhead(i);
-      if (tok.type === TokenType.EOF) return false;
-      if (tok.type === TokenType.LBRACE) {
-        stack.push(TokenType.RBRACE);
-      } else if (tok.type === TokenType.LBRACKET) {
-        stack.push(TokenType.RBRACKET);
-      } else if (
-        tok.type === TokenType.RBRACE ||
-        tok.type === TokenType.RBRACKET
-      ) {
-        if (stack.length === 0 || stack[stack.length - 1] !== tok.type) {
-          return false;
-        }
-        stack.pop();
-        if (stack.length === 0) {
-          let nextIdx = i + 1;
-          while (this.peekAhead(nextIdx).type === TokenType.NEWLINE) {
-            nextIdx++;
-          }
-          return this.peekAhead(nextIdx).type === TokenType.LARROW;
-        }
-      }
-    }
-    return false;
+  public isDestructuringEffectBindStart(): boolean {
+    return isDestructuringEffectBindStartImpl(this);
   }
 
   private parseFunctionBody(requireExplicitReturn = false): FunctionBody {
@@ -3185,39 +2243,39 @@ export class Parser {
 
   // --- Types ---
 
-  private parseTypeNode(): TypeNode {
+  public parseTypeNode(): TypeNode {
     return parseTypeNode(this);
   }
 
-  private parseUnionType(): TypeNode {
+  public parseUnionType(): TypeNode {
     return parseUnionType(this);
   }
 
-  private parseIntersectionType(): TypeNode {
+  public parseIntersectionType(): TypeNode {
     return parseIntersectionType(this);
   }
 
-  private parseFunctionTypeNode(): TypeNode {
+  public parseFunctionTypeNode(): TypeNode {
     return parseFunctionTypeNode(this);
   }
 
-  private parsePrimaryType(): TypeNode {
+  public parsePrimaryType(): TypeNode {
     return parsePrimaryType(this);
   }
 
-  private parseEffectTypeNode(): EffectTypeNode {
+  public parseEffectTypeNode(): EffectTypeNode {
     return parseEffectTypeNode(this);
   }
 
-  private parseGenericFunctionExpression(): FunctionExpression {
+  public parseGenericFunctionExpression(): FunctionExpression {
     return parseGenericFunctionExpression(this);
   }
 
-  private isGenericCallableStart(): boolean {
+  public isGenericCallableStart(): boolean {
     return isGenericCallableStart(this);
   }
 
-  private parseTypeParameters(): TypeParameter[] {
+  public parseTypeParameters(): TypeParameter[] {
     return parseTypeParameters(this);
   }
 
@@ -3414,7 +2472,7 @@ export class Parser {
     while (this.match(TokenType.NEWLINE)) {}
   }
 
-  private consumeNewlineOrEof(message = "Expected newline"): void {
+  public consumeNewlineOrEof(message = "Expected newline"): void {
     if (
       this.isAtEnd() ||
       this.check(TokenType.DEDENT) ||
