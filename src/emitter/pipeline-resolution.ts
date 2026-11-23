@@ -1,6 +1,8 @@
 import type {
   BindingDeclaration,
+  CallExpression,
   Expression,
+  Identifier,
   RecordEntry,
 } from "../ast/types.js";
 import {
@@ -243,13 +245,34 @@ export class PipelineResolver {
     stage: Expression,
     preferredCompanion?: CompanionModule,
   ): Expression {
-    // 0. 'js' pipeline stage: eff |> js => pipe(eff, Effect.runPromise)
-    if (stage.kind === "Identifier" && stage.name === "js") {
+    // 0. 'runPromise' / 'runSync' / 'js' pipeline stage:
+    //    eff |> runPromise => pipe(eff, Effect.runPromise)
+    //    eff |> runSync => pipe(eff, Effect.runSync)
+    //    eff |> js => pipe(eff, Effect.runPromise) (legacy alias)
+    const isRunnerIdentifier =
+      stage.kind === "Identifier" &&
+      (stage.name === "runPromise" ||
+        stage.name === "runSync" ||
+        stage.name === "js");
+
+    const isRunnerCall =
+      stage.kind === "CallExpression" &&
+      stage.callee.kind === "Identifier" &&
+      (stage.callee.name === "runPromise" || stage.callee.name === "runSync") &&
+      stage.args.length === 0;
+
+    if (isRunnerIdentifier || isRunnerCall) {
+      const runnerName =
+        stage.kind === "Identifier"
+          ? stage.name === "js"
+            ? "runPromise"
+            : stage.name
+          : (stage.callee as Identifier).name;
       this.context.effectImports.add("Effect");
       return {
         kind: "MemberExpression",
         object: { kind: "UpperIdentifier", name: "Effect", span: stage.span },
-        property: { kind: "Identifier", name: "runPromise", span: stage.span },
+        property: { kind: "Identifier", name: runnerName, span: stage.span },
         span: stage.span,
       };
     }
@@ -672,6 +695,9 @@ export class PipelineResolver {
           : undefined;
     if (!name || preferredCompanion) return;
     if (
+      name === "js" ||
+      name === "runPromise" ||
+      name === "runSync" ||
       name === "decodeJson" ||
       name === "decodeJsonSync" ||
       name === "encodeJson" ||

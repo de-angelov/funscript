@@ -1,7 +1,12 @@
 import { describe, it, expect } from "vitest";
 import { Effect, Option } from "effect";
 import ts from "typescript";
-import { compileString, checkString, CompilerError, TypeScriptCompilationContext } from "../src/compiler.js";
+import {
+  compileString,
+  checkString,
+  CompilerError,
+  TypeScriptCompilationContext,
+} from "../src/compiler.js";
 import { typeCheckSource } from "../src/compiler/check.js";
 import {
   compile,
@@ -14,8 +19,18 @@ import {
 describe("FunScript Compiler", () => {
   it("reuses a compilation context across different source files", async () => {
     const context = new TypeScriptCompilationContext("first.fun");
-    const first = await Effect.runPromise(compileString("export first = 1", "first.fun", { context, sourcemap: false }));
-    const second = await Effect.runPromise(compileString('export second = "ok"', "second.fun", { context, sourcemap: false }));
+    const first = await Effect.runPromise(
+      compileString("export first = 1", "first.fun", {
+        context,
+        sourcemap: false,
+      }),
+    );
+    const second = await Effect.runPromise(
+      compileString('export second = "ok"', "second.fun", {
+        context,
+        sourcemap: false,
+      }),
+    );
     expect(first.typescript).toContain("export const first = 1;");
     expect(second.typescript).toContain('export const second = "ok";');
   });
@@ -71,30 +86,52 @@ export nextAge = age + 1
   });
 
   it("suggests inclusive Effect predicates for inclusive operators", async () => {
-    for (const [operator, method] of [[">=", "isGreaterThanOrEqualTo"], ["<=", "isLessThanOrEqualTo"]]) {
-      await expect(Effect.runPromise(compileString(`export invalid = (value: String) => value ${operator} "x"`)))
-        .rejects.toThrow(`Order.${method}(String.Order)`);
+    for (const [operator, method] of [
+      [">=", "isGreaterThanOrEqualTo"],
+      ["<=", "isLessThanOrEqualTo"],
+    ]) {
+      await expect(
+        Effect.runPromise(
+          compileString(
+            `export invalid = (value: String) => value ${operator} "x"`,
+          ),
+        ),
+      ).rejects.toThrow(`Order.${method}(String.Order)`);
     }
   });
 
   it("infers pipeline companions in funx files", async () => {
-    const source = "ts { declare function numbers(): ReadonlyArray<number> }\nexport result = numbers() |> map((x) => x + 1)";
-    const result = await Effect.runPromise(compileString(source, "inference.funx"));
+    const source =
+      "ts { declare function numbers(): ReadonlyArray<number> }\nexport result = numbers() |> map((x) => x + 1)";
+    const result = await Effect.runPromise(
+      compileString(source, "inference.funx"),
+    );
     expect(result.typescript).toContain("Array.map");
   });
 
   it("rejects ambiguous pipeline stages on mixed unions", async () => {
-    const source = "ts { declare const value: ReadonlyArray<number> | string }\nexport result = value |> map((x) => x)";
-    await expect(Effect.runPromise(compileString(source, "union.fun"))).rejects.toThrow("map is ambiguous");
-    const optional = "ts { declare const value: import('effect').Option.Option<number> | undefined }\nexport result = value |> map((x) => x)";
-    await expect(Effect.runPromise(compileString(optional, "optional-union.fun"))).rejects.toThrow("map is ambiguous");
+    const source =
+      "ts { declare const value: ReadonlyArray<number> | string }\nexport result = value |> map((x) => x)";
+    await expect(
+      Effect.runPromise(compileString(source, "union.fun")),
+    ).rejects.toThrow("map is ambiguous");
+    const optional =
+      "ts { declare const value: import('effect').Option.Option<number> | undefined }\nexport result = value |> map((x) => x)";
+    await expect(
+      Effect.runPromise(compileString(optional, "optional-union.fun")),
+    ).rejects.toThrow("map is ambiguous");
   });
 
   it("enforces numeric ordering in funx files", async () => {
-    const result = await Effect.runPromise(compileString("export valid = 1 < 2", "comparison.funx"));
+    const result = await Effect.runPromise(
+      compileString("export valid = 1 < 2", "comparison.funx"),
+    );
     expect(result.typescript).toContain("(1 < 2)");
-    await expect(Effect.runPromise(compileString('export invalid = "a" < "b"', "comparison.funx")))
-      .rejects.toThrow("< is only available for numbers");
+    await expect(
+      Effect.runPromise(
+        compileString('export invalid = "a" < "b"', "comparison.funx"),
+      ),
+    ).rejects.toThrow("< is only available for numbers");
   });
 
   it("preserves checker facts across comparison, pipeline, and interop passes", async () => {
@@ -106,8 +143,12 @@ export result = effect {
   => values |> Array.filter((n: Number) => n > 0)
 }
 `.trim();
-    const result = await Effect.runPromise(compileString(code, "mixed-checks.fun"));
-    expect(result.typescript).toContain("__funscriptJs(() => nativeValue(), true)");
+    const result = await Effect.runPromise(
+      compileString(code, "mixed-checks.fun"),
+    );
+    expect(result.typescript).toContain(
+      "__funscriptJs(() => nativeValue(), true)",
+    );
     expect(result.typescript).toContain("Array.filter");
     expect(result.typescript).toContain("(n > 0)");
   });
@@ -120,15 +161,21 @@ export res = 5 |> add(10, _)
 
     const res = await Effect.runPromise(compileString(code));
     expect(res.typescript).toContain(`import { pipe } from "effect";`);
-    expect(res.typescript).toContain(`export const add = (a: number, b: number) => (a + b);`);
+    expect(res.typescript).toContain(
+      `export const add = (a: number, b: number) => (a + b);`,
+    );
     expect(res.typescript).toContain(`(__p) => add(10, __p)`);
   });
 
   it("compiles export default declarations", async () => {
-    const resId = await Effect.runPromise(compileString("App = 1\nexport default App"));
+    const resId = await Effect.runPromise(
+      compileString("App = 1\nexport default App"),
+    );
     expect(resId.typescript).toContain("export default App;");
 
-    const resArrow = await Effect.runPromise(compileString("export default () => <div />", "app.funx"));
+    const resArrow = await Effect.runPromise(
+      compileString("export default () => <div />", "app.funx"),
+    );
     expect(resArrow.typescript).toContain("export default () => <div />;");
 
     const resLit = await Effect.runPromise(compileString("export default 42"));
@@ -141,13 +188,21 @@ export res = 5 |> add(10, _)
     const res = await Effect.runPromise(compileString(code));
     expect(res.typescript).toContain(`Effect.mapError((reason) => "mapped")`);
 
-    const checked = await Effect.runPromise(typeCheckSource(code, "map-error.fun"));
+    const checked = await Effect.runPromise(
+      typeCheckSource(code, "map-error.fun"),
+    );
     expect(checked.success, checked.formattedOutput).toBe(true);
   });
 
   it("keeps Effect compatibility aliases available as bare Effect stages", async () => {
-    const result = await Effect.runPromise(compileString(`export recovered = Effect.fail("nope") |> catchAll(() => Effect.succeed("ok"))`));
-    expect(result.typescript).toContain(`Effect.catch(() => Effect.succeed("ok"))`);
+    const result = await Effect.runPromise(
+      compileString(
+        `export recovered = Effect.fail("nope") |> catchAll(() => Effect.succeed("ok"))`,
+      ),
+    );
+    expect(result.typescript).toContain(
+      `Effect.catch(() => Effect.succeed("ok"))`,
+    );
   });
 
   it("resolves Schedule and Layer stages from their proven sources", async () => {
@@ -156,9 +211,13 @@ export schedule = Schedule.recurs(1) |> map((metadata) => metadata.output)
 export layer = Layer.empty |> fresh
 `.trim();
     const result = await Effect.runPromise(compileString(source));
-    expect(result.typescript).toContain("Schedule.map((metadata) => metadata.output)");
+    expect(result.typescript).toContain(
+      "Schedule.map((metadata) => metadata.output)",
+    );
     expect(result.typescript).toContain("Layer.fresh");
-    const checked = await Effect.runPromise(typeCheckSource(source, "schedule-layer.fun"));
+    const checked = await Effect.runPromise(
+      typeCheckSource(source, "schedule-layer.fun"),
+    );
     expect(checked.success, checked.formattedOutput).toBe(true);
   });
 
@@ -166,8 +225,12 @@ export layer = Layer.empty |> fresh
     const source = `export values = Stream.succeed(1) |> map((value) => value + 1) |> flatMap((value) => Stream.succeed(value))`;
     const result = await Effect.runPromise(compileString(source));
     expect(result.typescript).toContain("Stream.map((value) => (value + 1))");
-    expect(result.typescript).toContain("Stream.flatMap((value) => Stream.succeed(value))");
-    const checked = await Effect.runPromise(typeCheckSource(source, "stream.fun"));
+    expect(result.typescript).toContain(
+      "Stream.flatMap((value) => Stream.succeed(value))",
+    );
+    const checked = await Effect.runPromise(
+      typeCheckSource(source, "stream.fun"),
+    );
     expect(checked.success, checked.formattedOutput).toBe(true);
   });
 
@@ -175,7 +238,9 @@ export layer = Layer.empty |> fresh
     const source = `export Named = Schema.String |> annotate({ title: "Name" })`;
     const result = await Effect.runPromise(compileString(source));
     expect(result.typescript).toContain(`Schema.annotate({ title: "Name" })`);
-    const checked = await Effect.runPromise(typeCheckSource(source, "schema-pipeline.fun"));
+    const checked = await Effect.runPromise(
+      typeCheckSource(source, "schema-pipeline.fun"),
+    );
     expect(checked.success, checked.formattedOutput).toBe(true);
   });
 
@@ -191,47 +256,73 @@ export transformed =
 
     const res = await Effect.runPromise(compileString(code));
     expect(res.typescript).toContain(`Effect.map((value) => (value + 1))`);
-    expect(res.typescript).toContain(`Effect.flatMap((value) => Effect.succeed((value * 2)))`);
+    expect(res.typescript).toContain(
+      `Effect.flatMap((value) => Effect.succeed((value * 2)))`,
+    );
     expect(res.typescript).toContain(`Effect.as("done")`);
     expect(res.typescript).toContain(`Effect.timeout("1 second")`);
 
-    const checked = await Effect.runPromise(typeCheckSource(code, "effect-pipeline.fun"));
+    const checked = await Effect.runPromise(
+      typeCheckSource(code, "effect-pipeline.fun"),
+    );
     expect(checked.success, checked.formattedOutput).toBe(true);
   });
 
   it("uses a proven array source to resolve an otherwise ambiguous bare operation", async () => {
-    const res = await Effect.runPromise(compileString(`export values = [1, 2] |> map((value) => value + 1)`));
+    const res = await Effect.runPromise(
+      compileString(`export values = [1, 2] |> map((value) => value + 1)`),
+    );
     expect(res.typescript).toContain(`Array.map((value) => (value + 1))`);
   });
 
   it("proves companion modules through local pipeline bindings", async () => {
-    const res = await Effect.runPromise(compileString(`
+    const res = await Effect.runPromise(
+      compileString(
+        `
 export value = Option.some(1)
 export mapped = value |> map((item) => item + 1)
-`.trim()));
+`.trim(),
+      ),
+    );
     expect(res.typescript).toContain(`Option.map((item) => (item + 1))`);
-    const checked = await Effect.runPromise(typeCheckSource(`
+    const checked = await Effect.runPromise(
+      typeCheckSource(
+        `
 export value = Option.some(1)
 export mapped = value |> map((item) => item + 1)
-`.trim(), "option-binding.fun"));
+`.trim(),
+        "option-binding.fun",
+      ),
+    );
     expect(checked.success, checked.formattedOutput).toBe(true);
   });
 
   it("uses TypeScript inference for a pipeline source returned by a function", async () => {
-    const source = "export make = () => Option.some(1)\nexport mapped = make() |> map((item) => item + 1)";
-    const result = await Effect.runPromise(compileString(source, "function-result.fun"));
+    const source =
+      "export make = () => Option.some(1)\nexport mapped = make() |> map((item) => item + 1)";
+    const result = await Effect.runPromise(
+      compileString(source, "function-result.fun"),
+    );
     expect(result.typescript).toContain("Option.map((item) => (item + 1))");
   });
 
   it("uses TypeScript inference for an imported pipeline source", async () => {
-    const source = 'import { importedOption } from "./fixtures/pipeline-companion-source.js"\nexport mapped = importedOption |> map((item) => item + 1)';
-    const result = await Effect.runPromise(compileString(source, "tests/imported-pipeline.fun"));
+    const source =
+      'import { importedOption } from "./fixtures/pipeline-companion-source.js"\nexport mapped = importedOption |> map((item) => item + 1)';
+    const result = await Effect.runPromise(
+      compileString(source, "tests/imported-pipeline.fun"),
+    );
     expect(result.typescript).toContain("Option.map((item) => (item + 1))");
   });
 
   it("reports an actionable diagnostic for an unproven ambiguous bare operation", async () => {
-    await expect(Effect.runPromise(compileString(`export apply = (value) => value |> map((item) => item)`)))
-      .rejects.toThrow("map is ambiguous for this pipeline; write Array.map(...) or Option.map(...)");
+    await expect(
+      Effect.runPromise(
+        compileString(`export apply = (value) => value |> map((item) => item)`),
+      ),
+    ).rejects.toThrow(
+      "map is ambiguous for this pipeline; write Array.map(...) or Option.map(...)",
+    );
   });
 
   it("compiles pipeline placeholder binary, member, unary, and logical expressions", async () => {
@@ -246,10 +337,16 @@ export resChained = 5 |> (_ + 1) |> (_ * 2)
     const res = await compile(code);
     expect(res.typescript).toContain(`import { pipe } from "effect";`);
     expect(res.typescript).toContain(`pipe(\n  5,\n  (__p) => (__p + 1)\n)`);
-    expect(res.typescript).toContain(`pipe(\n  user,\n  (__p) => __p.profile.name\n)`);
+    expect(res.typescript).toContain(
+      `pipe(\n  user,\n  (__p) => __p.profile.name\n)`,
+    );
     expect(res.typescript).toContain(`pipe(\n  true,\n  (__p) => (!__p)\n)`);
-    expect(res.typescript).toContain(`pipe(\n  7,\n  (__p) => ((__p === 7) && (__p !== 0))\n)`);
-    expect(res.typescript).toContain(`pipe(\n  5,\n  (__p) => (__p + 1),\n  (__p) => (__p * 2)\n)`);
+    expect(res.typescript).toContain(
+      `pipe(\n  7,\n  (__p) => ((__p === 7) && (__p !== 0))\n)`,
+    );
+    expect(res.typescript).toContain(
+      `pipe(\n  5,\n  (__p) => (__p + 1),\n  (__p) => (__p * 2)\n)`,
+    );
 
     const evaluated = evalTypescript(res.typescript, {
       scope: { user: { profile: { name: "Alice" } } },
@@ -280,7 +377,9 @@ export schema Shape =
     expect(res.typescript).toContain(`id: Schema.String`);
     expect(res.typescript).toContain(`export type Shape = Data.TaggedEnum<{`);
     expect(res.typescript).toContain(`Circle: { readonly radius: number }`);
-    expect(res.typescript).toContain(`export const Point: Shape = $Shape.Point();`);
+    expect(res.typescript).toContain(
+      `export const Point: Shape = $Shape.Point();`,
+    );
   });
 
   it("emits Array schemas for fields in Schema.Struct", async () => {
@@ -289,7 +388,9 @@ export schema Shape =
 
     const { Items } = evalTypescript(res.typescript).exports;
     const { Schema } = await import("effect");
-    expect(Schema.decodeUnknownSync(Items)({ items: ["a", "b"] })).toEqual({ items: ["a", "b"] });
+    expect(Schema.decodeUnknownSync(Items)({ items: ["a", "b"] })).toEqual({
+      items: ["a", "b"],
+    });
   });
 
   it("compiles ts schema declarations for imported TypeScript types and structural types", async () => {
@@ -303,7 +404,9 @@ export ts schema Config = { timeout: Number }
     expect(res.typescript).toContain(`import { Schema } from "effect";`);
     expect(res.typescript).toContain(`export const User = Schema.Struct({`);
     expect(res.typescript).toContain(`export type User = typeof User.Type;`);
-    expect(res.typescript).toContain(`export const UserFromUnknown = (input: unknown): User => Schema.decodeUnknownSync(User)(input);`);
+    expect(res.typescript).toContain(
+      `export const UserFromUnknown = (input: unknown): User => Schema.decodeUnknownSync(User)(input);`,
+    );
     expect(res.typescript).toContain(`export const Config = Schema.Struct({`);
     expect(res.typescript).toContain(`timeout: Schema.Number`);
 
@@ -324,12 +427,52 @@ export runPromiseTest = fetchUser("123") |> js
 `.trim();
 
     const res = await Effect.runPromise(compileString(code));
-      expect(res.typescript).toContain(`import { Effect, Option, Schema, pipe } from "effect";`);
-    expect(res.typescript).toContain(`export const fetchUser = (id: string) => {`);
-    expect(res.typescript).toContain(`id = Schema.decodeUnknownSync(Schema.String)(id);`);
-      expect(res.typescript).toContain(`const res = yield* __funscriptJs(() => fetch(("https://api.com/users/" + id)), false);`);
-      expect(res.typescript).toContain(`const payload = yield* __funscriptJs(() => res.json(), "unknown");`);
+    expect(res.typescript).toContain(
+      `import { Effect, Option, Schema, pipe } from "effect";`,
+    );
+    expect(res.typescript).toContain(
+      `export const fetchUser = (id: string) => {`,
+    );
+    expect(res.typescript).toContain(
+      `id = Schema.decodeUnknownSync(Schema.String)(id);`,
+    );
+    expect(res.typescript).toContain(
+      `const res = yield* __funscriptJs(() => fetch(("https://api.com/users/" + id)), false);`,
+    );
+    expect(res.typescript).toContain(
+      `const payload = yield* __funscriptJs(() => res.json(), "unknown");`,
+    );
     expect(res.typescript).toContain(`Effect.runPromise`);
+  });
+
+  it("compiles 'runPromise' and 'runSync' pipeline runners to Effect runners", async () => {
+    const code = `
+import { Effect } from "effect"
+
+export eff = Effect.succeed(42)
+export testPromiseBare = eff |> runPromise
+export testPromiseCall = eff |> runPromise()
+export testSyncBare = eff |> runSync
+export testSyncCall = eff |> runSync()
+export testLegacyJs = eff |> js
+`.trim();
+
+    const res = await Effect.runPromise(compileString(code));
+    expect(res.typescript).toContain(
+      `export const testPromiseBare = pipe(\n  eff,\n  Effect.runPromise\n);`,
+    );
+    expect(res.typescript).toContain(
+      `export const testPromiseCall = pipe(\n  eff,\n  Effect.runPromise\n);`,
+    );
+    expect(res.typescript).toContain(
+      `export const testSyncBare = pipe(\n  eff,\n  Effect.runSync\n);`,
+    );
+    expect(res.typescript).toContain(
+      `export const testSyncCall = pipe(\n  eff,\n  Effect.runSync\n);`,
+    );
+    expect(res.typescript).toContain(
+      `export const testLegacyJs = pipe(\n  eff,\n  Effect.runPromise\n);`,
+    );
   });
 
   it("uses TypeScript return types to normalize nullable js results to Option", async () => {
@@ -356,16 +499,30 @@ export untrusted = effect {
 }
 `.trim();
 
-    const res = await Effect.runPromise(compileString(code, "native-interop.fun"));
-    expect(res.typescript).toContain('import { Effect, Option } from "effect";');
-    expect(res.typescript).toContain('class JsInteropError extends Error');
-    expect(res.typescript).toContain("__funscriptJs(() => nullableNative(), true)");
-    expect(res.typescript).toContain("__funscriptJs(() => requiredNative(), false)");
-    expect(res.typescript).toContain('__funscriptJs(() => untrustedNative(), "unknown")');
+    const res = await Effect.runPromise(
+      compileString(code, "native-interop.fun"),
+    );
+    expect(res.typescript).toContain(
+      'import { Effect, Option } from "effect";',
+    );
+    expect(res.typescript).toContain("class JsInteropError extends Error");
+    expect(res.typescript).toContain(
+      "__funscriptJs(() => nullableNative(), true)",
+    );
+    expect(res.typescript).toContain(
+      "__funscriptJs(() => requiredNative(), false)",
+    );
+    expect(res.typescript).toContain(
+      '__funscriptJs(() => untrustedNative(), "unknown")',
+    );
     expect(res.typescript).toContain("Option.fromNullishOr");
-    expect(res.typescript).toContain("catch: (cause) => new JsInteropError(cause)");
+    expect(res.typescript).toContain(
+      "catch: (cause) => new JsInteropError(cause)",
+    );
 
-    const checked = await Effect.runPromise(typeCheckSource(code, "native-interop.fun"));
+    const checked = await Effect.runPromise(
+      typeCheckSource(code, "native-interop.fun"),
+    );
     expect(checked.success, checked.formattedOutput).toBe(true);
   });
 
@@ -393,19 +550,29 @@ export runThrow = effect {
 }
 `.trim();
 
-    const res = await Effect.runPromise(compileString(code, "sync-interop.fun"));
-    expect(res.typescript).toContain("__funscriptJs(() => syncSuccess(), false)");
-    expect(res.typescript).toContain("__funscriptJs(() => syncNullable(), true)");
+    const res = await Effect.runPromise(
+      compileString(code, "sync-interop.fun"),
+    );
+    expect(res.typescript).toContain(
+      "__funscriptJs(() => syncSuccess(), false)",
+    );
+    expect(res.typescript).toContain(
+      "__funscriptJs(() => syncNullable(), true)",
+    );
     expect(res.typescript).toContain("__funscriptJs(() => syncThrow(), false)");
 
-    const checked = await Effect.runPromise(typeCheckSource(code, "sync-interop.fun"));
+    const checked = await Effect.runPromise(
+      typeCheckSource(code, "sync-interop.fun"),
+    );
     expect(checked.success, checked.formattedOutput).toBe(true);
 
     const output = await execute(code, {
       scope: {
         syncSuccess: () => "computed",
         syncNullable: () => null,
-        syncThrow: () => { throw new Error("sync error message"); },
+        syncThrow: () => {
+          throw new Error("sync error message");
+        },
       },
     });
 
@@ -420,7 +587,10 @@ export runThrow = effect {
     expect((failureVal as any).cause.message).toBe("sync error message");
 
     // Rejects redundant js.try with clear guidance
-    await expectCompileError("res = js.try(myFunction)", "FunScript has no 'js.try'; use 'js <expr>'");
+    await expectCompileError(
+      "res = js.try(myFunction)",
+      "FunScript has no 'js.try'; use 'js <expr>'",
+    );
   });
 
   it("preserves unions of native Promise return types", async () => {
@@ -444,10 +614,18 @@ type RequiredResult = Assert<EqualTypes<Effect.Success<typeof required>, { statu
 type NullableResult = Assert<EqualTypes<Effect.Success<typeof nullable>, Option.Option<string>>>;
 }
 `.trim();
-    const compiled = await Effect.runPromise(compileString(code, "promise-union.fun"));
-    expect(compiled.typescript).toContain("__funscriptJs(() => nativeUnion(), false)");
-    expect(compiled.typescript).toContain("__funscriptJs(() => nullableUnion(), true)");
-    const checked = await Effect.runPromise(typeCheckSource(code, "promise-union.fun"));
+    const compiled = await Effect.runPromise(
+      compileString(code, "promise-union.fun"),
+    );
+    expect(compiled.typescript).toContain(
+      "__funscriptJs(() => nativeUnion(), false)",
+    );
+    expect(compiled.typescript).toContain(
+      "__funscriptJs(() => nullableUnion(), true)",
+    );
+    const checked = await Effect.runPromise(
+      typeCheckSource(code, "promise-union.fun"),
+    );
     expect(checked.success, checked.formattedOutput).toBe(true);
   });
 
@@ -463,7 +641,9 @@ export createBuffer = ts { Buffer.from('hello') }
     const res = await Effect.runPromise(compileString(code));
     expect(res.typescript).toContain(`interface CustomBuffer { size: number }`);
     expect(res.typescript).toContain(`Record<string, unknown>`);
-    expect(res.typescript).toContain(`export const createBuffer = Buffer.from('hello');`);
+    expect(res.typescript).toContain(
+      `export const createBuffer = Buffer.from('hello');`,
+    );
   });
 
   it("compiles brace-delimited 'ts' block escape hatches", async () => {
@@ -485,8 +665,14 @@ export host = "localhost"
   });
 
   it("rejects removed quoted and indentation-based ts escapes", async () => {
-    await expect(Effect.runPromise(compileString('schema Legacy = ts "Record<string, unknown>"'))).rejects.toThrow("Expected '{ ... }' after 'ts'");
-    await expect(Effect.runPromise(compileString("ts\n  interface Legacy {}"))).rejects.toThrow("Expected '{ ... }' after 'ts'");
+    await expect(
+      Effect.runPromise(
+        compileString('schema Legacy = ts "Record<string, unknown>"'),
+      ),
+    ).rejects.toThrow("Expected '{ ... }' after 'ts'");
+    await expect(
+      Effect.runPromise(compileString("ts\n  interface Legacy {}")),
+    ).rejects.toThrow("Expected '{ ... }' after 'ts'");
   });
 
   it("compiles effect blocks with direct service calls", async () => {
@@ -502,7 +688,9 @@ export getUser = (id: String) =>
     const res = await Effect.runPromise(compileString(code));
     expect(res.typescript).toMatch(/import \{.*Effect.*\} from "effect";/);
     expect(res.typescript).toContain(`Effect.scoped(Effect.gen(function* () {`);
-    expect(res.typescript).toContain(`const user = yield* (yield* UserRepo).find(id);`);
+    expect(res.typescript).toContain(
+      `const user = yield* (yield* UserRepo).find(id);`,
+    );
     expect(res.typescript).toContain(`yield* Console.log(user);`);
     expect(res.typescript).toContain(`return user;`);
   });
@@ -519,19 +707,27 @@ export fetch =
 `.trim();
 
     const res = await Effect.runPromise(compileString(code));
-    expect(res.typescript).toContain(`const response = yield* HttpClient.get("https://example.com");`);
+    expect(res.typescript).toContain(
+      `const response = yield* HttpClient.get("https://example.com");`,
+    );
     expect(res.typescript).not.toContain("yield* (yield* HttpClient)");
   });
 
   it("compiles brace-delimited effects as pipeline expressions", async () => {
-    const res = await Effect.runPromise(compileString(`result = effect {\n  user <- fetchUser()\n  => user |> summarize\n}`));
+    const res = await Effect.runPromise(
+      compileString(
+        `result = effect {\n  user <- fetchUser()\n  => user |> summarize\n}`,
+      ),
+    );
     expect(res.typescript).toContain("Effect.gen(function* () {");
     expect(res.typescript).toContain("const user = yield* fetchUser();");
     expect(res.typescript).toContain("summarize");
   });
 
   it("keeps explicitly qualified non-companion pipeline stages intact", async () => {
-    const result = await Effect.runPromise(compileString("export result = value |> Custom.transform(1)"));
+    const result = await Effect.runPromise(
+      compileString("export result = value |> Custom.transform(1)"),
+    );
     expect(result.typescript).toContain("Custom.transform(1)");
   });
 
@@ -560,8 +756,12 @@ export conditionalBlock = (enabled: Boolean) =>
 
     const res = await Effect.runPromise(compileString(code));
     expect(res.typescript).toContain(`if (skip) return "early";`);
-    expect(res.typescript).toContain(`if (shouldFail) return yield* Effect.fail("failed");`);
-    expect(res.typescript).toContain(`if (enabled) {\n  const selected = "inside";\n}`);
+    expect(res.typescript).toContain(
+      `if (shouldFail) return yield* Effect.fail("failed");`,
+    );
+    expect(res.typescript).toContain(
+      `if (enabled) {\n  const selected = "inside";\n}`,
+    );
     expect(res.typescript).toContain(`return "done";`);
   });
 
@@ -573,7 +773,9 @@ export run = effect {
 }
 `.trim();
     const resScoped = await Effect.runPromise(compileString(scopedCode));
-    expect(resScoped.typescript).toContain(`Effect.scoped(Effect.gen(function* () {`);
+    expect(resScoped.typescript).toContain(
+      `Effect.scoped(Effect.gen(function* () {`,
+    );
 
     const unscopedCode = `
 export run = effect (unscoped) {
@@ -594,7 +796,9 @@ export fetchBoth = par {
 }
 `.trim();
     const resInherit = await Effect.runPromise(compileString(parInheritCode));
-    expect(resInherit.typescript).toContain(`Effect.all({\n      users: fetchUsers(),\n      posts: fetchPosts()\n    }, { concurrency: "inherit" })`);
+    expect(resInherit.typescript).toContain(
+      `Effect.all({\n      users: fetchUsers(),\n      posts: fetchPosts()\n    }, { concurrency: "inherit" })`,
+    );
 
     const parCustomCode = `
 export fetchBoth = par (2) {
@@ -604,7 +808,9 @@ export fetchBoth = par (2) {
 }
 `.trim();
     const resCustom = await Effect.runPromise(compileString(parCustomCode));
-    expect(resCustom.typescript).toContain(`Effect.all({\n      users: fetchUsers(),\n      posts: fetchPosts()\n    }, { concurrency: 2 })`);
+    expect(resCustom.typescript).toContain(
+      `Effect.all({\n      users: fetchUsers(),\n      posts: fetchPosts()\n    }, { concurrency: 2 })`,
+    );
 
     const parMappedCode = `
 export sum = par {
@@ -614,7 +820,9 @@ export sum = par {
 }
 `.trim();
     const resMapped = await Effect.runPromise(compileString(parMappedCode));
-    expect(resMapped.typescript).toContain(`Effect.map(Effect.all({\n      a: getA(),\n      b: getB()\n    }, { concurrency: "inherit" }), ({ a, b }) => (a + b))`);
+    expect(resMapped.typescript).toContain(
+      `Effect.map(Effect.all({\n      a: getA(),\n      b: getB()\n    }, { concurrency: "inherit" }), ({ a, b }) => (a + b))`,
+    );
   });
 
   it("rejects early returns inside par blocks", async () => {
@@ -624,24 +832,36 @@ export bad = par {
   a <- getA()
 }
 `.trim();
-    await expect(Effect.runPromise(compileString(code))).rejects.toThrow("Early return 'when (...) =>' is rejected inside 'par' blocks");
+    await expect(Effect.runPromise(compileString(code))).rejects.toThrow(
+      "Early return 'when (...) =>' is rejected inside 'par' blocks",
+    );
   });
 
   it("compiles retry pipeline stage with jittered exponential backoff default", async () => {
     const defaultJitterCode = `
 export fetchWithRetry = apiCall |> retry({ backoff: "100 millis", max: 3 })
 `.trim();
-    const resDefault = await Effect.runPromise(compileString(defaultJitterCode));
-    expect(resDefault.typescript).toContain(`import { Effect, Schedule, pipe } from "effect";`);
+    const resDefault = await Effect.runPromise(
+      compileString(defaultJitterCode),
+    );
+    expect(resDefault.typescript).toContain(
+      `import { Effect, Schedule, pipe } from "effect";`,
+    );
     expect(resDefault.typescript).toContain(`Effect.retry({`);
-    expect(resDefault.typescript).toContain(`schedule: Schedule.jittered(Schedule.exponential("100 millis"))`);
+    expect(resDefault.typescript).toContain(
+      `schedule: Schedule.jittered(Schedule.exponential("100 millis"))`,
+    );
     expect(resDefault.typescript).toContain(`times: 3`);
 
     const disabledJitterCode = `
 export fetchWithRetry = apiCall |> retry({ backoff: "100 millis", max: 3, jitter: false })
 `.trim();
-    const resDisabled = await Effect.runPromise(compileString(disabledJitterCode));
-    expect(resDisabled.typescript).toContain(`schedule: Schedule.exponential("100 millis")`);
+    const resDisabled = await Effect.runPromise(
+      compileString(disabledJitterCode),
+    );
+    expect(resDisabled.typescript).toContain(
+      `schedule: Schedule.exponential("100 millis")`,
+    );
     expect(resDisabled.typescript).not.toContain(`Schedule.jittered`);
   });
 
@@ -673,7 +893,9 @@ updated = tasks |> mut (draft) =>
     expect(res.typescript).toContain("draft.push(item);");
     expect(res.typescript).not.toContain("return draft;");
 
-    const checked = await Effect.runPromise(typeCheckSource(code, "mut-recipe.fun"));
+    const checked = await Effect.runPromise(
+      typeCheckSource(code, "mut-recipe.fun"),
+    );
     expect(checked.success, checked.formattedOutput).toBe(true);
   });
 
@@ -688,7 +910,9 @@ updated = profile |> mut (draft) =>
     const res = await Effect.runPromise(compileString(code));
     expect(res.typescript).toContain('draft.name = "Grace";');
     expect(res.typescript).toContain('draft.tags[0] = "new";');
-    const checked = await Effect.runPromise(typeCheckSource(code, "mut-assignment.fun"));
+    const checked = await Effect.runPromise(
+      typeCheckSource(code, "mut-assignment.fun"),
+    );
     expect(checked.success, checked.formattedOutput).toBe(true);
   });
 
@@ -697,7 +921,9 @@ updated = profile |> mut (draft) =>
 import { Effect } from "effect"
 export task = Effect.succeed(1)
 `.trim();
-    const result = await Effect.runPromise(typeCheckSource(code, "effect-import-dedup.fun"));
+    const result = await Effect.runPromise(
+      typeCheckSource(code, "effect-import-dedup.fun"),
+    );
     expect(result.success, result.formattedOutput).toBe(true);
     expect(result.formattedOutput).not.toContain("TS2300");
   });
@@ -714,12 +940,18 @@ export describeShape = (shape: Shape) =>
 `.trim();
 
       const res = await Effect.runPromise(compileString(code));
-      expect(res.typescript).toContain(`import { match, P } from "ts-pattern";`);
+      expect(res.typescript).toContain(
+        `import { match, P } from "ts-pattern";`,
+      );
       expect(res.typescript).toContain(`match(shape)`);
       expect(res.typescript).toContain(`.with({ _tag: "Circle" }`);
-      expect(res.typescript).toContain(`const [r] = Object.values(__fields) as any[];`);
+      expect(res.typescript).toContain(
+        `const [r] = Object.values(__fields) as any[];`,
+      );
       expect(res.typescript).toContain(`.with({ _tag: "Rect" }`);
-      expect(res.typescript).toContain(`const [w, h] = Object.values(__fields) as any[];`);
+      expect(res.typescript).toContain(
+        `const [w, h] = Object.values(__fields) as any[];`,
+      );
       expect(res.typescript).toContain(`.with({ _tag: "Point" }, () => 0)`);
       expect(res.typescript).toContain(`.otherwise(() => (-1))`);
     });
@@ -802,9 +1034,11 @@ export error UserNotFound(id: String, code: Number)
       const res = await compile(code);
       expect(res.typescript).toContain(`import { Schema } from "effect";`);
       expect(res.typescript).toContain(
-        `export class UserNotFound$Class extends Schema.TaggedError<UserNotFound$Class>()("UserNotFound", {\n  id: Schema.String,\n  code: Schema.Number\n}) {}`
+        `export class UserNotFound$Class extends Schema.TaggedError<UserNotFound$Class>()("UserNotFound", {\n  id: Schema.String,\n  code: Schema.Number\n}) {}`,
       );
-      expect(res.typescript).toContain(`export const UserNotFound = (function(args: ConstructorParameters<typeof UserNotFound$Class>[0]): UserNotFound { return new UserNotFound$Class(args); }) as { (args: ConstructorParameters<typeof UserNotFound$Class>[0]): UserNotFound; new (args: ConstructorParameters<typeof UserNotFound$Class>[0]): UserNotFound };`);
+      expect(res.typescript).toContain(
+        `export const UserNotFound = (function(args: ConstructorParameters<typeof UserNotFound$Class>[0]): UserNotFound { return new UserNotFound$Class(args); }) as { (args: ConstructorParameters<typeof UserNotFound$Class>[0]): UserNotFound; new (args: ConstructorParameters<typeof UserNotFound$Class>[0]): UserNotFound };`,
+      );
 
       const { UserNotFound } = evalTypescript(res.typescript).exports;
       const error = UserNotFound({ id: "u1", code: 404 });
@@ -819,10 +1053,16 @@ export service PaymentGateway "custom/payment/gateway"
 `.trim();
 
       const res = await Effect.runPromise(compileString(code));
-      expect(res.typescript).toContain(`import { Context, Effect } from "effect";`);
-      expect(res.typescript).toContain(`export class PaymentGateway extends Context.Service<PaymentGateway, {`);
+      expect(res.typescript).toContain(
+        `import { Context, Effect } from "effect";`,
+      );
+      expect(res.typescript).toContain(
+        `export class PaymentGateway extends Context.Service<PaymentGateway, {`,
+      );
       expect(res.typescript).toContain(`}>()("custom/payment/gateway") {}`);
-      expect(res.typescript).toContain(`readonly charge: (amount: number) => Effect.Effect<Receipt, PaymentFailed, never>;`);
+      expect(res.typescript).toContain(
+        `readonly charge: (amount: number) => Effect.Effect<Receipt, PaymentFailed, never>;`,
+      );
     });
 
     it("rejects retired 'extern' keyword during compilation", async () => {
@@ -833,7 +1073,7 @@ export extern "stripe" service StripeClient {
 `.trim();
 
       await expect(Effect.runPromise(compileString(code))).rejects.toThrow(
-        /FunScript has retired 'extern service'/
+        /FunScript has retired 'extern service'/,
       );
     });
 
@@ -843,39 +1083,55 @@ export unfinished = () => ??? "implement later"
 `.trim();
 
       const res = await Effect.runPromise(compileString(code));
-      expect(res.typescript).toContain(`throw new Error("Typed hole reached: implement later");`);
+      expect(res.typescript).toContain(
+        `throw new Error("Typed hole reached: implement later");`,
+      );
     });
   });
 
   describe("Compiler Error Diagnostics", () => {
     it("fails with CompilerError diagnostic when encountering banned keywords", async () => {
-      const failure = await Effect.runPromise(Effect.flip(compileString(`let x = 10`)));
+      const failure = await Effect.runPromise(
+        Effect.flip(compileString(`let x = 10`)),
+      );
       expect(failure).toBeInstanceOf(CompilerError);
       expect(failure.message).toContain("FunScript has no 'let'");
 
-      const failureFn = await Effect.runPromise(Effect.flip(compileString(`fn add(a, b) => a + b`)));
+      const failureFn = await Effect.runPromise(
+        Effect.flip(compileString(`fn add(a, b) => a + b`)),
+      );
       expect(failureFn).toBeInstanceOf(CompilerError);
-      expect(failureFn.message).toContain("FunScript functions use the arrow syntax: 'name = (args) => body'");
+      expect(failureFn.message).toContain(
+        "FunScript functions use the arrow syntax: 'name = (args) => body'",
+      );
     });
 
     it("fails with CompilerError diagnostic when encountering banned symbols", async () => {
-      const failure1 = await Effect.runPromise(Effect.flip(compileString(`res = a && b`)));
+      const failure1 = await Effect.runPromise(
+        Effect.flip(compileString(`res = a && b`)),
+      );
       expect(failure1).toBeInstanceOf(CompilerError);
       expect(failure1.message).toContain("FunScript logical AND is 'and'");
 
-      const failure2 = await Effect.runPromise(Effect.flip(compileString(`res = !a`)));
+      const failure2 = await Effect.runPromise(
+        Effect.flip(compileString(`res = !a`)),
+      );
       expect(failure2).toBeInstanceOf(CompilerError);
       expect(failure2.message).toContain("FunScript logical NOT is 'not'");
     });
 
     it("fails with CompilerError diagnostic when encountering tabs", async () => {
-      const failure = await Effect.runPromise(Effect.flip(compileString(`x\t= 1`)));
+      const failure = await Effect.runPromise(
+        Effect.flip(compileString(`x\t= 1`)),
+      );
       expect(failure).toBeInstanceOf(CompilerError);
       expect(failure.message).toContain("Tabs are not allowed");
     });
 
     it("fails with CompilerError diagnostic when encountering syntax errors in parser", async () => {
-      const failure = await Effect.runPromise(Effect.flip(compileString(`schema User`)));
+      const failure = await Effect.runPromise(
+        Effect.flip(compileString(`schema User`)),
+      );
       expect(failure).toBeInstanceOf(CompilerError);
       expect(failure.message).toContain("Expected '=' after schema name");
     });
@@ -890,7 +1146,9 @@ getUser = () =>
 `;
       const failure = await Effect.runPromise(Effect.flip(compileString(code)));
       expect(failure).toBeInstanceOf(CompilerError);
-      expect(failure.message).toContain("Non-final bare expression in effect block is not executed");
+      expect(failure.message).toContain(
+        "Non-final bare expression in effect block is not executed",
+      );
     });
 
     it("fails with CompilerError diagnostic when effect block misses return expression", async () => {
@@ -902,7 +1160,9 @@ getUser = () =>
 `;
       const failure = await Effect.runPromise(Effect.flip(compileString(code)));
       expect(failure).toBeInstanceOf(CompilerError);
-      expect(failure.message).toContain("Effect block must end with an explicit");
+      expect(failure.message).toContain(
+        "Effect block must end with an explicit",
+      );
     });
 
     it("verifies checkString returns AST on success and CompilerError on failure", async () => {
@@ -912,7 +1172,9 @@ getUser = () =>
       expect(ast.body.length).toBe(2);
 
       const invalidCode = `var x = 42`;
-      const failure = await Effect.runPromise(Effect.flip(checkString(invalidCode)));
+      const failure = await Effect.runPromise(
+        Effect.flip(checkString(invalidCode)),
+      );
       expect(failure).toBeInstanceOf(CompilerError);
       expect(failure.message).toContain("FunScript has no 'var'");
     });
@@ -927,10 +1189,18 @@ export schema TagSet = Set<String>
 `.trim();
       const res = await Effect.runPromise(compileString(code));
       expect(res.typescript).toContain(`export const s = new Set([1, 2, 3]);`);
-      expect(res.typescript).toContain(`export const m = new Map([["a", 1]] as any);`);
-      expect(res.typescript).toContain(`export const u = optionTry(() => new URL("https://example.com"));`);
-      expect(res.typescript).toContain(`export type ItemMap = ReadonlyMap<string, number>;`);
-      expect(res.typescript).toContain(`export type TagSet = ReadonlySet<string>;`);
+      expect(res.typescript).toContain(
+        `export const m = new Map([["a", 1]] as any);`,
+      );
+      expect(res.typescript).toContain(
+        `export const u = optionTry(() => new URL("https://example.com"));`,
+      );
+      expect(res.typescript).toContain(
+        `export type ItemMap = ReadonlyMap<string, number>;`,
+      );
+      expect(res.typescript).toContain(
+        `export type TagSet = ReadonlySet<string>;`,
+      );
     });
   });
 });

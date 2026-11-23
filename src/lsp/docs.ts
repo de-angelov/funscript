@@ -271,9 +271,9 @@ export const DOC_MAP: Record<string, DocDef> = {
   ],
   js: [
     "keyword",
-    "res <- js promiseFn()\nexport js handler = (...) => ...\neff |> js",
+    "res <- js promiseFn()\nexport js handler = (...) => ...\neff |> runPromise",
     "JavaScript and npm interop keyword for typed async interop.",
-    "Lifts JS Promises into Effects inside effect blocks (`res <- js promiseFn()`). Native throws and rejections become the typed `JsInteropError` channel. When TypeScript declares the resolved value as `A | null | undefined`, js converts it to `Option<A>` with `Option.fromNullishOr`; non-nullable values remain `A`. An `any`, `unknown`, or unresolved native result becomes `Option<Unknown>`, requiring both absence handling and schema validation. It also compiles exported functions to Promise-returning JS functions (`export js handler`) and pipes Effects to JS Promises (`eff |> js`).",
+    "Lifts JS Promises into Effects inside effect blocks (`res <- js promiseFn()`). Native throws and rejections become the typed `JsInteropError` channel. When TypeScript declares the resolved value as `A | null | undefined`, js converts it to `Option<A>` with `Option.fromNullishOr`; non-nullable values remain `A`. An `any`, `unknown`, or unresolved native result becomes `Option<Unknown>`, requiring both absence handling and schema validation. It also compiles exported functions to Promise-returning JS functions (`export js handler`) and pipes Effects to JS Promises (`eff |> runPromise` or legacy `eff |> js`).",
     "fetchData = (url: String) => effect {\n  res <- js fetch(url)\n  result <- js res.json()\n  => result\n}",
     ["ts", "effect", "export"],
   ],

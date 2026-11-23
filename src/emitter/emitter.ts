@@ -1996,9 +1996,17 @@ export class Emitter {
           preferredCompanion,
         );
 
-        // `js` runs an Effect and leaves the Effect pipeline domain.
-        if (s.kind === "Identifier" && s.name === "js")
-          preferredCompanion = undefined;
+        // `js`, `runPromise`, and `runSync` run an Effect and leave the Effect pipeline domain.
+        const isEffectRunner =
+          (s.kind === "Identifier" &&
+            (s.name === "js" ||
+              s.name === "runPromise" ||
+              s.name === "runSync")) ||
+          (s.kind === "CallExpression" &&
+            s.callee.kind === "Identifier" &&
+            (s.callee.name === "runPromise" || s.callee.name === "runSync") &&
+            s.args.length === 0);
+        if (isEffectRunner) preferredCompanion = undefined;
 
         // Check if stage has placeholder '_'
         if (resolver.hasPlaceholder(resolvedStage)) {

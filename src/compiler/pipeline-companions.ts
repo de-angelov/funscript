@@ -663,11 +663,13 @@ export function inferPipelineCompanions(
 
       if (!fnName) continue;
 
-      // `js` is a language pipeline operator handled directly by the emitter;
-      // its input is intentionally a Promise, not a companion operation.
+      // `js`, `runPromise`, and `runSync` are language pipeline runners handled directly by the emitter;
+      // their input is intentionally an Effect, not a companion operation.
       // Built-in codec helpers (decodeJson, encodeJson) are handled directly by emitter.
       if (
         fnName === "js" ||
+        fnName === "runPromise" ||
+        fnName === "runSync" ||
         fnName === "decodeJson" ||
         fnName === "decodeJsonSync" ||
         fnName === "encodeJson" ||
