@@ -11,7 +11,7 @@ TypeScript blocks and several `.fun` examples with embedded TypeScript or
 multiline strings remain outside the formatting check until those formatter
 cases are supported. Superseded runs for the same pull request or branch are
 cancelled.
-The workflow needs no repository secrets and has read-only repository permissions.
+The workflow needs no repository secrets and maintains `contents: write` repository permissions to auto-rebuild and commit updated reference documentation if documentation drift is detected.
 On failure it uploads the captured build and test logs (and any generated source
 maps) as a short-lived Actions artifact.
 
