@@ -4,20 +4,22 @@
 
 Package: `funscript` 0.2.3.
 
-| Import | Implementation |
-| --- | --- |
-| `funscript` | `./dist/index.js` |
-| `funscript/prettier` | `./dist/formatter/prettier.js` |
-| `funscript/prettier-plugin-funscript` | `./dist/formatter/prettier.js` |
-| `funscript/record` | `./dist/interop/record.js` |
-| `funscript/zod` | `./dist/interop/zod.js` |
-| `funscript/interop/zod` | `./dist/interop/zod.js` |
-| `funscript/valibot` | `./dist/interop/valibot.js` |
-| `funscript/interop/valibot` | `./dist/interop/valibot.js` |
-| `funscript/vite` | `./dist/plugins/vite.js` |
-| `funscript/plugins/vite` | `./dist/plugins/vite.js` |
-| `funscript/bun` | `./dist/plugins/bun.js` |
-| `funscript/plugins/bun` | `./dist/plugins/bun.js` |
-| `funscript/bun/preload` | `./dist/plugins/bun-preload.js` |
-| `funscript/plugins/bun-preload` | `./dist/plugins/bun-preload.js` |
-| `funscript/callback` | `./dist/interop/callback.js` |
+| Import                                | Implementation                  |
+| ------------------------------------- | ------------------------------- |
+| `funscript`                           | `./dist/index.js`               |
+| `funscript/prettier`                  | `./dist/formatter/prettier.js`  |
+| `funscript/prettier-plugin-funscript` | `./dist/formatter/prettier.js`  |
+| `funscript/record`                    | `./dist/interop/record.js`      |
+| `funscript/zod`                       | `./dist/interop/zod.js`         |
+| `funscript/interop/zod`               | `./dist/interop/zod.js`         |
+| `funscript/valibot`                   | `./dist/interop/valibot.js`     |
+| `funscript/interop/valibot`           | `./dist/interop/valibot.js`     |
+| `funscript/vite`                      | `./dist/plugins/vite.js`        |
+| `funscript/plugins/vite`              | `./dist/plugins/vite.js`        |
+| `funscript/bun`                       | `./dist/plugins/bun.js`         |
+| `funscript/plugins/bun`               | `./dist/plugins/bun.js`         |
+| `funscript/bun/preload`               | `./dist/plugins/bun-preload.js` |
+| `funscript/plugins/bun-preload`       | `./dist/plugins/bun-preload.js` |
+| `funscript/esbuild`                   | `./dist/plugins/esbuild.js`     |
+| `funscript/plugins/esbuild`           | `./dist/plugins/esbuild.js`     |
+| `funscript/callback`                  | `./dist/interop/callback.js`    |

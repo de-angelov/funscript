@@ -194,6 +194,12 @@ const buildCommand = (args: string[]) =>
     const outDir = outDirIndex !== -1 ? args[outDirIndex + 1] : undefined;
     const targetIndex = args.indexOf("--target");
     const target = targetIndex !== -1 ? args[targetIndex + 1] : undefined;
+    const engineIndex = args.indexOf("--engine");
+    const engine =
+      engineIndex !== -1
+        ? (args[engineIndex + 1] as "auto" | "bun" | "esbuild")
+        : undefined;
+    const isFast = args.includes("--fast");
     if (target !== undefined && target !== "bun") {
       process.exitCode = 1;
       return yield* Console.error(
@@ -214,7 +220,8 @@ const buildCommand = (args: string[]) =>
         arg === "--no-optional" ||
         arg === "--bare-pipelines" ||
         arg === "--bin" ||
-        arg === "--watch"
+        arg === "--watch" ||
+        arg === "--fast"
       )
         return false;
       if (arg === "--out" || (outIndex !== -1 && i === outIndex + 1))
@@ -222,6 +229,8 @@ const buildCommand = (args: string[]) =>
       if (arg === "--outDir" || (outDirIndex !== -1 && i === outDirIndex + 1))
         return false;
       if (arg === "--target" || (targetIndex !== -1 && i === targetIndex + 1))
+        return false;
+      if (arg === "--engine" || (engineIndex !== -1 && i === engineIndex + 1))
         return false;
       return true;
     });
@@ -429,6 +438,7 @@ const buildCommand = (args: string[]) =>
             noGlobalThis: args.includes("--no-global-this"),
             noOptional: args.includes("--no-optional"),
             barePipelines: args.includes("--bare-pipelines"),
+            engine: isFast ? "bun" : engine,
           }),
         catch: (error) =>
           error instanceof Error ? error : new Error(String(error)),
@@ -1315,13 +1325,15 @@ const runCommand = (args: string[]) =>
     const separator = args.indexOf("--");
     const commandArgs = separator < 0 ? args : args.slice(0, separator);
     const programArgs = separator < 0 ? [] : args.slice(separator + 1);
+    const isFast = commandArgs.includes("--fast");
     const filePath = commandArgs.find(
       (arg) =>
         arg !== "--no-check" &&
         arg !== "--no-ts" &&
         arg !== "--no-global-this" &&
         arg !== "--no-optional" &&
-        arg !== "--bare-pipelines",
+        arg !== "--bare-pipelines" &&
+        arg !== "--fast",
     );
     if (!filePath) {
       process.exitCode = 1;
@@ -1378,6 +1390,7 @@ const runCommand = (args: string[]) =>
           noGlobalThis: commandArgs.includes("--no-global-this"),
           noOptional: commandArgs.includes("--no-optional"),
           barePipelines: commandArgs.includes("--bare-pipelines"),
+          engine: isFast ? "bun" : undefined,
         }),
       catch: (error) =>
         error instanceof Error ? error : new Error(String(error)),

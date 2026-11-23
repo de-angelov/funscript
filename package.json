@@ -23,6 +23,8 @@
     "./plugins/bun": "./dist/plugins/bun.js",
     "./bun/preload": "./dist/plugins/bun-preload.js",
     "./plugins/bun-preload": "./dist/plugins/bun-preload.js",
+    "./esbuild": "./dist/plugins/esbuild.js",
+    "./plugins/esbuild": "./dist/plugins/esbuild.js",
     "./callback": "./dist/interop/callback.js"
   },
   "scripts": {
