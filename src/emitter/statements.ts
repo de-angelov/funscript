@@ -22,6 +22,7 @@ export interface StatementEmitterContext {
   emitFunctionBody(body: FunctionBody): string;
   emitBindingDeclaration(decl: BindingDeclaration): string;
   emitBindingTarget(target: BindingTarget | Pattern): string;
+  collectBindingNames(target: BindingTarget | Pattern): string[];
   emitJsExpression(expr: JsExpression): string;
   emitMemberProperty(expr: MemberExpression): string;
   activeDraftParams: Set<string>;
@@ -208,13 +209,30 @@ export function emitParBlockExpression(
   ctx.addEffectImport("Effect");
   const entries: string[] = [];
   const boundNames: string[] = [];
+  const bindings: Array<{ resultKey: string; target: BindingTarget | Pattern }> = [];
+  const usedNames = expr.body.flatMap((statement) =>
+    statement.kind === "EffectBindStatement"
+      ? ctx.collectBindingNames(statement.id)
+      : [],
+  );
+  let syntheticIndex = 0;
+  let hasDestructuring = false;
 
   for (const s of expr.body) {
     if (s.kind === "EffectBindStatement") {
-      const key = ctx.emitBindingTarget(s.id);
+      const isIdentifier =
+        s.id.kind === "Identifier" || s.id.kind === "UpperIdentifier";
+      hasDestructuring ||= !isIdentifier;
+      let key = isIdentifier ? s.id.name : `__funscriptPar${syntheticIndex++}`;
+      while (!isIdentifier && usedNames.includes(key)) {
+        key = `__funscriptPar${syntheticIndex++}`;
+      }
       const effectVal = emitEffectCall(ctx, s.effect);
-      entries.push(`      ${key}: ${effectVal}`);
-      boundNames.push(key);
+      entries.push(
+        `      ${isIdentifier ? key : JSON.stringify(key)}: ${effectVal}`,
+      );
+      bindings.push({ resultKey: key, target: s.id });
+      if (isIdentifier) boundNames.push(key);
     } else if (s.kind === "EffectDiscardStatement") {
       const effectVal = emitEffectCall(ctx, s.effect);
       entries.push(`      _: ${effectVal}`);
@@ -228,8 +246,9 @@ export function emitParBlockExpression(
   const allCall = `Effect.all(${dict}, { concurrency: ${concurrencyArg} })`;
 
   const isExactShorthand =
-    !expr.hasExplicitReturn ||
-    (expr.finalExpression.kind === "RecordExpression" &&
+    !hasDestructuring &&
+    (!expr.hasExplicitReturn ||
+      (expr.finalExpression.kind === "RecordExpression" &&
       expr.finalExpression.entries.length === boundNames.length &&
       expr.finalExpression.entries.every((e, i) => {
         if (e.kind === "ShorthandEntry") {
@@ -243,13 +262,28 @@ export function emitParBlockExpression(
           );
         }
         return false;
-      }));
+      })));
 
   if (isExactShorthand) {
     return allCall;
   }
 
-  const retExpr = ctx.emitExpression(expr.finalExpression);
+  const emittedReturn = ctx.emitExpression(expr.finalExpression);
+  const retExpr =
+    expr.finalExpression.kind === "RecordExpression"
+      ? `(${emittedReturn})`
+      : emittedReturn;
+  if (hasDestructuring) {
+    let resultName = "__funscriptParResult";
+    while (usedNames.includes(resultName)) resultName += "_";
+    const declarations = bindings
+      .map(
+        ({ resultKey, target }) =>
+          `  const ${ctx.emitBindingTarget(target)} = ${resultName}[${JSON.stringify(resultKey)}];`,
+      )
+      .join("\n");
+    return `Effect.map(${allCall}, (${resultName}) => {\n${declarations}\n  return ${retExpr};\n})`;
+  }
   return `Effect.map(${allCall}, ({ ${boundNames.join(", ")} }) => ${retExpr})`;
 }
 

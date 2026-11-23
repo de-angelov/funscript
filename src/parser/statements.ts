@@ -612,16 +612,14 @@ export function parseParBlock(ctx: StatementParserContext): ParBlockExpression {
 
     const resolvedFinalExpression: Expression = finalExpression ?? {
       kind: "RecordExpression",
-      entries: body
-        .filter(
-          (s): s is EffectBindStatement & { id: Identifier } =>
-            s.kind === "EffectBindStatement" && s.id.kind === "Identifier",
-        )
-        .map((s) => ({
+      entries: body.flatMap((s) => {
+        if (s.kind !== "EffectBindStatement") return [];
+        return ctx.collectPatternVariables(s.id).map((name) => ({
           kind: "ShorthandEntry" as const,
-          key: s.id,
+          key: { kind: "Identifier" as const, name, span: s.id.span },
           span: s.id.span,
-        })),
+        }));
+      }),
       span: { start, end: ctx.previous().span.end },
     };
 

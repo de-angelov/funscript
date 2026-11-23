@@ -2261,7 +2261,7 @@ export fetchDashboard = (userId: String) =>
   par {
     user <- fetchUser(userId)
     orders <- fetchOrders(userId)
-    # When no explicit '=>' return is specified, defaults to returning a record of all bound variables
+    # Without '=>', returns all bound names, including names from destructuring binds
   }
 ```
 
@@ -2283,6 +2283,15 @@ export fetchLimited = par (concurrency = 2) {
 ```
 
 > **Safety invariant**: Early returns (`when (...) =>`) are statically rejected inside `par` blocks to prevent leaving sibling fibers in an ambiguous or orphaned state.
+
+Destructured effect results are unpacked before the implicit record is returned:
+
+```funscript
+result = par {
+  { user, orders } <- fetchDashboard()
+}
+# result is { user, orders }
+```
 
 #### Jittered exponential retries (`retry`)
 
