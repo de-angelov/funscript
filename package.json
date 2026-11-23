@@ -21,6 +21,8 @@
     "./plugins/vite": "./dist/plugins/vite.js",
     "./bun": "./dist/plugins/bun.js",
     "./plugins/bun": "./dist/plugins/bun.js",
+    "./bun/preload": "./dist/plugins/bun-preload.js",
+    "./plugins/bun-preload": "./dist/plugins/bun-preload.js",
     "./callback": "./dist/interop/callback.js"
   },
   "scripts": {

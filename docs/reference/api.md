@@ -18,4 +18,6 @@ Package: `funscript` 0.2.3.
 | `funscript/plugins/vite` | `./dist/plugins/vite.js` |
 | `funscript/bun` | `./dist/plugins/bun.js` |
 | `funscript/plugins/bun` | `./dist/plugins/bun.js` |
+| `funscript/bun/preload` | `./dist/plugins/bun-preload.js` |
+| `funscript/plugins/bun-preload` | `./dist/plugins/bun-preload.js` |
 | `funscript/callback` | `./dist/interop/callback.js` |

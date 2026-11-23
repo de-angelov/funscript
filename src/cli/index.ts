@@ -1125,6 +1125,12 @@ const doctorCommand = (args: string[]) =>
         : `Node ${process.versions.node}; version 20 or newer is required`,
     );
 
+    if (process.versions.bun) {
+      add("Bun runtime", "pass", `Bun ${process.versions.bun}`);
+    } else if (existsSync(path.resolve("bunfig.toml"))) {
+      add("Bun config", "pass", "Found bunfig.toml");
+    }
+
     let packageJson: Record<string, any> | undefined;
     const packageText = yield* Effect.promise(() =>
       fs.readFile("package.json", "utf8").catch(() => undefined),

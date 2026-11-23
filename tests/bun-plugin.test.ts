@@ -118,4 +118,64 @@ describe("Bun Plugin (bun-plugin-funscript)", () => {
       await fs.rm(tempDir, { recursive: true, force: true });
     }
   });
+
+  it("enforces server boundary restrictions in onResolve", async () => {
+    let resolveHandler: any;
+    const plugin = funscriptBunPlugin({ serverBoundary: true });
+
+    const mockBuild: any = {
+      onResolve: (_opts: any, cb: any) => {
+        resolveHandler = cb;
+      },
+      onLoad: () => {},
+    };
+
+    await plugin.setup(mockBuild);
+    expect(resolveHandler).toBeDefined();
+
+    expect(() =>
+      resolveHandler({
+        path: "./database.server.fun",
+        importer: "/project/src/ClientComponent.funx",
+        namespace: "file",
+        resolveDir: "/project/src",
+      }),
+    ).toThrow("Server module './database.server.fun' cannot be imported into client module");
+  });
+
+  it("generates and updates TypeView when types option is provided", async () => {
+    const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), "bun-plugin-types-"));
+    const typesDir = path.join(tempDir, ".funscript", "types");
+    const appDir = path.join(tempDir, "app");
+    await fs.mkdir(appDir, { recursive: true });
+
+    const funFile = path.join(appDir, "component.funx");
+    await fs.writeFile(funFile, "export Button = () => <button>Click</button>");
+
+    const origCwd = process.cwd();
+    try {
+      process.chdir(tempDir);
+      let loadHandler: any;
+      const plugin = funscriptBunPlugin({
+        types: { include: ["app"], outDir: ".funscript/types" },
+      });
+
+      const mockBuild: any = {
+        onResolve: () => {},
+        onLoad: (_opts: any, cb: any) => {
+          loadHandler = cb;
+        },
+      };
+
+      await plugin.setup(mockBuild);
+      await loadHandler({ path: funFile, namespace: "file", loader: "tsx" });
+
+      const compiledTsx = path.join(typesDir, "app", "component.tsx");
+      const exists = await fs.stat(compiledTsx).then(() => true).catch(() => false);
+      expect(exists).toBe(true);
+    } finally {
+      process.chdir(origCwd);
+      await fs.rm(tempDir, { recursive: true, force: true });
+    }
+  });
 });

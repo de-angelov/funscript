@@ -8,6 +8,28 @@ import {
   isPathPolicyEnabled,
 } from "../compiler/project-config.js";
 import { TypeScriptCompilationContext } from "../compiler/typescript-context.js";
+import { TypeView, type TypeViewOptions } from "./type-view.js";
+
+export { TypeView, type TypeViewOptions };
+
+export interface ServerBoundaryOptions {
+  /**
+   * Whether to enforce compile-time separation of server modules in client builds.
+   * Defaults to false (opt-in).
+   */
+  enabled?: boolean;
+  /**
+   * Matchers for server-only modules that must not be bundled into client builds.
+   * Defaults to [/\.server(\.|$)/].
+   */
+  serverPatterns?: (string | RegExp)[];
+  /**
+   * Matchers for permitted boundary/bridge modules (e.g. route modules in full-stack
+   * frameworks) where a framework compiler plugin tree-shakes server code from client outputs.
+   * Defaults to [].
+   */
+  allowedImporters?: (string | RegExp)[];
+}
 
 export interface BunPluginOptions {
   /** Reject raw TypeScript escapes in compiled FunScript modules. */
@@ -21,6 +43,14 @@ export interface BunPluginOptions {
    */
   filter?: RegExp;
   /**
+   * Filter pattern(s) for files to include.
+   */
+  include?: string | RegExp | readonly (string | RegExp)[];
+  /**
+   * Filter pattern(s) for files to exclude.
+   */
+  exclude?: string | RegExp | readonly (string | RegExp)[];
+  /**
    * Whether to generate sourcemaps.
    * Defaults to true.
    */
@@ -30,6 +60,14 @@ export interface BunPluginOptions {
    * Defaults to true.
    */
   resolveJsToFun?: boolean;
+  /** Generate a disk-backed type view for tools outside Bun. */
+  types?: TypeViewOptions;
+  /**
+   * Compile-time server/client boundary enforcement.
+   * When enabled, prevents server-only modules from accidentally leaking into client-side bundles.
+   * Defaults to false.
+   */
+  serverBoundary?: boolean | ServerBoundaryOptions;
 }
 
 export interface BunPluginBuilder {
@@ -87,9 +125,23 @@ export interface BunPlugin {
   setup(build: BunPluginBuilder): void | Promise<void>;
 }
 
+function matchesPattern(value: string, pattern: string | RegExp): boolean {
+  return typeof pattern === "string"
+    ? value.includes(pattern)
+    : pattern.test(value);
+}
+
+function matchesAnyPattern(
+  value: string,
+  patterns: (string | RegExp)[],
+): boolean {
+  return patterns.some((p) => matchesPattern(value, p));
+}
+
 /**
  * Bun runtime loader plugin for FunScript and FunX (.fun, .funx) compilation.
- * Compiles FunScript in-memory directly to TypeScript for Bun's JavaScriptCore runtime.
+ * Compiles FunScript in-memory directly to TypeScript for Bun's JavaScriptCore runtime,
+ * with full parity to the Vite plugin (TypeView .d.ts generation, server boundaries, and resolution).
  */
 export function funscriptBunPlugin(options: BunPluginOptions = {}): BunPlugin {
   const projectPolicy = loadProjectConfig(process.cwd());
@@ -99,36 +151,111 @@ export function funscriptBunPlugin(options: BunPluginOptions = {}): BunPlugin {
     path.resolve("__funscript_bun__.fun"),
   );
 
+  let typeView: TypeView | undefined;
+  let typeViewInitPromise: Promise<void> | undefined;
+
+  const ensureTypeView = async () => {
+    if (options.types && !typeView) {
+      typeView = new TypeView(process.cwd(), options.types);
+      typeViewInitPromise = typeView.generate();
+    }
+    if (typeViewInitPromise) {
+      await typeViewInitPromise;
+    }
+  };
+
   return {
     name: "bun-plugin-funscript",
-    setup(build: BunPluginBuilder) {
-      if (resolveJsToFun) {
-        build.onResolve({ filter: /.*/ }, (args) => {
-          if (!args.path.endsWith(".js") && !args.path.endsWith(".jsx")) {
-            return undefined;
-          }
-          if (!args.path.startsWith(".") && !path.isAbsolute(args.path)) {
-            return undefined;
-          }
-          const dir = args.importer
-            ? path.dirname(args.importer)
-            : args.resolveDir || process.cwd();
-          const target = path.isAbsolute(args.path)
-            ? args.path
-            : path.resolve(dir, args.path);
-          const base = target.slice(0, target.lastIndexOf("."));
+    async setup(build: BunPluginBuilder) {
+      if (options.types) {
+        await ensureTypeView();
+      }
 
-          for (const ext of [".fun", ".funx"]) {
-            const candidate = base + ext;
-            if (fs.existsSync(candidate)) {
-              return { path: candidate };
+      const boundaryOption = options.serverBoundary;
+      const boundaryEnabled =
+        typeof boundaryOption === "boolean"
+          ? boundaryOption
+          : boundaryOption
+            ? boundaryOption.enabled !== false
+            : false;
+
+      if (boundaryEnabled || resolveJsToFun) {
+        const serverPatterns = (typeof boundaryOption === "object" &&
+          boundaryOption?.serverPatterns) || [/\.server(\.|$)/];
+        const allowedImporters =
+          (typeof boundaryOption === "object" &&
+            boundaryOption?.allowedImporters) ||
+          [];
+
+        build.onResolve({ filter: /.*/ }, (args) => {
+          if (
+            boundaryEnabled &&
+            args.importer &&
+            matchesAnyPattern(args.path, serverPatterns)
+          ) {
+            const isServerImporter = matchesAnyPattern(
+              args.importer,
+              serverPatterns,
+            );
+            if (!isServerImporter) {
+              const isAllowedImporter = matchesAnyPattern(
+                args.importer,
+                allowedImporters,
+              );
+              if (!isAllowedImporter) {
+                throw new Error(
+                  `[bun-plugin-funscript] Server module '${args.path}' cannot be imported into client module '${args.importer}'. FunScript enforces strict server/client boundary separation. To permit framework bridge modules (e.g. route loaders), configure 'serverBoundary.allowedImporters' in funscriptBunPlugin().`,
+                );
+              }
             }
           }
+
+          if (resolveJsToFun) {
+            if (!args.path.endsWith(".js") && !args.path.endsWith(".jsx")) {
+              return undefined;
+            }
+            if (!args.path.startsWith(".") && !path.isAbsolute(args.path)) {
+              return undefined;
+            }
+            const dir = args.importer
+              ? path.dirname(args.importer)
+              : args.resolveDir || process.cwd();
+            const target = path.isAbsolute(args.path)
+              ? args.path
+              : path.resolve(dir, args.path);
+            const base = target.slice(0, target.lastIndexOf("."));
+
+            for (const ext of [".fun", ".funx"]) {
+              const candidate = base + ext;
+              if (fs.existsSync(candidate)) {
+                return { path: candidate };
+              }
+            }
+          }
+
           return undefined;
         });
       }
 
       build.onLoad({ filter }, async (args) => {
+        if (options.include) {
+          const includes = Array.isArray(options.include)
+            ? options.include
+            : [options.include];
+          if (!matchesAnyPattern(args.path, includes as (string | RegExp)[])) {
+            return undefined as any;
+          }
+        }
+
+        if (options.exclude) {
+          const excludes = Array.isArray(options.exclude)
+            ? options.exclude
+            : [options.exclude];
+          if (matchesAnyPattern(args.path, excludes as (string | RegExp)[])) {
+            return undefined as any;
+          }
+        }
+
         let text: string;
         if (typeof Bun !== "undefined" && typeof Bun.file === "function") {
           text = await Bun.file(args.path).text();
@@ -176,6 +303,13 @@ export function funscriptBunPlugin(options: BunPluginOptions = {}): BunPlugin {
             context,
           }),
         );
+
+        if (options.types) {
+          await ensureTypeView();
+          if (typeView) {
+            await typeView.update(args.path);
+          }
+        }
 
         return {
           contents: res.typescript,
