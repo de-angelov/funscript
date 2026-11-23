@@ -839,4 +839,25 @@ export createItemFormatted = (id: String, options: { slug: String = id |> toLowe
       "CUSTOM",
     ]);
   });
+
+  it("compiles and executes function expressions inside ts { ... } escape blocks", () => {
+    const src = `
+export legacyAdder = ts { function(this: any, x: number) { return this.base + x; } }
+export arrowHelper = ts { (x: number) => x * 3 }
+`;
+    const res = Effect.runSync(compileString(src));
+    expect(res.typescript).toContain(
+      "export const legacyAdder = function(this: any, x: number) { return this.base + x; };",
+    );
+    expect(res.typescript).toContain(
+      "export const arrowHelper = (x: number) => x * 3;",
+    );
+
+    const legacyAdder = evaluateTsFunction(res.typescript, "legacyAdder");
+    const ctx = { base: 100, add: legacyAdder };
+    expect(ctx.add(5)).toBe(105);
+
+    const arrowHelper = evaluateTsFunction(res.typescript, "arrowHelper");
+    expect(arrowHelper(4)).toBe(12);
+  });
 });

@@ -5,7 +5,10 @@ import * as os from "node:os";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import { auditIdiomaticFunScript } from "../src/tooling/idiomatic.js";
-import { checkIdiomatic, findFunScriptFiles } from "../scripts/check-idiomatic.mjs";
+import {
+  checkIdiomatic,
+  findFunScriptFiles,
+} from "../scripts/check-idiomatic.mjs";
 
 const execFileAsync = promisify(execFile);
 const cliPath = path.resolve("dist/cli/index.js");
@@ -13,7 +16,8 @@ const cliPath = path.resolve("dist/cli/index.js");
 describe("Audit Showcase Examples and Restrict Unjustified 'ts { }' Blocks (TASK-181)", () => {
   describe("Showcase examples idiomatic verification", () => {
     it("verifies all examples contain zero non-ambient 'ts { }' blocks", async () => {
-      const { success, totalFiles, totalViolations, results } = await checkIdiomatic();
+      const { success, totalFiles, totalViolations, results } =
+        await checkIdiomatic();
       expect(totalFiles).toBeGreaterThan(15);
       expect(totalViolations).toBe(0);
       expect(success).toBe(true);
@@ -23,23 +27,34 @@ describe("Audit Showcase Examples and Restrict Unjustified 'ts { }' Blocks (TASK
     });
 
     it("verifies examples/todo-service.fun uses native FunScript arrays and zero ts blocks", async () => {
-      const content = await fs.readFile(path.resolve("examples/todo-service.fun"), "utf-8");
+      const content = await fs.readFile(
+        path.resolve("examples/todo-service.fun"),
+        "utf-8",
+      );
       expect(content).not.toContain("ts {");
       expect(content).toContain("store <- Ref.make(initialStore)");
       expect(content).toContain("Array.append(newTodo)");
     });
 
     it("verifies examples/markdown-task-manager.fun uses native TaskManager schema and zero ts blocks", async () => {
-      const content = await fs.readFile(path.resolve("examples/markdown-task-manager.fun"), "utf-8");
+      const content = await fs.readFile(
+        path.resolve("examples/markdown-task-manager.fun"),
+        "utf-8",
+      );
       expect(content).not.toContain("ts {");
       expect(content).toContain("export schema TaskManager = {");
       expect(content).toContain("tasks: Array<Task>");
       expect(content).toContain("nextId: Number");
-      expect(content).toContain('import { writeFile, readFile, unlink } from "node:fs/promises"');
+      expect(content).toContain(
+        'import { writeFile, readFile, unlink } from "node:fs/promises"',
+      );
     });
 
     it("verifies examples/github-api-client.fun uses native RawApiResponse schema and zero ts blocks", async () => {
-      const content = await fs.readFile(path.resolve("examples/github-api-client.fun"), "utf-8");
+      const content = await fs.readFile(
+        path.resolve("examples/github-api-client.fun"),
+        "utf-8",
+      );
       expect(content).not.toContain("ts {");
       expect(content).toContain("export schema RawApiResponse = {");
       expect(content).toContain("export executeFetch = (repoPath: String) =>");
@@ -47,19 +62,34 @@ describe("Audit Showcase Examples and Restrict Unjustified 'ts { }' Blocks (TASK
     });
 
     it("verifies examples/order-fulfillment.fun uses native FunScript types and zero ts blocks", async () => {
-      const content = await fs.readFile(path.resolve("examples/order-fulfillment.fun"), "utf-8");
+      const content = await fs.readFile(
+        path.resolve("examples/order-fulfillment.fun"),
+        "utf-8",
+      );
       expect(content).not.toContain("ts {");
-      expect(content).toContain("export appendAuditEntry = (logs: Array<String>, entry: String) =>");
+      expect(content).toContain(
+        "export appendAuditEntry = (logs: Array<String>, entry: String) =>",
+      );
       expect(content).toContain("paymentCallCount <- Ref.make(0)");
     });
 
     it("verifies examples/todo-dashboard.funx implements addTodo in native FunScript", async () => {
-      const content = await fs.readFile(path.resolve("examples/todo-dashboard.funx"), "utf-8");
-      expect(content).toContain("export addTodo = (todos: Array<Todo>, title: String): Array<Todo> =>");
-      expect(content).toContain("draft.push({ id: \"new-task\", title, completed: false })");
+      const content = await fs.readFile(
+        path.resolve("examples/todo-dashboard.funx"),
+        "utf-8",
+      );
+      expect(content).toContain(
+        "export addTodo = (todos: Array<Todo>, title: String): Array<Todo> =>",
+      );
+      expect(content).toContain(
+        'draft.push({ id: "new-task", title, completed: false })',
+      );
 
       // Verify that any ts block in todo-dashboard is restricted strictly to runtime React polyfill
-      const audit = auditIdiomaticFunScript(content, "examples/todo-dashboard.funx");
+      const audit = auditIdiomaticFunScript(
+        content,
+        "examples/todo-dashboard.funx",
+      );
       expect(audit.success).toBe(true);
       expect(audit.diagnostics).toEqual([]);
     });
@@ -78,7 +108,9 @@ ts {
       expect(res.success).toBe(false);
       expect(res.diagnostics).toHaveLength(1);
       expect(res.diagnostics[0].kind).toBe("non-ambient-function-declaration");
-      expect(res.diagnostics[0].message).toContain("Top-level function declaration 'writeTaskFile' inside 'ts { }' block is forbidden");
+      expect(res.diagnostics[0].message).toContain(
+        "Top-level function declaration 'writeTaskFile' inside 'ts { }' block is forbidden",
+      );
     });
 
     it("flags function definitions assigned to variables inside 'ts { }' blocks", () => {
@@ -93,7 +125,9 @@ ts {
       expect(res.success).toBe(false);
       expect(res.diagnostics).toHaveLength(1);
       expect(res.diagnostics[0].kind).toBe("non-ambient-function-definition");
-      expect(res.diagnostics[0].message).toContain("Function definition 'addTodo' inside 'ts { }' block is forbidden");
+      expect(res.diagnostics[0].message).toContain(
+        "Function definition 'addTodo' inside 'ts { }' block is forbidden",
+      );
     });
 
     it("flags imports declared inside 'ts { }' blocks", () => {
@@ -106,18 +140,19 @@ ts {
       expect(res.success).toBe(false);
       expect(res.diagnostics).toHaveLength(1);
       expect(res.diagnostics[0].kind).toBe("import-inside-ts-block");
-      expect(res.diagnostics[0].message).toContain("Import declaration inside 'ts { }' block is forbidden");
+      expect(res.diagnostics[0].message).toContain(
+        "Import declaration inside 'ts { }' block is forbidden",
+      );
     });
 
-    it("flags function expressions inside inline 'ts { }' escape expressions", () => {
+    it("allows function expressions and arrow functions inside inline 'ts { }' escape expressions", () => {
       const code = `
 export helper = ts { () => 42 }
+export legacyShim = ts { function(this: any, x: number) { return this.offset + x; } }
       `.trim();
       const res = auditIdiomaticFunScript(code, "test.fun");
-      expect(res.success).toBe(false);
-      expect(res.diagnostics).toHaveLength(1);
-      expect(res.diagnostics[0].kind).toBe("non-ambient-expression");
-      expect(res.diagnostics[0].message).toContain("Function expression inside 'ts { }' escape is forbidden");
+      expect(res.success).toBe(true);
+      expect(res.diagnostics).toHaveLength(0);
     });
 
     it("allows ambient type declarations and valid runtime polyfills in 'ts { }'", () => {
@@ -141,7 +176,9 @@ ts {
 
   describe("CLI integration and audit script verification", () => {
     it("runs scripts/check-idiomatic.mjs via CLI and exits 0 on valid codebase", async () => {
-      const { stdout, stderr } = await execFileAsync("node", ["scripts/check-idiomatic.mjs"]);
+      const { stdout, stderr } = await execFileAsync("node", [
+        "scripts/check-idiomatic.mjs",
+      ]);
       expect(stderr).toBe("");
       expect(stdout).toContain("✓ Idiomatic check passed");
     }, 30_000);
@@ -154,11 +191,15 @@ ts {
         "--idiomatic",
       ]);
       expect(stderr).toBe("");
-      expect(stdout).toContain("✓ examples/todo-service.fun checked successfully (0 errors");
+      expect(stdout).toContain(
+        "✓ examples/todo-service.fun checked successfully (0 errors",
+      );
     }, 30_000);
 
     it("fails funscript check --idiomatic when non-ambient ts blocks are detected", async () => {
-      const tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), "idiomatic-cli-test-"));
+      const tmpDir = await fs.mkdtemp(
+        path.join(os.tmpdir(), "idiomatic-cli-test-"),
+      );
       const badFile = path.join(tmpDir, "bad-ts.fun");
       await fs.writeFile(
         badFile,
@@ -177,11 +218,18 @@ export value = 1
       try {
         let failed = false;
         try {
-          await execFileAsync("node", [cliPath, "check", badFile, "--idiomatic"]);
+          await execFileAsync("node", [
+            cliPath,
+            "check",
+            badFile,
+            "--idiomatic",
+          ]);
         } catch (err: any) {
           failed = true;
           expect(err.code).toBe(1);
-          expect(err.stderr).toContain("Top-level function declaration 'helper' inside 'ts { }' block is forbidden");
+          expect(err.stderr).toContain(
+            "Top-level function declaration 'helper' inside 'ts { }' block is forbidden",
+          );
         }
         expect(failed).toBe(true);
       } finally {

@@ -184,20 +184,6 @@ export function auditIdiomaticFunScript(
       const baseCol = node.span.start.column;
       const diags = checkTsBlockCode(node.code, baseLine, baseCol, filePath);
       diagnostics.push(...diags);
-    } else if (node.kind === "TsEscapeExpression") {
-      // Check if expression defines a function inside ts { ... }
-      const code = node.code.trim();
-      if (code.includes("=>") || code.startsWith("function")) {
-        diagnostics.push({
-          file: filePath,
-          line: node.span.start.line,
-          column: node.span.start.column,
-          kind: "non-ambient-expression",
-          message:
-            "Function expression inside 'ts { }' escape is forbidden. Use native FunScript functions.",
-          snippet: code.split("\n")[0]?.trim(),
-        });
-      }
     }
   });
 
