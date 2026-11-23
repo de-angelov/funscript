@@ -115,10 +115,12 @@ export class TypeScriptCompilationContext {
     this.host = host;
   }
 
-  setFilename(filename: string): void {
+  setFilename(filename: string, reuseProgram = false): void {
     const nextFile = filename.endsWith(".funx") ? filename.slice(0, -5) + ".tsx"
       : filename.endsWith(".fun") ? filename.slice(0, -4) + ".ts" : filename.endsWith(".ts") || filename.endsWith(".tsx") ? filename : filename + ".ts";
-    if (this.virtualFile && this.virtualFile !== nextFile) this.program = undefined;
+    if (this.virtualFile && this.virtualFile !== nextFile && !reuseProgram) this.program = undefined;
+    // Directory tooling can opt into using the old Program as an incremental
+    // base when only its virtual source root changes.
     this.virtualFile = nextFile;
     this.normalized = ts.sys.resolvePath(this.virtualFile);
     this.isJsx = this.virtualFile.endsWith(".tsx") || filename.endsWith(".funx");

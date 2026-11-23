@@ -2,15 +2,14 @@ import { Effect } from "effect";
 import { Lexer } from "../lexer/lexer.js";
 import { Parser } from "../parser/parser.js";
 import { compileString } from "../compiler.js";
-import { inferPipelineCompanions } from "../compiler/pipeline-companions.js";
 import { TypeScriptCompilationContext } from "../compiler/typescript-context.js";
-import { PIPELINE_COMPANION_CATALOG } from "../emitter/pipeline-catalog.js";
+import { PIPELINE_COMPANION_CATALOG, pipelineCompanionCandidates } from "../emitter/pipeline-catalog.js";
 
 export type PipelineStyle = "bare" | "qualified";
 type Edit = { start: number; end: number; text: string; module: string; method: string };
 
 /** Convert only pipeline stages whose generated TypeScript is unchanged. */
-export function convertPipelineStyle(source: string, filename: string, style: PipelineStyle, range?: { start: number; end: number }): { text: string; changed: number; skipped: number } {
+export function convertPipelineStyle(source: string, filename: string, style: PipelineStyle, range?: { start: number; end: number }, compilationContext?: TypeScriptCompilationContext): { text: string; changed: number; skipped: number } {
   if (!source.includes("|>")) return { text: source, changed: 0, skipped: 0 };
   // Most editor requests target a single stage. Avoid type checking the
   // document for the opposite style, or for a selection without a stage.
@@ -39,14 +38,14 @@ export function convertPipelineStyle(source: string, filename: string, style: Pi
   };
   scan(parsed);
   if (!hasCandidate) return { text: source, changed: 0, skipped: 0 };
-  const context = new TypeScriptCompilationContext(filename);
-  const compile = (text: string) => Effect.runSync(compileString(text, filename, { context, sourcePath: filename, sourcemap: false }));
-  const original = compile(source);
-  let resolutions: ReturnType<typeof inferPipelineCompanions>["stageResolutions"] | undefined;
-  if (style === "qualified") {
-    resolutions = inferPipelineCompanions(original.ast, context).stageResolutions;
-  }
+  const context = compilationContext ?? new TypeScriptCompilationContext(filename);
+  context.setFilename(filename, true);
+  const compiled = Effect.runSync(compileString(source, filename, { context, sourcePath: filename, sourcemap: false, pipelineAnalysisOnly: true }));
+  const resolutions = style === "bare"
+    ? compiled.barePipelineStageResolutions
+    : compiled.pipelineStageResolutions;
   const edits: Edit[] = [];
+  let candidateCount = 0;
   const visit = (node: any): void => {
     if (!node || typeof node !== "object") return;
     if (node.kind === "PipelineExpression") {
@@ -59,11 +58,15 @@ export function convertPipelineStyle(source: string, filename: string, style: Pi
       if (selected && style === "bare" && target.kind === "MemberExpression" && target.object.kind === "UpperIdentifier") {
         const module = target.object.name as keyof typeof PIPELINE_COMPANION_CATALOG;
         const method = target.property.name;
-        if (PIPELINE_COMPANION_CATALOG[module]?.includes(method)) {
+        if (PIPELINE_COMPANION_CATALOG[module]?.includes(method)) candidateCount++;
+        const resolution = resolutions.get(stage.span.start.offset);
+        if (PIPELINE_COMPANION_CATALOG[module]?.includes(method) && resolution?.module === module && resolution.method === method) {
           edits.push({ start, end: target.property.span.start.offset, text: "", module, method });
         }
       } else if (selected && style === "qualified" && target.kind === "Identifier") {
-        const resolution = resolutions?.get(stage.span.start.offset);
+        const possibleModules = pipelineCompanionCandidates(target.name);
+        if (possibleModules.length > 0) candidateCount++;
+        const resolution = resolutions.get(stage.span.start.offset);
         if (resolution && resolution.method === target.name && PIPELINE_COMPANION_CATALOG[resolution.module as keyof typeof PIPELINE_COMPANION_CATALOG]?.includes(target.name)) {
           edits.push({ start, end: start, text: `${resolution.module}.`, module: resolution.module, method: target.name });
         }
@@ -75,52 +78,10 @@ export function convertPipelineStyle(source: string, filename: string, style: Pi
       else if (value && typeof value === "object") visit(value);
     }
   };
-  visit(original.ast);
-  const apply = (changes: Edit[]) => {
-    let result = source;
-    for (const edit of [...changes].sort((a, b) => b.start - a.start)) result = result.slice(0, edit.start) + edit.text + result.slice(edit.end);
-    return result;
-  };
-  // Resolve all candidate bare stages in one type-checking pass. Ambiguous or
-  // shadowed stages are left qualified; a final emission comparison remains
-  // the authority, including for interactions between stages.
-  let candidates = edits;
-  if (style === "bare" && edits.length > 1) {
-    try {
-      const transformed = apply(edits);
-      const ast = new Parser(new Lexer(transformed, filename).tokenize(), filename, transformed).parse();
-      const inferred = inferPipelineCompanions(ast, context, undefined, undefined, undefined, undefined, undefined, true).stageResolutions;
-      let delta = 0;
-      const candidatesForExactCheck = new Set<Edit>();
-      for (const edit of [...edits].sort((a, b) => a.start - b.start)) {
-        const resolution = inferred.get(edit.start + delta);
-        // The batch inference pass can lose a candidate when its surrounding
-        // file contains unresolved or unrelated types. Keep unresolved edits
-        // for the exact emission comparison below; it is still the authority
-        // on whether removing this qualifier preserves the generated code.
-        if (!resolution || (resolution.module === edit.module && (resolution.method ?? edit.method) === edit.method)) {
-          candidatesForExactCheck.add(edit);
-        }
-        delta += edit.text.length - (edit.end - edit.start);
-      }
-      candidates = edits.filter(edit => candidatesForExactCheck.has(edit));
-    } catch { /* Fall back to the exact compiler comparison below. */ }
+  visit(parsed);
+  let result = source;
+  for (const edit of [...edits].sort((a, b) => b.start - a.start)) {
+    result = result.slice(0, edit.start) + edit.text + result.slice(edit.end);
   }
-  const accepted: Edit[] = [];
-  const tryGroup = (group: Edit[]): void => {
-    if (!group.length) return;
-    try {
-      if (compile(apply([...accepted, ...group])).typescript === original.typescript) {
-        accepted.push(...group);
-        return;
-      }
-    } catch { /* A stage may be ambiguous or shadowed. */ }
-    if (group.length > 1) {
-      const middle = Math.floor(group.length / 2);
-      tryGroup(group.slice(0, middle));
-      tryGroup(group.slice(middle));
-    }
-  };
-  tryGroup(candidates);
-  return { text: apply(accepted), changed: accepted.length, skipped: edits.length - accepted.length };
+  return { text: result, changed: edits.length, skipped: candidateCount - edits.length };
 }

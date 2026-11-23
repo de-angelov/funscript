@@ -82,6 +82,7 @@ export class FunScriptLspServer extends EventEmitter {
   private readonly projectConfigWatchers = new Map<string, FSWatcher>();
   private readonly interopRenameSession = new InteropRenameSession();
   private readonly parsedDocuments = new ParsedDocumentCache();
+  private readonly pipelineCompletionInputs = new Map<string, { source: string; version: number; inputs: Array<[number, string]> }>();
   private codeActionWorker?: Worker;
   private codeActionWorkerId = 0;
   private readonly pendingCodeActions = new Map<number, { version: number; text: string; uri: string; resolve: (result: CodeAction[]) => void }>();
@@ -170,6 +171,7 @@ export class FunScriptLspServer extends EventEmitter {
     this.interopDocuments.clear();
     this.interopRenameSession.dispose();
     this.parsedDocuments.clear();
+    this.pipelineCompletionInputs.clear();
     const roots = params?.workspaceFolders?.map(folder => folder.uri) ?? (params?.rootUri ? [params.rootUri] : []);
     this.workspaceRoots = roots.flatMap(uri => {
       try { return [resolve(fileURLToPath(uri))]; } catch { return []; }
@@ -269,6 +271,7 @@ export class FunScriptLspServer extends EventEmitter {
       this.documentRevision++;
       this.cancelCodeActionsFor(params.textDocument.uri);
       this.documents.delete(params.textDocument.uri);
+      this.pipelineCompletionInputs.delete(params.textDocument.uri);
       this.syncProjectConfigWatchers();
       this.syntaxErrors.delete(params.textDocument.uri);
       this.scheduleTypeDiagnostics();
@@ -453,7 +456,7 @@ export class FunScriptLspServer extends EventEmitter {
     const uri = params?.textDocument?.uri;
     const doc = uri ? this.documents.get(uri) : undefined;
     if (!doc || !params?.position) return [];
-    return complete(doc.text, uri, params.position, this.getDocuments());
+    return complete(doc.text, uri, params.position, this.getDocuments(), this.pipelineCompletionInputs.get(uri));
   }
 
   public onDocumentSymbolHandler(params: DocumentSymbolParams): DocumentSymbol[] {
@@ -779,11 +782,12 @@ export class FunScriptLspServer extends EventEmitter {
         const worker = new Worker(workerUrl, { execArgv: [] });
         worker.unref();
         this.diagnosticWorker = worker;
-        worker.on("message", (response: { revision: number; complete?: boolean; diagnostics?: PublishDiagnosticsParams[]; error?: string }) => {
+        worker.on("message", (response: { revision: number; complete?: boolean; diagnostics?: PublishDiagnosticsParams[]; pipelineInputs?: Array<{ uri: string; version: number; source: string; inputs: Array<[number, string]> }>; error?: string }) => {
           if (this.diagnosticWorker !== worker) return;
           if (response.error) console.error("FunScript type checking failed:", response.error);
           if (!response.error && response.revision === this.diagnosticRevision) {
             for (const result of response.diagnostics ?? []) if (!this.syntaxErrors.has(result.uri)) this.publishDiagnostics(result.uri, result.version, result.diagnostics);
+            for (const result of response.pipelineInputs ?? []) this.pipelineCompletionInputs.set(result.uri, { source: result.source, version: result.version, inputs: result.inputs });
           }
           if (response.complete === false) return;
           this.diagnosticBusy = false;
@@ -921,6 +925,7 @@ export class FunScriptLspServer extends EventEmitter {
       this.connection = null;
     }
     this.documents.clear();
+    this.pipelineCompletionInputs.clear();
     this.syntaxErrors.clear();
     this.interopDocuments.clear();
     this.removeAllListeners();

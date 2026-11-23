@@ -69,6 +69,7 @@ export interface TypeCheckCache {
         typescript: string;
         map?: any;
         ast?: any;
+        pipelineStageInputCompanions?: ReadonlyMap<number, string>;
       };
     }
   >;

@@ -21,11 +21,15 @@ export function complete(
   uri: string,
   position: Position,
   documents: IndexedDocument[],
+  pipelineAnalysis?: { source: string; inputs: Array<[number, string]> },
 ): CompletionItem[] {
   const lines = source.split("\n");
   const line = lines[position.line] ?? "";
   const before = line.slice(0, position.character);
-  const priorSource = lines.slice(0, position.line).join("\n") + before;
+  const priorSource =
+    lines.slice(0, position.line).join("\n") +
+    (position.line > 0 ? "\n" : "") +
+    before;
   const match = before.match(/[\w$.-]*$/);
   const typedPrefix = match?.[0] ?? "";
   const member = /([A-Za-z_$][\w$]*)\.$/.exec(before)?.[1];
@@ -134,21 +138,45 @@ export function complete(
       );
     }
     if (pipelineContext) {
-      const operations = new Set(Object.values(PIPELINE_COMPANION_CATALOG).flat());
-      for (const operation of operations) {
-        if (typedPrefix && !operation.toLowerCase().startsWith(typedPrefix.toLowerCase())) continue;
-        const candidates = pipelineCompanionCandidates(operation);
-        if (candidates.length < 2) continue;
-        for (const module of candidates) {
-          const label = `${module}.${operation}`;
-          items.set(label, {
-            label,
+      const pipeOffset = priorSource.lastIndexOf("|>");
+      const cachedPrefixMatches = pipelineAnalysis && pipeOffset >= 0 &&
+        pipelineAnalysis.source.slice(0, pipeOffset).trimEnd() === priorSource.slice(0, pipeOffset).trimEnd();
+      let inputCompanion: string | undefined;
+      if (cachedPrefixMatches) {
+        const cachedPipe = pipelineAnalysis!.source.indexOf("|>", pipeOffset);
+        let stageOffset = cachedPipe + 2;
+        while (/\s/.test(pipelineAnalysis!.source[stageOffset] ?? "")) stageOffset++;
+        inputCompanion = pipelineAnalysis!.inputs.find(([offset]) => offset === stageOffset)?.[1];
+      }
+      if (inputCompanion && inputCompanion in PIPELINE_COMPANION_CATALOG) {
+        for (const operation of PIPELINE_COMPANION_CATALOG[inputCompanion as keyof typeof PIPELINE_COMPANION_CATALOG]) {
+          if (typedPrefix && !operation.toLowerCase().startsWith(typedPrefix.toLowerCase())) continue;
+          items.set(operation, {
+            label: operation,
             kind: CompletionItemKind.Function,
-            detail: `Explicit pipeline stage — ${operation} is shared by ${candidates.join(", ")}`,
-            documentation: `Use \`${label}(...)\` to avoid an ambiguous bare pipeline stage.`,
-            textEdit: { range, newText: label },
-            sortText: `0-${label.toLowerCase()}`,
+            detail: `${inputCompanion} pipeline operation`,
+            documentation: `This stage is selected from the pipeline input type (${inputCompanion}).`,
+            textEdit: { range, newText: operation },
+            sortText: `0-${operation.toLowerCase()}`,
           });
+        }
+      } else {
+        const operations = new Set(Object.values(PIPELINE_COMPANION_CATALOG).flat());
+        for (const operation of operations) {
+          if (typedPrefix && !operation.toLowerCase().startsWith(typedPrefix.toLowerCase())) continue;
+          const candidates = pipelineCompanionCandidates(operation);
+          if (candidates.length < 2) continue;
+          for (const module of candidates) {
+            const label = `${module}.${operation}`;
+            items.set(label, {
+              label,
+              kind: CompletionItemKind.Function,
+              detail: `Explicit pipeline stage — ${operation} is shared by ${candidates.join(", ")}`,
+              documentation: `Use \`${label}(...)\` to avoid an ambiguous bare pipeline stage.`,
+              textEdit: { range, newText: label },
+              sortText: `0-${label.toLowerCase()}`,
+            });
+          }
         }
       }
     }

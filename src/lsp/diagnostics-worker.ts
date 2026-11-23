@@ -75,7 +75,15 @@ parentPort?.on("message", async (request: Request) => {
       }));
       return [{ uri: doc.uri, version: doc.version, diagnostics: mapped }];
     });
-    parentPort?.postMessage({ revision: request.revision, diagnostics });
+    const pipelineInputs = request.documents.flatMap(doc => {
+      const filename = filenames.get(doc.uri);
+      if (!filename) return [];
+      const root = loadProjectConfigForFile(filename).root;
+      const compiled = caches.get(root)?.compiledFiles.get(filename)?.compiled;
+      const inputs = compiled?.pipelineStageInputCompanions;
+      return inputs ? [{ uri: doc.uri, version: doc.version, source: doc.text, inputs: [...inputs] }] : [];
+    });
+    parentPort?.postMessage({ revision: request.revision, diagnostics, pipelineInputs });
   } catch (error) {
     parentPort?.postMessage({ revision: request.revision, error: error instanceof Error ? error.message : String(error) });
   }

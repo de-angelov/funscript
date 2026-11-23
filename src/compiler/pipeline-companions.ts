@@ -46,6 +46,8 @@ import { FunScriptError } from "../errors.js";
 export interface PipelineCompanionMap extends ReadonlyMap<number, PipelineCompanionModule> {
   readonly pipelineCompanions: ReadonlyMap<number, PipelineCompanionModule>;
   readonly stageResolutions: ReadonlyMap<number, StageResolution>;
+  readonly stageInputCompanions: ReadonlyMap<number, string>;
+  readonly bareStageResolutions: ReadonlyMap<number, StageResolution>;
   readonly directCallResolutions: ReadonlyMap<number, StageResolution>;
 }
 
@@ -175,23 +177,48 @@ export function inferPipelineCompanions(
   const emptyResult = new Map<number, PipelineCompanionModule>() as Map<number, PipelineCompanionModule> & {
     pipelineCompanions: ReadonlyMap<number, PipelineCompanionModule>;
     stageResolutions: ReadonlyMap<number, StageResolution>;
+    stageInputCompanions: ReadonlyMap<number, string>;
+    bareStageResolutions: ReadonlyMap<number, StageResolution>;
     directCallResolutions: ReadonlyMap<number, StageResolution>;
   };
   emptyResult.pipelineCompanions = emptyResult;
   emptyResult.stageResolutions = new Map();
+  emptyResult.stageInputCompanions = new Map();
+  emptyResult.bareStageResolutions = new Map();
   emptyResult.directCallResolutions = new Map();
 
   if (!marked.includes("__funscriptPipelineSource(") && !marked.includes("__funscriptDirectCall(")) {
     return emptyResult;
   }
 
-  const source = `import { Array, Chunk, DateTime, Duration, Effect, Layer, Option, Result, Schedule, Schema, Stream, String } from "effect";\ndeclare const decode: any;\nconst __funscriptPipelineSource = <T,>(_id: number, value: T): T => value;\nconst __funscriptDirectCall = <T,>(_id: number, value: T): T => value;\n${marked}`;
+  // Bare stages are selected from the input type below, so they do not need
+  // every possible companion namespace in scope. Rewrite Effect's barrel
+  // imports in the checker-only source to module subpaths; loading `effect`
+  // pulls its entire export graph into the TypeScript program.
+  const checkerMarked = marked.replace(/import\s*\{([\s\S]*?)\}\s*from\s*(["'])effect\2\s*;?/g, (_match, bindings: string) => {
+    const namespaces: string[] = [];
+    const remaining: string[] = [];
+    for (const binding of bindings.split(",").map((item: string) => item.trim()).filter(Boolean)) {
+      const parsed = /^(type\s+)?([A-Za-z_$][\w$]*)(?:\s+as\s+([A-Za-z_$][\w$]*))?$/.exec(binding);
+      if (!parsed || !/^[A-Z]/.test(parsed[2])) {
+        remaining.push(binding);
+        continue;
+      }
+      const [, typeOnly, imported, local = imported] = parsed;
+      namespaces.push(`import ${typeOnly ?? ""}* as ${local} from \"effect/${imported}\";`);
+    }
+    if (remaining.length) namespaces.push(`import { ${remaining.join(", ")} } from \"effect\";`);
+    return namespaces.join("\n");
+  });
+  const source = `declare const decode: any;\nconst __funscriptPipelineSource = <T,>(_id: number, value: T): T => value;\nconst __funscriptPipelineStageInput = <T,>(_id: number, value: T): T => value;\nconst __funscriptDirectCall = <T,>(_id: number, value: T): T => value;\n${checkerMarked}`;
   const checked = context.check(source);
   if (!checked) return emptyResult;
   const { sourceFile, checker } = checked;
 
   const companions = new Map<number, PipelineCompanionModule>();
   const stageResolutions = new Map<number, StageResolution>();
+  const stageInputCompanions = new Map<number, string>();
+  const bareStageResolutions = new Map<number, StageResolution>();
   const directCallResolutions = new Map<number, StageResolution>();
 
   const isSchemaType = (type: ts.Type): boolean => {
@@ -215,6 +242,15 @@ export function inferPipelineCompanions(
     if (type.aliasSymbol?.getName() === "Option") return "Option";
     if (type.aliasSymbol?.getName() === "Result") return "Result";
     if (type.isUnion()) {
+      const tag = checker.getPropertyOfType(type, "_tag");
+      if (tag) {
+        const tagType = checker.getTypeOfSymbolAtLocation(tag, sourceFile);
+        const tagNames = new Set((tagType.isUnion() ? tagType.types : [tagType]).flatMap(member =>
+          member.flags & ts.TypeFlags.StringLiteral ? [String((member as ts.StringLiteralType).value)] : [],
+        ));
+        if (tagNames.has("None") && tagNames.has("Some") && tagNames.size === 2) return "Option";
+        if (tagNames.has("Success") && tagNames.has("Failure") && tagNames.size === 2) return "Result";
+      }
       const members = type.types.map(companionForType);
       const first = members[0];
       return first && members.every((member) => member === first) ? first : undefined;
@@ -244,6 +280,7 @@ export function inferPipelineCompanions(
   };
 
   const pipelineSourceNodes = new Map<number, ts.CallExpression>();
+  const pipelineStageInputNodes = new Map<number, ts.CallExpression>();
   const directCallNodes = new Map<number, ts.CallExpression>();
 
   // Some curried Effect APIs have TypeScript signatures whose first stage can
@@ -267,11 +304,53 @@ export function inferPipelineCompanions(
   };
   collectPipelineBindings(ast);
   const bindingCompanions = new Map<string, PipelineCompanionModule>();
+  const pipelineScopeBindings = new Map<number, Set<string>>();
+  const functionBindings = (fn: any): Set<string> => {
+    const names = new Set<string>();
+    for (const param of fn.params ?? []) addBindingNames(param.name, names);
+    const visitScope = (node: any): void => {
+      if (!node || typeof node !== "object" || (node !== fn && node.kind === "FunctionExpression")) return;
+      if (node.kind === "BindingDeclaration") addBindingNames(node.id, names);
+      for (const [key, child] of Object.entries(node)) {
+        if (key === "span") continue;
+        if (Array.isArray(child)) child.forEach(visitScope);
+        else if (child && typeof child === "object") visitScope(child);
+      }
+    };
+    visitScope(fn.body);
+    return names;
+  };
+  const collectPipelineScopes = (node: any, inherited: ReadonlySet<string> = new Set()): void => {
+    if (!node || typeof node !== "object") return;
+    if (Array.isArray(node)) {
+      node.forEach(child => collectPipelineScopes(child, inherited));
+      return;
+    }
+    let scope = inherited;
+    if (node.kind === "FunctionExpression") {
+      scope = new Set([...inherited, ...functionBindings(node)]);
+    }
+    if (node.kind === "PipelineExpression") {
+      for (const stage of unrollPipeline(node).slice(1)) {
+        const names = pipelineScopeBindings.get(stage.span.start.offset) ?? new Set<string>();
+        for (const name of scope) names.add(name);
+        pipelineScopeBindings.set(stage.span.start.offset, names);
+      }
+    }
+    for (const [key, child] of Object.entries(node)) {
+      if (key === "span") continue;
+      if (Array.isArray(child)) child.forEach(item => collectPipelineScopes(item, scope));
+      else if (child && typeof child === "object") collectPipelineScopes(child, scope);
+    }
+  };
+  collectPipelineScopes(ast, new Set(localBindings));
 
   const visitNodes = (node: ts.Node): void => {
     if (ts.isCallExpression(node) && ts.isIdentifier(node.expression)) {
       if (node.expression.text === "__funscriptPipelineSource" && node.arguments.length === 2 && ts.isNumericLiteral(node.arguments[0])) {
         pipelineSourceNodes.set(Number(node.arguments[0].text), node);
+      } else if (node.expression.text === "__funscriptPipelineStageInput" && node.arguments.length === 2 && ts.isNumericLiteral(node.arguments[0])) {
+        pipelineStageInputNodes.set(Number(node.arguments[0].text), node);
       } else if (node.expression.text === "__funscriptDirectCall" && node.arguments.length === 2 && ts.isNumericLiteral(node.arguments[0])) {
         directCallNodes.set(Number(node.arguments[0].text), node);
       }
@@ -337,6 +416,20 @@ export function inferPipelineCompanions(
     // Resolve subsequent stages
     for (let i = 1; i < stages.length; i++) {
       const stage = stages[i];
+      const stageInputNode = pipelineStageInputNodes.get(stage.span.start.offset);
+      if (stageInputNode) {
+        const stageInputType = checker.getTypeAtLocation(stageInputNode.arguments[1]);
+        // The wrapper used to expose the stage input to TypeScript can lose
+        // the concrete type at the first pipe boundary (Effect.pipe's
+        // overloads may infer `any`). Preserve the type we already tracked
+        // from the pipeline source or preceding stage in that case.
+        currentCompanion = companionForType(stageInputType) ?? currentCompanion;
+        currentType = stageInputType.flags & (ts.TypeFlags.Any | ts.TypeFlags.Unknown)
+          ? currentType
+          : stageInputType;
+        stageInputCompanions.set(stage.span.start.offset, currentCompanion ?? "Unknown");
+      }
+      else if (currentCompanion) stageInputCompanions.set(stage.span.start.offset, currentCompanion);
       let fnName: string | undefined;
       let isExplicit = false;
       let explicitModule: string | undefined;
@@ -357,6 +450,15 @@ export function inferPipelineCompanions(
 
       if (isExplicit && explicitModule) {
         stageResolutions.set(stage.span.start.offset, { module: explicitModule, method: fnName });
+        if (
+          fnName &&
+          !pipelineScopeBindings.get(stage.span.start.offset)?.has(fnName) &&
+          currentCompanion === explicitModule &&
+          (PIPELINE_COMPANION_CATALOG[currentCompanion as PipelineCompanionModule]?.includes(fnName) ||
+            (currentCompanion === "Effect" && fnName in EFFECT_PIPELINE_COMPATIBILITY_ALIASES))
+        ) {
+          bareStageResolutions.set(stage.span.start.offset, { module: currentCompanion, method: fnName });
+        }
         const sym = checker.resolveName(explicitModule, sourceFile, ts.SymbolFlags.Value | ts.SymbolFlags.Namespace, false);
         if (sym && fnName) {
           const symType = checker.getTypeOfSymbolAtLocation(sym, sourceFile);
@@ -592,10 +694,14 @@ export function inferPipelineCompanions(
   const result = companions as Map<number, PipelineCompanionModule> & {
     pipelineCompanions: ReadonlyMap<number, PipelineCompanionModule>;
     stageResolutions: ReadonlyMap<number, StageResolution>;
+    stageInputCompanions: ReadonlyMap<number, string>;
+    bareStageResolutions: ReadonlyMap<number, StageResolution>;
     directCallResolutions: ReadonlyMap<number, StageResolution>;
   };
   result.pipelineCompanions = companions;
   result.stageResolutions = stageResolutions;
+  result.stageInputCompanions = stageInputCompanions;
+  result.bareStageResolutions = bareStageResolutions;
   result.directCallResolutions = directCallResolutions;
   return result;
 }

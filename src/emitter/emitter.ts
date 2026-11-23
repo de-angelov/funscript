@@ -1956,7 +1956,12 @@ export class Emitter {
         return this.emitExpression(resolvedStage);
       });
 
-      return `pipe(\n  ${emittedStages.join(",\n  ")}\n)`;
+      const checkedStages = this.options.markPipelineSources
+        ? emittedStages.map((stage, index) => index === 0
+          ? stage
+          : `(__funscriptPipelineValue) => (${stage})(__funscriptPipelineStageInput(${stages[index].span.start.offset}, __funscriptPipelineValue))`)
+        : emittedStages;
+      return `pipe(\n  ${checkedStages.join(",\n  ")}\n)`;
     } finally {
       this.inPipelineStage = prevInPipeline;
     }

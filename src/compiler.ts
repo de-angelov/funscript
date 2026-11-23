@@ -44,6 +44,8 @@ export interface CompileOptions {
   context?: TypeScriptCompilationContext;
   /** In-memory source files, keyed by absolute path, for cross-module analysis. */
   virtualSources?: ReadonlyMap<string, string>;
+  /** Return compiler pipeline metadata without emitting a TypeScript program. @internal */
+  pipelineAnalysisOnly?: boolean;
   /** Absolute source path when the displayed filename is project-relative. */
   sourcePath?: string;
 }
@@ -53,6 +55,12 @@ export interface CompileResult {
   ast: Program;
   typescript: string;
   targetExtension: string;
+  /** Type-directed pipeline stage resolution produced by the compiler pass. */
+  pipelineStageResolutions: ReadonlyMap<number, import("./emitter/emitter.js").StageResolution>;
+  /** Inferred input companion for each pipeline stage offset. */
+  pipelineStageInputCompanions: ReadonlyMap<number, string>;
+  /** Qualified stages whose receiver type allows the equivalent bare form. */
+  barePipelineStageResolutions: ReadonlyMap<number, import("./emitter/emitter.js").StageResolution>;
   map?: SourceMap;
   sourcemap?: SourceMap;
 }
@@ -264,8 +272,30 @@ export const compileString = (
       const importedDataSchemas = new Set<string>();
       const importedRecordFunctions = resolveImportedRecordFunctions(ast, options?.sourcePath ?? filename, options?.virtualSources, importedRecordContracts, importedIdentitySchemas, importedGenericDataSchemas, importedDataSchemas);
       for (const [name, contract] of resolvePackageRecordContracts(ast, context, importedRecordContracts)) importedRecordContracts.set(name, contract);
-      validateNumericComparisons(ast, source, context, importedRecordFunctions, importedRecordContracts, importedGenericDataSchemas, importedIdentitySchemas, importedDataSchemas);
-      const { pipelineCompanions, stageResolutions, directCallResolutions } = inferPipelineCompanions(ast, context, importedRecordFunctions, importedRecordContracts, importedGenericDataSchemas, importedIdentitySchemas, importedDataSchemas);
+      if (!options?.pipelineAnalysisOnly) {
+        validateNumericComparisons(ast, source, context, importedRecordFunctions, importedRecordContracts, importedGenericDataSchemas, importedIdentitySchemas, importedDataSchemas);
+      }
+      const { pipelineCompanions, stageResolutions, stageInputCompanions, bareStageResolutions, directCallResolutions } = inferPipelineCompanions(
+        ast,
+        context,
+        importedRecordFunctions,
+        importedRecordContracts,
+        importedGenericDataSchemas,
+        importedIdentitySchemas,
+        importedDataSchemas,
+        options?.pipelineAnalysisOnly,
+      );
+      if (options?.pipelineAnalysisOnly) {
+        return {
+          source,
+          ast,
+          typescript: "",
+          targetExtension: filename.endsWith(".funx") ? ".tsx" : ".ts",
+          pipelineStageResolutions: stageResolutions,
+          pipelineStageInputCompanions: stageInputCompanions,
+          barePipelineStageResolutions: bareStageResolutions,
+        };
+      }
       const importedSchemas = resolveImportedSchemas(ast, source, context);
       const emitterOptions: EmitterOptions = {
         pipelineCompanions,
@@ -301,6 +331,9 @@ export const compileString = (
         ast,
         typescript,
         targetExtension,
+        pipelineStageResolutions: stageResolutions,
+        pipelineStageInputCompanions: stageInputCompanions,
+        barePipelineStageResolutions: bareStageResolutions,
         map,
         sourcemap: map,
       };

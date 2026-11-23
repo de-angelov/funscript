@@ -19,6 +19,7 @@ import { runTsc } from "./tsc.js";
 import { startLspServer } from "../lsp/index.js";
 import { format } from "../formatter/index.js";
 import { convertPipelineStyle } from "../tooling/pipeline-style.js";
+import { TypeScriptCompilationContext } from "../compiler/typescript-context.js";
 import { watchBuild } from "./build-watch.js";
 import { startRepl } from "./repl.js";
 import { renderCliHelp, validateCliArgs } from "./commands.js";
@@ -743,10 +744,11 @@ const pipelineStyleCommand = (args: string[]) => Effect.gen(function* () {
   for (const target of targets) {
     const stat = yield* Effect.tryPromise({ try: () => fs.stat(target), catch: (error: any) => new Error(error.message) });
     const files = stat.isDirectory() ? yield* Effect.tryPromise({ try: () => findFunFiles(target), catch: (error: any) => new Error(error.message) }) : [target];
+    const compilationContext = files.length > 0 ? new TypeScriptCompilationContext(path.resolve(files[0])) : undefined;
     for (const file of files) {
       try {
         const source = yield* readFile(file);
-        const result = convertPipelineStyle(source, path.resolve(file), style);
+        const result = convertPipelineStyle(source, path.resolve(file), style, undefined, compilationContext);
         if (result.changed) yield* writeFile(file, result.text);
         yield* Console.log(`${file}: ${result.changed} converted, ${result.skipped} skipped`);
       } catch (error: any) {
