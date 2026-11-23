@@ -15,10 +15,21 @@ import {
 import {
   PRIMITIVE_TYPES,
   EFFECT_TYPE_MODULES,
+  EFFECT_BUILTIN_MODULES,
   emitPropertyKey,
   emitTypeParameters,
   emitTypeNode,
 } from "./types.js";
+import {
+  emitArrowExpression,
+  emitIndexTarget,
+  emitStatement,
+  emitWhenStatement,
+  emitEffectCall,
+  emitEffectBlockExpression,
+  emitParBlockExpression,
+  emitMutativeRecipe,
+} from "./statements.js";
 import {
   emitSchemaDeclaration,
   emitGenericDataSchema,
@@ -592,61 +603,6 @@ const AUTO_NEW_CONSTRUCTORS = new Set([
   "File",
 ]);
 
-const EFFECT_BUILTIN_MODULES = new Set([
-  "Array",
-  "BigDecimal",
-  "BigInt",
-  "Boolean",
-  "Brand",
-  "Cache",
-  "Cause",
-  "Chunk",
-  "Clock",
-  "Config",
-  "ConfigProvider",
-  "Console",
-  "Context",
-  "Cron",
-  "Data",
-  "DateTime",
-  "Deferred",
-  "Duration",
-  "Effect",
-  "Equal",
-  "Exit",
-  "Fiber",
-  "FiberMap",
-  "FiberSet",
-  "HashMap",
-  "HashSet",
-  "Layer",
-  "LogLevel",
-  "Logger",
-  "Match",
-  "Metric",
-  "Number",
-  "Option",
-  "Order",
-  "PubSub",
-  "Queue",
-  "Random",
-  "Record",
-  "Redacted",
-  "Ref",
-  "Result",
-  "Runtime",
-  "Schedule",
-  "Schema",
-  "Scope",
-  "Sink",
-  "Stream",
-  "String",
-  "Struct",
-  "SubscriptionRef",
-  "SynchronizedRef",
-  "Tuple",
-]);
-
 const NATIVE_CONSTRUCTOR_NAMES = new Set([
   "Number",
   "String",
@@ -661,7 +617,7 @@ export class Emitter {
     Map<string, Map<string, RecordFieldInfo> | undefined>
   > = [];
   private userEffectBindings = new Set<string>();
-  private effectModuleBindings = new Set<string>();
+  public effectModuleBindings = new Set<string>();
   private userEsToolkitBindings = new Set<string>();
   public userImportBindings = new Set<string>();
   private esToolkitImports = new Set<string>();
@@ -677,7 +633,7 @@ export class Emitter {
   private currentPlaceholderParam: string | null = null;
   public bindings = new Map<string, BindingDeclaration>();
   private tryContextDepth = 0;
-  private activeDraftParams = new Set<string>();
+  public activeDraftParams = new Set<string>();
 
   public declaredTypeNames = new Set<string>();
   public runtimeSchemaNames = new Set<string>();
@@ -1436,7 +1392,7 @@ export class Emitter {
     visit(value);
   }
 
-  private emitBindingDeclaration(
+  public emitBindingDeclaration(
     decl: BindingDeclaration,
     isExport = false,
   ): string {
@@ -1719,7 +1675,7 @@ export class Emitter {
     }
   }
 
-  private emitJsExpression(expr: JsExpression): string {
+  public emitJsExpression(expr: JsExpression): string {
     this.effectImports.add("Effect");
     this.effectImports.add("Option");
     this.needsJsInterop = true;
@@ -1741,7 +1697,7 @@ export class Emitter {
     return `__funscriptJs(() => ${inner}, false)`;
   }
 
-  private emitMemberProperty(expr: MemberExpression): string {
+  public emitMemberProperty(expr: MemberExpression): string {
     if (expr.object.kind === "UpperIdentifier") {
       if (expr.object.name === "Effect")
         return (
@@ -1751,22 +1707,8 @@ export class Emitter {
     return expr.property.name;
   }
 
-  private emitMutativeRecipe(expr: MutBlockExpression): string {
-    // Mutative recipes mutate their draft in place and must return void.
-    // A trailing draft expression is useful in FunScript's block syntax,
-    // but returning that proxy selects the wrong create overload.
-    this.activeDraftParams.add(expr.draftParam.name);
-    try {
-      const recipeBody =
-        expr.body.kind === "BlockStatement" &&
-        expr.body.finalExpression?.kind === "Identifier" &&
-        expr.body.finalExpression.name === expr.draftParam.name
-          ? this.emitFunctionBody({ ...expr.body, finalExpression: undefined })
-          : this.emitFunctionBody(expr.body);
-      return `(${expr.draftParam.name}) => {\n${recipeBody}\n}`;
-    } finally {
-      this.activeDraftParams.delete(expr.draftParam.name);
-    }
+  public emitMutativeRecipe(expr: MutBlockExpression): string {
+    return emitMutativeRecipe(this, expr);
   }
 
   public emitStringLiteral(lit: StringLiteral): string {
@@ -2630,7 +2572,7 @@ export class Emitter {
     }
   }
 
-  private emitFunctionBody(body: FunctionBody): string {
+  public emitFunctionBody(body: FunctionBody): string {
     if (body.kind === "BlockStatement") {
       const stmts = body.statements
         .map((s) => "  " + this.emitStatement(s))
@@ -2657,76 +2599,20 @@ export class Emitter {
     return `  return ${this.emitExpression(body)};`;
   }
 
-  private emitArrowExpression(expr: Expression): string {
-    const emitted = this.emitExpression(expr);
-    return expr.kind === "RecordExpression" ? `(${emitted})` : emitted;
+  public emitArrowExpression(expr: Expression): string {
+    return emitArrowExpression(this, expr);
   }
 
-  private emitIndexTarget(expr: IndexExpression): string {
-    return `${this.emitExpression(expr.object)}[${this.emitExpression(expr.index)}]`;
+  public emitIndexTarget(expr: IndexExpression): string {
+    return emitIndexTarget(this, expr);
   }
 
-  private emitStatement(stmt: Statement): string {
-    if (stmt.kind === "BindingDeclaration") {
-      return this.emitBindingDeclaration(stmt);
-    }
-    if (stmt.kind === "AssignmentStatement") {
-      const target =
-        stmt.target.kind === "Identifier"
-          ? stmt.target.name
-          : stmt.target.kind === "IndexExpression"
-            ? this.emitIndexTarget(stmt.target)
-            : stmt.target.path.map((p) => p.name).join(".");
-      return `${target} = ${this.emitExpression(stmt.value)};`;
-    }
-    if (stmt.kind === "ReturnStatement") {
-      if (
-        (stmt.argument.kind === "Identifier" ||
-          stmt.argument.kind === "UpperIdentifier") &&
-        stmt.argument.name === "Unit"
-      ) {
-        return "return;";
-      }
-      const arg = this.emitExpression(stmt.argument);
-      if (arg.startsWith("(") && arg.endsWith(")")) {
-        return `return ${arg};`;
-      }
-      return `return (${arg});`;
-    }
-    if (stmt.kind === "WhenStatement") {
-      return this.emitWhenStatement(stmt);
-    }
-    return `${this.emitExpression(stmt.expression)};`;
+  public emitStatement(stmt: Statement): string {
+    return emitStatement(this, stmt);
   }
 
-  private emitWhenStatement(stmt: WhenStatement, insideEffect = false): string {
-    const cond = this.emitExpression(stmt.condition);
-    if (stmt.isEarlyReturn) {
-      const consequence = stmt.consequent as Expression;
-      if (
-        insideEffect &&
-        consequence.kind === "CallExpression" &&
-        consequence.callee.kind === "MemberExpression" &&
-        consequence.callee.object.kind === "UpperIdentifier" &&
-        consequence.callee.object.name === "Effect" &&
-        consequence.callee.property.name === "fail"
-      ) {
-        return `if (${cond}) return yield* ${this.emitEffectCall(consequence)};`;
-      }
-      return `if (${cond}) return ${this.emitExpression(consequence)};`;
-    }
-    const body = stmt.consequent as BlockStatement;
-    const stmts = body.statements
-      .map((s) => "  " + this.emitStatement(s))
-      .join("\n");
-    const ret =
-      body.finalExpression &&
-      (body.finalExpression.kind !== "Identifier" ||
-        body.finalExpression.name !== "_error")
-        ? `  ${this.emitExpression(body.finalExpression)};`
-        : "";
-    const allStmts = [stmts, ret].filter(Boolean).join("\n");
-    return `if (${cond}) {\n${allStmts}\n}`;
+  public emitWhenStatement(stmt: WhenStatement, insideEffect = false): string {
+    return emitWhenStatement(this, stmt, insideEffect);
   }
 
   private emitMatchExpression(expr: MatchExpression): string {
@@ -2776,133 +2662,16 @@ export class Emitter {
     }).emitMatchExpression(expr);
   }
 
-  private emitEffectBlockExpression(expr: EffectBlockExpression): string {
-    this.effectImports.add("Effect");
-    const statements = expr.body
-      .map((s) => {
-        if (s.kind === "EffectBindStatement") {
-          return `    const ${this.emitBindingTarget(s.id)} = yield* ${this.emitEffectCall(s.effect)};`;
-        }
-        if (s.kind === "EffectDiscardStatement") {
-          return `    yield* ${this.emitEffectCall(s.effect)};`;
-        }
-        if (s.kind === "BindingDeclaration") {
-          return `    ${this.emitBindingDeclaration(s)}`;
-        }
-        if (s.kind === "AssignmentStatement") {
-          const target =
-            s.target.kind === "Identifier"
-              ? s.target.name
-              : s.target.kind === "IndexExpression"
-                ? this.emitIndexTarget(s.target)
-                : s.target.path.map((p) => p.name).join(".");
-          return `    ${target} = ${this.emitExpression(s.value)};`;
-        }
-        if (s.kind === "WhenStatement") {
-          return `    ${this.emitWhenStatement(s, true)}`;
-        }
-        return "";
-      })
-      .join("\n");
-
-    const isUnit =
-      (expr.finalExpression.kind === "Identifier" ||
-        expr.finalExpression.kind === "UpperIdentifier") &&
-      expr.finalExpression.name === "Unit";
-    const ret = isUnit
-      ? `    return;`
-      : `    return ${this.emitExpression(expr.finalExpression)};`;
-    const gen = `Effect.gen(function* () {\n${statements}\n${ret}\n  })`;
-    if (expr.unscoped) {
-      return gen;
-    }
-    return `Effect.scoped(${gen})`;
+  public emitEffectBlockExpression(expr: EffectBlockExpression): string {
+    return emitEffectBlockExpression(this, expr);
   }
 
-  private emitParBlockExpression(expr: ParBlockExpression): string {
-    this.effectImports.add("Effect");
-    const entries: string[] = [];
-    const boundNames: string[] = [];
-
-    for (const s of expr.body) {
-      if (s.kind === "EffectBindStatement") {
-        const key = this.emitBindingTarget(s.id);
-        const effectVal = this.emitEffectCall(s.effect);
-        entries.push(`      ${key}: ${effectVal}`);
-        boundNames.push(key);
-      } else if (s.kind === "EffectDiscardStatement") {
-        const effectVal = this.emitEffectCall(s.effect);
-        entries.push(`      _: ${effectVal}`);
-      }
-    }
-
-    const concurrencyArg = expr.concurrency
-      ? this.emitExpression(expr.concurrency)
-      : `"inherit"`;
-    const dict = `{\n${entries.join(",\n")}\n    }`;
-    const allCall = `Effect.all(${dict}, { concurrency: ${concurrencyArg} })`;
-
-    const isExactShorthand =
-      !expr.hasExplicitReturn ||
-      (expr.finalExpression.kind === "RecordExpression" &&
-        expr.finalExpression.entries.length === boundNames.length &&
-        expr.finalExpression.entries.every((e, i) => {
-          if (e.kind === "ShorthandEntry") {
-            return e.key.name === boundNames[i];
-          }
-          if (e.kind === "FieldEntry") {
-            return (
-              e.key.name === boundNames[i] &&
-              e.value.kind === "Identifier" &&
-              e.value.name === boundNames[i]
-            );
-          }
-          return false;
-        }));
-
-    if (isExactShorthand) {
-      return allCall;
-    }
-
-    const retExpr = this.emitExpression(expr.finalExpression);
-    return `Effect.map(${allCall}, ({ ${boundNames.join(", ")} }) => ${retExpr})`;
+  public emitParBlockExpression(expr: ParBlockExpression): string {
+    return emitParBlockExpression(this, expr);
   }
 
-  private emitEffectCall(effectExpr: Expression): string {
-    if (effectExpr.kind === "JsExpression") {
-      return this.emitJsExpression(effectExpr);
-    }
-    if (effectExpr.kind === "ParBlockExpression") {
-      return this.emitParBlockExpression(effectExpr);
-    }
-    if (effectExpr.kind === "EffectBlockExpression") {
-      return this.emitEffectBlockExpression(effectExpr);
-    }
-    // Check if this is a direct service call: Service.method(args)
-    if (
-      effectExpr.kind === "CallExpression" &&
-      effectExpr.callee.kind === "MemberExpression"
-    ) {
-      const obj = effectExpr.callee.object;
-      if (obj.kind === "UpperIdentifier") {
-        if (
-          EFFECT_BUILTIN_MODULES.has(obj.name) ||
-          this.effectModuleBindings.has(obj.name) ||
-          obj.name === "Promise"
-        ) {
-          if (
-            EFFECT_BUILTIN_MODULES.has(obj.name) &&
-            !this.isUserBinding(obj.name)
-          ) {
-            this.effectImports.add(obj.name);
-          }
-          return `${obj.name}.${this.emitMemberProperty(effectExpr.callee)}(${effectExpr.args.map((a) => this.emitExpression(a)).join(", ")})`;
-        }
-        // Direct Service Call: Service.method(...) => (yield* Service).method(...)
-        return `(yield* ${obj.name}).${effectExpr.callee.property.name}(${effectExpr.args.map((a) => this.emitExpression(a)).join(", ")})`;
-      }
-    }
-    return this.emitExpression(effectExpr);
+  public emitEffectCall(effectExpr: Expression): string {
+    return emitEffectCall(this, effectExpr);
   }
 
   // --- Types ---
