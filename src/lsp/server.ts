@@ -62,6 +62,7 @@ import {
 import { convertPipelineStyle } from "../tooling/pipeline-style.js";
 import { findHoverAsync } from "./hover.js";
 import { findInlayHints } from "./inlay-hints.js";
+import { findFillMatchArmsCodeActions } from "./match-arms.js";
 import { complete } from "./completion.js";
 import {
   documentSymbols,
@@ -491,6 +492,18 @@ export class FunScriptLspServer extends EventEmitter {
     } catch {
       /* Invalid source has no formatting action. */
     }
+
+    try {
+      const matchActions = findFillMatchArmsCodeActions(
+        doc.text,
+        uri,
+        params.range,
+      );
+      actions.push(...matchActions);
+    } catch {
+      /* Code actions gracefully decline on invalid syntax. */
+    }
+
     if (!doc.text.includes("|>")) return actions;
     const filename = uri.startsWith("file:") ? fileURLToPath(uri) : uri;
     for (const style of ["bare", "qualified"] as const) {

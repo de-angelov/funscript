@@ -734,6 +734,7 @@ const checkCommand = (args: string[]) =>
     const jsonOutput = args.includes("--json");
     const sarifOutput = args.includes("--sarif");
     const warningsAsErrors = args.includes("--warnings-as-errors");
+    const isFix = args.includes("--fix");
     if (jsonOutput && sarifOutput) {
       process.exitCode = 1;
       return yield* Console.error(
@@ -805,6 +806,59 @@ const checkCommand = (args: string[]) =>
         } else {
           filesToCheck.push(target);
         }
+      }
+    }
+
+    if (isFix) {
+      let fixedCount = 0;
+      for (const target of filesToCheck) {
+        try {
+          const original = yield* Effect.tryPromise({
+            try: () => fs.readFile(target, "utf-8"),
+            catch: () => "",
+          });
+          if (!original) continue;
+
+          let updated = original;
+
+          if (
+            args.includes("--bare-pipelines") ||
+            projectPolicy.barePipelines === true
+          ) {
+            const pipeRes = convertPipelineStyle(
+              updated,
+              path.resolve(target),
+              "bare",
+            );
+            if (pipeRes.changed) {
+              updated = pipeRes.text;
+            }
+          }
+
+          const formatConfig = loadFormatConfigForFile(path.resolve(target));
+          const formatted = format(updated, {
+            ...formatConfig,
+            filename: path.resolve(target),
+          });
+          if (formatted !== original) {
+            yield* Effect.tryPromise({
+              try: () => fs.writeFile(target, formatted, "utf-8"),
+              catch: (err: any) =>
+                new Error(`Failed writing '${target}': ${err.message}`),
+            });
+            fixedCount++;
+            if (!jsonOutput && !sarifOutput) {
+              yield* Console.log(`✓ Fixed ${target}`);
+            }
+          }
+        } catch {
+          /* Skip unfixable files */
+        }
+      }
+      if (fixedCount > 0 && !jsonOutput && !sarifOutput) {
+        yield* Console.log(
+          `✓ Fixed formatting and style in ${fixedCount} file${fixedCount === 1 ? "" : "s"}.`,
+        );
       }
     }
 

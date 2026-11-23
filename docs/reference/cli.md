@@ -37,13 +37,17 @@ funscript emit src/main.fun --out src/main.ts --sourcemap
 ### `funscript check`
 
 ```text
-funscript check [file.fun|file.funx...] [--idiomatic] [--json|--sarif] [--warnings-as-errors] [--no-ts] [--no-global-this] [--no-optional] [--bare-pipelines]
+funscript check [file.fun|file.funx...] [--fix] [--idiomatic] [--json|--sarif] [--warnings-as-errors] [--no-ts] [--no-global-this] [--no-optional] [--bare-pipelines]
 ```
 
-Statically type-check files with the TypeScript API and optionally emit machine-readable diagnostics.
+Statically type-check files with the TypeScript API, optionally fix formatting and pipeline styles, and emit machine-readable diagnostics.
 
 ```sh
 funscript check examples/shapes.fun
+```
+
+```sh
+funscript check src/ --fix
 ```
 
 ```sh

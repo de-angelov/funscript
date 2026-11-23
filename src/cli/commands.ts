@@ -36,6 +36,7 @@ const commandOptions: Record<string, ReadonlySet<string>> = {
     "--json",
     "--sarif",
     "--warnings-as-errors",
+    "--fix",
     "--no-ts",
     "--no-global-this",
     "--no-optional",
@@ -123,11 +124,12 @@ export const CLI_COMMANDS: readonly CliCommand[] = [
   {
     name: "check",
     usage:
-      "check [file.fun|file.funx...] [--idiomatic] [--json|--sarif] [--warnings-as-errors] [--no-ts] [--no-global-this] [--no-optional] [--bare-pipelines]",
+      "check [file.fun|file.funx...] [--fix] [--idiomatic] [--json|--sarif] [--warnings-as-errors] [--no-ts] [--no-global-this] [--no-optional] [--bare-pipelines]",
     description:
-      "Statically type-check files with the TypeScript API and optionally emit machine-readable diagnostics.",
+      "Statically type-check files with the TypeScript API, optionally fix formatting and pipeline styles, and emit machine-readable diagnostics.",
     examples: [
       "funscript check examples/shapes.fun",
+      "funscript check src/ --fix",
       "funscript check src --sarif --warnings-as-errors",
     ],
   },

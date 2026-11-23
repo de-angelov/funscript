@@ -6,6 +6,7 @@ export * from "./docs.js";
 export * from "./definition.js";
 export * from "./hover.js";
 export * from "./inlay-hints.js";
+export * from "./match-arms.js";
 
 export {
   DiagnosticSeverity,
