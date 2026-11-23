@@ -9,6 +9,7 @@ import type {
   Pattern,
   RecordPattern,
   StringLiteral,
+  TypeNode,
 } from "../ast/types.js";
 import { FunScriptError } from "../errors.js";
 
@@ -25,6 +26,7 @@ interface MatchEmitterContext {
   emitBindingTarget(target: BindingTarget | Pattern): string;
   emitStringLiteral(literal: StringLiteral): string;
   recordField(expression: Expression): RecordFieldInfo | undefined;
+  getTypeNodeForExpression?(expression: Expression): TypeNode | undefined;
   isOptionalParameter(name: string): boolean;
   isOptionalValue(expression: Expression): boolean;
   requireTsPattern(): void;
@@ -32,6 +34,7 @@ interface MatchEmitterContext {
     name: string,
     fields: Map<string, RecordFieldInfo>,
     arm: MatchArm,
+    payloadType?: TypeNode,
   ): void;
   leaveOptionalPayload(): void;
 }
@@ -129,7 +132,27 @@ export class MatchEmitter {
         }
       }
       if (payloadName && payloadFields) {
-        this.context.enterOptionalPayload(payloadName, payloadFields, arm);
+        let payloadType: TypeNode | undefined;
+        if (expr.scrutinee && this.context.getTypeNodeForExpression) {
+          const scrutineeType = this.context.getTypeNodeForExpression(
+            expr.scrutinee,
+          );
+          if (
+            scrutineeType?.kind === "TypeReferenceNode" &&
+            scrutineeType.name.name === "Option" &&
+            scrutineeType.typeArgs?.length === 1
+          ) {
+            payloadType = scrutineeType.typeArgs[0];
+          } else {
+            payloadType = scrutineeType;
+          }
+        }
+        this.context.enterOptionalPayload(
+          payloadName,
+          payloadFields,
+          arm,
+          payloadType,
+        );
       }
       try {
         if (

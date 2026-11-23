@@ -804,4 +804,39 @@ export callInterop = (optStr: Option<String>) => effect {
       'Option.isSome(__value) ? { ["comment"]: __value.value } : {}',
     );
   });
+
+  it("allows defaulted record fields to reference preceding function parameters", () => {
+    const src = `
+export createItem = (id: String, options: { slug: String = id }) =>
+  [id, options.slug]
+
+export createItemFormatted = (id: String, options: { slug: String = id |> toLowerCase }) =>
+  [id, options.slug]
+`;
+    const res = Effect.runSync(compileString(src));
+    expect(res.typescript).toContain(
+      "const $funscriptFieldRaw1_0 = options.slug;",
+    );
+    expect(res.typescript).toContain(
+      "$funscriptFieldRaw1_0 === undefined ? id : $funscriptFieldRaw1_0",
+    );
+    expect(res.typescript).toContain("String.toLowerCase");
+
+    const createItem = evaluateTsFunction(res.typescript, "createItem");
+    expect(createItem("ABC-123", {})).toEqual(["ABC-123", "ABC-123"]);
+    expect(createItem("ABC-123", { slug: "custom" })).toEqual([
+      "ABC-123",
+      "custom",
+    ]);
+
+    const createItemFormatted = evaluateTsFunction(
+      res.typescript,
+      "createItemFormatted",
+    );
+    expect(createItemFormatted("ABC-123", {})).toEqual(["ABC-123", "abc-123"]);
+    expect(createItemFormatted("ABC-123", { slug: "CUSTOM" })).toEqual([
+      "ABC-123",
+      "CUSTOM",
+    ]);
+  });
 });

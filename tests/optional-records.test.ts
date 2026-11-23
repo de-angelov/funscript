@@ -473,11 +473,16 @@ describe("optional fields in inline parameter records", () => {
     );
     await expectCompileError(
       "export f = (props: { label: String = props.label }) => props.label",
-      /cannot reference function parameters/,
+      /cannot reference its own record parameter/,
     );
     await expectCompileError(
-      "export f = (prefix: String, props: { label: String = prefix }) => props.label",
-      /cannot reference function parameters/,
+      "export f = (props: { label: String = suffix }, suffix: String) => props.label",
+      /before its declaration/,
     );
+    const { f } = await execute(
+      "export f = (prefix: String, props: { label: String = prefix }) => props.label",
+    );
+    expect(f("default-prefix", {})).toBe("default-prefix");
+    expect(f("default-prefix", { label: "custom" })).toBe("custom");
   });
 });

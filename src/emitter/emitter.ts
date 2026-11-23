@@ -1051,6 +1051,34 @@ export class Emitter {
     return this.bindings.get(name)?.typeAnnotation;
   }
 
+  public getTypeNodeForExpression(expr: Expression): TypeNode | undefined {
+    if (expr.kind === "Identifier") {
+      return this.getTypeNodeForIdentifier(expr.name);
+    }
+    if (expr.kind === "MemberExpression") {
+      const objType = this.getTypeNodeForExpression(expr.object);
+      if (!objType) return undefined;
+      let recordType: TypeNode | undefined = objType;
+      if (recordType.kind === "TypeReferenceNode") {
+        if (
+          recordType.name.name === "Option" &&
+          recordType.typeArgs?.length === 1
+        ) {
+          recordType = recordType.typeArgs[0];
+        } else {
+          recordType = this.recordContracts.get(recordType.name.name);
+        }
+      }
+      if (recordType?.kind === "RecordTypeNode") {
+        const field = recordType.fields.find(
+          (f) => f.name.name === expr.property.name,
+        );
+        return field?.typeAnnotation;
+      }
+    }
+    return undefined;
+  }
+
   private isTargetNativeCategory(
     expr: Expression,
     category: string,
@@ -1079,44 +1107,44 @@ export class Emitter {
       }
     }
 
-    if (expr.kind === "Identifier") {
-      const name = expr.name;
-      const typeNode = this.getTypeNodeForIdentifier(name);
-      if (typeNode) {
-        if (typeNode.kind === "ArrayTypeNode") {
+    const typeNode = this.getTypeNodeForExpression(expr);
+    if (typeNode) {
+      if (typeNode.kind === "ArrayTypeNode") {
+        return category === "array";
+      }
+      if (typeNode.kind === "TypeReferenceNode") {
+        const typeName = typeNode.name.name;
+        if (typeName === "Array" || typeName === "ReadonlyArray") {
           return category === "array";
         }
-        if (typeNode.kind === "TypeReferenceNode") {
-          const typeName = typeNode.name.name;
-          if (typeName === "Array" || typeName === "ReadonlyArray") {
-            return category === "array";
-          }
-          if (typeName === "String" || typeName === "string") {
-            return category === "string";
-          }
-          if (
-            typeName === "Map" ||
-            typeName === "Set" ||
-            typeName === "WeakMap" ||
-            typeName === "WeakSet"
-          ) {
-            return category === "collection";
-          }
-          if (typeName === "Date") {
-            return category === "date";
-          }
-          // Any other type reference (URLSearchParams, Headers, FormData, Request, Response, URL, Observable, QueryBuilder, Parser, Store, etc.)
-          // is NOT a native JavaScript type replaced by Effect.
-          return false;
+        if (typeName === "String" || typeName === "string") {
+          return category === "string";
         }
         if (
-          typeNode.kind === "RecordTypeNode" ||
-          typeNode.kind === "FunctionTypeNode"
+          typeName === "Map" ||
+          typeName === "Set" ||
+          typeName === "WeakMap" ||
+          typeName === "WeakSet"
         ) {
-          return false;
+          return category === "collection";
         }
+        if (typeName === "Date") {
+          return category === "date";
+        }
+        // Any other type reference (URLSearchParams, Headers, FormData, Request, Response, URL, Observable, QueryBuilder, Parser, Store, etc.)
+        // is NOT a native JavaScript type replaced by Effect.
+        return false;
       }
+      if (
+        typeNode.kind === "RecordTypeNode" ||
+        typeNode.kind === "FunctionTypeNode"
+      ) {
+        return false;
+      }
+    }
 
+    if (expr.kind === "Identifier") {
+      const name = expr.name;
       // Check if initialized from a binding
       const binding = this.bindings.get(name);
       if (binding) {
@@ -1417,7 +1445,8 @@ export class Emitter {
 
   private validateRecordDefault(
     value: Expression,
-    parameterNames: Set<string>,
+    currentParamNames: Set<string>,
+    subsequentParamNames: Set<string>,
   ): void {
     const visit = (
       item: unknown,
@@ -1430,20 +1459,24 @@ export class Emitter {
         return;
       }
       const node = item as Record<string, unknown>;
-      if (
-        node.kind === "Identifier" &&
-        typeof node.name === "string" &&
-        parameterNames.has(node.name)
-      ) {
+      if (node.kind === "Identifier" && typeof node.name === "string") {
         if (
           (parent?.kind === "MemberExpression" && key === "property") ||
           (parent?.kind === "FieldEntry" && key === "key")
         )
           return;
-        throw new FunScriptError(
-          "Defaulted record fields cannot reference function parameters yet",
-          node.span as any,
-        );
+        if (currentParamNames.has(node.name)) {
+          throw new FunScriptError(
+            `Defaulted record field cannot reference its own record parameter '${node.name}'`,
+            node.span as any,
+          );
+        }
+        if (subsequentParamNames.has(node.name)) {
+          throw new FunScriptError(
+            `Parameter '${node.name}' cannot be referenced in a default value before its declaration`,
+            node.span as any,
+          );
+        }
       }
       for (const [childKey, child] of Object.entries(node)) {
         if (
@@ -2460,11 +2493,18 @@ export class Emitter {
           ? `$funscriptField${paramIndex}_${fieldIndex}`
           : undefined;
         if (field.defaultValue) {
+          const currentParamNames = new Set(
+            this.collectBindingNames(expr.params[paramIndex].name),
+          );
+          const subsequentParamNames = new Set(
+            expr.params
+              .slice(paramIndex + 1)
+              .flatMap((p) => this.collectBindingNames(p.name)),
+          );
           this.validateRecordDefault(
             field.defaultValue,
-            new Set(
-              expr.params.flatMap((p) => this.collectBindingNames(p.name)),
-            ),
+            currentParamNames,
+            subsequentParamNames,
           );
           const raw = `$funscriptFieldRaw${paramIndex}_${fieldIndex}`;
           recordDefaults.push(
@@ -2589,12 +2629,15 @@ export class Emitter {
       recordField: (expression) => this.recordField(expression),
       isOptionalParameter: (name) => this.isOptionalParameter(name),
       isOptionalValue: (expression) => this.isOptionalValue(expression),
+      getTypeNodeForExpression: (expression) =>
+        this.getTypeNodeForExpression(expression),
       requireTsPattern: () => {
         this.needsTsPattern = true;
       },
-      enterOptionalPayload: (name, fields, arm) => {
+      enterOptionalPayload: (name, fields, arm, payloadType) => {
         this.recordScopes.push(new Map([[name, fields]]));
         this.parameterScopes.push(new Map([[name, false]]));
+        this.variableTypeScopes.push(new Map([[name, payloadType]]));
         const validateBody = (body: FunctionBody) => {
           const synthetic = {
             kind: "FunctionExpression",
@@ -2614,12 +2657,14 @@ export class Emitter {
           validateBody(arm.body);
           if (arm.guard) validateBody(arm.guard);
         } catch (error) {
+          this.variableTypeScopes.pop();
           this.parameterScopes.pop();
           this.recordScopes.pop();
           throw error;
         }
       },
       leaveOptionalPayload: () => {
+        this.variableTypeScopes.pop();
         this.parameterScopes.pop();
         this.recordScopes.pop();
       },
