@@ -15,6 +15,10 @@ import { validateNumericComparisons } from "./compiler/numeric-comparisons.js";
 import { inferPipelineCompanions } from "./compiler/pipeline-companions.js";
 import { applyJsInteropNullability } from "./compiler/js-interop-nullability.js";
 import { resolveImportedSchemas } from "./compiler/imported-schemas.js";
+import {
+  resolveProviderSchemas,
+  providerDependencies,
+} from "./compiler/providers.js";
 import { resolveImportedRecordFunctions } from "./compiler/imported-record-functions.js";
 import { resolvePackageRecordContracts } from "./compiler/package-record-contracts.js";
 import { resolveOptionalArguments } from "./compiler/optional-arguments.js";
@@ -51,6 +55,7 @@ export interface CompileOptions {
 }
 
 export interface CompileResult {
+  providerDependencies?: string[];
   source: string;
   ast: Program;
   typescript: string;
@@ -476,6 +481,14 @@ export const compileString = (
             options?.context ??
             new TypeScriptCompilationContext(options?.sourcePath ?? filename);
           context.setFilename(options?.sourcePath ?? filename);
+          const importedSchemas = new Map(
+            resolveImportedSchemas(ast, source, context),
+          );
+          for (const [name, schema] of resolveProviderSchemas(
+            ast,
+            options?.sourcePath ?? filename,
+          ))
+            importedSchemas.set(name, schema);
           const importedRecordContracts = new Map<string, RecordTypeNode>();
           const importedIdentitySchemas = new Set<string>();
           const importedGenericDataSchemas = new Map<string, number>();
@@ -505,6 +518,7 @@ export const compileString = (
               importedGenericDataSchemas,
               importedIdentitySchemas,
               importedDataSchemas,
+              importedSchemas,
             );
           }
           const {
@@ -522,6 +536,7 @@ export const compileString = (
             importedIdentitySchemas,
             importedDataSchemas,
             options?.pipelineAnalysisOnly,
+            importedSchemas,
           );
           if (options?.pipelineAnalysisOnly) {
             return {
@@ -534,7 +549,6 @@ export const compileString = (
               barePipelineStageResolutions: bareStageResolutions,
             };
           }
-          const importedSchemas = resolveImportedSchemas(ast, source, context);
           const emitterOptions: EmitterOptions = {
             pipelineCompanions,
             stageResolutions,
@@ -588,6 +602,10 @@ export const compileString = (
           return {
             source,
             ast,
+            providerDependencies: providerDependencies(
+              ast,
+              options?.sourcePath ?? filename,
+            ),
             typescript,
             targetExtension,
             pipelineStageResolutions: stageResolutions,

@@ -12,6 +12,7 @@ import {
   resolveImportedSchemas,
 } from "../compiler/imported-schemas.js";
 import type { Span } from "../ast/types.js";
+import { resolveProviderSchemas } from "../compiler/providers.js";
 
 export function toDiagnostic(error: any): Diagnostic {
   const span: Span | undefined = error.span;
@@ -125,9 +126,21 @@ export function validateFunScript(
   if (!diagnostics.length && ast) {
     try {
       const context = new TypeScriptCompilationContext(uri);
+      const schemas = new Map(resolveImportedSchemas(ast, source, context));
+      for (const [name, schema] of resolveProviderSchemas(ast, uri))
+        schemas.set(name, schema);
       if (!ast.body.some((decl) => decl.kind === "AsDeclaration"))
-        validateNumericComparisons(ast, source, context);
-      resolveImportedSchemas(ast, source, context);
+        validateNumericComparisons(
+          ast,
+          source,
+          context,
+          undefined,
+          undefined,
+          undefined,
+          undefined,
+          undefined,
+          schemas,
+        );
     } catch (error: any) {
       diagnostics.push(toDiagnostic(error));
     }

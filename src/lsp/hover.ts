@@ -18,6 +18,7 @@ import { Parser } from "../parser/parser.js";
 import { Emitter } from "../emitter/emitter.js";
 import { TypeScriptCompilationContext } from "../compiler/typescript-context.js";
 import { resolveImportedSchemas } from "../compiler/imported-schemas.js";
+import { resolveProviderSchemas } from "../compiler/providers.js";
 import { inferPipelineCompanions } from "../compiler/pipeline-companions.js";
 import { fileURLToPath } from "node:url";
 import { Effect } from "effect";
@@ -178,7 +179,8 @@ function importedSchemaHover(
     const decls = program.body.flatMap((item) => {
       const decl = item.kind === "ExportDeclaration" ? item.declaration : item;
       return decl.kind === "SchemaDeclaration" &&
-        decl.body.kind === "ImportedTsSchema"
+        (decl.body.kind === "ImportedTsSchema" ||
+          decl.body.kind === "ProviderSchema")
         ? [decl]
         : [];
     });
@@ -194,7 +196,9 @@ function importedSchemaHover(
     if (!target) return null;
 
     const context = new TypeScriptCompilationContext(uri);
-    const schemas = resolveImportedSchemas(program, source, context);
+    const schemas = new Map(resolveImportedSchemas(program, source, context));
+    for (const [name, schema] of resolveProviderSchemas(program, uri))
+      schemas.set(name, schema);
     const checked = context.check(
       new Emitter(program, undefined, { importedSchemas: schemas }).emit(),
     );

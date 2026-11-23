@@ -85,6 +85,7 @@ export function funscriptPlugin(options: FunscriptPluginOptions = {}): Plugin {
   let policyRoot = process.cwd();
   let projectPolicy: FunScriptProjectConfig = {};
   let policyLoaded = false;
+  const providerFiles = new Map<string, Set<string>>();
   const context = new TypeScriptCompilationContext(
     path.resolve("__funscript_vite__.fun"),
   );
@@ -193,9 +194,11 @@ export function funscriptPlugin(options: FunscriptPluginOptions = {}): Plugin {
       };
       const update = (file: string) => {
         if (/\.funx?$/.test(file)) enqueue(() => view.refresh(file));
+        else enqueue(() => view.refreshDependency(file));
       };
       const remove = (file: string) => {
         if (/\.funx?$/.test(file)) enqueue(() => view.forget(file));
+        else enqueue(() => view.refreshDependency(file));
       };
       server.watcher
         .on("add", update)
@@ -249,6 +252,13 @@ export function funscriptPlugin(options: FunscriptPluginOptions = {}): Plugin {
         }),
       );
 
+      for (const users of providerFiles.values()) users.delete(cleanId);
+      for (const file of res.providerDependencies ?? []) {
+        this.addWatchFile(file);
+        const users = providerFiles.get(file) ?? new Set<string>();
+        users.add(cleanId);
+        providerFiles.set(file, users);
+      }
       return {
         code: res.typescript,
         map: (res.sourcemap ?? res.map ?? null) as any,
@@ -258,6 +268,15 @@ export function funscriptPlugin(options: FunscriptPluginOptions = {}): Plugin {
     handleHotUpdate(ctx) {
       const [cleanPath] = ctx.file.split("?");
       const cleanFile = cleanPath.split("#")[0];
+      const users = providerFiles.get(cleanFile);
+      if (users?.size) {
+        const modules = [...users].flatMap((file) => [
+          ...(ctx.server.moduleGraph.getModulesByFile(file) ?? []),
+        ]);
+        for (const module of modules)
+          ctx.server.moduleGraph.invalidateModule(module);
+        return modules;
+      }
       if (cleanFile.endsWith(".fun") || cleanFile.endsWith(".funx")) {
         return ctx.modules;
       }

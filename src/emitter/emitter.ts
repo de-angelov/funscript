@@ -861,7 +861,8 @@ export class Emitter {
           decl.body.kind === "StructuralUnionSchema" ||
           decl.body.kind === "RefinementSchema" ||
           decl.body.kind === "TsDerivedSchema" ||
-          decl.body.kind === "ImportedTsSchema"
+          decl.body.kind === "ImportedTsSchema" ||
+          decl.body.kind === "ProviderSchema"
         ) {
           this.runtimeSchemaNames.add(decl.id.name);
         }

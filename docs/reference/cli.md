@@ -6,6 +6,18 @@ FunScript 0.2.3. This page is generated from [the CLI command catalogue](../../s
 
 ## Commands
 
+### `funscript drizzle-schema`
+
+```text
+funscript drizzle-schema <sqlite-file> <table>
+```
+
+Generate a Drizzle table definition for a STRICT SQLite table on stdout.
+
+```sh
+funscript drizzle-schema ./app.db users > ./schema.ts
+```
+
 ### `funscript build`
 
 ```text

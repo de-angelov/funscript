@@ -407,6 +407,32 @@ export function parseSchemaBody(ctx: DeclarationParserContext): SchemaBody {
 
   // 0. Imported TypeScript Schema: from ts<Type>
   if (ctx.check(TokenType.FROM)) {
+    if (
+      ctx.peekAhead(1).type === TokenType.IDENTIFIER &&
+      (ctx.peekAhead(1).value === "csv" ||
+        (ctx.peekAhead(2).type === TokenType.LT &&
+          ctx.peekAhead(3).type === TokenType.STRING))
+    ) {
+      const start = ctx.advance();
+      const provider = ctx.advance();
+      ctx.consume(TokenType.LT, "Expected '<' after provider name");
+      const file = ctx.consume(
+        TokenType.STRING,
+        "Expected a literal provider path",
+      );
+      const selector = ctx.match(TokenType.COMMA)
+        ? ctx.consume(TokenType.STRING, "Expected a literal provider selector")
+            .value
+        : undefined;
+      const end = ctx.consume(TokenType.GT, "Expected '>' after provider path");
+      return {
+        kind: "ProviderSchema",
+        provider: provider.value,
+        path: file.value,
+        selector,
+        span: { start: start.span.start, end: end.span.end },
+      };
+    }
     return parseImportedTsSchema(ctx);
   }
 

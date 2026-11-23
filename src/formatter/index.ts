@@ -588,6 +588,8 @@ export class Formatter {
         return this.formatType(body.targetType, indent);
       case "ImportedTsSchema":
         return `from ts<${body.typeArguments.map((t) => this.formatType(t, indent)).join(", ")}>`;
+      case "ProviderSchema":
+        return `from ${body.provider}<${JSON.stringify(body.path)}${body.selector === undefined ? "" : `, ${JSON.stringify(body.selector)}`}>`;
     }
   }
 

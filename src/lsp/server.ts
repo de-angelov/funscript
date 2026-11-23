@@ -2,6 +2,7 @@ import { EventEmitter } from "node:events";
 import { Worker } from "node:worker_threads";
 import type { Readable, Writable } from "node:stream";
 import { fileURLToPath, pathToFileURL } from "node:url";
+import { providerDependencies } from "../compiler/providers.js";
 import {
   existsSync,
   readdirSync,
@@ -106,6 +107,7 @@ export class FunScriptLspServer extends EventEmitter {
   private clientCapabilities: any = null;
   private workspaceRoots: string[] = [];
   private readonly projectConfigWatchers = new Map<string, FSWatcher>();
+  private providerInputs = new Set<string>();
   private readonly interopRenameSession = new InteropRenameSession();
   private readonly parsedDocuments = new ParsedDocumentCache();
   private readonly pipelineCompletionInputs = new Map<
@@ -1251,9 +1253,20 @@ export class FunScriptLspServer extends EventEmitter {
 
   private syncProjectConfigWatchers(): void {
     const directories = new Set(this.workspaceRoots);
+    const providerInputs = new Set<string>();
     for (const document of this.documents.values()) {
       try {
         const filename = fileURLToPath(document.uri);
+        const parsed = validateSyntax(document.text, filename);
+        if (!parsed.diagnostics.length && parsed.ast) {
+          for (const dependency of providerDependencies(parsed.ast, filename)) {
+            providerInputs.add(dependency);
+            let parent = dirname(dependency);
+            while (!existsSync(parent) && dirname(parent) !== parent)
+              parent = dirname(parent);
+            directories.add(parent);
+          }
+        }
         const workspaceRoot = this.workspaceRoots
           .filter((root) => {
             const rel = relative(root, filename);
@@ -1288,6 +1301,8 @@ export class FunScriptLspServer extends EventEmitter {
       }
     }
 
+    this.providerInputs = providerInputs;
+
     for (const [directory, watcher] of this.projectConfigWatchers) {
       if (directories.has(directory)) continue;
       watcher.close();
@@ -1298,7 +1313,19 @@ export class FunScriptLspServer extends EventEmitter {
         continue;
       try {
         const watcher = watchDirectory(directory, (_event, filename) => {
-          if (filename?.toString() === "funscript.config.fun")
+          const changed = filename
+            ? join(directory, filename.toString())
+            : undefined;
+          const affectsProvider =
+            !changed ||
+            [...this.providerInputs].some(
+              (input) => input === changed || input.startsWith(changed + sep),
+            );
+          if (affectsProvider) this.syncProjectConfigWatchers();
+          if (
+            affectsProvider ||
+            filename?.toString() === "funscript.config.fun"
+          )
             this.scheduleTypeDiagnostics();
         });
         watcher.on("error", () => {

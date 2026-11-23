@@ -305,6 +305,13 @@ export function emitSchemaDeclaration(
       }
       return `${exp}const ${name} = ${schemaExpr};\n${exp}type ${name} = typeof ${name}.Type;\n${exp}const ${name}FromUnknown = (input: unknown): ${name} => Schema.decodeUnknownSync(${name})(input);`;
     }
+    case "ProviderSchema": {
+      ctx.addEffectImport("Schema");
+      // Preliminary type-analysis passes emit before provider resolution.
+      const schemaExpr =
+        ctx.options.importedSchemas?.get(decl.id.name) ?? "Schema.Unknown";
+      return `${exp}const ${name} = ${schemaExpr};\n${exp}type ${name} = typeof ${name}.Type;\n${exp}const ${name}FromUnknown = (input: unknown): ${name} => Schema.decodeUnknownSync(${name})(input);`;
+    }
     case "ImportedTsSchema": {
       ctx.addEffectImport("Schema");
       const schemaExpr =

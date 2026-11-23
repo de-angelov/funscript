@@ -67,6 +67,7 @@ const commandOptions: Record<string, ReadonlySet<string>> = {
   doc: new Set(["--outDir", "--format", "--open", "--json"]),
   lsp: new Set(["--stdio"]),
   init: new Set(["--template", "--force"]),
+  "drizzle-schema": new Set(),
 };
 
 const valueOptions: Record<string, ReadonlySet<string>> = {
@@ -103,6 +104,13 @@ export function validateCliArgs(
 
 /** Canonical public CLI contract: both help output and reference docs use this data. */
 export const CLI_COMMANDS: readonly CliCommand[] = [
+  {
+    name: "drizzle-schema",
+    usage: "drizzle-schema <sqlite-file> <table>",
+    description:
+      "Generate a Drizzle table definition for a STRICT SQLite table on stdout.",
+    examples: ["funscript drizzle-schema ./app.db users > ./schema.ts"],
+  },
   {
     name: "build",
     usage:

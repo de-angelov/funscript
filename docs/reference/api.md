@@ -25,3 +25,9 @@ Package: `funscript` 0.2.3.
 | `funscript/test` | `./dist/testing/index.js` |
 | `funscript/testing` | `./dist/testing/index.js` |
 | `funscript/callback` | `./dist/interop/callback.js` |
+| `funscript/csv` | `./dist/interop/csv.js` |
+| `funscript/providers` | `./dist/providers/index.js` |
+| `funscript/providers/json` | `./dist/providers/json.js` |
+| `funscript/providers/sqlite` | `./dist/providers/sqlite.js` |
+| `funscript/providers/drizzle` | `./dist/providers/drizzle.js` |
+| `funscript/providers/csv` | `./dist/providers/csv.js` |

@@ -5,6 +5,9 @@ import { Effect } from "effect";
 import ts from "typescript";
 import { compileString } from "../compiler.js";
 import { TypeScriptCompilationContext } from "../compiler/typescript-context.js";
+import { providerDependencies } from "../compiler/providers.js";
+import { Lexer } from "../lexer/lexer.js";
+import { Parser } from "../parser/parser.js";
 
 export interface TypeViewOptions {
   /** Project-relative source directories or files. Defaults to ["app"]. */
@@ -66,6 +69,7 @@ export class TypeView {
   private readonly manifest: string;
   private readonly context: TypeScriptCompilationContext;
   private readonly hashes = new Map<string, string>();
+  private readonly providerInputs = new Map<string, string[]>();
 
   constructor(root: string, options: TypeViewOptions = {}) {
     this.root = path.resolve(root);
@@ -163,7 +167,20 @@ export class TypeView {
     const source = await fs.readFile(file, "utf8");
     const { compiled, shim } = this.paths(file);
     const relative = path.relative(this.root, file);
-    const hash = createHash("sha256").update(source).digest("hex");
+    const ast = new Parser(
+      new Lexer(source, file).tokenize(),
+      file,
+      source,
+    ).parse();
+    const dependencies = providerDependencies(ast, file);
+    this.providerInputs.set(file, dependencies);
+    const hasher = createHash("sha256").update(source);
+    for (const dependency of dependencies) {
+      hasher.update(dependency);
+      const content = await fs.readFile(dependency).catch(() => undefined);
+      hasher.update(content ?? "<missing>");
+    }
+    const hash = hasher.digest("hex");
     if (
       this.hashes.get(relative) === hash &&
       (await Promise.all(
@@ -225,6 +242,7 @@ export class TypeView {
       fs.rm(shim, { force: true }),
     ]);
     this.known.delete(file);
+    this.providerInputs.delete(file);
     this.hashes.delete(path.relative(this.root, file));
   }
 
@@ -295,11 +313,20 @@ export class TypeView {
       await this.update(file);
     } catch (error) {
       // Do not let consumers silently use a stale successful compilation.
+      const dependencies = this.providerInputs.get(path.resolve(file));
       await this.remove(file);
+      if (dependencies)
+        this.providerInputs.set(path.resolve(file), dependencies);
       await this.writeManifest();
       throw error;
     }
     await this.writeManifest();
+  }
+
+  async refreshDependency(file: string): Promise<void> {
+    const target = path.resolve(file);
+    for (const [source, dependencies] of this.providerInputs)
+      if (dependencies.includes(target)) await this.refresh(source);
   }
 
   async forget(file: string): Promise<void> {

@@ -114,7 +114,15 @@ export type SchemaBody =
   | RefinementSchema
   | TypeSignatureSchema
   | TsDerivedSchema
-  | ImportedTsSchema;
+  | ImportedTsSchema
+  | ProviderSchema;
+
+export interface ProviderSchema extends NodeBase {
+  kind: "ProviderSchema";
+  provider: string;
+  path: string;
+  selector?: string;
+}
 
 export interface TsDerivedSchema extends NodeBase {
   kind: "TsDerivedSchema";

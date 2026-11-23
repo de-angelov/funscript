@@ -5,6 +5,7 @@ import { createRequire } from "node:module";
 import { Lexer } from "../lexer/lexer.js";
 import { Parser } from "../parser/parser.js";
 import { packageFingerprint } from "./package-fingerprint.js";
+import { providerDependencies } from "./providers.js";
 
 /**
  * Fingerprint only dependency graphs entirely represented by this snapshot.
@@ -106,6 +107,17 @@ export function incrementalDependencyKeys(
             inspect(value);
       };
       inspect(ast);
+      for (const file of providerDependencies(ast, filename)) {
+        try {
+          packages.push(
+            `provider:${file}:${createHash("sha256").update(fs.readFileSync(file)).digest("hex")}`,
+          );
+        } catch (error) {
+          if ((error as NodeJS.ErrnoException)?.code === "ENOENT")
+            packages.push(`provider:${file}:missing`);
+          else safe = false;
+        }
+      }
       if (usesImplicitEffect) {
         try {
           const key = `effect\0${createRequire(filename).resolve("effect")}`;

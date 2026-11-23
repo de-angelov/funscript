@@ -24,6 +24,7 @@ import { docCommand } from "./doc.js";
 import { pipelineStyleCommand } from "./pipeline-style.js";
 import { runCommand } from "./run.js";
 import { testCommand } from "./test.js";
+import { generateSqliteDrizzleSchema } from "../providers/drizzle.js";
 
 let projectPolicy: FunScriptProjectConfig = {};
 
@@ -114,6 +115,18 @@ const program = Effect.gen(function* () {
   }
 
   switch (command) {
+    case "drizzle-schema": {
+      if (commandArgs.length !== 2)
+        return yield* Effect.fail(
+          new Error("Usage: funscript drizzle-schema <sqlite-file> <table>"),
+        );
+      const output = yield* Effect.try({
+        try: () => generateSqliteDrizzleSchema(commandArgs[0], commandArgs[1]),
+        catch: (error) =>
+          error instanceof Error ? error : new Error(String(error)),
+      });
+      return yield* Console.log(output.trimEnd());
+    }
     case "build":
       return yield* buildCommand(commandArgs, projectPolicy);
     case "run":
