@@ -62,6 +62,7 @@ const commandOptions: Record<string, ReadonlySet<string>> = {
   ]),
   fmt: new Set(["--check", "--diff", "--stdin", "--stdin-filepath"]),
   doctor: new Set(["--json"]),
+  explain: new Set(["--list", "--json"]),
   lsp: new Set(["--stdio"]),
   init: new Set(["--template", "--force"]),
 };
@@ -199,6 +200,19 @@ export const CLI_COMMANDS: readonly CliCommand[] = [
     usage: "doctor [--json]",
     description: "Check project prerequisites and FunScript configuration.",
     examples: ["funscript doctor --json"],
+  },
+  {
+    name: "explain",
+    usage: "explain [topic] [--list] [--json]",
+    description:
+      "Display reference documentation, syntax, and examples for a language keyword, construct, effect, or operator.",
+    examples: [
+      "funscript explain",
+      "funscript explain effect",
+      "funscript explain match",
+      "funscript explain schema",
+      "funscript explain --list",
+    ],
   },
   {
     name: "pipeline-style",

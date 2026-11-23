@@ -180,6 +180,34 @@ Check project prerequisites and FunScript configuration.
 funscript doctor --json
 ```
 
+### `funscript explain`
+
+```text
+funscript explain [topic] [--list] [--json]
+```
+
+Display reference documentation, syntax, and examples for a language keyword, construct, effect, or operator.
+
+```sh
+funscript explain
+```
+
+```sh
+funscript explain effect
+```
+
+```sh
+funscript explain match
+```
+
+```sh
+funscript explain schema
+```
+
+```sh
+funscript explain --list
+```
+
 ### `funscript pipeline-style`
 
 ```text

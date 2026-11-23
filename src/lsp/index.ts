@@ -5,6 +5,7 @@ export * from "./server.js";
 export * from "./docs.js";
 export * from "./definition.js";
 export * from "./hover.js";
+export * from "./inlay-hints.js";
 
 export {
   DiagnosticSeverity,
@@ -31,6 +32,9 @@ export {
   type HoverParams,
   type Position,
   type Range,
+  type InlayHint,
+  type InlayHintParams,
+  InlayHintKind,
 } from "vscode-languageserver/node";
 
 export interface StartLspServerOptions {

@@ -50,6 +50,8 @@ import {
   type DocumentSymbol,
   type SymbolInformation,
   type PrepareRenameResult,
+  type InlayHint,
+  type InlayHintParams,
   SymbolKind,
 } from "vscode-languageserver/node";
 import { format } from "../formatter/index.js";
@@ -59,6 +61,7 @@ import {
 } from "../compiler/project-config.js";
 import { convertPipelineStyle } from "../tooling/pipeline-style.js";
 import { findHoverAsync } from "./hover.js";
+import { findInlayHints } from "./inlay-hints.js";
 import { complete } from "./completion.js";
 import {
   documentSymbols,
@@ -204,6 +207,9 @@ export class FunScriptLspServer extends EventEmitter {
     connection.onRenameRequest((params) =>
       this.renameInWorker("rename", params),
     );
+    connection.onRequest("textDocument/inlayHint", (params) =>
+      this.onInlayHintHandler(params as InlayHintParams),
+    );
   }
 
   public onInitializeHandler(params: InitializeParams): InitializeResult {
@@ -244,6 +250,7 @@ export class FunScriptLspServer extends EventEmitter {
           triggerCharacters: [".", "<"],
         },
         codeActionProvider: true,
+        inlayHintProvider: { resolveProvider: false },
       },
       serverInfo: {
         name: "funscript-lsp",
@@ -569,6 +576,13 @@ export class FunScriptLspServer extends EventEmitter {
     }
 
     return findHoverAsync(doc.text, uri, params.position);
+  }
+
+  public onInlayHintHandler(params: InlayHintParams): InlayHint[] {
+    const uri = params?.textDocument?.uri;
+    const doc = uri ? this.documents.get(uri) : undefined;
+    if (!doc) return [];
+    return findInlayHints(doc.text, uri, params?.range);
   }
 
   public onCompletionHandler(params: CompletionParams): CompletionItem[] {
@@ -982,6 +996,15 @@ export class FunScriptLspServer extends EventEmitter {
 
     if (req.method === "textDocument/hover") {
       const result = await this.onHoverHandler(req.params as HoverParams);
+      return {
+        jsonrpc: "2.0",
+        id: req.id,
+        result,
+      };
+    }
+
+    if (req.method === "textDocument/inlayHint") {
+      const result = this.onInlayHintHandler(req.params as InlayHintParams);
       return {
         jsonrpc: "2.0",
         id: req.id,
