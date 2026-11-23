@@ -208,6 +208,30 @@ funscript explain schema
 funscript explain --list
 ```
 
+### `funscript doc`
+
+```text
+funscript doc [files or directories...] [--outDir <dir>] [--format <html|markdown|json>] [--open]
+```
+
+Generate documentation and interactive API reference from FunScript source files and doc comments.
+
+```sh
+funscript doc
+```
+
+```sh
+funscript doc src/ --outDir docs/html
+```
+
+```sh
+funscript doc --format markdown --outDir docs
+```
+
+```sh
+funscript doc --open
+```
+
 ### `funscript pipeline-style`
 
 ```text

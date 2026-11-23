@@ -63,6 +63,7 @@ const commandOptions: Record<string, ReadonlySet<string>> = {
   fmt: new Set(["--check", "--diff", "--stdin", "--stdin-filepath"]),
   doctor: new Set(["--json"]),
   explain: new Set(["--list", "--json"]),
+  doc: new Set(["--outDir", "--format", "--open", "--json"]),
   lsp: new Set(["--stdio"]),
   init: new Set(["--template", "--force"]),
 };
@@ -73,6 +74,7 @@ const valueOptions: Record<string, ReadonlySet<string>> = {
   fmt: new Set(["--stdin-filepath"]),
   test: new Set(["--engine", "--reporter"]),
   init: new Set(["--template"]),
+  doc: new Set(["--outDir", "--format"]),
 };
 
 export function validateCliArgs(
@@ -212,6 +214,19 @@ export const CLI_COMMANDS: readonly CliCommand[] = [
       "funscript explain match",
       "funscript explain schema",
       "funscript explain --list",
+    ],
+  },
+  {
+    name: "doc",
+    usage:
+      "doc [files or directories...] [--outDir <dir>] [--format <html|markdown|json>] [--open]",
+    description:
+      "Generate documentation and interactive API reference from FunScript source files and doc comments.",
+    examples: [
+      "funscript doc",
+      "funscript doc src/ --outDir docs/html",
+      "funscript doc --format markdown --outDir docs",
+      "funscript doc --open",
     ],
   },
   {

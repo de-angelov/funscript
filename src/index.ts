@@ -27,5 +27,12 @@ export {
   migrateFiles,
   formatMigrationReport,
 } from "./tooling/migrate.js";
+export * as doc from "./tooling/doc.js";
+export {
+  generateDocs,
+  extractModuleDoc,
+  renderHtmlDoc,
+  renderMarkdownDoc,
+} from "./tooling/doc.js";
 export * as zodInterop from "./interop/zod.js";
 export { fromZod, toZod } from "./interop/zod.js";
