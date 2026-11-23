@@ -5,3 +5,4 @@ export * from "./jsx.js";
 export * from "./types.js";
 export * from "./patterns.js";
 export * from "./declarations.js";
+export * from "./statements.js";
