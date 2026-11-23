@@ -8,7 +8,7 @@ export main = () =>
     doubled = createMemo(() => count() * 2)
 
     createComputed(() =>
-      => console.log("Solid createComputed triggered => count: {count()}, doubled: {doubled()}")
+      console.log("Solid createComputed triggered => count: {count()}, doubled: {doubled()}")
     )
 
     console.log("Updating signal to 20:")

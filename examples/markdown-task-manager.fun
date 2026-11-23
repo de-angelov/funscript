@@ -26,13 +26,13 @@ export schema TaskManager = {
 // --- File System I/O Helpers via FunScript Promise Interop ---
 
 export writeTaskFile = (filePath: String, content: String) =>
-  => writeFile(filePath, content, "utf-8").then(() => true)
+  writeFile(filePath, content, "utf-8").then(() => true)
 
 export readTaskFile = (filePath: String) =>
-  => readFile(filePath, "utf-8").catch(() => "")
+  readFile(filePath, "utf-8").catch(() => "")
 
 export deleteTaskFile = (filePath: String) =>
-  => unlink(filePath).then(() => true).catch(() => false)
+  unlink(filePath).then(() => true).catch(() => false)
 
 // --- Pure Domain Operations (Mutative & Control Flow) ---
 

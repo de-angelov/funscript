@@ -51,9 +51,12 @@ export const testCommand = (args: string[]) =>
       process.platform === "win32" ? "vitest.cmd" : "vitest",
     );
     const vitestCmd = existsSync(localVitest) ? localVitest : "npx";
+    const effectiveArgs = forwardArgs.includes("--globals")
+      ? forwardArgs
+      : ["--globals", ...forwardArgs];
     const vitestArgs = existsSync(localVitest)
-      ? (isWatch ? [] : ["run"]).concat(forwardArgs)
-      : ["vitest", ...(isWatch ? [] : ["run"]), ...forwardArgs];
+      ? (isWatch ? [] : ["run"]).concat(effectiveArgs)
+      : ["vitest", ...(isWatch ? [] : ["run"]), ...effectiveArgs];
 
     const child = spawn(vitestCmd, vitestArgs, {
       stdio: "inherit",

@@ -9,11 +9,11 @@ export schema User = from ts<UserProfile>
 
 // Safe decoder returning Option<User> via Schema.decodeUnknownOption
 export decodeUserOption = (raw: Unknown) =>
-  => Schema.decodeUnknownOption(User)(raw)
+  Schema.decodeUnknownOption(User)(raw)
 
 // Explicit decoder returning Result<User, SchemaError> via Schema.decodeUnknownResult
 export decodeUserResult = (raw: Unknown) =>
-  => Schema.decodeUnknownResult(User)(raw)
+  Schema.decodeUnknownResult(User)(raw)
 
 export main =
   effect {

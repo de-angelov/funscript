@@ -1,17 +1,44 @@
-import * as vitest from "vitest";
-
 const getGlobal = (name: string): any => (globalThis as any)[name];
 
-export const describe = getGlobal("describe") ?? vitest.describe;
-export const it = getGlobal("it") ?? vitest.it;
-export const test = getGlobal("test") ?? vitest.test;
-export const expect = getGlobal("expect") ?? vitest.expect;
-export const assert = getGlobal("assert") ?? vitest.assert;
-export const beforeAll = getGlobal("beforeAll") ?? vitest.beforeAll;
-export const beforeEach = getGlobal("beforeEach") ?? vitest.beforeEach;
-export const afterAll = getGlobal("afterAll") ?? vitest.afterAll;
-export const afterEach = getGlobal("afterEach") ?? vitest.afterEach;
-export const vi = getGlobal("vi") ?? vitest.vi;
+function createUniversalProxy(name: string): any {
+  return new Proxy(
+    function (this: any, ...args: any[]) {
+      const g = getGlobal(name);
+      if (typeof g === "function") {
+        return Reflect.apply(g, this, args);
+      }
+      throw new Error(
+        `Testing function '${name}' is not available in the current environment. Ensure tests are executed with a supported runner (e.g. 'funscript test', Vitest, or Bun).`,
+      );
+    },
+    {
+      get(_target, prop, receiver) {
+        const g = getGlobal(name);
+        if (g != null && prop in g) {
+          const val = Reflect.get(g, prop, receiver);
+          return typeof val === "function" ? val.bind(g) : val;
+        }
+        return undefined;
+      },
+    },
+  );
+}
+
+export const describe =
+  getGlobal("describe") ?? createUniversalProxy("describe");
+export const it = getGlobal("it") ?? createUniversalProxy("it");
+export const test = getGlobal("test") ?? createUniversalProxy("test");
+export const expect = getGlobal("expect") ?? createUniversalProxy("expect");
+export const assert = getGlobal("assert") ?? createUniversalProxy("assert");
+export const beforeAll =
+  getGlobal("beforeAll") ?? createUniversalProxy("beforeAll");
+export const beforeEach =
+  getGlobal("beforeEach") ?? createUniversalProxy("beforeEach");
+export const afterAll =
+  getGlobal("afterAll") ?? createUniversalProxy("afterAll");
+export const afterEach =
+  getGlobal("afterEach") ?? createUniversalProxy("afterEach");
+export const vi = getGlobal("vi") ?? createUniversalProxy("vi");
 
 export default {
   describe,

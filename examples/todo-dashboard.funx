@@ -24,7 +24,7 @@ export schema Todo = {
 }
 
 export addTodo = (todos: Array<Todo>, title: String): Array<Todo> =>
-  => todos
+  todos
   |> mut (draft) =>
     draft.push({ id: "new-task", title, completed: false })
     draft
@@ -43,18 +43,18 @@ export schema DashboardProps = {
 // --- Reusable dashboard components ---
 
 export StatCard = (label: String, value: Number) =>
-  => <div className="stat-card">
+  <div className="stat-card">
     <span className="stat-label">{label}</span>
     <strong className="stat-value">{value}</strong>
   </div>
 
 export FilterButton = (label: String, selected: Boolean) =>
-  => <button className={selected and "filter selected" or "filter"} aria-pressed={selected}>
+  <button className={selected and "filter selected" or "filter"} aria-pressed={selected}>
     {label}
   </button>
 
 export TodoItemRow = (todo: Todo) =>
-  => <li className={todo.completed and "todo completed" or "todo"} data-id={todo.id}>
+  <li className={todo.completed and "todo completed" or "todo"} data-id={todo.id}>
     <input type="checkbox" checked={todo.completed} />
     <span>{todo.title}</span>
   </li>
@@ -67,7 +67,7 @@ export visibleTodos = (props: DashboardProps) =>
     | _ => props.todos
 
 export TodoDashboard = (props: DashboardProps) =>
-  => <main className="todo-dashboard">
+  <main className="todo-dashboard">
     <header className="dashboard-header">
       <h1>Todo Dashboard</h1>
       <p>Plan the work, then make progress.</p>

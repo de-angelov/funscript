@@ -63,7 +63,7 @@ export describeResult = (res: OrderResult) =>
 
 // Mutative deep record updates (dot-path syntax)
 export updateShipping = (order: Order, carrier: String, trackingNumber: String, estimatedDays: Number) =>
-  => {
+  {
     ...order
     shipping.carrier: carrier
     shipping.trackingNumber: trackingNumber
@@ -73,14 +73,14 @@ export updateShipping = (order: Order, carrier: String, trackingNumber: String, 
 
 // Pure discount calculation using pipe
 export applyDiscount = (order: Order, discount: Number) =>
-  => {
+  {
     ...order
     total: order.total - discount
   }
 
 // Mutative array draft recipe
 export appendAuditEntry = (logs: Array<String>, entry: String) =>
-  => logs
+  logs
   |> mut (draft) =>
     draft[draft.length] = entry
     draft
@@ -150,7 +150,7 @@ export PaymentGatewayLive =
 export NotificationServiceLive =
   Layer.succeed(NotificationService, {
     sendConfirmation: (customer, message) =>
-      => Console.log("  [NotificationService] Sent confirmation to {customer}: {message}")
+      Console.log("  [NotificationService] Sent confirmation to {customer}: {message}")
   })
 
 export AppLive =
@@ -231,7 +231,7 @@ export processOrderWorkflow = (order: Order, method: PaymentMethod, tier: Delive
   }
 
 export processOrderSafely = (order: Order, method: PaymentMethod, tier: DeliveryTier) =>
-  => processOrderWorkflow(order, method, tier)
+  processOrderWorkflow(order, method, tier)
   |> Effect.catch((err) =>
     effect {
       _ <- Console.log("  [Workflow Recovery] Caught domain error: {err}")

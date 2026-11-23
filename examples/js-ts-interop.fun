@@ -9,7 +9,7 @@ export schema Settings = ts { Record<string, string> }
 
 // 2. Foreign JavaScript Promise simulation
 jsGetGreeting = (name: String) =>
-  => Promise.resolve("Hello " + name + " from native JavaScript Promise!")
+  Promise.resolve("Hello " + name + " from native JavaScript Promise!")
 
 // 3. 'js' in Effect block: auto-wrapped with Effect.tryPromise
 export fetchUserGreeting = (name: String) =>

@@ -846,13 +846,20 @@ export class Formatter {
       lines.push(blockLeading.trimEnd());
     }
 
+    const isSingleReturn =
+      stmt.statements.length === 1 &&
+      stmt.statements[0].kind === "ReturnStatement" &&
+      !stmt.finalExpression;
+
     for (let i = 0; i < stmt.statements.length; i++) {
       const s = stmt.statements[i];
       const leading = this.formatLeadingComments(s, lineIndent);
       const trailing = this.getTrailingComment(s.span.end.line);
-      lines.push(
-        `${leading}${lineIndent}${this.formatStatement(s, indent)}${trailing}`,
-      );
+      const formattedStmt =
+        isSingleReturn && s.kind === "ReturnStatement"
+          ? this.formatExpression(s.argument, indent)
+          : this.formatStatement(s, indent);
+      lines.push(`${leading}${lineIndent}${formattedStmt}${trailing}`);
       if (i < stmt.statements.length - 1) {
         const next = stmt.statements[i + 1];
         if (next.span && s.span && next.span.start.line - s.span.end.line > 1) {

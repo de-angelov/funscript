@@ -2,11 +2,18 @@ import { describe, it, expect } from "vitest";
 import prettier from "prettier";
 import * as fs from "node:fs";
 import * as path from "node:path";
-import { format, checkFormat, extractComments } from "../src/formatter/index.js";
+import {
+  format,
+  checkFormat,
+  extractComments,
+} from "../src/formatter/index.js";
 import prettierPlugin from "../src/formatter/prettier.js";
 import { Lexer } from "../src/lexer/lexer.js";
 import { Parser } from "../src/parser/parser.js";
-import { ASSOCIATIVITY, PRECEDENCE } from "../src/formatter/operator-precedence.js";
+import {
+  ASSOCIATIVITY,
+  PRECEDENCE,
+} from "../src/formatter/operator-precedence.js";
 import {
   assertFormattingIdempotent,
   assertFormat,
@@ -14,9 +21,15 @@ import {
 } from "./helpers/index.js";
 
 function operatorTree(source: string): unknown {
-  const program = new Parser(new Lexer(source, "test.fun").tokenize(), "test.fun").parse();
+  const program = new Parser(
+    new Lexer(source, "test.fun").tokenize(),
+    "test.fun",
+  ).parse();
   const declaration = program.body[0];
-  if (declaration?.kind !== "ExportDeclaration" || declaration.declaration.kind !== "BindingDeclaration") {
+  if (
+    declaration?.kind !== "ExportDeclaration" ||
+    declaration.declaration.kind !== "BindingDeclaration"
+  ) {
     throw new Error("Expected an exported binding");
   }
 
@@ -24,7 +37,9 @@ function operatorTree(source: string): unknown {
     if (Array.isArray(value)) return value.map(withoutSpans);
     if (value !== null && typeof value === "object") {
       return Object.fromEntries(
-        Object.entries(value).filter(([key]) => key !== "span").map(([key, child]) => [key, withoutSpans(child)])
+        Object.entries(value)
+          .filter(([key]) => key !== "span")
+          .map(([key, child]) => [key, withoutSpans(child)]),
       );
     }
     return value;
@@ -36,9 +51,9 @@ function operatorTree(source: string): unknown {
 describe("FunScript Code Formatter", () => {
   it("preserves optional and defaulted parameters in binding functions", () => {
     for (const source of [
-      'export read = (value?: String) => value',
-      'export read = (value: Number = 5) => value',
-      'export read = <A>(value?: A) => value',
+      "export read = (value?: String) => value",
+      "export read = (value: Number = 5) => value",
+      "export read = <A>(value?: A) => value",
     ]) {
       const formatted = format(source);
       expect(operatorTree(formatted)).toEqual(operatorTree(source));
@@ -48,7 +63,7 @@ describe("FunScript Code Formatter", () => {
 
   it("round-trips generic return annotations in fun and funx", () => {
     for (const filename of ["test.fun", "test.funx"]) {
-      const source = 'export identity = <A>(value: A) => A { => value }';
+      const source = "export identity = <A>(value: A) => A { => value }";
       const formatted = format(source, { filename });
       expect(format(formatted, { filename })).toBe(formatted);
     }
@@ -56,11 +71,32 @@ describe("FunScript Code Formatter", () => {
   it("lists a precedence for every binary operator and formats identifier operands", () => {
     const operators = Object.keys(PRECEDENCE);
     expect(operators).toEqual([
-      "or", "and", "#=", "#!", "@=", "@!", "<", "<=", ">", ">=",
-      "+", "-", "*", "/", "%", "**",
+      "or",
+      "and",
+      "#=",
+      "#!",
+      "@=",
+      "@!",
+      "<",
+      "<=",
+      ">",
+      ">=",
+      "+",
+      "-",
+      "*",
+      "/",
+      "%",
+      "**",
     ]);
     expect(Object.keys(ASSOCIATIVITY)).toEqual(operators);
-    expect(ASSOCIATIVITY).toEqual(Object.fromEntries(operators.map(operator => [operator, operator === "**" ? "right" : "left"])));
+    expect(ASSOCIATIVITY).toEqual(
+      Object.fromEntries(
+        operators.map((operator) => [
+          operator,
+          operator === "**" ? "right" : "left",
+        ]),
+      ),
+    );
 
     for (const operator of operators) {
       const source = `export result = left ${operator} right`;
@@ -70,19 +106,40 @@ describe("FunScript Code Formatter", () => {
 
   it("matches parser grouping across adjacent precedence levels", () => {
     const expressions = [
-      "a or b and c", "a and b #= c", "a #= b < c", "a < b + c",
-      "a + b * c", "a * b ** c",
+      "a or b and c",
+      "a and b #= c",
+      "a #= b < c",
+      "a < b + c",
+      "a + b * c",
+      "a * b ** c",
     ];
 
     for (const expression of expressions) {
       const source = `export result = ${expression}`;
       expect(operatorTree(format(source))).toEqual(operatorTree(source));
-      expect(operatorTree(format(format(source)))).toEqual(operatorTree(source));
+      expect(operatorTree(format(format(source)))).toEqual(
+        operatorTree(source),
+      );
     }
   });
 
   it("preserves parser grouping across every ordered value-operator pair", () => {
-    const operators = ["or", "and", "#=", "#!", "<", "<=", ">", ">=", "+", "-", "*", "/", "%", "**"];
+    const operators = [
+      "or",
+      "and",
+      "#=",
+      "#!",
+      "<",
+      "<=",
+      ">",
+      ">=",
+      "+",
+      "-",
+      "*",
+      "/",
+      "%",
+      "**",
+    ];
 
     for (const first of operators) {
       for (const second of operators) {
@@ -94,14 +151,18 @@ describe("FunScript Code Formatter", () => {
 
   it("preserves left and right associativity for equality and numeric comparison", () => {
     const expressions = [
-      "a #= b #! c", "a #= (b #! c)",
-      "a < b <= c", "a < (b <= c)",
+      "a #= b #! c",
+      "a #= (b #! c)",
+      "a < b <= c",
+      "a < (b <= c)",
     ];
 
     for (const expression of expressions) {
       const source = `export result = ${expression}`;
       expect(operatorTree(format(source))).toEqual(operatorTree(source));
-      expect(operatorTree(format(format(source)))).toEqual(operatorTree(source));
+      expect(operatorTree(format(format(source)))).toEqual(
+        operatorTree(source),
+      );
     }
   });
 
@@ -143,7 +204,9 @@ describe("FunScript Code Formatter", () => {
     const formatted = format(source, { filename: "message.funx" });
 
     expect(formatted).toBe(`export Message = () => <p>Done!</p>\n`);
-    expect(checkFormat(formatted, { filename: "message.funx" }).isFormatted).toBe(true);
+    expect(
+      checkFormat(formatted, { filename: "message.funx" }).isFormatted,
+    ).toBe(true);
   });
 
   it("preserves JSX source and comments across repeated formatting", () => {
@@ -183,10 +246,10 @@ describe("FunScript Code Formatter", () => {
     expect(format(formatted, { filename: "message.funx" })).toBe(formatted);
   });
 
-  it("preserves explicit => return in .funx function block across formatting", () => {
+  it("simplifies redundant => return in .funx function block across formatting", () => {
     const source = `export Message = () =>\n  => <p>Done!</p>`;
     const formatted = format(source, { filename: "message.funx" });
-    expect(formatted).toBe(`export Message = () =>\n  => <p>Done!</p>\n`);
+    expect(formatted).toBe(`export Message = () =>\n  <p>Done!</p>\n`);
     expect(format(formatted, { filename: "message.funx" })).toBe(formatted);
   });
 
@@ -201,7 +264,9 @@ describe("FunScript Code Formatter", () => {
     const fmtArrow = format(srcArrow, { filename: "App.funx" });
     expect(fmtArrow).toBe("export default () => <div />\n");
     expect(format(fmtArrow, { filename: "App.funx" })).toBe(fmtArrow);
-    expect(checkFormat(fmtArrow, { filename: "App.funx" }).isFormatted).toBe(true);
+    expect(checkFormat(fmtArrow, { filename: "App.funx" }).isFormatted).toBe(
+      true,
+    );
 
     const srcLit = "export default 42";
     const fmtLit = format(srcLit);
@@ -225,14 +290,18 @@ export greet = (name: String) =>
     => "Hello, {name}!"
 `.trim();
     const formatted = format(unformatted);
-    expect(formatted).toBe(`export greet = (name: String) =>\n  // greeting message\n  => "Hello, {name}!"\n`);
+    expect(formatted).toBe(
+      `export greet = (name: String) =>\n  // greeting message\n  "Hello, {name}!"\n`,
+    );
     expect(format(formatted)).toBe(formatted);
   });
 
   it("formats imports canonically with normalized spacing", () => {
     const unformatted = `import {Console,   Effect,  Array as Arr} from "effect"`;
     const formatted = format(unformatted);
-    expect(formatted).toBe(`import { Console, Effect, Array as Arr } from "effect"\n`);
+    expect(formatted).toBe(
+      `import { Console, Effect, Array as Arr } from "effect"\n`,
+    );
     expect(format(formatted)).toBe(formatted);
   });
 
@@ -251,7 +320,7 @@ export schema Shape =
 `.trim();
     const formatted = format(unformatted);
     expect(formatted).toBe(
-      `export schema User = {\n  id: String\n  name: String\n  role: String = "user"\n}\n\nexport schema Shape =\n  | Circle(radius: Number)\n  | Rect(width: Number, height: Number)\n  | Point\n`
+      `export schema User = {\n  id: String\n  name: String\n  role: String = "user"\n}\n\nexport schema Shape =\n  | Circle(radius: Number)\n  | Rect(width: Number, height: Number)\n  | Point\n`,
     );
     expect(format(formatted)).toBe(formatted);
   });
@@ -268,7 +337,7 @@ ts schema Config = {
 `.trim();
     const formatted = format(unformatted);
     expect(formatted).toBe(
-      `ts schema User = UserType\nexport ts schema Admin = AdminType<String>\nts schema Point = { x: Number, y: Number }\n\nts schema Config = {\n  timeout: Number\n}\n`
+      `ts schema User = UserType\nexport ts schema Admin = AdminType<String>\nts schema Point = { x: Number, y: Number }\n\nts schema Config = {\n  timeout: Number\n}\n`,
     );
     expect(format(formatted)).toBe(formatted);
   });
@@ -285,7 +354,7 @@ schema Pair = from ts<FirstType, SecondType>
 
     const formatted = format(unformatted);
     expect(formatted).toBe(
-      `import { User as UserType } from "./model"\n\nschema User = from ts<UserType>\nexport schema Admin = from ts<AdminType>\nschema Container<T> = from ts<ContainerType<T>>\nschema Pair = from ts<FirstType, SecondType>\n`
+      `import { User as UserType } from "./model"\n\nschema User = from ts<UserType>\nexport schema Admin = from ts<AdminType>\nschema Container<T> = from ts<ContainerType<T>>\nschema Pair = from ts<FirstType, SecondType>\n`,
     );
     expect(format(formatted)).toBe(formatted);
   });
@@ -301,7 +370,7 @@ export service Greeter "greeter-v1"
 `.trim();
     const formatted = format(unformatted);
     expect(formatted).toBe(
-      `export error NotFound(id: String)\nexport error Empty\n\nexport service Greeter "greeter-v1"\n  greet: (name: String) => Effect<String>\n  farewell: (name: String) => Effect<Void, NotFound>\n`
+      `export error NotFound(id: String)\nexport error Empty\n\nexport service Greeter "greeter-v1"\n  greet: (name: String) => Effect<String>\n  farewell: (name: String) => Effect<Void, NotFound>\n`,
     );
     expect(format(formatted)).toBe(formatted);
   });
@@ -317,7 +386,7 @@ export classify = (shape: Shape) =>
 `.trim();
     const formatted = format(unformatted);
     expect(formatted).toBe(
-      `export classify = (shape: Shape) =>\n  match shape\n    | Circle(r) when r |> Number.isGreaterThan(10) => "large"\n    | Circle(_) => "circle"\n    | Rect(w, h) => "rect"\n    | _ => "unknown"\n`
+      `export classify = (shape: Shape) =>\n  match shape\n    | Circle(r) when r |> Number.isGreaterThan(10) => "large"\n    | Circle(_) => "circle"\n    | Rect(w, h) => "rect"\n    | _ => "unknown"\n`,
     );
     expect(format(formatted)).toBe(formatted);
   });
@@ -332,7 +401,7 @@ export checkNumber = (n: Number) =>
 `.trim();
     const formatted = format(unformatted);
     expect(formatted).toBe(
-      `export checkNumber = (n: Number) =>\n  match\n    | n |> Number.isLessThan(0) => "negative"\n    | n #= 0 => "zero"\n    | _ => "positive"\n`
+      `export checkNumber = (n: Number) =>\n  match\n    | n |> Number.isLessThan(0) => "negative"\n    | n #= 0 => "zero"\n    | _ => "positive"\n`,
     );
     expect(format(formatted)).toBe(formatted);
   });
@@ -349,7 +418,7 @@ export program =
 `.trim();
     const formatted = format(unformatted);
     expect(formatted).toBe(
-      `export program =\n  effect {\n    x <- fetchNumber()\n    _ <- Console.log(x)\n    y = x + 1\n    => y\n  }\n`
+      `export program =\n  effect {\n    x <- fetchNumber()\n    _ <- Console.log(x)\n    y = x + 1\n    => y\n  }\n`,
     );
     expect(format(formatted)).toBe(formatted);
   });
@@ -364,7 +433,7 @@ export main =
 `.trim();
     const formatted = format(unformatted);
     expect(formatted).toBe(
-      `export main =\n  [1, 2, 3]\n  |> Array.map((x) => x * 2)\n  |> Array.join(", ")\n  |> Console.log\n`
+      `export main =\n  [1, 2, 3]\n  |> Array.map((x) => x * 2)\n  |> Array.join(", ")\n  |> Console.log\n`,
     );
     expect(format(formatted)).toBe(formatted);
   });
@@ -379,7 +448,7 @@ export appendTag = (p: Profile, tag: String) =>
 `.trim();
     const formatted = format(unformatted);
     expect(formatted).toBe(
-      `export appendTag = (p: Profile, tag: String) =>\n  => p\n  |> mut (draft) =>\n    draft.tags.push(tag)\n    => draft\n`
+      `export appendTag = (p: Profile, tag: String) =>\n  p\n  |> mut (draft) =>\n    draft.tags.push(tag)\n    => draft\n`,
     );
     expect(format(formatted)).toBe(formatted);
   });
@@ -411,7 +480,9 @@ export schema WidgetProps = {
 }`;
 
     const formatted = format(source);
-    expect(formatted.match(/Preserve this as part of the TypeScript block/g)).toHaveLength(1);
+    expect(
+      formatted.match(/Preserve this as part of the TypeScript block/g),
+    ).toHaveLength(1);
     expect(formatted).toContain("// Component declarations follow.");
     expect(format(formatted)).toBe(formatted);
   });
@@ -444,8 +515,12 @@ export schema WidgetProps = {
   });
 
   it("formats mixed comparison, equality, and logical operators idempotently", () => {
-    const formatted = format(`export result = (4 + 5) * 6 < 60 #= true and ready or fallback`);
-    expect(formatted).toBe(`export result = (4 + 5) * 6 < 60 #= true and ready or fallback\n`);
+    const formatted = format(
+      `export result = (4 + 5) * 6 < 60 #= true and ready or fallback`,
+    );
+    expect(formatted).toBe(
+      `export result = (4 + 5) * 6 < 60 #= true and ready or fallback\n`,
+    );
     expect(format(formatted)).toBe(formatted);
   });
 
@@ -534,8 +609,12 @@ export schema WidgetProps = {
       expect(operatorTree(formatted)).toEqual(operatorTree(source));
     }
 
-    expect(format("export result = (1 #= 2) < 3")).toBe("export result = (1 #= 2) < 3\n");
-    expect(format("export result = 1 < (2 #= 3)")).toBe("export result = 1 < (2 #= 3)\n");
+    expect(format("export result = (1 #= 2) < 3")).toBe(
+      "export result = (1 #= 2) < 3\n",
+    );
+    expect(format("export result = 1 < (2 #= 3)")).toBe(
+      "export result = 1 < (2 #= 3)\n",
+    );
   });
 
   it("preserves right-nested same-precedence operators through formatting", () => {
@@ -664,7 +743,9 @@ export updated = {
         parser: "funscript",
         plugins: [prettierPlugin],
       });
-      expect(result).toBe(`export greet = (name: String) => "Hello, {name}!"\n`);
+      expect(result).toBe(
+        `export greet = (name: String) => "Hello, {name}!"\n`,
+      );
 
       const pass2 = await prettier.format(result, {
         parser: "funscript",
@@ -683,10 +764,13 @@ export updated = {
     });
 
     it("formats JSX in .funx files while preserving JSX source", async () => {
-      const result = await prettier.format("export Button = () => <button>hello</button>", {
-        filepath: "Button.funx",
-        plugins: [prettierPlugin],
-      });
+      const result = await prettier.format(
+        "export Button = () => <button>hello</button>",
+        {
+          filepath: "Button.funx",
+          plugins: [prettierPlugin],
+        },
+      );
       expect(result).toBe("export Button = () => <button>hello</button>\n");
     });
 
@@ -707,7 +791,8 @@ export schema Config = {
     });
 
     it("formats abstract function pipelines and comparison shorthand consistently", () => {
-      const source = "export isSmall = (score: Number, deadline: Number) => score |> lessThan(deadline)\n";
+      const source =
+        "export isSmall = (score: Number, deadline: Number) => score |> lessThan(deadline)\n";
       const formatted = format(source);
       expect(formatted).toBe(source);
     });

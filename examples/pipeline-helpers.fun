@@ -5,31 +5,31 @@ import { Console } from "effect"
 
 // Pure string transformations in pipelines
 export formatPostSlug = (title: String): String =>
-  => title
+  title
   |> trim
   |> slug
 
 export toCamel = (name: String): String =>
-  => name
+  name
   |> camelCase
 
 export toSnake = (name: String): String =>
-  => name
+  name
   |> snakeCase
 
 // Math pipeline operations with data-last calling conventions
 export normalizeScore = (raw: Number): Number =>
-  => raw
+  raw
   |> clamp(0, 100)
   |> round(1)
 
 export summarizeNumbers = (values: Array<Number>): Number =>
-  => values
+  values
   |> sum
 
 // Timing helpers in pipelines
 export createDebouncedAction = (action: (msg: String) => Void) =>
-  => action
+  action
   |> debounce(100)
 
 export main =

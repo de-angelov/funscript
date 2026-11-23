@@ -105,7 +105,7 @@ export parseResponse = (repoPath: String, raw: RawApiResponse): ApiResponse =>
 
 // Pattern matching on ApiResponse variants
 formatRepository = (repo: Repository) =>
-  => "[200 OK] " + repo.fullName + " - " + repo.description + " (Stars: " + repo.stargazersCount + ", Forks: " + repo.forksCount + ")"
+  "[200 OK] " + repo.fullName + " - " + repo.description + " (Stars: " + repo.stargazersCount + ", Forks: " + repo.forksCount + ")"
 
 export formatApiResponse = (res: ApiResponse) =>
   match res
@@ -128,7 +128,7 @@ export fetchRepo = (repoPath: String) =>
 
 // Summary formatter for a batch of repositories
 export summarizeRepo = (repo: Repository) =>
-  => repo.fullName + " (⭐ " + repo.stargazersCount + " | 🍴 " + repo.forksCount + " | ⚠️ " + repo.openIssuesCount + ")"
+  repo.fullName + " (⭐ " + repo.stargazersCount + " | 🍴 " + repo.forksCount + " | ⚠️ " + repo.openIssuesCount + ")"
 
 // --- Main Program Runner ---
 
