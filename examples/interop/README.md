@@ -45,6 +45,5 @@ cache and returns the effect that callers run; it does not itself produce the cl
 
 This helper does not manage a connection's lifetime. For a shared connection that
 must close, acquire it in a scoped Layer and release it when the layer's scope closes.
-See `tests/cache-spike.test.ts` for both patterns. These examples use an in-memory
-stand-in, not a Redis server, and do not establish production interruption or reconnection
-behavior.
+These examples use an in-memory stand-in, not a Redis server, and do not establish
+production interruption or reconnection behavior.
