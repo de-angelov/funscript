@@ -19,6 +19,8 @@ const commandOptions: Record<string, ReadonlySet<string>> = {
     "--bare-pipelines",
     "--bin",
     "--watch",
+    "--engine",
+    "--fast",
   ]),
   emit: new Set([
     "--out",
@@ -45,6 +47,18 @@ const commandOptions: Record<string, ReadonlySet<string>> = {
     "--no-global-this",
     "--no-optional",
     "--bare-pipelines",
+    "--engine",
+    "--fast",
+  ]),
+  test: new Set([
+    "--watch",
+    "--run",
+    "--engine",
+    "--coverage",
+    "--ui",
+    "--reporter",
+    "--no-check",
+    "--fast",
   ]),
   fmt: new Set(["--check", "--diff", "--stdin", "--stdin-filepath"]),
   doctor: new Set(["--json"]),
@@ -52,9 +66,10 @@ const commandOptions: Record<string, ReadonlySet<string>> = {
 };
 
 const valueOptions: Record<string, ReadonlySet<string>> = {
-  build: new Set(["--target", "--out", "--outDir"]),
+  build: new Set(["--target", "--out", "--outDir", "--engine"]),
   emit: new Set(["--out"]),
   fmt: new Set(["--stdin-filepath"]),
+  test: new Set(["--engine", "--reporter"]),
 };
 
 export function validateCliArgs(
@@ -127,6 +142,18 @@ export const CLI_COMMANDS: readonly CliCommand[] = [
     examples: [
       "funscript run examples/hello.fun",
       "funscript run src/main.fun -- --verbose",
+    ],
+  },
+  {
+    name: "test",
+    usage: "test [filters...] [--watch] [--engine <vitest|bun>]",
+    description:
+      "Run unit and integration tests across FunScript (.fun/.funx) and TypeScript modules.",
+    examples: [
+      "funscript test",
+      "funscript test tests/native-funscript.test.fun",
+      "funscript test --watch",
+      "funscript test --engine bun",
     ],
   },
   {

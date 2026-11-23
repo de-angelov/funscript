@@ -22,4 +22,6 @@ Package: `funscript` 0.2.3.
 | `funscript/plugins/bun-preload`       | `./dist/plugins/bun-preload.js` |
 | `funscript/esbuild`                   | `./dist/plugins/esbuild.js`     |
 | `funscript/plugins/esbuild`           | `./dist/plugins/esbuild.js`     |
+| `funscript/test`                      | `./dist/testing/index.js`       |
+| `funscript/testing`                   | `./dist/testing/index.js`       |
 | `funscript/callback`                  | `./dist/interop/callback.js`    |

@@ -4,7 +4,7 @@ import { Effect, Console } from "effect";
 import * as fs from "node:fs/promises";
 import { existsSync } from "node:fs";
 import * as path from "node:path";
-import { fork } from "node:child_process";
+import { fork, spawn } from "node:child_process";
 import { createRequire } from "node:module";
 import { pathToFileURL } from "node:url";
 import fg from "fast-glob";
@@ -1423,6 +1423,72 @@ const replCommand = (args: string[]) =>
     });
   });
 
+const testCommand = (args: string[]) =>
+  Effect.callback<void, Error>((resume) => {
+    const isWatch = args.includes("--watch");
+    const engineIndex = args.indexOf("--engine");
+    const engine = engineIndex !== -1 ? args[engineIndex + 1] : undefined;
+    const isFast = args.includes("--fast");
+    const isBun =
+      engine === "bun" ||
+      isFast ||
+      (!engine &&
+        typeof process !== "undefined" &&
+        Boolean(process.versions?.bun));
+
+    const forwardArgs = args.filter(
+      (arg, i) =>
+        arg !== "--watch" &&
+        arg !== "--engine" &&
+        arg !== "--fast" &&
+        (engineIndex === -1 || i !== engineIndex + 1),
+    );
+
+    if (isBun) {
+      const bunArgs = [
+        "test",
+        "--preload",
+        "funscript/bun/preload",
+        ...forwardArgs,
+      ];
+      const child = spawn("bun", bunArgs, { stdio: "inherit" });
+      child.on("exit", (code) => {
+        if (code === 0) resume(Effect.void);
+        else {
+          process.exitCode = code ?? 1;
+          resume(Effect.void);
+        }
+      });
+      child.on("error", (err) => resume(Effect.fail(err)));
+      return;
+    }
+
+    const cwd = process.cwd();
+    const localVitest = path.resolve(
+      cwd,
+      "node_modules",
+      ".bin",
+      process.platform === "win32" ? "vitest.cmd" : "vitest",
+    );
+    const vitestCmd = existsSync(localVitest) ? localVitest : "npx";
+    const vitestArgs = existsSync(localVitest)
+      ? (isWatch ? [] : ["run"]).concat(forwardArgs)
+      : ["vitest", ...(isWatch ? [] : ["run"]), ...forwardArgs];
+
+    const child = spawn(vitestCmd, vitestArgs, {
+      stdio: "inherit",
+      shell: process.platform === "win32",
+    });
+    child.on("exit", (code) => {
+      if (code === 0) resume(Effect.void);
+      else {
+        process.exitCode = code ?? 1;
+        resume(Effect.void);
+      }
+    });
+    child.on("error", (err) => resume(Effect.fail(err)));
+  });
+
 const helpCommand = Console.log(renderCliHelp(FUNSCRIPT_VERSION));
 
 const program = Effect.gen(function* () {
@@ -1481,6 +1547,8 @@ const program = Effect.gen(function* () {
       return yield* buildCommand(commandArgs);
     case "run":
       return yield* runCommand(commandArgs);
+    case "test":
+      return yield* testCommand(commandArgs);
     case "repl":
       return yield* replCommand(commandArgs);
     case "emit":

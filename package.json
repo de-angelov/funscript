@@ -25,6 +25,8 @@
     "./plugins/bun-preload": "./dist/plugins/bun-preload.js",
     "./esbuild": "./dist/plugins/esbuild.js",
     "./plugins/esbuild": "./dist/plugins/esbuild.js",
+    "./test": "./dist/testing/index.js",
+    "./testing": "./dist/testing/index.js",
     "./callback": "./dist/interop/callback.js"
   },
   "scripts": {

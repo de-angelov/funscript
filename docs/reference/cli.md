@@ -78,6 +78,30 @@ funscript run examples/hello.fun
 funscript run src/main.fun -- --verbose
 ```
 
+### `funscript test`
+
+```text
+funscript test [filters...] [--watch] [--engine <vitest|bun>]
+```
+
+Run unit and integration tests across FunScript (.fun/.funx) and TypeScript modules.
+
+```sh
+funscript test
+```
+
+```sh
+funscript test tests/native-funscript.test.fun
+```
+
+```sh
+funscript test --watch
+```
+
+```sh
+funscript test --engine bun
+```
+
 ### `funscript repl`
 
 ```text

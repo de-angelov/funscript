@@ -169,7 +169,7 @@ export function funscriptPlugin(options: FunscriptPluginOptions = {}): Plugin {
         skipSelf: true,
       });
       if (existing) return existing;
-      for (const extension of [".fun", ".funx"]) {
+      for (const extension of [".ts", ".tsx", ".fun", ".funx"]) {
         const resolved = await this.resolve(
           source.slice(0, -3) + extension,
           importer,
