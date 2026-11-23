@@ -28,6 +28,7 @@
   "scripts": {
     "build": "tsc && tsc -p editors/vscode",
     "check": "tsc --noEmit",
+    "typecheck": "tsc --noEmit",
     "benchmark": "node scripts/benchmark.mjs",
     "prototype:optional": "node scripts/optional-prototype.mjs",
     "spike:optional-compiler": "node scripts/optional-compiler-spike.mjs",
@@ -46,7 +47,8 @@
     "check:idiomatic": "node scripts/check-idiomatic.mjs",
     "verify": "npm run build && npm run fmt:check && npm test",
     "pr:check": "node scripts/validate-pr.js",
-    "package:check": "node scripts/check-package.mjs"
+    "package:check": "node scripts/check-package.mjs",
+    "prepare": "husky"
   },
   "keywords": [
     "funscript",
@@ -90,6 +92,8 @@
     "@types/react": "^19.3.0",
     "@types/vscode": "^1.140.0",
     "eslint": "^9.39.5",
+    "husky": "^9.1.7",
+    "lint-staged": "^16.4.0",
     "pino": "^10.4.0",
     "prettier": "^3.9.10",
     "react": "^19.3.1",
