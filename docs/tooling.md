@@ -172,7 +172,7 @@ proprietary project layout or package format.
 ## Package scripts in this repository
 
 The repository's own scripts are defined in `package.json`: `build`, `check`, `typecheck`, `benchmark`, `test`,
-`test:examples`, `test:watch`, `fmt`, `fmt:check`, `fmt:ts`, `fmt:ts:check`, `lint`, `lint:fix`, `prettier:check`, `docs:generate`,
+`test:fast`, `test:unit`, `test:examples`, `test:watch`, `fmt`, `fmt:check`, `fmt:ts`, `fmt:ts:check`, `lint`, `lint:fix`, `prettier:check`, `docs:generate`,
 `docs:check`, `check:idiomatic`, `package:check`, `verify`, `pr:check`, and `prepare`. They are repository scripts,
 not additional `funscript` CLI commands.
 

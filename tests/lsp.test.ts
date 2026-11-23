@@ -29,37 +29,61 @@ import { format } from "../src/formatter/index.js";
 
 describe("FunScript LSP Server", () => {
   it("shows inferred function types and preceding documentation on declarations and uses", () => {
-    const source = '/// Say hello to someone.\nexport greet = (name: String) => "Hello, {name}!"\nexport message = greet("Ada")';
+    const source =
+      '/// Say hello to someone.\nexport greet = (name: String) => "Hello, {name}!"\nexport message = greet("Ada")';
     const uri = `file://${process.cwd()}/hover-example.fun`;
-    for (const position of [{ line: 1, character: 9 }, { line: 2, character: 19 }]) {
-      const value = (findHover(source, uri, position)?.contents as { value: string })?.value;
+    for (const position of [
+      { line: 1, character: 9 },
+      { line: 2, character: 19 },
+    ]) {
+      const value = (
+        findHover(source, uri, position)?.contents as { value: string }
+      )?.value;
       expect(value).toContain("greet");
       expect(value).toContain("string");
       expect(value).toContain("Say hello to someone");
     }
   });
   it("shows TypeScript documentation for imported symbols", () => {
-    const source = 'import { readFileSync } from "node:fs"\nexport read = readFileSync';
-    const hover = findHover(source, `file://${process.cwd()}/hover-example.fun`, { line: 1, character: 16 });
+    const source =
+      'import { readFileSync } from "node:fs"\nexport read = readFileSync';
+    const hover = findHover(
+      source,
+      `file://${process.cwd()}/hover-example.fun`,
+      { line: 1, character: 16 },
+    );
     const value = (hover?.contents as { value: string })?.value;
     expect(value).toContain("readFileSync");
     expect(value).toContain("Synchronously");
   });
   it("shows the resolved companion for an array pipeline stage", () => {
-    const source = 'export names =\n  ["Ada", "Grace"]\n  |> map((name) => name)';
-    const hover = findHover(source, `file://${process.cwd()}/pipeline.fun`, { line: 2, character: 6 });
-    expect(hover?.contents).toMatchObject({ value: expect.stringContaining("Array.map") });
+    const source =
+      'export names =\n  ["Ada", "Grace"]\n  |> map((name) => name)';
+    const hover = findHover(source, `file://${process.cwd()}/pipeline.fun`, {
+      line: 2,
+      character: 6,
+    });
+    expect(hover?.contents).toMatchObject({
+      value: expect.stringContaining("Array.map"),
+    });
     expect(JSON.stringify(hover)).not.toContain("ambiguous");
   });
   it("explains explicit alternatives when hovering an ambiguous bare stage", () => {
-    const hover = findHover("value |> map((item) => item)", "file:///pipeline.fun", { line: 0, character: 10 });
+    const hover = findHover(
+      "value |> map((item) => item)",
+      "file:///pipeline.fun",
+      { line: 0, character: 10 },
+    );
     expect(hover?.contents).toMatchObject({
       value: expect.stringContaining("Array.map"),
     });
   });
 
   it("explains that native ordering operators are number-only", () => {
-    const hover = findHover("name < other", "file:///comparison.fun", { line: 0, character: 5 });
+    const hover = findHover("name < other", "file:///comparison.fun", {
+      line: 0,
+      character: 5,
+    });
     expect(hover?.contents).toMatchObject({
       value: expect.stringContaining("both operands are proven numbers"),
     });
@@ -68,10 +92,14 @@ describe("FunScript LSP Server", () => {
   describe("Completion", () => {
     it("offers explicit companion alternatives for ambiguous bare pipeline stages", () => {
       const server = new FunScriptLspServer();
-      server.onDidOpenHandler({ textDocument: {
-        uri: "file:///project/pipeline.fun", languageId: "funscript", version: 1,
-        text: "value |> ma",
-      }});
+      server.onDidOpenHandler({
+        textDocument: {
+          uri: "file:///project/pipeline.fun",
+          languageId: "funscript",
+          version: 1,
+          text: "value |> ma",
+        },
+      });
       const items = server.onCompletionHandler({
         textDocument: { uri: "file:///project/pipeline.fun" },
         position: { line: 0, character: 11 },
@@ -132,10 +160,14 @@ describe("FunScript LSP Server", () => {
 
     it("offers JSX tags only in JSX context and excludes later local bindings", async () => {
       const server = new FunScriptLspServer();
-      server.onDidOpenHandler({ textDocument: {
-        uri: "file:///project/view.funx", languageId: "funscript", version: 1,
-        text: "shown = true\n<d\nlater = 1",
-      }});
+      server.onDidOpenHandler({
+        textDocument: {
+          uri: "file:///project/view.funx",
+          languageId: "funscript",
+          version: 1,
+          text: "shown = true\n<d\nlater = 1",
+        },
+      });
       const jsx = server.onCompletionHandler({
         textDocument: { uri: "file:///project/view.funx" },
         position: { line: 1, character: 2 },
@@ -143,7 +175,10 @@ describe("FunScript LSP Server", () => {
       expect(jsx.map((item) => item.label)).toContain("div");
       expect(jsx.map((item) => item.label)).not.toContain("later");
       expect(jsx.find((item) => item.label === "div")?.textEdit).toMatchObject({
-        range: { start: { line: 1, character: 1 }, end: { line: 1, character: 2 } },
+        range: {
+          start: { line: 1, character: 1 },
+          end: { line: 1, character: 2 },
+        },
         newText: "div",
       });
     });
@@ -213,10 +248,15 @@ describe("FunScript LSP Server", () => {
             triggerCharacters: [".", "<"],
           },
           codeActionProvider: true,
+          inlayHintProvider: {
+            resolveProvider: false,
+          },
         },
         serverInfo: {
           name: "funscript-lsp",
-          version: JSON.parse(readFileSync(new URL("../package.json", import.meta.url), "utf8")).version,
+          version: JSON.parse(
+            readFileSync(new URL("../package.json", import.meta.url), "utf8"),
+          ).version,
         },
       });
     });
@@ -351,11 +391,27 @@ describe("FunScript LSP Server", () => {
     it("offers a deterministic whole-document formatter code action", () => {
       const server = new FunScriptLspServer();
       const uri = "file:///example.fun";
-      server.onDidOpenHandler({ textDocument: { uri, languageId: "funscript", version: 1, text: "value=1" } });
-      const actions = server.onCodeActionHandler({ textDocument: { uri }, range: { start: { line: 0, character: 0 }, end: { line: 0, character: 7 } }, context: { diagnostics: [] } });
+      server.onDidOpenHandler({
+        textDocument: {
+          uri,
+          languageId: "funscript",
+          version: 1,
+          text: "value=1",
+        },
+      });
+      const actions = server.onCodeActionHandler({
+        textDocument: { uri },
+        range: {
+          start: { line: 0, character: 0 },
+          end: { line: 0, character: 7 },
+        },
+        context: { diagnostics: [] },
+      });
       expect(actions).toHaveLength(1);
       expect(actions[0].title).toBe("Format document");
-      expect(actions[0].edit?.changes?.[uri]?.[0].newText).toBe(format("value=1", { filename: "/example.fun" }));
+      expect(actions[0].edit?.changes?.[uri]?.[0].newText).toBe(
+        format("value=1", { filename: "/example.fun" }),
+      );
     });
   });
 
@@ -393,7 +449,12 @@ describe("FunScript LSP Server", () => {
 
     it("reports 0 diagnostics for optional properties and function parameters", async () => {
       const server = new FunScriptLspServer();
-      await server.handleMessage({ jsonrpc: "2.0", id: 1, method: "initialize", params: {} });
+      await server.handleMessage({
+        jsonrpc: "2.0",
+        id: 1,
+        method: "initialize",
+        params: {},
+      });
       const diagEvents: PublishDiagnosticsParams[] = [];
       server.on("diagnostics", (p) => diagEvents.push(p));
       await server.handleMessage({
@@ -755,7 +816,8 @@ calculate = (x: Number) => {
     });
 
     it("reports diagnostic for rejected nonnumeric comparisons with actionable explanation and location", () => {
-      const code = "export valid = (left: String, right: String) => left < right";
+      const code =
+        "export valid = (left: String, right: String) => left < right";
       const diagnostics = validateFunScript(code, "file:///test.fun");
       expect(diagnostics).toHaveLength(1);
       const diag = diagnostics[0];
@@ -1116,14 +1178,43 @@ export schema Config = {
       const library = "file:///project/country.fun";
       const barrel = "file:///project/barrel.fun";
       const app = "file:///project/app.fun";
-      server.onDidOpenHandler({ textDocument: { uri: library, languageId: "funscript", version: 1, text: "export value = 1\n" } });
-      server.onDidOpenHandler({ textDocument: { uri: barrel, languageId: "funscript", version: 1, text: 'export { value as amount } from "./country.js"\n' } });
-      server.onDidOpenHandler({ textDocument: { uri: app, languageId: "funscript", version: 1, text: 'import { amount } from "./barrel.js"\nresult = amount\n' } });
+      server.onDidOpenHandler({
+        textDocument: {
+          uri: library,
+          languageId: "funscript",
+          version: 1,
+          text: "export value = 1\n",
+        },
+      });
+      server.onDidOpenHandler({
+        textDocument: {
+          uri: barrel,
+          languageId: "funscript",
+          version: 1,
+          text: 'export { value as amount } from "./country.js"\n',
+        },
+      });
+      server.onDidOpenHandler({
+        textDocument: {
+          uri: app,
+          languageId: "funscript",
+          version: 1,
+          text: 'import { amount } from "./barrel.js"\nresult = amount\n',
+        },
+      });
 
       const position = { line: 1, character: 10 };
-      expect(server.onDefinitionHandler({ textDocument: { uri: app }, position })).toMatchObject({ uri: library });
-      const edits = server.onRenameHandler({ textDocument: { uri: app }, position, newName: "total" });
-      expect(Object.keys(edits?.changes ?? {}).sort()).toEqual([app, barrel].sort());
+      expect(
+        server.onDefinitionHandler({ textDocument: { uri: app }, position }),
+      ).toMatchObject({ uri: library });
+      const edits = server.onRenameHandler({
+        textDocument: { uri: app },
+        position,
+        newName: "total",
+      });
+      expect(Object.keys(edits?.changes ?? {}).sort()).toEqual(
+        [app, barrel].sort(),
+      );
       expect(edits?.changes?.[barrel]).toHaveLength(1);
       expect(edits?.changes?.[app]).toHaveLength(2);
     });
@@ -1132,17 +1223,75 @@ export schema Config = {
       const server = new FunScriptLspServer();
       const libraryUri = "file:///project/math.fun";
       const appUri = "file:///project/app.fun";
-      server.onDidOpenHandler({ textDocument: { uri: libraryUri, languageId: "funscript", version: 1, text: "export add = (a, b) => a + b\n" } });
-      server.onDidOpenHandler({ textDocument: { uri: appUri, languageId: "funscript", version: 1, text: 'import { add } from "./math.fun"\nresult = add(1, 2)\n' } });
+      server.onDidOpenHandler({
+        textDocument: {
+          uri: libraryUri,
+          languageId: "funscript",
+          version: 1,
+          text: "export add = (a, b) => a + b\n",
+        },
+      });
+      server.onDidOpenHandler({
+        textDocument: {
+          uri: appUri,
+          languageId: "funscript",
+          version: 1,
+          text: 'import { add } from "./math.fun"\nresult = add(1, 2)\n',
+        },
+      });
 
-      expect(server.onDefinitionHandler({ textDocument: { uri: appUri }, position: { line: 1, character: 10 } })).toMatchObject({ uri: libraryUri, range: { start: { line: 0, character: 7 } } });
-      expect(server.onDocumentSymbolHandler({ textDocument: { uri: libraryUri } }).map((symbol) => symbol.name)).toContain("add");
-      expect(server.onWorkspaceSymbolHandler({ query: "ad" }).map((symbol) => symbol.name)).toContain("add");
-      expect(server.onPrepareRenameHandler({ textDocument: { uri: appUri }, position: { line: 1, character: 10 } })).toMatchObject({ placeholder: "add" });
-      const refs = server.onReferencesHandler({ textDocument: { uri: appUri }, position: { line: 1, character: 10 }, context: { includeDeclaration: true } });
-      expect(refs.map((reference) => reference.uri)).toEqual(expect.arrayContaining([appUri, libraryUri]));
-      expect(server.onRenameHandler({ textDocument: { uri: appUri }, position: { line: 1, character: 10 }, newName: "sum" })).toMatchObject({ changes: { [appUri]: expect.any(Array), [libraryUri]: expect.any(Array) } });
-      expect(server.onRenameHandler({ textDocument: { uri: appUri }, position: { line: 1, character: 10 }, newName: "schema" })).toBeNull();
+      expect(
+        server.onDefinitionHandler({
+          textDocument: { uri: appUri },
+          position: { line: 1, character: 10 },
+        }),
+      ).toMatchObject({
+        uri: libraryUri,
+        range: { start: { line: 0, character: 7 } },
+      });
+      expect(
+        server
+          .onDocumentSymbolHandler({ textDocument: { uri: libraryUri } })
+          .map((symbol) => symbol.name),
+      ).toContain("add");
+      expect(
+        server
+          .onWorkspaceSymbolHandler({ query: "ad" })
+          .map((symbol) => symbol.name),
+      ).toContain("add");
+      expect(
+        server.onPrepareRenameHandler({
+          textDocument: { uri: appUri },
+          position: { line: 1, character: 10 },
+        }),
+      ).toMatchObject({ placeholder: "add" });
+      const refs = server.onReferencesHandler({
+        textDocument: { uri: appUri },
+        position: { line: 1, character: 10 },
+        context: { includeDeclaration: true },
+      });
+      expect(refs.map((reference) => reference.uri)).toEqual(
+        expect.arrayContaining([appUri, libraryUri]),
+      );
+      expect(
+        server.onRenameHandler({
+          textDocument: { uri: appUri },
+          position: { line: 1, character: 10 },
+          newName: "sum",
+        }),
+      ).toMatchObject({
+        changes: {
+          [appUri]: expect.any(Array),
+          [libraryUri]: expect.any(Array),
+        },
+      });
+      expect(
+        server.onRenameHandler({
+          textDocument: { uri: appUri },
+          position: { line: 1, character: 10 },
+          newName: "schema",
+        }),
+      ).toBeNull();
     });
 
     it("returns null when document is not open", async () => {
@@ -2049,7 +2198,12 @@ export schema Config = {
   describe("Hover Provider (textDocument/hover)", () => {
     it("shows imported TypeScript schema structure and Effect representation", async () => {
       const server = new FunScriptLspServer();
-      await server.handleMessage({ jsonrpc: "2.0", id: 1, method: "initialize", params: {} });
+      await server.handleMessage({
+        jsonrpc: "2.0",
+        id: 1,
+        method: "initialize",
+        params: {},
+      });
       const uri = "file:///workspace/imported-hover.fun";
       const text = [
         "ts { type Imported = { name: string; active: boolean } }",
@@ -2058,10 +2212,14 @@ export schema Config = {
       await server.handleMessage({
         jsonrpc: "2.0",
         method: "textDocument/didOpen",
-        params: { textDocument: { uri, languageId: "funscript", version: 1, text } },
+        params: {
+          textDocument: { uri, languageId: "funscript", version: 1, text },
+        },
       });
       const response = (await server.handleMessage({
-        jsonrpc: "2.0", id: 99, method: "textDocument/hover",
+        jsonrpc: "2.0",
+        id: 99,
+        method: "textDocument/hover",
         params: { textDocument: { uri }, position: { line: 1, character: 8 } },
       })) as ResponseMessage;
       const value = (response.result as Hover).contents as { value: string };
@@ -2072,7 +2230,12 @@ export schema Config = {
 
     it("simplifies complex inferred record types cleanly on LSP hover", async () => {
       const server = new FunScriptLspServer();
-      await server.handleMessage({ jsonrpc: "2.0", id: 1, method: "initialize", params: {} });
+      await server.handleMessage({
+        jsonrpc: "2.0",
+        id: 1,
+        method: "initialize",
+        params: {},
+      });
       const uri = "file:///workspace/simplify-hover.fun";
       const text = [
         "ts {",
@@ -2085,7 +2248,9 @@ export schema Config = {
       await server.handleMessage({
         jsonrpc: "2.0",
         method: "textDocument/didOpen",
-        params: { textDocument: { uri, languageId: "funscript", version: 1, text } },
+        params: {
+          textDocument: { uri, languageId: "funscript", version: 1, text },
+        },
       });
       const response = (await server.handleMessage({
         jsonrpc: "2.0",
@@ -2094,13 +2259,20 @@ export schema Config = {
         params: { textDocument: { uri }, position: { line: 5, character: 8 } },
       })) as ResponseMessage;
       const value = (response.result as Hover).contents as { value: string };
-      expect(value.value).toContain("{ id: string; name: string; age: number }");
+      expect(value.value).toContain(
+        "{ id: string; name: string; age: number }",
+      );
       expect(value.value).toContain("Schema.Struct");
     });
 
     it("shows optional properties in imported TypeScript schema hover", async () => {
       const server = new FunScriptLspServer();
-      await server.handleMessage({ jsonrpc: "2.0", id: 1, method: "initialize", params: {} });
+      await server.handleMessage({
+        jsonrpc: "2.0",
+        id: 1,
+        method: "initialize",
+        params: {},
+      });
       const uri = "file:///workspace/optional-hover.fun";
       const text = [
         "ts { type ButtonProps = { label: string; className?: string; count?: number } }",
@@ -2109,10 +2281,14 @@ export schema Config = {
       await server.handleMessage({
         jsonrpc: "2.0",
         method: "textDocument/didOpen",
-        params: { textDocument: { uri, languageId: "funscript", version: 1, text } },
+        params: {
+          textDocument: { uri, languageId: "funscript", version: 1, text },
+        },
       });
       const response = (await server.handleMessage({
-        jsonrpc: "2.0", id: 100, method: "textDocument/hover",
+        jsonrpc: "2.0",
+        id: 100,
+        method: "textDocument/hover",
         params: { textDocument: { uri }, position: { line: 1, character: 8 } },
       })) as ResponseMessage;
       const value = (response.result as Hover).contents as { value: string };
@@ -2225,7 +2401,9 @@ export schema Config = {
           position: { line: 0, character: 4 }, // on 'myCustomVar'
         },
       })) as ResponseMessage;
-      expect((varRes.result as Hover).contents).toMatchObject({ value: expect.stringContaining("myCustomVar: 123") });
+      expect((varRes.result as Hover).contents).toMatchObject({
+        value: expect.stringContaining("myCustomVar: 123"),
+      });
     });
 
     it("returns rich Markdown hover documentation for language keywords (service, effect, match, mut)", async () => {
@@ -2347,7 +2525,7 @@ export schema Config = {
       const uri = "file:///interop.fun";
       const text = [
         "schema Config = {",
-        '  options: ts { Record<string, unknown> }',
+        "  options: ts { Record<string, unknown> }",
         "}",
         "",
         "fetchData = (url: String) =>",
@@ -2747,9 +2925,7 @@ export schema Config = {
   });
 
   describe("CLI Stdio Integration (funscript lsp --stdio)", () => {
-    it(
-      "boots over stdio, responds to initialize, and publishes diagnostics",
-      async () => {
+    it("boots over stdio, responds to initialize, and publishes diagnostics", async () => {
       const cliPath = path.resolve(__dirname, "../dist/cli/index.js");
 
       const child = spawn("node", [cliPath, "lsp", "--stdio"]);

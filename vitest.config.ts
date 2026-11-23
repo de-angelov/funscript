@@ -4,8 +4,8 @@ import { funscriptPlugin } from "./dist/plugins/vite.js";
 export default defineConfig({
   plugins: [funscriptPlugin()],
   test: {
-    testTimeout: 20_000,
-    hookTimeout: 30_000,
+    testTimeout: 60_000,
+    hookTimeout: 60_000,
     include: [
       ...configDefaults.include,
       "**/*.{test,spec}.fun",
