@@ -13,6 +13,8 @@ export function renderProviderSchema(node: ProviderSchemaNodeV1): string {
       return "Schema.Null";
     case "array":
       return `Schema.Array(${renderProviderSchema(node.items)})`;
+    case "union":
+      return `Schema.Union(${node.alternatives.map(renderProviderSchema).join(", ")})`;
     default:
       throw new Error(`Unsupported provider schema node '${node.kind}'`);
   }

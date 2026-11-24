@@ -35,7 +35,6 @@ describe("renderProviderSchema", () => {
       required: [],
       additionalProperties: "reject",
     },
-    { kind: "union", alternatives: [{ kind: "string" }] },
   ] satisfies ReadonlyArray<ProviderSchemaNodeV1>)(
     "rejects unsupported %s nodes",
     (node) => {
@@ -48,6 +47,47 @@ describe("renderProviderSchema", () => {
   it("rejects unsupported item nodes inside arrays", () => {
     expect(() =>
       renderProviderSchema({ kind: "array", items: { kind: "bytes" } }),
+    ).toThrow("Unsupported provider schema node 'bytes'");
+  });
+
+  it.each([
+    [
+      { kind: "union", alternatives: [{ kind: "string" }, { kind: "number" }] },
+      "Schema.Union(Schema.String, Schema.Finite)",
+    ],
+    [
+      {
+        kind: "array",
+        items: {
+          kind: "union",
+          alternatives: [
+            { kind: "boolean" },
+            {
+              kind: "array",
+              items: {
+                kind: "union",
+                alternatives: [{ kind: "null" }, { kind: "string" }],
+              },
+            },
+          ],
+        },
+      },
+      "Schema.Array(Schema.Union(Schema.Boolean, Schema.Array(Schema.Union(Schema.Null, Schema.String))))",
+    ],
+  ] as const)(
+    "renders unions recursively and deterministically",
+    (node, expected) => {
+      expect(renderProviderSchema(node)).toBe(expected);
+      expect(renderProviderSchema(node)).toBe(expected);
+    },
+  );
+
+  it("propagates unsupported alternatives in unions", () => {
+    expect(() =>
+      renderProviderSchema({
+        kind: "union",
+        alternatives: [{ kind: "string" }, { kind: "bytes" }],
+      }),
     ).toThrow("Unsupported provider schema node 'bytes'");
   });
 });
