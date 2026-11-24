@@ -933,6 +933,7 @@ export const typeCheckVirtualFiles = (
             options?.effectOnly ?? [],
             preparedProviders?.schemas ?? [],
             preparedProviders?.dependencies ?? [],
+            preparedProviders?.runtimeApis ?? [],
             compilerOptions,
           ]);
         const existing = cache?.compiledFiles.get(fullFunPath);

@@ -87,6 +87,27 @@ parentPort?.on("message", async (request: Request) => {
                 dependencies: prepared.dependencies.flatMap((item) =>
                   item.kind === "file" ? [item.path] : [],
                 ),
+                runtimeApis: new Map(
+                  prepared.results.flatMap((item) => {
+                    const runtimeModule = item.result.runtimeModule;
+                    return runtimeModule
+                      ? [
+                          [
+                            item.declarationId,
+                            {
+                              declarationId: item.declarationId,
+                              name: item.name,
+                              providerId: item.providerId,
+                              span: item.span,
+                              exported: item.exported,
+                              moduleSpecifier: runtimeModule.specifier,
+                              exports: runtimeModule.exports,
+                            },
+                          ] as const,
+                        ]
+                      : [];
+                  }),
+                ),
               });
             }
           } catch (error) {

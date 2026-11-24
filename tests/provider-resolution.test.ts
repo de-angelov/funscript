@@ -95,6 +95,12 @@ describe("prepareProviderResults", () => {
     expect(prepared.results[0]?.result.runtimeModule?.exports[0]?.name).toBe(
       "Catalog",
     );
+    expect(prepared.results[0]).toMatchObject({
+      declarationId: `${f.program.body[0]?.span.start.offset}:${f.program.body[0]?.span.end.offset}`,
+      name: "Catalog",
+      exported: false,
+      span: f.program.body[0]?.span,
+    });
     expect(prepared.dependencies).toEqual([
       { kind: "file", path: path.join(f.dataDir, "schema.db") },
     ]);

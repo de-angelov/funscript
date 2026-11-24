@@ -65,6 +65,19 @@ export interface CompileOptions {
 export interface PreparedProviderSchemas {
   schemas: ReadonlyMap<string, string>;
   dependencies: ReadonlyArray<string>;
+  runtimeApis?: ReadonlyMap<string, PreparedRuntimeApi>;
+}
+
+export interface PreparedRuntimeApi {
+  declarationId: string;
+  name: string;
+  providerId: string;
+  span: import("./ast/types.js").Span;
+  exported: boolean;
+  moduleSpecifier: string;
+  exports: ReadonlyArray<
+    import("./providers/contract.js").ProviderRuntimeExportV1_1
+  >;
 }
 
 export interface CompileResult {
@@ -675,7 +688,21 @@ export const compileStringAsync = (
         const dependencies = prepared.dependencies.flatMap((dependency) =>
           dependency.kind === "file" ? [dependency.path] : [],
         );
-        return { schemas, dependencies };
+        const runtimeApis = new Map<string, PreparedRuntimeApi>();
+        for (const item of prepared.results) {
+          const runtimeModule = item.result.runtimeModule;
+          if (!runtimeModule) continue;
+          runtimeApis.set(item.declarationId, {
+            declarationId: item.declarationId,
+            name: item.name,
+            providerId: item.providerId,
+            span: item.span,
+            exported: item.exported,
+            moduleSpecifier: runtimeModule.specifier,
+            exports: runtimeModule.exports,
+          });
+        }
+        return { schemas, dependencies, runtimeApis };
       },
       catch: (error: any) => {
         const declaration = error?.declaration;

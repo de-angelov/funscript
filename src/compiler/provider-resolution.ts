@@ -26,6 +26,9 @@ export class ProviderResolutionError extends Error {
 export interface PreparedProviderResult {
   name: string;
   providerId: string;
+  declarationId: string;
+  span: DatabaseDeclaration["span"];
+  exported: boolean;
   result: ProviderResultV1;
 }
 
@@ -46,8 +49,11 @@ export async function prepareProviderResults(
     ? fileURLToPath(sourceFile)
     : sourceFile;
   const declarations = program.body.flatMap((item) => {
-    const decl = item.kind === "ExportDeclaration" ? item.declaration : item;
-    return decl.kind === "DatabaseDeclaration" ? [decl] : [];
+    const exported = item.kind === "ExportDeclaration";
+    const decl = exported ? item.declaration : item;
+    return decl.kind === "DatabaseDeclaration"
+      ? [{ declaration: decl, exported }]
+      : [];
   });
   const results: PreparedProviderResult[] = [];
   const dependencyMap = new Map<
@@ -55,7 +61,7 @@ export async function prepareProviderResults(
     ProviderResultV1["dependencies"][number]
   >();
 
-  for (const declaration of declarations) {
+  for (const { declaration, exported } of declarations) {
     try {
       const matches = [...registry.values()].filter(
         (entry) => entry.id.split("/").at(-1) === declaration.provider,
@@ -129,7 +135,14 @@ export async function prepareProviderResults(
       );
       if (errorDiagnostic)
         throw new Error(`Provider reported ${errorDiagnostic.code}`);
-      results.push({ name: declaration.id.name, providerId: entry.id, result });
+      results.push({
+        name: declaration.id.name,
+        providerId: entry.id,
+        declarationId: `${declaration.span.start.offset}:${declaration.span.end.offset}`,
+        span: declaration.span,
+        exported,
+        result,
+      });
       for (const dependency of result.dependencies)
         dependencyMap.set(dependencyKey(dependency), dependency);
     } catch (error) {
