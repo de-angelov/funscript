@@ -2,6 +2,10 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 import { Lexer } from "../lexer/lexer.js";
 import { Parser } from "../parser/parser.js";
+import {
+  createProviderRegistry,
+  type ProviderRegistry,
+} from "./provider-registry.js";
 
 export interface FunScriptProjectConfig {
   format?: { indentSize?: number; lineWidth?: number };
@@ -10,6 +14,8 @@ export interface FunScriptProjectConfig {
   noOptional?: boolean | string[];
   barePipelines?: boolean | string[];
   effectOnly?: string[];
+  providers?: ProviderRegistry;
+  providerRoots?: string[];
 }
 
 /** Read a literal FunScript record without compiling or executing project code. */
@@ -51,15 +57,83 @@ export function loadProjectConfig(cwd: string): FunScriptProjectConfig {
           "barePipelines",
           "effectOnly",
           "format",
+          "providers",
+          "providerRoots",
         ].includes(entry.key.name)
       ) {
         throw new Error(
-          "config accepts only 'noTs', 'noGlobalThis', 'noOptional', 'barePipelines', 'effectOnly', and 'format'",
+          "config accepts only 'noTs', 'noGlobalThis', 'noOptional', 'barePipelines', 'effectOnly', 'format', 'providers', and 'providerRoots'",
         );
       }
       const name = entry.key.name;
       if (seen.has(name)) throw new Error(`duplicate config field '${name}'`);
       seen.add(name);
+      if (name === "providers") {
+        if (entry.value.kind !== "ArrayExpression")
+          throw new Error("providers must be an array of literal records");
+        const records: Record<string, string>[] = [];
+        const aliases = new Set<string>();
+        for (const [index, item] of entry.value.elements.entries()) {
+          if (!item || item.kind !== "RecordExpression")
+            throw new Error(`provider entry ${index} must be a literal record`);
+          const record: Record<string, string> = {};
+          for (const field of item.entries) {
+            if (
+              field.kind !== "FieldEntry" ||
+              !["name", "id", "moduleSpecifier", "version", "trust"].includes(
+                field.key.name,
+              )
+            )
+              throw new Error(`provider entry ${index} has an unknown field`);
+            const key = field.key.name;
+            if (record[key] !== undefined)
+              throw new Error(`duplicate provider field '${key}'`);
+            if (
+              field.value.kind !== "StringLiteral" ||
+              field.value.parts.some((part) => part.kind !== "StringRawPart")
+            )
+              throw new Error(`provider ${key} must be a string literal`);
+            record[key] = field.value.parts
+              .map((part) => (part.kind === "StringRawPart" ? part.value : ""))
+              .join("");
+          }
+          if (!record.name)
+            throw new Error(`provider entry ${index} requires a name`);
+          if (aliases.has(record.name))
+            throw new Error(`duplicate provider source alias '${record.name}'`);
+          aliases.add(record.name);
+          records.push(record);
+        }
+        config.providers = createProviderRegistry(
+          records.map(({ name: _name, ...entry }) => entry),
+        );
+        continue;
+      }
+      if (name === "providerRoots") {
+        if (entry.value.kind !== "ArrayExpression")
+          throw new Error("providerRoots must be an array of literal paths");
+        config.providerRoots = entry.value.elements.map((item) => {
+          if (
+            !item ||
+            item.kind !== "StringLiteral" ||
+            item.parts.some((part) => part.kind !== "StringRawPart")
+          )
+            throw new Error("providerRoots must contain literal paths");
+          const value = item.parts
+            .map((part) => (part.kind === "StringRawPart" ? part.value : ""))
+            .join("");
+          if (
+            !value ||
+            path.isAbsolute(value) ||
+            value.split(/[\\/]/).includes("..")
+          )
+            throw new Error(
+              "providerRoots paths must be within the project root",
+            );
+          return path.resolve(cwd, value);
+        });
+        continue;
+      }
       if (name === "format") {
         if (entry.value.kind !== "RecordExpression")
           throw new Error("format must be a literal record");
