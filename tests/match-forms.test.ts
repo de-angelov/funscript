@@ -7,7 +7,10 @@ import { format } from "../src/formatter/index.js";
 
 function evaluateTsFunction(tsCode: string, fnName: string) {
   const cjs = ts.transpileModule(tsCode, {
-    compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 },
+    compilerOptions: {
+      module: ts.ModuleKind.CommonJS,
+      target: ts.ScriptTarget.ES2022,
+    },
   }).outputText;
   const module = { exports: {} as any };
   const fn = new Function("exports", "require", "module", "match", "P", cjs);
@@ -29,40 +32,60 @@ describe("Equality Type Constraints & Match Forms Test Suite Matrix (TASK-026)",
   describe("1. Reference Identity Type Constraints (@= and @!)", () => {
     it("rejects reference equality on primitive number literals", async () => {
       const code1 = "x = 1 @= 2";
-      const failure1 = await Effect.runPromise(Effect.flip(compileString(code1)));
+      const failure1 = await Effect.runPromise(
+        Effect.flip(compileString(code1)),
+      );
       expect(failure1).toBeInstanceOf(CompilerError);
-      expect(failure1.message).toContain("Reference identity operator '@=' cannot be used with primitive values");
+      expect(failure1.message).toContain(
+        "Reference identity operator '@=' cannot be used with primitive values",
+      );
 
       const code2 = "x = 10 @! 20";
-      const failure2 = await Effect.runPromise(Effect.flip(compileString(code2)));
+      const failure2 = await Effect.runPromise(
+        Effect.flip(compileString(code2)),
+      );
       expect(failure2).toBeInstanceOf(CompilerError);
-      expect(failure2.message).toContain("Reference identity operator '@!' cannot be used with primitive values");
+      expect(failure2.message).toContain(
+        "Reference identity operator '@!' cannot be used with primitive values",
+      );
     });
 
     it("rejects reference equality on primitive string literals", async () => {
       const code = 'res = "hello" @= "world"';
       const failure = await Effect.runPromise(Effect.flip(compileString(code)));
       expect(failure).toBeInstanceOf(CompilerError);
-      expect(failure.message).toContain("Reference identity operator '@=' cannot be used with primitive values");
+      expect(failure.message).toContain(
+        "Reference identity operator '@=' cannot be used with primitive values",
+      );
     });
 
     it("rejects reference equality on boolean literals", async () => {
       const code = "res = true @! false";
       const failure = await Effect.runPromise(Effect.flip(compileString(code)));
       expect(failure).toBeInstanceOf(CompilerError);
-      expect(failure.message).toContain("Reference identity operator '@!' cannot be used with primitive values");
+      expect(failure.message).toContain(
+        "Reference identity operator '@!' cannot be used with primitive values",
+      );
     });
 
     it("rejects reference equality on expressions with primitive literals", async () => {
       const code1 = "checkZero = (x) => x @= 0";
-      const failure1 = await Effect.runPromise(Effect.flip(compileString(code1)));
+      const failure1 = await Effect.runPromise(
+        Effect.flip(compileString(code1)),
+      );
       expect(failure1).toBeInstanceOf(CompilerError);
-      expect(failure1.message).toContain("Reference identity operator '@=' cannot be used with primitive values");
+      expect(failure1.message).toContain(
+        "Reference identity operator '@=' cannot be used with primitive values",
+      );
 
       const code2 = 'checkEmpty = (x) => "" @! x';
-      const failure2 = await Effect.runPromise(Effect.flip(compileString(code2)));
+      const failure2 = await Effect.runPromise(
+        Effect.flip(compileString(code2)),
+      );
       expect(failure2).toBeInstanceOf(CompilerError);
-      expect(failure2.message).toContain("Reference identity operator '@!' cannot be used with primitive values");
+      expect(failure2.message).toContain(
+        "Reference identity operator '@!' cannot be used with primitive values",
+      );
     });
 
     it("rejects reference equality on typed primitive variables", async () => {
@@ -73,7 +96,9 @@ export checkNums = (a: Number, b: Number): Boolean => {
 `.trim();
       const failure = await Effect.runPromise(Effect.flip(compileString(code)));
       expect(failure).toBeInstanceOf(CompilerError);
-      expect(failure.message).toContain("Reference identity operator '@=' cannot be used with primitive values");
+      expect(failure.message).toContain(
+        "Reference identity operator '@=' cannot be used with primitive values",
+      );
     });
 
     it("allows reference equality on reference objects, schemas, and untyped parameters", async () => {
@@ -100,19 +125,21 @@ export compareVenues = (v1: Venue, v2: Venue) => v1 #= v2
 export compareVenuesNeq = (v1: Venue, v2: Venue) => v1 #! v2
 `.trim();
       const res = await Effect.runPromise(compileString(code));
-      expect(res.typescript).toContain('import { Equal, Schema } from "effect";');
+      expect(res.typescript).toContain(
+        'import { Equal, Schema } from "effect";',
+      );
       expect(res.typescript).toContain("Equal.equals(v1, v2)");
       expect(res.typescript).toContain("(!Equal.equals(v1, v2))");
     });
 
     it("evaluates structural equality on nested Data structures with Equal.equals", () => {
-      const geo1 = ({ lat: 48.8566, lng: 2.3522 });
-      const geo2 = ({ lat: 48.8566, lng: 2.3522 });
-      const geo3 = ({ lat: 51.5074, lng: -0.1278 });
+      const geo1 = { lat: 48.8566, lng: 2.3522 };
+      const geo2 = { lat: 48.8566, lng: 2.3522 };
+      const geo3 = { lat: 51.5074, lng: -0.1278 };
 
-      const venue1 = ({ name: "Louvre", location: geo1 });
-      const venue2 = ({ name: "Louvre", location: geo2 });
-      const venue3 = ({ name: "Louvre", location: geo3 });
+      const venue1 = { name: "Louvre", location: geo1 };
+      const venue2 = { name: "Louvre", location: geo2 };
+      const venue3 = { name: "Louvre", location: geo3 };
 
       // Structural value equality
       expect(Equal.equals(venue1, venue2)).toBe(true);
@@ -165,7 +192,9 @@ export area = (s: Shape) =>
 `.trim();
 
       const res = await Effect.runPromise(compileString(code));
-      expect(res.typescript).toContain('import { match, P } from "ts-pattern";');
+      expect(res.typescript).toContain(
+        'import { match, P } from "ts-pattern";',
+      );
       expect(res.typescript).toContain("match(s)");
       expect(res.typescript).toContain('.with({ _tag: "Circle" },');
       expect(res.typescript).toContain('.with({ _tag: "Rectangle" },');
@@ -211,8 +240,13 @@ export grade = (score) =>
 
       // Test execution with Effect Number module
       const { Number: EffectNumber } = await import("effect");
-      const cleanCode = res.typescript.replace(/export /g, "").replace(/import .*;/g, "");
-      const fn = new Function("pipe", "Number", `${cleanCode}; return grade;`)(pipe, EffectNumber);
+      const cleanCode = res.typescript
+        .replace(/export /g, "")
+        .replace(/import .*;/g, "");
+      const fn = new Function("pipe", "Number", `${cleanCode}; return grade;`)(
+        pipe,
+        EffectNumber,
+      );
       expect(fn(95)).toBe("A");
       expect(fn(85)).toBe("B");
       expect(fn(75)).toBe("C");
@@ -231,9 +265,11 @@ export checkFlag = (flag) =>
 
       const res = await Effect.runPromise(compileString(code));
       expect(res.typescript).toContain("(() => {");
-      expect(res.typescript).toContain("const status = \"active\";");
+      expect(res.typescript).toContain('const status = "active";');
 
-      const cleanCode = res.typescript.replace(/export /g, "").replace(/import .*;/g, "");
+      const cleanCode = res.typescript
+        .replace(/export /g, "")
+        .replace(/import .*;/g, "");
       const fn = new Function(`${cleanCode}; return checkFlag;`)();
       expect(fn(true)).toBe("active");
       expect(fn(false)).toBe("inactive");
@@ -264,7 +300,9 @@ export evalShape = (s: Shape) =>
 `.trim();
 
       const formatted = format(unformatted);
-      expect(formatted).toContain("  match s\n    | Circle(r) => r\n    | Dot => 0\n");
+      expect(formatted).toContain(
+        "  match s\n    | Circle(r) => r\n    | Dot => 0\n",
+      );
       expect(format(formatted)).toBe(formatted);
     });
 
@@ -277,7 +315,9 @@ export testNum = (flag: Boolean) =>
 `.trim();
 
       const formatted = format(unformatted);
-      expect(formatted).toContain("  match\n    | flag => \"big\"\n    | _ => \"small\"\n");
+      expect(formatted).toContain(
+        '  match\n    | flag => "big"\n    | _ => "small"\n',
+      );
       expect(format(formatted)).toBe(formatted);
     });
   });
@@ -297,7 +337,9 @@ export getVal = (opt: Option) =>
 
       const res = await Effect.runPromise(compileString(code));
       expect(res.typescript).toContain('import { Data, pipe } from "effect";');
-      expect(res.typescript).toContain('import { match, P } from "ts-pattern";');
+      expect(res.typescript).toContain(
+        'import { match, P } from "ts-pattern";',
+      );
       expect(res.typescript).toContain("pipe(\n  opt,\n  (($v) => match($v)");
       expect(res.typescript).toContain('.with({ _tag: "Some" },');
       expect(res.typescript).toContain('.with({ _tag: "None" },');
@@ -313,18 +355,15 @@ export getVal = (opt: Option) =>
       const None = $Option.None();
 
       const getVal = (opt: any) =>
-        pipe(
-          opt,
-          (($v: any) =>
-            match($v)
-              .with({ _tag: "Some" }, ($matched: any) => {
-                const { _tag: _, ...__fields } = $matched;
-                const [v] = Object.values(__fields) as any[];
-                return v * 10;
-              })
-              .with({ _tag: "None" }, () => -1)
-              .exhaustive()) as any
-        );
+        pipe(opt, (($v: any) =>
+          match($v)
+            .with({ _tag: "Some" }, ($matched: any) => {
+              const { _tag: _, ...__fields } = $matched;
+              const [v] = Object.values(__fields) as any[];
+              return v * 10;
+            })
+            .with({ _tag: "None" }, () => -1)
+            .exhaustive()) as any);
 
       expect(getVal(Some(5))).toBe(50);
       expect(getVal(None)).toBe(-1);
@@ -346,7 +385,9 @@ export unwrap = (opt: Option) =>
 `.trim();
 
       const formatted = format(unformatted);
-      expect(formatted).toContain("  => opt |> match\n    | Some(x) => x\n    | None => 0\n");
+      expect(formatted).toContain(
+        "  opt |> match\n    | Some(x) => x\n    | None => 0\n",
+      );
       expect(format(formatted)).toBe(formatted);
     });
   });
@@ -367,9 +408,11 @@ export isPrimary = (c: Color) =>
 `.trim();
 
       const res = await Effect.runPromise(compileString(code));
-      expect(res.typescript).toContain('import { match, P } from "ts-pattern";');
       expect(res.typescript).toContain(
-        'P.union({ _tag: "Red" }, { _tag: "Green" }, { _tag: "Blue" })'
+        'import { match, P } from "ts-pattern";',
+      );
+      expect(res.typescript).toContain(
+        'P.union({ _tag: "Red" }, { _tag: "Green" }, { _tag: "Blue" })',
       );
       expect(res.typescript).toContain('"primary"');
     });
@@ -389,8 +432,14 @@ export httpStatusGroup = (code) =>
       expect(res.typescript).toContain('.otherwise(() => "unknown")');
 
       // Verify execution using ts-pattern runtime
-      const cleanCode = res.typescript.replace(/export /g, "").replace(/import .*;/g, "");
-      const fn = new Function("match", "P", `${cleanCode}; return httpStatusGroup;`)(match, P);
+      const cleanCode = res.typescript
+        .replace(/export /g, "")
+        .replace(/import .*;/g, "");
+      const fn = new Function(
+        "match",
+        "P",
+        `${cleanCode}; return httpStatusGroup;`,
+      )(match, P);
       expect(fn(200)).toBe("success");
       expect(fn(201)).toBe("success");
       expect(fn(404)).toBe("client_error");
@@ -430,7 +479,9 @@ export classifyAction = (act: Action) =>
 `.trim();
 
       const res = await Effect.runPromise(compileString(code));
-      expect(res.typescript).toContain('.with({ _tag: "Deposit" }, ($matched) => {');
+      expect(res.typescript).toContain(
+        '.with({ _tag: "Deposit" }, ($matched) => {',
+      );
       expect(res.typescript).toContain("Number.isGreaterThan(1000)");
       expect(res.typescript).toContain('"huge deposit"');
       expect(res.typescript).toContain("Number.isGreaterThan(100)");
@@ -461,7 +512,7 @@ export classifyAction = (act: Action) =>
               const [amount] = Object.values(__fields) as any[];
               return pipe(amount, greaterThan(1000));
             },
-            () => "huge deposit"
+            () => "huge deposit",
           )
           .with(
             { _tag: "Deposit" },
@@ -470,7 +521,7 @@ export classifyAction = (act: Action) =>
               const [amount] = Object.values(__fields) as any[];
               return pipe(amount, greaterThan(100));
             },
-            () => "medium deposit"
+            () => "medium deposit",
           )
           .with({ _tag: "Deposit" }, () => "small deposit")
           .with(
@@ -480,7 +531,7 @@ export classifyAction = (act: Action) =>
               const [amount] = Object.values(__fields) as any[];
               return pipe(amount, greaterThan(500));
             },
-            () => "large withdrawal"
+            () => "large withdrawal",
           )
           .with({ _tag: "Withdraw" }, () => "normal withdrawal")
           .with({ _tag: "Reset" }, () => "reset")
@@ -521,7 +572,9 @@ export check = (act: Action) =>
 `.trim();
 
       const formatted = format(unformatted);
-      expect(formatted).toContain("    | Deposit(amount) when flag => \"large\"\n");
+      expect(formatted).toContain(
+        '    | Deposit(amount) when flag => "large"\n',
+      );
       expect(format(formatted)).toBe(formatted);
     });
   });
@@ -544,23 +597,35 @@ export handle = (event: Event) =>
 `.trim();
 
       const res = await Effect.runPromise(compileString(code));
-      expect(res.typescript).toContain('import { match, P } from "ts-pattern";');
-      expect(res.typescript).toContain('.with({ type: "checkout.session.completed" }, (event) => event.data.object.amount_total)');
-      expect(res.typescript).toContain('.with({ type: "payment_intent.payment_failed" }, (event) => event.data.object.last_payment_error)');
-      expect(res.typescript).toContain('.exhaustive()');
+      expect(res.typescript).toContain(
+        'import { match, P } from "ts-pattern";',
+      );
+      expect(res.typescript).toContain(
+        '.with({ type: "checkout.session.completed" }, (event) => event.data.object.amount_total)',
+      );
+      expect(res.typescript).toContain(
+        '.with({ type: "payment_intent.payment_failed" }, (event) => event.data.object.last_payment_error)',
+      );
+      expect(res.typescript).toContain(".exhaustive()");
 
       // Execute compiled JavaScript
       const fn = evaluateTsFunction(res.typescript, "handle");
 
-      expect(fn({
-        type: "checkout.session.completed",
-        data: { object: { id: "cs_1", amount_total: 999 } },
-      })).toBe(999);
+      expect(
+        fn({
+          type: "checkout.session.completed",
+          data: { object: { id: "cs_1", amount_total: 999 } },
+        }),
+      ).toBe(999);
 
-      expect(fn({
-        type: "payment_intent.payment_failed",
-        data: { object: { id: "pi_2", last_payment_error: "insufficient_funds" } },
-      })).toBe("insufficient_funds");
+      expect(
+        fn({
+          type: "payment_intent.payment_failed",
+          data: {
+            object: { id: "pi_2", last_payment_error: "insufficient_funds" },
+          },
+        }),
+      ).toBe("insufficient_funds");
     });
 
     it("compiles and executes match with destructured and nested record patterns", async () => {
@@ -580,20 +645,26 @@ export summarize = (event: Webhook) =>
 `.trim();
 
       const res = await Effect.runPromise(compileString(code));
-      expect(res.typescript).toContain('const { payload } = $matched;');
-      expect(res.typescript).toContain('const { payload: { customerId, reason } } = $matched;');
+      expect(res.typescript).toContain("const { payload } = $matched;");
+      expect(res.typescript).toContain(
+        "const { payload: { customerId, reason } } = $matched;",
+      );
 
       const fn = evaluateTsFunction(res.typescript, "summarize");
 
-      expect(fn({
-        type: "order.created",
-        payload: { customerId: "cust_1", total: 150 },
-      })).toBe("cust_1:150");
+      expect(
+        fn({
+          type: "order.created",
+          payload: { customerId: "cust_1", total: 150 },
+        }),
+      ).toBe("cust_1:150");
 
-      expect(fn({
-        type: "order.cancelled",
-        payload: { customerId: "cust_2", reason: "fraud" },
-      })).toBe("cust_2:fraud");
+      expect(
+        fn({
+          type: "order.cancelled",
+          payload: { customerId: "cust_2", reason: "fraud" },
+        }),
+      ).toBe("cust_2:fraud");
     });
 
     it("compiles and executes match with when guards on narrowed union variants", async () => {
@@ -623,20 +694,26 @@ export classify = (event: Event) =>
 
       const fn = evaluateTsFunction(res.typescript, "classify");
 
-      expect(fn({
-        type: "checkout.session.completed",
-        data: { object: { id: "cs_1", amount_total: 5000 } },
-      })).toBe("vip");
+      expect(
+        fn({
+          type: "checkout.session.completed",
+          data: { object: { id: "cs_1", amount_total: 5000 } },
+        }),
+      ).toBe("vip");
 
-      expect(fn({
-        type: "checkout.session.completed",
-        data: { object: { id: "cs_2", amount_total: 50 } },
-      })).toBe("standard");
+      expect(
+        fn({
+          type: "checkout.session.completed",
+          data: { object: { id: "cs_2", amount_total: 50 } },
+        }),
+      ).toBe("standard");
 
-      expect(fn({
-        type: "payment_intent.payment_failed",
-        data: { object: { id: "pi_1", last_payment_error: "expired_card" } },
-      })).toBe("failed");
+      expect(
+        fn({
+          type: "payment_intent.payment_failed",
+          data: { object: { id: "pi_1", last_payment_error: "expired_card" } },
+        }),
+      ).toBe("failed");
     });
 
     it("compiles or-patterns combining record pattern variants", async () => {
@@ -657,12 +734,22 @@ export getTarget = (n: Notice) =>
 `.trim();
 
       const res = await Effect.runPromise(compileString(code));
-      expect(res.typescript).toContain('P.union({ channel: "email" }, { channel: "sms" })');
+      expect(res.typescript).toContain(
+        'P.union({ channel: "email" }, { channel: "sms" })',
+      );
 
       const fn = evaluateTsFunction(res.typescript, "getTarget");
 
-      expect(fn({ channel: "email", recipient: "alice@example.com", subject: "Hello" })).toBe("alice@example.com");
-      expect(fn({ channel: "sms", recipient: "+1234567890", body: "Hi" })).toBe("+1234567890");
+      expect(
+        fn({
+          channel: "email",
+          recipient: "alice@example.com",
+          subject: "Hello",
+        }),
+      ).toBe("alice@example.com");
+      expect(fn({ channel: "sms", recipient: "+1234567890", body: "Hi" })).toBe(
+        "+1234567890",
+      );
       expect(fn({ channel: "push", deviceToken: "tok_abc" })).toBe("tok_abc");
     });
 
@@ -675,8 +762,12 @@ export check = (event: Event) =>
 `.trim();
 
       const formatted = format(unformatted);
-      expect(formatted).toContain('    | { type: "checkout.session.completed", data } when flag => "ok"\n');
-      expect(formatted).toContain('    | { type: "payment_intent.payment_failed" } => "err"\n');
+      expect(formatted).toContain(
+        '    | { type: "checkout.session.completed", data } when flag => "ok"\n',
+      );
+      expect(formatted).toContain(
+        '    | { type: "payment_intent.payment_failed" } => "err"\n',
+      );
       expect(format(formatted)).toBe(formatted);
     });
   });

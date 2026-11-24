@@ -934,7 +934,7 @@ export greet = (user: User) =>
       expect(response.result).toHaveLength(1);
       const edit: TextEdit = response.result[0];
       expect(edit.newText).toBe(
-        'export schema User = {\n  id: String\n  name: String\n}\n\nexport greet = (user: User) =>\n  => "Hello, {user.name}!"\n',
+        'export schema User = {\n  id: String\n  name: String\n}\n\nexport greet = (user: User) =>\n  "Hello, {user.name}!"\n',
       );
     });
 
