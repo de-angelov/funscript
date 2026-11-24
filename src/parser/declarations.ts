@@ -1,5 +1,6 @@
 import type {
   BindingDeclaration,
+  DatabaseDeclaration,
   BindingTarget,
   ErrorDeclaration,
   ErrorField,
@@ -50,6 +51,7 @@ export function parseTopLevelDeclaration(
       decl.kind !== "SchemaDeclaration" &&
       decl.kind !== "ErrorDeclaration" &&
       decl.kind !== "ServiceDeclaration" &&
+      decl.kind !== "DatabaseDeclaration" &&
       decl.kind !== "BindingDeclaration"
     ) {
       throw new ParseError("Invalid declaration for export", decl.span);
@@ -216,10 +218,52 @@ export function parseDeclaration(
   if (ctx.check(TokenType.SERVICE)) {
     return parseServiceDeclaration(ctx);
   }
+  if (ctx.check(TokenType.DATABASE)) {
+    return parseDatabaseDeclaration(ctx);
+  }
   if (ctx.check(TokenType.WHEN)) {
     return ctx.parseWhenStatement();
   }
   return parseBindingDeclaration(ctx, isJs);
+}
+
+export function parseDatabaseDeclaration(
+  ctx: DeclarationParserContext,
+): DatabaseDeclaration {
+  const start = ctx.consume(TokenType.DATABASE, "Expected 'database'").span
+    .start;
+  const id = ctx.parseUpperIdentifier();
+  ctx.consume(TokenType.EQ, "Expected '=' after database name");
+  const provider = ctx.consume(
+    TokenType.IDENTIFIER,
+    "Expected a database provider name",
+  );
+  ctx.consume(TokenType.LT, "Expected '<' after database provider");
+  const args: Array<string | number | boolean> = [];
+  const parseArgument = (): string | number | boolean => {
+    if (ctx.match(TokenType.STRING)) return ctx.previous().value;
+    if (ctx.match(TokenType.NUMBER)) return Number(ctx.previous().value);
+    if (ctx.match(TokenType.TRUE)) return true;
+    if (ctx.match(TokenType.FALSE)) return false;
+    throw new ParseError(
+      "Expected a static string, number, or boolean provider argument",
+      ctx.peek().span,
+    );
+  };
+  args.push(parseArgument());
+  while (ctx.match(TokenType.COMMA)) args.push(parseArgument());
+  const end = ctx.consume(
+    TokenType.GT,
+    "Expected '>' after database provider arguments",
+  );
+  ctx.consumeNewlineOrEof("Expected newline after database declaration");
+  return {
+    kind: "DatabaseDeclaration",
+    id,
+    provider: provider.value,
+    arguments: args,
+    span: { start, end: end.span.end },
+  };
 }
 
 export function parseImportDeclaration(

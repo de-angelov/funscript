@@ -25,6 +25,7 @@ import {
   type ErrorDeclaration,
   ErrorField,
   type ServiceDeclaration,
+  type DatabaseDeclaration,
   ServiceMember,
   type Expression,
   type PipelineExpression,
@@ -500,6 +501,8 @@ export class Formatter {
         return this.formatErrorDeclaration(decl);
       case "ServiceDeclaration":
         return this.formatServiceDeclaration(decl, 0);
+      case "DatabaseDeclaration":
+        return this.formatDatabaseDeclaration(decl);
       case "BindingDeclaration":
         return this.formatBindingDeclaration(decl, 0);
       case "WhenStatement":
@@ -518,6 +521,7 @@ export class Formatter {
       | SchemaDeclaration
       | ErrorDeclaration
       | ServiceDeclaration
+      | DatabaseDeclaration
       | BindingDeclaration
       | WhenStatement,
   ): string {
@@ -528,6 +532,8 @@ export class Formatter {
         return this.formatErrorDeclaration(decl);
       case "ServiceDeclaration":
         return this.formatServiceDeclaration(decl, 0);
+      case "DatabaseDeclaration":
+        return this.formatDatabaseDeclaration(decl);
       case "BindingDeclaration":
         return this.formatBindingDeclaration(decl, 0);
       case "WhenStatement":
@@ -657,6 +663,15 @@ export class Formatter {
       })
       .join("\n");
     return `service ${decl.id.name}${tag}\n${members}`;
+  }
+
+  private formatDatabaseDeclaration(decl: DatabaseDeclaration): string {
+    const args = decl.arguments
+      .map((arg) =>
+        typeof arg === "string" ? JSON.stringify(arg) : String(arg),
+      )
+      .join(", ");
+    return `database ${decl.id.name} = ${decl.provider}<${args}>`;
   }
 
   private formatBindingDeclaration(

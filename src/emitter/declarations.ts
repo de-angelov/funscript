@@ -251,6 +251,10 @@ export function emitTopLevelDeclaration(
       return emitErrorDeclaration(ctx, decl, isExport);
     case "ServiceDeclaration":
       return emitServiceDeclaration(ctx, decl, isExport);
+    case "DatabaseDeclaration":
+      throw new Error(
+        "Database declarations are not supported by code generation",
+      );
     case "BindingDeclaration":
       return emitBindingDeclaration(ctx, decl, isExport);
     case "WhenStatement":

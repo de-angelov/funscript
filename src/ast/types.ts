@@ -30,6 +30,7 @@ export type TopLevelDeclaration =
   | SchemaDeclaration
   | ErrorDeclaration
   | ServiceDeclaration
+  | DatabaseDeclaration
   | BindingDeclaration
   | TsEscapeDeclaration
   | AsDeclaration
@@ -70,6 +71,7 @@ export interface ExportDeclaration extends NodeBase {
     | SchemaDeclaration
     | ErrorDeclaration
     | ServiceDeclaration
+    | DatabaseDeclaration
     | BindingDeclaration;
 }
 
@@ -201,6 +203,13 @@ export interface ServiceDeclaration extends NodeBase {
   id: UpperIdentifier;
   customTag?: StringLiteral;
   members: ServiceMember[];
+}
+
+export interface DatabaseDeclaration extends NodeBase {
+  kind: "DatabaseDeclaration";
+  id: UpperIdentifier;
+  provider: string;
+  arguments: Array<string | number | boolean>;
 }
 
 export interface ServiceMember extends NodeBase {
