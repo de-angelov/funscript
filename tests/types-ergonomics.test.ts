@@ -270,6 +270,28 @@ export sumList = (list: Array<Number>) =>
     expect(sumList([1, 2, 3, 4])).toBe(10);
   });
 
+  it("does not collapse nested Options when indexing arrays of Options", () => {
+    const src = `
+import { Option } from "effect"
+
+export getNested = (arr: Array<Option<Number>>, i: Number): Option<Option<Number>> =>
+  => arr[i]
+`;
+    const res = Effect.runSync(compileString(src));
+    expect(res.typescript).toContain("fromNullishOr(arr[i])");
+
+    const getNested = evaluateTsFunction(res.typescript, "getNested");
+    expect(getNested([Option.some(10), Option.none()], 0)).toEqual(
+      Option.some(Option.some(10)),
+    );
+    expect(getNested([Option.some(10), Option.none()], 1)).toEqual(
+      Option.some(Option.none()),
+    );
+    expect(getNested([Option.some(10), Option.none()], 5)).toEqual(
+      Option.none(),
+    );
+  });
+
   it("supports record and tuple destructuring in function parameters", () => {
     const src = `
 export getProps = ({ name, age }: { name: String, age: Number }) =>

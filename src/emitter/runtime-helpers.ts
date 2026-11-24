@@ -32,7 +32,7 @@ export function emitRuntimeHelpers(options: RuntimeHelperOptions): string {
     header += `function fromNullishOrElse(...args: unknown[]): unknown {\n  if (args.length === 1) { const onNone = args[0]; return (value: unknown) => fromNullishOrElse(value, onNone); }\n  let [value, onNone] = args;\n  while (value !== null && value !== undefined && typeof value === "object" && "_tag" in value) {\n    const candidate = value as { readonly _tag: string; readonly value?: unknown };\n    if (candidate._tag === "Some") value = candidate.value;\n    else if (candidate._tag === "None") return onNone;\n    else break;\n  }\n  if (value !== null && value !== undefined) return value;\n  return onNone;\n}\n`;
   }
   if (options.fromNullishOr) {
-    header += `function fromNullishOr<A>(value: A): 0 extends (1 & A) ? import("effect/Option").Option<A> : A extends import("effect/Option").Option<any> ? A : import("effect/Option").Option<NonNullable<A>> {\n  if (Option.isOption(value)) return value as any;\n  return Option.fromNullishOr(value) as any;\n}\n`;
+    header += `function fromNullishOr<A>(value: A): 0 extends (1 & A) ? import("effect/Option").Option<A> : import("effect/Option").Option<NonNullable<A>> {\n  return Option.fromNullishOr(value) as any;\n}\n`;
   }
   if (options.optionTry) {
     header += `function optionTry<A>(thunk: () => A): import("effect").Option.Option<NonNullable<A>> {\n  try {\n    return Option.fromNullishOr(thunk()) as any;\n  } catch {\n    return Option.none();\n  }\n}\n`;
