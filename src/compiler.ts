@@ -49,6 +49,8 @@ export interface CompileOptions {
   pipelineAnalysisOnly?: boolean;
   /** Absolute source path when the displayed filename is project-relative. */
   sourcePath?: string;
+  /** Emit modular subpath imports (e.g. 'effect/Effect', 'effect/Option') instead of barrel imports from 'effect'. */
+  modularEffectImports?: boolean;
 }
 
 export interface CompileResult {
@@ -586,6 +588,7 @@ export const compileString = (
             importedGenericDataSchemas,
             importedDataSchemas,
             isJsx: filename.endsWith(".funx"),
+            modularEffectImports: options?.modularEffectImports,
             context,
           };
           const optionalResolutions = resolveOptionalArguments(

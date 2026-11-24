@@ -11,6 +11,7 @@ export interface FunScriptProjectConfig {
   noOptional?: boolean | string[];
   barePipelines?: boolean | string[];
   effectOnly?: string[];
+  modularEffectImports?: boolean;
 }
 
 /** Read a literal FunScript record without compiling or executing project code. */
@@ -52,10 +53,11 @@ export function loadProjectConfig(cwd: string): FunScriptProjectConfig {
           "barePipelines",
           "effectOnly",
           "format",
+          "modularEffectImports",
         ].includes(entry.key.name)
       ) {
         throw new Error(
-          "config accepts only 'noTs', 'noGlobalThis', 'noOptional', 'barePipelines', 'effectOnly', and 'format'",
+          "config accepts only 'noTs', 'noGlobalThis', 'noOptional', 'barePipelines', 'effectOnly', 'format', and 'modularEffectImports'",
         );
       }
       const name = entry.key.name;
@@ -117,7 +119,12 @@ export function loadProjectConfig(cwd: string): FunScriptProjectConfig {
             `${name} must be ${name === "effectOnly" ? "an array of paths" : "a boolean or an array of paths"}`,
           );
         config[
-          name as "noTs" | "noGlobalThis" | "noOptional" | "barePipelines"
+          name as
+            | "noTs"
+            | "noGlobalThis"
+            | "noOptional"
+            | "barePipelines"
+            | "modularEffectImports"
         ] = entry.value.value;
       }
     }

@@ -64,7 +64,9 @@ export const buildCommand = (
         arg === "--bare-pipelines" ||
         arg === "--bin" ||
         arg === "--watch" ||
-        arg === "--fast"
+        arg === "--fast" ||
+        arg === "--modular-effect" ||
+        arg === "--effect-subpaths"
       )
         return false;
       if (arg === "--out" || (outIndex !== -1 && i === outIndex + 1))
@@ -427,6 +429,10 @@ export const buildCommand = (
           ),
         effectOnly: isEffectOnlyFile(projectPolicy, process.cwd(), filePath),
         effectOnlyDirectories: projectPolicy.effectOnly,
+        modularEffectImports:
+          args.includes("--modular-effect") ||
+          args.includes("--effect-subpaths") ||
+          projectPolicy.modularEffectImports,
         policyRoot: process.cwd(),
         outputFile: path.basename(targetOut),
       });

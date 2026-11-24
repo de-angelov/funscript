@@ -27,7 +27,9 @@ export const emitCommand = (
         a === "--no-global-this" ||
         a === "--no-optional" ||
         a === "--bare-pipelines" ||
-        a === "--bin"
+        a === "--bin" ||
+        a === "--modular-effect" ||
+        a === "--effect-subpaths"
       )
         return false;
       if (a === "--out" || (outIndex !== -1 && idx === outIndex + 1))
@@ -81,6 +83,10 @@ export const emitCommand = (
         ),
       effectOnly: isEffectOnlyFile(projectPolicy, process.cwd(), filePath),
       effectOnlyDirectories: projectPolicy.effectOnly,
+      modularEffectImports:
+        args.includes("--modular-effect") ||
+        args.includes("--effect-subpaths") ||
+        projectPolicy.modularEffectImports,
       policyRoot: process.cwd(),
       outputFile: outPath ? path.basename(outPath) : undefined,
     });

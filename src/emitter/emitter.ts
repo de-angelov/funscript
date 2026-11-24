@@ -143,6 +143,7 @@ export interface EmitterOptions {
   /** Whether the output is `.tsx`; generic arrows need a comma there. */
   isJsx?: boolean;
   context?: import("../compiler/typescript-context.js").TypeScriptCompilationContext;
+  modularEffectImports?: boolean;
 }
 
 export const EFFECT_MODULE_NAMES = new Set([
@@ -624,6 +625,7 @@ export class Emitter {
   public checkedCallbackKinds = new Set<"sync" | "void" | "effect">();
   public identityRecordSchemas = new Set<string>();
   public checkedTaggedSchemas = new Map<string, TaggedUnionSchema>();
+  public modularEffectImports: boolean;
 
   public addEffectImport(name: string): void {
     this.effectImports.add(name);
@@ -634,6 +636,7 @@ export class Emitter {
     contextProgram?: Program,
     public options: EmitterOptions = {},
   ) {
+    this.modularEffectImports = options.modularEffectImports ?? false;
     for (const [name, contract] of options.importedRecordContracts ?? [])
       this.recordContracts.set(name, contract);
     // Source-map emission renders declarations individually, but resolution
@@ -855,8 +858,18 @@ export class Emitter {
       (name) => !this.userEffectBindings.has(name),
     );
     if (generatedEffectImports.length > 0) {
-      const sorted = generatedEffectImports.sort().join(", ");
-      header += `import { ${sorted} } from "effect";\n`;
+      if (this.modularEffectImports) {
+        for (const name of generatedEffectImports.sort()) {
+          if (name === "pipe") {
+            header += `import { pipe } from "effect/Function";\n`;
+          } else {
+            header += `import * as ${name} from "effect/${name}";\n`;
+          }
+        }
+      } else {
+        const sorted = generatedEffectImports.sort().join(", ");
+        header += `import { ${sorted} } from "effect";\n`;
+      }
     }
     const generatedEsToolkitImports = Array.from(this.esToolkitImports)
       .filter((name) => !this.userEsToolkitBindings.has(name))

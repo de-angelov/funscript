@@ -34,6 +34,7 @@ export interface DeclarationEmitterContext {
   isOptionalValue(expr: Expression): boolean;
   recordFields(name: string): Map<string, RecordFieldInfo> | undefined;
   isPrimitive(expr: Expression): boolean;
+  modularEffectImports?: boolean;
 }
 
 export function isPrimitiveType(type?: TypeNode): boolean {
@@ -238,7 +239,7 @@ export function emitTopLevelDeclaration(
 ): string {
   switch (decl.kind) {
     case "ImportDeclaration":
-      return renderImport(decl);
+      return renderImport(decl, undefined, ctx.modularEffectImports);
     case "ExportFromDeclaration":
       return renderExportFrom(decl);
     case "ExportDeclaration":
