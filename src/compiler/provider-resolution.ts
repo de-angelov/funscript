@@ -1,7 +1,7 @@
 import { fileURLToPath } from "node:url";
 import type { DatabaseDeclaration, Program } from "../ast/types.js";
 import {
-  PROVIDER_CONTRACT_V1,
+  PROVIDER_CONTRACT_V1_1,
   type ProviderManifestV1,
   type ProviderRequestV1,
   type ProviderResultV1,
@@ -71,7 +71,9 @@ export async function prepareProviderResults(
         throw new Error(`Provider '${entry.id}' is not trusted`);
 
       const request: ProviderRequestV1 = {
-        contract: PROVIDER_CONTRACT_V1,
+        // Offer the highest contract minor implemented by this host. The
+        // invocation layer negotiates down against the loaded manifest.
+        contract: PROVIDER_CONTRACT_V1_1,
         provider: { id: entry.id, version: entry.version },
         declaration: {
           source,
@@ -111,8 +113,6 @@ export async function prepareProviderResults(
         request,
         preparedLoader,
       );
-      if (!result.runtimeModule)
-        throw new Error("Provider result is missing its runtime module");
       if (
         result.diagnostics.some(
           (diagnostic) =>

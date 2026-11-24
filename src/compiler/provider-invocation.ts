@@ -51,21 +51,28 @@ export async function invokeTrustedProvider(
     throw new Error(
       `Provider '${entry.id}' version mismatch: registry declares ${entry.version}, module declares ${provider.manifest.version}`,
     );
-  validateRequest(provider, request);
+  const negotiatedRequest: ProviderRequestV1 = {
+    ...request,
+    contract: {
+      major: request.contract.major,
+      minor: negotiateMinor(provider, request),
+    },
+  };
+  validateRequest(provider, negotiatedRequest);
 
   let result: unknown;
   try {
-    result = await provider.provide(request);
+    result = await provider.provide(negotiatedRequest);
   } catch {
     throw new Error(
-      `Provider '${entry.id}' failed while processing '${request.declaration.name}'`,
+      `Provider '${entry.id}' failed while processing '${negotiatedRequest.declaration.name}'`,
     );
   }
   if (
     !isRecord(result) ||
     !isContract(result.contract) ||
     result.contract.major !== 1 ||
-    result.contract.minor !== request.contract.minor
+    result.contract.minor !== negotiatedRequest.contract.minor
   )
     throw new Error(
       `Provider '${entry.id}' returned an incompatible result envelope`,
@@ -78,12 +85,36 @@ export async function invokeTrustedProvider(
     throw new Error(`Provider '${entry.id}' returned a malformed result`);
   if (
     result.runtimeModule !== undefined &&
-    !isRuntimeModule(result.runtimeModule, request.contract.minor)
+    !isRuntimeModule(result.runtimeModule, negotiatedRequest.contract.minor)
   )
     throw new Error(
       `Provider '${entry.id}' returned a malformed runtime module`,
     );
   return result as unknown as ProviderResultV1;
+}
+
+function negotiateMinor(
+  provider: FunscriptProviderV1,
+  request: ProviderRequestV1,
+): number {
+  const range = provider.manifest.contract;
+  if (
+    !isRecord(range) ||
+    range.major !== 1 ||
+    !Number.isInteger(range.minMinor) ||
+    !Number.isInteger(range.maxMinor) ||
+    range.minMinor < 0 ||
+    range.maxMinor < range.minMinor
+  )
+    throw new Error(
+      `Provider '${provider.manifest.id}' has an unsupported contract range`,
+    );
+  const minor = Math.min(request.contract.minor, range.maxMinor);
+  if (minor < range.minMinor)
+    throw new Error(
+      `Provider '${provider.manifest.id}' does not support contract ${request.contract.major}.${request.contract.minor}`,
+    );
+  return minor;
 }
 
 function validateRequest(
