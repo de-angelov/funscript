@@ -472,10 +472,18 @@ describe("optional fields in inline parameter records", () => {
     );
     expect(jsCompiled.typescript).toContain("readonly label?: string");
     expect(jsCompiled.typescript).toContain("Schema.decodeUnknownSync");
-    await expectCompileError(
-      'export js f = (props: { label: String = "guest" }) => props.label',
-      /not yet supported on js entry bindings/,
+    const jsDefaultedCompiled = await compile(
+      'export js f = (props: { label: String = "guest" }) => effect { => props.label }',
     );
+    expect(jsDefaultedCompiled.typescript).toContain("readonly label?: string");
+    expect(jsDefaultedCompiled.typescript).toContain(
+      "Schema.withDecodingDefaultType",
+    );
+    const { f: jsDefaulted } = await execute(
+      'export js f = (props: { label: String = "guest" }) => effect { => props.label }',
+    );
+    expect(await jsDefaulted({})).toBe("guest");
+    expect(await jsDefaulted({ label: "custom" })).toBe("custom");
     await expectCompileError(
       "export f = (props: { label: String = props.label }) => props.label",
       /cannot reference its own record parameter/,
@@ -562,6 +570,28 @@ export categorize = (props: { address?: { city: String, vip?: Boolean } }) =>
     await expectCompileError(
       'export f = (props: { address?: { city?: String } }) => match props.address\n  | 123 => "bad"\n  | _ => "ok"',
       /Match an optional record with Some\(name\), Some\(\{\.\.\.\}\), None, or _/,
+    );
+  });
+
+  it("supports defaulted record parameters on export js entry bindings", async () => {
+    const source = `
+export js startServer = (props: { port: Number = 3000, host: String = "localhost" } = {}) =>
+  effect {
+    => props.host + ":" + props.port
+  }
+`;
+    const checked = await typeCheck(source, "export-js-defaults.fun");
+    expect(checked.success, checked.formattedOutput).toBe(true);
+    const compiled = await compile(source, "export-js-defaults.fun");
+    expect(compiled.typescript).toContain("Schema.withDecodingDefaultType");
+    expect(compiled.typescript).toContain("readonly port?: number");
+    expect(compiled.typescript).toContain("readonly host?: string");
+    const { startServer } = await execute(source);
+    expect(await startServer()).toBe("localhost:3000");
+    expect(await startServer({})).toBe("localhost:3000");
+    expect(await startServer({ port: 8080 })).toBe("localhost:8080");
+    expect(await startServer({ host: "127.0.0.1", port: 9000 })).toBe(
+      "127.0.0.1:9000",
     );
   });
 });

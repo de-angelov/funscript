@@ -4,6 +4,7 @@ import type {
   Expression,
   FunctionTypeNode,
   Pattern,
+  RecordTypeNode,
   SchemaDeclaration,
   TaggedUnionSchema,
   TypeNode,
@@ -18,7 +19,10 @@ import { FunScriptError } from "../errors.js";
 import { PRIMITIVE_TYPES, emitPropertyKey } from "./types.js";
 
 export interface SchemaEmitterContext {
-  recordContracts: { has(name: string): boolean };
+  recordContracts: {
+    has(name: string): boolean;
+    get(name: string): RecordTypeNode | undefined;
+  };
   declaredTypeNames: Set<string>;
   bindings: { has(name: string): boolean };
   userImportBindings: Set<string>;
@@ -810,10 +814,8 @@ export function emitSchemaTypeField(
       return tName;
     }
     if (ctx.recordContracts.has(tName)) {
-      throw new FunScriptError(
-        `'${tName}' is a compile-time record contract, not a runtime schema; it cannot be used as a runtime schema field`,
-        typeNode.span,
-      );
+      const contract = ctx.recordContracts.get(tName)!;
+      return emitSchemaTypeField(ctx, contract, rawRecordFields);
     }
     if (typeNode.typeArgs?.length)
       throw new FunScriptError(

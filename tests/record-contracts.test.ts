@@ -750,4 +750,23 @@ export renderTable = (props: { columns: Array<{ width?: Number }>, title?: Strin
     );
     expect(entryCompiled.typescript).toContain("PropsDecodeChecked");
   });
+
+  it("automatically derives runtime schema fields from compile-time record contracts", async () => {
+    const source = `
+schema Address = { street: String, suite?: String }
+export ts schema User = { name: String, address: Address }
+export readStreet = (user: User) => user.address.street
+`;
+    const checked = await typeCheck(source, "contract-in-schema.fun");
+    expect(checked.success, checked.formattedOutput).toBe(true);
+    const compiled = await compile(source, "contract-in-schema.fun");
+    expect(compiled.typescript).toContain("address: Address");
+    expect(compiled.typescript).toContain("const Address = Schema.Struct({");
+    const { UserFromUnknown, readStreet } = await execute(source);
+    const user = UserFromUnknown({
+      name: "Alice",
+      address: { street: "123 Main St", suite: "Apt 4" },
+    });
+    expect(readStreet(user)).toBe("123 Main St");
+  });
 });

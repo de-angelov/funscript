@@ -479,28 +479,51 @@ export function emitBindingDeclaration(
           return `${rest}${name}${p.optional ? "?" : ""}${t}${def}`;
         })
         .join(", ");
-      const headerStatements = [validations, ...optionalBindings]
-        .filter(Boolean)
-        .join("\n");
-      const prefix = headerStatements ? `${headerStatements}\n` : "";
       const paramScopeEntries: [string, boolean][] = [];
       const varTypeEntries: [string, TypeNode | undefined][] = [];
+      const recordDefaults: string[] = [];
       const recordScope = new Map<
         string,
         Map<string, RecordFieldInfo> | undefined
       >();
-      for (const p of fn.params) {
+      for (let paramIndex = 0; paramIndex < fn.params.length; paramIndex++) {
+        const p = fn.params[paramIndex];
         if (p.name.kind === "Identifier") {
-          paramScopeEntries.push([p.name.name, Boolean(p.optional)]);
+          const paramName = p.name.name;
+          paramScopeEntries.push([paramName, Boolean(p.optional)]);
           if (p.typeAnnotation?.kind === "RecordTypeNode") {
-            recordScope.set(p.name.name, extractRecordFields(p.typeAnnotation));
+            const mapped = new Map<string, RecordFieldInfo>();
+            p.typeAnnotation.fields.forEach((field, fieldIndex) => {
+              const binding = field.defaultValue
+                ? `$funscriptField${paramIndex}_${fieldIndex}`
+                : undefined;
+              if (field.defaultValue) {
+                const raw = `$funscriptFieldRaw${paramIndex}_${fieldIndex}`;
+                recordDefaults.push(
+                  `  const ${raw} = ${paramName}.${field.name.name};`,
+                );
+                recordDefaults.push(
+                  `  const ${binding} = ${raw} === undefined ? ${ctx.emitExpression(field.defaultValue)} : ${raw};`,
+                );
+              }
+              const children =
+                field.typeAnnotation?.kind === "RecordTypeNode"
+                  ? extractRecordFields(field.typeAnnotation)
+                  : undefined;
+              mapped.set(field.name.name, {
+                optional: Boolean(field.optional),
+                defaultBinding: binding,
+                fields: children,
+              });
+            });
+            recordScope.set(p.name.name, mapped);
           } else if (
             p.typeAnnotation?.kind === "TypeReferenceNode" &&
             ctx.recordContracts.has(p.typeAnnotation.name.name)
           ) {
             const contract = ctx.recordContracts.get(
               p.typeAnnotation.name.name,
-            );
+            )!;
             if (contract?.kind === "RecordTypeNode") {
               recordScope.set(p.name.name, extractRecordFields(contract));
             }
@@ -539,6 +562,14 @@ export function emitBindingDeclaration(
       ctx.parameterScopes.push(new Map(paramScopeEntries));
       ctx.variableTypeScopes.push(new Map(varTypeEntries));
       ctx.recordScopes.push(recordScope);
+      const headerStatements = [
+        validations,
+        ...recordDefaults,
+        ...optionalBindings,
+      ]
+        .filter(Boolean)
+        .join("\n");
+      const prefix = headerStatements ? `${headerStatements}\n` : "";
       try {
         if (fn.body.kind === "BlockStatement") {
           const retExpr = fn.body.finalExpression

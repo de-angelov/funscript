@@ -297,10 +297,6 @@ export forwardedNone = forward(Option.some(Option.none()))`;
       "export f = (x?: Number, y: Number) => y",
       /Only optional parameters/,
     );
-    await expectCompileError(
-      "export js f = (x: { opt: Number = 5 }) => x",
-      /not yet supported/,
-    );
   });
 });
 

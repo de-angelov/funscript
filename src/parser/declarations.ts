@@ -775,20 +775,6 @@ export function parseBindingDeclaration(
     init.typeParams = typeParams;
     init.span = { start: typeParams[0].span.start, end: init.span.end };
   }
-  if (
-    isJs &&
-    init.kind === "FunctionExpression" &&
-    init.params.some(
-      (p) =>
-        p.typeAnnotation?.kind === "RecordTypeNode" &&
-        p.typeAnnotation.fields.some((field) => field.defaultValue),
-    )
-  ) {
-    throw new ParseError(
-      "Defaulted parameters inside record contracts are not yet supported on js entry bindings",
-      init.span,
-    );
-  }
   if (hasIndent) {
     ctx.skipNewlines();
     if (!ctx.isAtEnd() && !ctx.check(TokenType.EOF)) {
