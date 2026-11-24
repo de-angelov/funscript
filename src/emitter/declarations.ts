@@ -5,6 +5,8 @@ import type {
   Expression,
   Identifier,
   Pattern,
+  RecordPattern,
+  RecordTypeNode,
   SchemaDeclaration,
   ServiceDeclaration,
   Statement,
@@ -32,8 +34,11 @@ export interface DeclarationEmitterContext {
   primitiveIdentifiers: Set<string>;
   isOptionalValue(expr: Expression): boolean;
   recordFields(name: string): Map<string, RecordFieldInfo> | undefined;
+  recordField?(expr: Expression): RecordFieldInfo | undefined;
   isPrimitive(expr: Expression): boolean;
   modularEffectImports?: boolean;
+  getRecordTypeNode?(name: string): RecordTypeNode | undefined;
+  getTypeNodeForExpression?(expr: Expression): TypeNode | undefined;
 }
 
 export function isPrimitiveType(type?: TypeNode): boolean {
@@ -103,8 +108,10 @@ export function emitServiceDeclaration(
   return `${exp}class ${name} extends Context.Service<${name}, {\n${members}\n}>()(${tag}) {}`;
 }
 
-function extractRecordFields(
-  typeNode: import("../ast/types.js").RecordTypeNode,
+let syntheticDestructureId = 0;
+
+export function extractRecordFields(
+  typeNode: RecordTypeNode,
 ): Map<string, RecordFieldInfo> {
   const result = new Map<string, RecordFieldInfo>();
   for (const field of typeNode.fields) {
@@ -120,11 +127,93 @@ function extractRecordFields(
   return result;
 }
 
+export function patternHasOptionalField(
+  pattern: RecordPattern,
+  fieldsInfo?: Map<string, RecordFieldInfo>,
+): boolean {
+  if (!fieldsInfo) return false;
+  for (const f of pattern.fields) {
+    if (f.isRest) continue;
+    const info = fieldsInfo.get(f.key.name);
+    if (info?.optional) return true;
+    if (f.pattern?.kind === "RecordPattern" && info?.fields) {
+      if (patternHasOptionalField(f.pattern, info.fields)) return true;
+    }
+  }
+  return false;
+}
+
+export function getRecordFieldInfoForBinding(
+  ctx: DeclarationEmitterContext,
+  decl: BindingDeclaration,
+): Map<string, RecordFieldInfo> | undefined {
+  if (decl.typeAnnotation) {
+    if (decl.typeAnnotation.kind === "RecordTypeNode") {
+      return extractRecordFields(decl.typeAnnotation);
+    }
+    if (decl.typeAnnotation.kind === "TypeReferenceNode") {
+      const contract =
+        ctx.getRecordTypeNode?.(decl.typeAnnotation.name.name) ??
+        ctx.recordContracts.get(decl.typeAnnotation.name.name);
+      if (contract?.kind === "RecordTypeNode") {
+        return extractRecordFields(contract);
+      }
+    }
+  }
+  if (decl.init.kind === "Identifier") {
+    const fields = ctx.recordFields(decl.init.name);
+    if (fields) return fields;
+    const typeNode = ctx.getTypeNodeForExpression?.(decl.init);
+    if (typeNode?.kind === "RecordTypeNode") {
+      return extractRecordFields(typeNode);
+    }
+    if (typeNode?.kind === "TypeReferenceNode") {
+      const contract =
+        ctx.getRecordTypeNode?.(typeNode.name.name) ??
+        ctx.recordContracts.get(typeNode.name.name);
+      if (contract?.kind === "RecordTypeNode") {
+        return extractRecordFields(contract);
+      }
+    }
+  }
+  if (decl.init.kind === "MemberExpression") {
+    const field = ctx.recordField?.(decl.init);
+    if (field?.fields) return field.fields;
+    const typeNode = ctx.getTypeNodeForExpression?.(decl.init);
+    if (typeNode?.kind === "RecordTypeNode") {
+      return extractRecordFields(typeNode);
+    }
+    if (typeNode?.kind === "TypeReferenceNode") {
+      const contract =
+        ctx.getRecordTypeNode?.(typeNode.name.name) ??
+        ctx.recordContracts.get(typeNode.name.name);
+      if (contract?.kind === "RecordTypeNode") {
+        return extractRecordFields(contract);
+      }
+    }
+  }
+  if (decl.init.kind === "RecordExpression") {
+    return extractRecordFieldsForBinding(ctx, decl);
+  }
+  return undefined;
+}
+
 function extractRecordFieldsForBinding(
   ctx: DeclarationEmitterContext,
   decl: BindingDeclaration,
 ): Map<string, RecordFieldInfo> | undefined {
   if (decl.isMut) return undefined;
+  if (decl.typeAnnotation?.kind === "RecordTypeNode") {
+    return extractRecordFields(decl.typeAnnotation);
+  }
+  if (decl.typeAnnotation?.kind === "TypeReferenceNode") {
+    const contract =
+      ctx.getRecordTypeNode?.(decl.typeAnnotation.name.name) ??
+      ctx.recordContracts.get(decl.typeAnnotation.name.name);
+    if (contract?.kind === "RecordTypeNode") {
+      return extractRecordFields(contract);
+    }
+  }
   if (decl.init.kind === "Identifier") {
     return ctx.recordFields(decl.init.name);
   }
@@ -181,12 +270,87 @@ export function emitBindingDeclaration(
       ctx.primitiveIdentifiers.add(idName);
     }
   }
-  const target = ctx.emitBindingTarget(decl.id);
+
+  const fieldsInfo =
+    decl.id.kind === "RecordPattern"
+      ? getRecordFieldInfoForBinding(ctx, decl)
+      : undefined;
+
+  if (decl.id.kind === "RecordPattern" && fieldsInfo) {
+    for (const f of decl.id.fields) {
+      if (f.isRest) continue;
+      const varName =
+        f.pattern?.kind === "VariablePattern"
+          ? f.pattern.name.name
+          : f.key.name;
+      const info = fieldsInfo.get(f.key.name);
+      const isOpt = Boolean(info?.optional);
+      if (scope) scope.set(varName, isOpt);
+      if (info?.fields) {
+        ctx.recordScopes.at(-1)?.set(varName, info.fields);
+      }
+    }
+  }
+
   const exp = isExport ? "export " : "";
   const keyword = decl.isMut ? "let" : "const";
   const typeAnn = decl.typeAnnotation
     ? `: ${ctx.emitTypeNode(decl.typeAnnotation)}`
     : "";
+
+  if (
+    decl.id.kind === "RecordPattern" &&
+    fieldsInfo &&
+    patternHasOptionalField(decl.id, fieldsInfo)
+  ) {
+    ctx.addEffectImport("Option");
+    const boundNames = collectBindingNames(decl.id);
+    const canUseDirectInit =
+      decl.init.kind === "Identifier" &&
+      !boundNames.includes(decl.init.name) &&
+      !decl.typeAnnotation &&
+      !decl.isJs;
+    let sourceRef = "";
+    let initStatement = "";
+    const initExpr = decl.isJs
+      ? `Effect.runPromise(${ctx.emitExpression(decl.init)})`
+      : ctx.emitExpression(decl.init);
+
+    if (canUseDirectInit) {
+      sourceRef = (decl.init as Identifier).name;
+    } else {
+      sourceRef = `$funscriptDestructure${syntheticDestructureId++}`;
+      initStatement = `const ${sourceRef}${typeAnn} = ${initExpr};\n`;
+    }
+
+    const restField = decl.id.fields.find((f) => f.isRest);
+    let restDestructure = "";
+    const lines: string[] = [];
+    if (restField) {
+      const restName = restField.key.name;
+      const nonRestFields = decl.id.fields.filter((f) => !f.isRest);
+      const restTemp = `$funscriptRest${syntheticDestructureId++}`;
+      restDestructure = `const { ${nonRestFields.map((f) => `${f.key.name}: _${f.key.name}`).join(", ")}, ...${restTemp} } = ${sourceRef};\n`;
+      lines.push(`${exp}${keyword} ${restName} = ${restTemp};`);
+    }
+
+    for (const f of decl.id.fields) {
+      if (f.isRest) continue;
+      const varName = f.pattern ? ctx.emitBindingTarget(f.pattern) : f.key.name;
+      const isOpt = fieldsInfo.get(f.key.name)?.optional === true;
+      if (isOpt) {
+        lines.push(
+          `${exp}${keyword} ${varName} = Option.fromNullishOr(${sourceRef}.${f.key.name});`,
+        );
+      } else {
+        lines.push(`${exp}${keyword} ${varName} = ${sourceRef}.${f.key.name};`);
+      }
+    }
+
+    return `${initStatement}${restDestructure}${lines.join("\n")}`;
+  }
+
+  const target = ctx.emitBindingTarget(decl.id);
 
   if (decl.isJs) {
     ctx.addEffectImport("Effect");
@@ -210,7 +374,52 @@ export function emitBindingDeclaration(
         })
         .join("\n");
       const optionalBindings = fn.params.flatMap((p, index) => {
-        if (!p.optional) return [];
+        if (!p.optional) {
+          if (p.name.kind === "RecordPattern") {
+            let recType: TypeNode | undefined = p.typeAnnotation;
+            if (recType?.kind === "TypeReferenceNode") {
+              recType =
+                ctx.getRecordTypeNode?.(recType.name.name) ??
+                ctx.recordContracts.get(recType.name.name);
+            }
+            const recFields =
+              recType?.kind === "RecordTypeNode"
+                ? extractRecordFields(recType)
+                : undefined;
+            if (patternHasOptionalField(p.name, recFields)) {
+              ctx.addEffectImport("Option");
+              const bindings: string[] = [];
+              const restField = p.name.fields.find((f) => f.isRest);
+              if (restField) {
+                const nonRest = p.name.fields.filter((f) => !f.isRest);
+                bindings.push(
+                  `  const { ${nonRest.map((f) => `${f.key.name}: _${f.key.name}`).join(", ")}, ...$funscriptRest${index} } = $funscriptParam${index};`,
+                );
+                bindings.push(
+                  `  const ${restField.key.name} = $funscriptRest${index};`,
+                );
+              }
+              for (const f of p.name.fields) {
+                if (f.isRest) continue;
+                const varName = f.pattern
+                  ? ctx.emitBindingTarget(f.pattern)
+                  : f.key.name;
+                const isOpt = recFields?.get(f.key.name)?.optional === true;
+                if (isOpt) {
+                  bindings.push(
+                    `  const ${varName} = Option.fromNullishOr($funscriptParam${index}.${f.key.name});`,
+                  );
+                } else {
+                  bindings.push(
+                    `  const ${varName} = $funscriptParam${index}.${f.key.name};`,
+                  );
+                }
+              }
+              return bindings;
+            }
+          }
+          return [];
+        }
         ctx.addEffectImport("Option");
         const targetName = ctx.emitBindingTarget(p.name);
         const rawName = `$funscriptOptional${index}`;
@@ -243,9 +452,24 @@ export function emitBindingDeclaration(
       const params = fn.params
         .map((p, index) => {
           const rest = p.isRest ? "..." : "";
-          const name = p.optional
-            ? `$funscriptOptional${index}`
-            : ctx.emitBindingTarget(p.name);
+          let name = ctx.emitBindingTarget(p.name);
+          if (p.optional) {
+            name = `$funscriptOptional${index}`;
+          } else if (p.name.kind === "RecordPattern") {
+            let recType: TypeNode | undefined = p.typeAnnotation;
+            if (recType?.kind === "TypeReferenceNode") {
+              recType =
+                ctx.getRecordTypeNode?.(recType.name.name) ??
+                ctx.recordContracts.get(recType.name.name);
+            }
+            const recFields =
+              recType?.kind === "RecordTypeNode"
+                ? extractRecordFields(recType)
+                : undefined;
+            if (patternHasOptionalField(p.name, recFields)) {
+              name = `$funscriptParam${index}`;
+            }
+          }
           const t = p.typeAnnotation
             ? `: ${ctx.emitTypeNode(p.typeAnnotation)}`
             : "";
@@ -279,6 +503,32 @@ export function emitBindingDeclaration(
             );
             if (contract?.kind === "RecordTypeNode") {
               recordScope.set(p.name.name, extractRecordFields(contract));
+            }
+          }
+        } else if (p.name.kind === "RecordPattern") {
+          let recType: TypeNode | undefined = p.typeAnnotation;
+          if (recType?.kind === "TypeReferenceNode") {
+            recType =
+              ctx.getRecordTypeNode?.(recType.name.name) ??
+              ctx.recordContracts.get(recType.name.name);
+          }
+          const recFields =
+            recType?.kind === "RecordTypeNode"
+              ? extractRecordFields(recType)
+              : undefined;
+          if (patternHasOptionalField(p.name, recFields)) {
+            for (const f of p.name.fields) {
+              if (f.isRest) continue;
+              const varName = f.pattern
+                ? f.pattern.kind === "VariablePattern"
+                  ? f.pattern.name.name
+                  : ctx.emitBindingTarget(f.pattern)
+                : f.key.name;
+              const isOpt = recFields?.get(f.key.name)?.optional === true;
+              paramScopeEntries.push([varName, isOpt]);
+              if (recFields?.get(f.key.name)?.fields) {
+                recordScope.set(varName, recFields.get(f.key.name)?.fields);
+              }
             }
           }
         }

@@ -999,4 +999,108 @@ export arrowHelper = ts { (x: number) => x * 3 }
     const arrowHelper = evaluateTsFunction(res.typescript, "arrowHelper");
     expect(arrowHelper(4)).toBe(12);
   });
+
+  it("wraps destructured optional record fields in Option instead of leaking naked undefined", () => {
+    const src = `
+export getUserName = (u: { name?: String, id: Number }) =>
+  { name, id } = u
+  => [id, name]
+
+export getUserNameRenamed = (u: { name?: String, id: Number }) =>
+  { name: myName, id } = u
+  => [id, myName]
+
+export getUserNameAndRest = (u: { name?: String, id: Number }) =>
+  { name, ...rest } = u
+  => [name, rest]
+
+export greetUser = ({ name, id }: { name?: String, id: Number }) =>
+  [id, name]
+
+export greetInline = ({ title, count }: { title?: String, count: Number }) =>
+  [count, title]
+`;
+    const res = Effect.runSync(compileString(src));
+    expect(res.typescript).toContain("Option.fromNullishOr(");
+
+    const getUserName = evaluateTsFunction(res.typescript, "getUserName");
+    const [id1, name1] = getUserName({ id: 101 });
+    expect(id1).toBe(101);
+    expect(Option.isNone(name1)).toBe(true);
+
+    const [id2, name2] = getUserName({ id: 102, name: "Alice" });
+    expect(id2).toBe(102);
+    expect(Option.isSome(name2)).toBe(true);
+    expect(Option.getOrThrow(name2)).toBe("Alice");
+
+    const getUserNameRenamed = evaluateTsFunction(
+      res.typescript,
+      "getUserNameRenamed",
+    );
+    const [id3, name3] = getUserNameRenamed({ id: 103 });
+    expect(id3).toBe(103);
+    expect(Option.isNone(name3)).toBe(true);
+
+    const getUserNameAndRest = evaluateTsFunction(
+      res.typescript,
+      "getUserNameAndRest",
+    );
+    const [name4, rest4] = getUserNameAndRest({ id: 104, name: "Bob" });
+    expect(Option.isSome(name4)).toBe(true);
+    expect(Option.getOrThrow(name4)).toBe("Bob");
+    expect(rest4).toEqual({ id: 104 });
+
+    const greetUser = evaluateTsFunction(res.typescript, "greetUser");
+    const [id5, name5] = greetUser({ id: 105 });
+    expect(id5).toBe(105);
+    expect(Option.isNone(name5)).toBe(true);
+
+    const [id6, name6] = greetUser({ id: 106, name: "Charlie" });
+    expect(id6).toBe(106);
+    expect(Option.isSome(name6)).toBe(true);
+    expect(Option.getOrThrow(name6)).toBe("Charlie");
+
+    const greetInline = evaluateTsFunction(res.typescript, "greetInline");
+    const [count7, title7] = greetInline({ count: 42 });
+    expect(count7).toBe(42);
+    expect(Option.isNone(title7)).toBe(true);
+
+    const [count8, title8] = greetInline({ count: 43, title: "Dr." });
+    expect(count8).toBe(43);
+    expect(Option.isSome(title8)).toBe(true);
+    expect(Option.getOrThrow(title8)).toBe("Dr.");
+  });
+
+  it("supports top-level export and export js destructuring with optional record fields", async () => {
+    const src = `
+schema ServerConfig = {
+  host?: String,
+  port: Number,
+  ping: () => Void,
+}
+
+cfg: ServerConfig = { port: 8080, ping: () => Unit }
+export { host, port } = cfg
+
+export js handleServer = ({ host, port }: ServerConfig) =>
+  Effect.succeed(port)
+`;
+    const res = Effect.runSync(compileString(src));
+    expect(res.typescript).toContain(
+      "export const host = Option.fromNullishOr(",
+    );
+    expect(res.typescript).toContain("export const port = ");
+    expect(res.typescript).toContain(
+      "export const handleServer = ($funscriptParam0: ServerConfig) =>",
+    );
+
+    const host = evaluateTsFunction(res.typescript, "host");
+    const port = evaluateTsFunction(res.typescript, "port");
+    expect(port).toBe(8080);
+    expect(Option.isNone(host)).toBe(true);
+
+    const handleServer = evaluateTsFunction(res.typescript, "handleServer");
+    const result = await handleServer({ port: 3000, ping: () => {} });
+    expect(result).toBe(3000);
+  });
 });
