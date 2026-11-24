@@ -147,18 +147,42 @@ A source declaration names a registered provider and supplies only static
 literal arguments. Version 1 permits strings, finite numbers, and booleans,
 matching the scalar literal forms currently accepted by provider declarations;
 lists, objects, expressions, interpolation, environment lookups, and runtime
-values are unsupported. The declaration span is retained by the host. The
-registered provider manifest declares its ID, version, entry point, contract
-range, argument names/order/types, and which string arguments are paths.
-Relative paths resolve against the declaring `.fun` file, matching the current
-built-in behavior; the host canonicalizes path arguments before invocation. A
-provider must reject missing, extra, or wrongly typed arguments.
+values are unsupported. The declaration span is retained by the host. A
+registration is host configuration, not data supplied by the source file. Its
+minimum manifest shape is:
+
+```ts
+interface ProviderManifestV1 {
+  id: string; // stable package-qualified provider ID
+  version: string; // provider package SemVer
+  entryPoint: string; // host-resolved executable entry point
+  contract: { major: 1; minMinor: number; maxMinor: number };
+  arguments: ReadonlyArray<{
+    name: string;
+    kind: "string" | "number" | "boolean";
+    required: boolean;
+    path?: boolean; // legal only for string arguments
+  }>;
+  inputRoots: ReadonlyArray<string>; // canonical, host-authorized file roots
+  requestedCapabilities: ReadonlyArray<"external-refresh">;
+}
+```
+
+The host chooses the highest common minor in the provider's declared range and
+its own supported range, then sends exactly that version. No common minor is a
+compatibility diagnostic. The manifest declares argument names/order/types and
+which string arguments are paths; the call's argument array follows that
+order. Relative paths resolve against the declaring `.fun` file, matching the
+current built-in behavior; the host canonicalizes path arguments before
+invocation and rejects paths outside authorized roots. A provider must reject
+missing, extra, or wrongly typed arguments. Path authorization is independent
+of trusting the provider executable.
 
 The host sends an immutable request equivalent to:
 
 ```ts
 interface ProviderRequestV1 {
-  contract: { major: 1; minor: number };
+  contract: { major: 1; minor: number }; // negotiated exact version
   provider: { id: string; version: string };
   declaration: { source: string; name: string; span: SourceSpan };
   arguments: ReadonlyArray<string | number | boolean>;
@@ -230,9 +254,11 @@ interface ProviderDiagnosticV1 {
 
 The provider entry point consumes one request and returns one result; it does
 not retain host objects between calls. This interface describes the proposed
-host contract, not a currently callable extension API. `contract.minor` is the
-highest minor version understood by that provider. The host sends only fields
-defined by that negotiated minor version.
+host contract, not a currently callable extension API. The host sends only
+fields defined by the negotiated minor version. A minor release may add
+optional fields or enum values only where older readers can safely ignore
+them; otherwise it requires a major increment. The result must echo the exact
+negotiated contract version. A mismatch is rejected.
 
 The schema vocabulary is closed: `string`, `number`, `boolean`, `null`, and
 `bytes`; `array` with one item schema; `object` with ordered named properties,
@@ -271,12 +297,21 @@ dependency kinds are:
   adapter; network access is not implicit.
 
 For a `file` dependency, `path` must be an absolute canonical path within the
-provider's declared input set. The host supplies the current fingerprint in
-its invocation context and verifies it has not changed before publishing the
-result. For an `external` dependency, `fingerprint` is an opaque value from
-the authorized adapter; the provider cannot fetch or choose it. Input
+provider's declared input roots or the canonical path of a declared path
+argument. The host supplies the current fingerprint in its invocation context
+and verifies it has not changed before publishing the result. For an
+`external` dependency, `fingerprint` is an opaque value from the authorized
+adapter; the provider cannot fetch or choose it. Requesting
+`external-refresh` does not grant that capability: the host must separately
+authorize the provider and configure an adapter. Input
 locations use UTF-16 offsets in the dependency's decoded text and are accepted
 only for a declared text file dependency.
+
+The host owns snapshots and generated output files. Providers own only their
+implementation and must not write into the project, generated TypeView, or
+host cache. The host discards temporary output on every failed or cancelled
+invocation and publishes a result atomically only after validating all fields
+and confirming input fingerprints are unchanged.
 
 An undeclared read or dependency is a provider contract violation. SQLite WAL
 and rollback-journal tracking in the current compiler is an example of local
