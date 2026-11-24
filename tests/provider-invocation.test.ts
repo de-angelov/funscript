@@ -57,6 +57,104 @@ const request: ProviderRequestV1 = {
 };
 
 describe("trusted provider invocation", () => {
+  it("accepts structured callable exports with negotiated contract minor 1", async () => {
+    const callableRequest = {
+      ...request,
+      contract: { major: 1 as const, minor: 1 },
+    };
+    const callableFixture: FunscriptProviderV1 = {
+      ...fixture,
+      manifest: {
+        ...fixture.manifest,
+        contract: { major: 1, minMinor: 0, maxMinor: 1 },
+      },
+    };
+    const result = await invokeTrustedProvider(
+      createProviderRegistry([entry]),
+      callableRequest,
+      async () => ({
+        ...callableFixture,
+        async provide(req) {
+          const output = await callableFixture.provide(req);
+          return {
+            ...output,
+            contract: req.contract,
+            runtimeModule: {
+              specifier: "@example/catalog-runtime",
+              exports: [
+                {
+                  name: "findCatalog",
+                  parameters: [
+                    { name: "id", type: { kind: "string" as const } },
+                  ],
+                  result: { kind: "string" as const },
+                },
+              ],
+            },
+          };
+        },
+      }),
+    );
+    expect(result.runtimeModule?.exports[0]).toMatchObject({
+      name: "findCatalog",
+      parameters: [{ name: "id", type: { kind: "string" } }],
+    });
+  });
+
+  it("rejects malformed callable signatures and callables under contract 1.0", async () => {
+    const registry = createProviderRegistry([entry]);
+    const malformed = async (minor: number, callable: unknown) => {
+      const requestAtVersion = {
+        ...request,
+        contract: { major: 1 as const, minor },
+      };
+      const provider: FunscriptProviderV1 = {
+        ...fixture,
+        manifest: {
+          ...fixture.manifest,
+          contract: { major: 1, minMinor: 0, maxMinor: 1 },
+        },
+        async provide(req) {
+          const output = await fixture.provide(req);
+          return {
+            ...output,
+            contract: req.contract,
+            runtimeModule: {
+              specifier: "@example/runtime",
+              exports: [callable as never],
+            },
+          };
+        },
+      };
+      return invokeTrustedProvider(
+        registry,
+        requestAtVersion,
+        async () => provider,
+      );
+    };
+    await expect(
+      malformed(1, {
+        name: "bad-name",
+        parameters: [],
+        result: { kind: "string" },
+      }),
+    ).rejects.toThrow(/malformed runtime module/);
+    await expect(
+      malformed(1, {
+        name: "call",
+        parameters: [{ name: "x", type: { kind: "string" }, optional: true }],
+        result: { kind: "string" },
+      }),
+    ).rejects.toThrow(/malformed runtime module/);
+    await expect(
+      malformed(0, {
+        name: "call",
+        parameters: [],
+        result: { kind: "string" },
+      }),
+    ).rejects.toThrow(/malformed runtime module/);
+  });
+
   it("loads only an explicitly trusted registered module and returns its data", async () => {
     const load = async (specifier: string) => {
       expect(specifier).toBe(entry.moduleSpecifier);

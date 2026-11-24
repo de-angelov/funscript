@@ -202,9 +202,13 @@ dependency. Providers must be deterministic for an identical request and
 identical dependency contents. Cache reuse across machines or host/compiler
 ABIs is not promised.
 
-Version 1 is additive within a major. An incompatible request, result, schema
-vocabulary, or runtime-module change requires a new contract major; a host
-rejects an unknown major and never coerces results. Provider package versions
+Contract 1.0 is data-only for runtime exports. Contract 1.1 adds typed callable
+exports while retaining 1.0 data-only results. A host must negotiate minor 1
+before accepting callable signatures; the same shape is invalid in a 1.0
+response. Minor versions are additive only when older readers can safely ignore
+the additions. An incompatible request, result, schema vocabulary, or
+runtime-module change requires a new contract major; a host rejects an unknown
+major and never coerces results. Provider package versions
 are independent and participate in the key. A missing provider, unsupported
 contract, invalid arguments, or invalid result is a source-located diagnostic.
 
@@ -218,7 +222,14 @@ interface ProviderResultV1 {
   schema: SchemaNodeV1;
   runtimeModule?: {
     specifier: string;
-    exports: ReadonlyArray<{ name: string; type: SchemaNodeV1 }>;
+    exports: ReadonlyArray<
+      | { name: string; type: SchemaNodeV1 }
+      | {
+          name: string;
+          parameters: ReadonlyArray<{ name: string; type: SchemaNodeV1 }>;
+          result: SchemaNodeV1;
+        }
+    >;
   };
   dependencies: ReadonlyArray<DependencyV1>;
   diagnostics: ReadonlyArray<ProviderDiagnosticV1>;
@@ -273,6 +284,16 @@ rejected. Version 1 has no references or recursive schemas. The host maps this
 schema tree to FunScript types and an Effect `Schema` decoder, so providers do
 not import compiler internals or construct compiler AST nodes. Descriptions
 do not affect type identity.
+
+In contract 1.1, a callable export describes a function signature using named
+parameters and a structured result schema. Export names and parameter names
+must be valid identifiers and unique within their respective lists. Unknown
+signature fields and malformed schemas are rejected. The provider supplies no
+TypeScript text or executable snippets. The host treats callable values as
+type declarations only; runtime implementations remain in the named package
+module and are imported by generated consumer code. Provider execution during
+build time remains a separate trusted operation and never imports a runtime
+module to execute provider logic.
 
 `runtimeModule.specifier` is a package/module specifier resolvable from the
 consumer project, not an output path chosen by the provider. The host emits a

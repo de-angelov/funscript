@@ -78,7 +78,7 @@ export async function invokeTrustedProvider(
     throw new Error(`Provider '${entry.id}' returned a malformed result`);
   if (
     result.runtimeModule !== undefined &&
-    !isRuntimeModule(result.runtimeModule)
+    !isRuntimeModule(result.runtimeModule, request.contract.minor)
   )
     throw new Error(
       `Provider '${entry.id}' returned a malformed runtime module`,
@@ -195,14 +195,55 @@ function isSchema(value: unknown): value is ProviderSchemaNodeV1 {
       return false;
   }
 }
-function isRuntimeModule(value: unknown): boolean {
+function isRuntimeModule(value: unknown, minor: number): boolean {
   return (
     isRecord(value) &&
     typeof value.specifier === "string" &&
+    value.specifier.length > 0 &&
     Array.isArray(value.exports) &&
-    value.exports.every(
-      (item: unknown) =>
-        isRecord(item) && typeof item.name === "string" && isSchema(item.type),
-    )
+    uniqueBy(value.exports, (item) =>
+      isRecord(item) ? item.name : undefined,
+    ) &&
+    value.exports.every((item: unknown) => {
+      if (!isRecord(item) || !isIdentifier(item.name)) return false;
+      if ("type" in item)
+        return (
+          Object.keys(item).every((key) => key === "name" || key === "type") &&
+          isSchema(item.type)
+        );
+      if (minor < 1 || !("parameters" in item) || !("result" in item))
+        return false;
+      return (
+        Object.keys(item).every(
+          (key) => key === "name" || key === "parameters" || key === "result",
+        ) &&
+        Array.isArray(item.parameters) &&
+        uniqueBy(item.parameters, (parameter) =>
+          isRecord(parameter) ? parameter.name : undefined,
+        ) &&
+        item.parameters.every(
+          (parameter: unknown) =>
+            isRecord(parameter) &&
+            Object.keys(parameter).every(
+              (key) => key === "name" || key === "type",
+            ) &&
+            isIdentifier(parameter.name) &&
+            isSchema(parameter.type),
+        ) &&
+        isSchema(item.result)
+      );
+    })
+  );
+}
+function isIdentifier(value: unknown): value is string {
+  return typeof value === "string" && /^[A-Za-z_$][\w$]*$/.test(value);
+}
+function uniqueBy(
+  values: unknown[],
+  keyOf: (value: unknown) => unknown,
+): boolean {
+  const keys = values.map(keyOf);
+  return (
+    keys.every((key) => key !== undefined) && new Set(keys).size === keys.length
   );
 }

@@ -1,6 +1,8 @@
 /** Public, data-only contract for independently authored providers. */
 
 export const PROVIDER_CONTRACT_V1 = { major: 1, minor: 0 } as const;
+/** Minor 1 adds structured callable runtime exports. */
+export const PROVIDER_CONTRACT_V1_1 = { major: 1, minor: 1 } as const;
 
 export type StaticProviderArgument = string | number | boolean;
 
@@ -74,12 +76,22 @@ export interface ProviderRuntimeExportV1 {
   type: ProviderSchemaNodeV1;
 }
 
+/** A callable is represented only by data; its module implementation is imported by consumers. */
+export interface ProviderRuntimeCallableV1 {
+  name: string;
+  parameters: ReadonlyArray<{ name: string; type: ProviderSchemaNodeV1 }>;
+  result: ProviderSchemaNodeV1;
+}
+
+export type ProviderRuntimeExportV1_1 =
+  ProviderRuntimeExportV1 | ProviderRuntimeCallableV1;
+
 export interface ProviderResultV1 {
   contract: { major: 1; minor: number };
   schema: ProviderSchemaNodeV1;
   runtimeModule?: {
     specifier: string;
-    exports: ReadonlyArray<ProviderRuntimeExportV1>;
+    exports: ReadonlyArray<ProviderRuntimeExportV1_1>;
   };
   dependencies: ReadonlyArray<ProviderDependencyV1>;
   diagnostics: ReadonlyArray<ProviderDiagnosticV1>;
