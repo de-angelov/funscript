@@ -855,6 +855,45 @@ export js greet = (props: { label?: String }) => effect {
     expect(await greet({ label: null })).toBe("Hello, stranger");
   });
 
+  it("supports named record contracts on export js entry bindings", async () => {
+    const src = `
+schema Props = { label?: String, onClick: () => Void }
+export js render = (props: Props) => effect {
+  _ <- js props.onClick()
+  => match props.label
+    | Some(n) => "Hello, " + n
+    | None => "Hello, stranger"
+}
+`;
+    const res = Effect.runSync(compileString(src));
+    expect(res.typescript).toContain("PropsDecodeChecked(props)");
+    expect(res.typescript).toContain("Option.fromNullishOr(props.label)");
+
+    let clicked = false;
+    const render = evaluateTsFunction(res.typescript, "render");
+    expect(
+      await render({
+        label: "Ada",
+        onClick: () => {
+          clicked = true;
+        },
+      }),
+    ).toBe("Hello, Ada");
+    expect(clicked).toBe(true);
+
+    clicked = false;
+    expect(
+      await render({
+        onClick: () => {
+          clicked = true;
+        },
+      }),
+    ).toBe("Hello, stranger");
+    expect(clicked).toBe(true);
+
+    expect(() => render({ label: 123, onClick: () => {} })).toThrow();
+  });
+
   it("automatically lowers Option into foreign optional and null parameters and record properties", () => {
     const src = `
 ts {

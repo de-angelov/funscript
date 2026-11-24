@@ -12,7 +12,6 @@ import type {
   TypeNode,
   WhenStatement,
 } from "../ast/types.js";
-import { FunScriptError } from "../errors.js";
 import { emitAssemblyScript } from "./assemblyscript.js";
 import { renderExportFrom, renderImport } from "./imports.js";
 import type { RecordFieldInfo } from "./match.js";
@@ -190,19 +189,6 @@ export function emitBindingDeclaration(
     : "";
 
   if (decl.isJs) {
-    if (
-      decl.init.kind === "FunctionExpression" &&
-      decl.init.params.some(
-        (p) =>
-          p.typeAnnotation?.kind === "TypeReferenceNode" &&
-          ctx.recordContracts.has(p.typeAnnotation.name.name),
-      )
-    ) {
-      throw new FunScriptError(
-        "Compile-time record contracts are not supported on js entry bindings",
-        decl.span,
-      );
-    }
     ctx.addEffectImport("Effect");
     if (decl.init.kind === "FunctionExpression") {
       const fn = decl.init;
@@ -211,10 +197,17 @@ export function emitBindingDeclaration(
           (p) =>
             !p.optional && p.typeAnnotation && p.name.kind === "Identifier",
         )
-        .map(
-          (p) =>
-            `  ${(p.name as Identifier).name} = Schema.decodeUnknownSync(${ctx.emitSchemaTypeField(p.typeAnnotation!, true)})(${(p.name as Identifier).name});`,
-        )
+        .map((p) => {
+          const paramName = (p.name as Identifier).name;
+          const typeAnn = p.typeAnnotation!;
+          if (
+            typeAnn.kind === "TypeReferenceNode" &&
+            ctx.recordContracts.has(typeAnn.name.name)
+          ) {
+            return `  ${paramName} = ${typeAnn.name.name}DecodeChecked(${paramName});`;
+          }
+          return `  ${paramName} = Schema.decodeUnknownSync(${ctx.emitSchemaTypeField(typeAnn, true)})(${paramName});`;
+        })
         .join("\n");
       const optionalBindings = fn.params.flatMap((p, index) => {
         if (!p.optional) return [];
@@ -222,6 +215,15 @@ export function emitBindingDeclaration(
         const targetName = ctx.emitBindingTarget(p.name);
         const rawName = `$funscriptOptional${index}`;
         if (p.typeAnnotation && p.name.kind === "Identifier") {
+          const typeAnn = p.typeAnnotation;
+          if (
+            typeAnn.kind === "TypeReferenceNode" &&
+            ctx.recordContracts.has(typeAnn.name.name)
+          ) {
+            return [
+              `  const ${targetName} = ${rawName} !== undefined ? Option.some(${typeAnn.name.name}DecodeChecked(${rawName})) : Option.none();`,
+            ];
+          }
           ctx.addEffectImport("Schema");
           return [
             `  const ${targetName} = ${rawName} !== undefined ? Option.some(Schema.decodeUnknownSync(${ctx.emitSchemaTypeField(p.typeAnnotation, true)})(${rawName})) : Option.none();`,
@@ -268,6 +270,16 @@ export function emitBindingDeclaration(
           paramScopeEntries.push([p.name.name, Boolean(p.optional)]);
           if (p.typeAnnotation?.kind === "RecordTypeNode") {
             recordScope.set(p.name.name, extractRecordFields(p.typeAnnotation));
+          } else if (
+            p.typeAnnotation?.kind === "TypeReferenceNode" &&
+            ctx.recordContracts.has(p.typeAnnotation.name.name)
+          ) {
+            const contract = ctx.recordContracts.get(
+              p.typeAnnotation.name.name,
+            );
+            if (contract?.kind === "RecordTypeNode") {
+              recordScope.set(p.name.name, extractRecordFields(contract));
+            }
           }
         }
         for (const n of collectBindingNames(p.name)) {

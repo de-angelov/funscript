@@ -744,9 +744,10 @@ export renderTable = (props: { columns: Array<{ width?: Number }>, title?: Strin
       declaration + "\nexport value = Props",
       /compile-time record contract/,
     );
-    await expectCompileError(
+    const entryCompiled = await compile(
       declaration + "\nexport js entry = (props: Props) => props.label",
-      /not supported on js entry/,
+      "entry.fun",
     );
+    expect(entryCompiled.typescript).toContain("PropsDecodeChecked");
   });
 });
