@@ -16,6 +16,16 @@ import type {
 import { FunScriptError } from "../errors.js";
 import { patternHasOptionalField } from "./declarations.js";
 
+const JS_ERROR_NAMES = new Set([
+  "Error",
+  "TypeError",
+  "RangeError",
+  "SyntaxError",
+  "ReferenceError",
+  "URIError",
+  "EvalError",
+]);
+
 export type RecordFieldInfo = {
   optional: boolean;
   defaultBinding?: string;
@@ -287,6 +297,11 @@ export class MatchEmitter {
                     directOptional || isOptional
                       ? `const { value: ${target} } = $matched;`
                       : `const { value: ${target} } = $matched as unknown as { value: typeof $matched extends import("effect").Option.Some<infer V> ? V : any };`;
+                } else if (
+                  arm.pattern.kind === "ConstructorPattern" &&
+                  JS_ERROR_NAMES.has(arm.pattern.constructorName.name)
+                ) {
+                  unpack = `const { ${vars.join(", ")} } = $matched as any;`;
                 } else {
                   unpack = `const { _tag: _, ...__fields } = $matched as any;\n    const [${vars.join(", ")}] = Object.values(__fields) as any[];`;
                 }
@@ -357,6 +372,14 @@ export class MatchEmitter {
     }
     if (pat.kind === "VariablePattern") return `P.select("${pat.name.name}")`;
     if (pat.kind === "ConstructorPattern") {
+      if (JS_ERROR_NAMES.has(pat.constructorName.name)) {
+        if (pat.args.length === 0) {
+          return `P.instanceOf(${pat.constructorName.name})`;
+        }
+        if (pat.args.length === 1) {
+          return `P.intersection(P.instanceOf(${pat.constructorName.name}), { message: ${this.emitPattern(pat.args[0])} })`;
+        }
+      }
       if (pat.args.length === 0) {
         return `{ _tag: "${pat.constructorName.name}" }`;
       }
@@ -585,6 +608,22 @@ export class MatchEmitter {
     const isOptional = scrutinee
       ? this.context.isOptionalValue(scrutinee)
       : false;
+    if (
+      pat?.kind === "ConstructorPattern" &&
+      JS_ERROR_NAMES.has(pat.constructorName.name)
+    ) {
+      if (vars.length > 0) {
+        const unpack = `const { ${vars.join(", ")} } = $matched as any;`;
+        if (body.kind === "BlockStatement") {
+          return `($matched) => {\n    ${unpack}\n${this.context.emitFunctionBody(body)}\n  }`;
+        }
+        return `($matched) => {\n    ${unpack}\n    return ${this.context.emitExpression(body)};\n  }`;
+      }
+      if (body.kind === "BlockStatement") {
+        return `() => {\n${this.context.emitFunctionBody(body)}\n}`;
+      }
+      return `() => ${this.context.emitArrowExpression(body)}`;
+    }
     if (
       pat?.kind === "ConstructorPattern" &&
       pat.constructorName.name === "Some" &&

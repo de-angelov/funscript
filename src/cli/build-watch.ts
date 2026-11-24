@@ -2,6 +2,7 @@ import * as Effect from "effect/Effect";
 import { createHash } from "node:crypto";
 import * as fs from "node:fs/promises";
 import * as path from "node:path";
+import { uniq } from "es-toolkit";
 import type { CheckOptions } from "../compiler/check.js";
 import { IncrementalBuildSession } from "../compiler/incremental-build.js";
 import { incrementalDependencyKeys } from "../compiler/incremental-dependencies.js";
@@ -113,9 +114,9 @@ export async function watchBuild(
     try {
       const policy = loadProjectConfig(cwd);
       const nextPolicyKey = JSON.stringify(policy);
-      const entries = [
-        ...new Set((await Promise.all(roots.map(findFiles))).flat()),
-      ].sort();
+      const entries = uniq(
+        (await Promise.all(roots.map(findFiles))).flat(),
+      ).sort();
       const all = entries.length
         ? await Effect.runPromise(collectCliFiles(entries, { cwd }))
         : [];
@@ -207,9 +208,9 @@ export async function watchBuild(
             process.exitCode = 1;
             report(result.check.formattedOutput);
           } else {
-            const currentEntries = [
-              ...new Set((await Promise.all(roots.map(findFiles))).flat()),
-            ].sort();
+            const currentEntries = uniq(
+              (await Promise.all(roots.map(findFiles))).flat(),
+            ).sort();
             const currentAll = currentEntries.length
               ? await Effect.runPromise(
                   collectCliFiles(currentEntries, { cwd }),

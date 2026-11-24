@@ -865,5 +865,32 @@ export handleOptionalOrder = (opt) =>
       ).toBe("O1 in-store");
       expect(handleOptionalOrder(Option.none())).toBe("none");
     });
+
+    it("matches native JavaScript errors via ts-pattern P.instanceOf", async () => {
+      const source = `
+export classifyError = (err) =>
+  match err
+    | TypeError(msg) => "type error: " + msg
+    | RangeError => "range error"
+    | Error("not found") => "not found error"
+    | Error => "generic error"
+    | _ => "unknown"
+`;
+      const res = await Effect.runPromise(compileString(source));
+      expect(res.typescript).toContain("P.instanceOf(TypeError)");
+      expect(res.typescript).toContain("P.instanceOf(RangeError)");
+      expect(res.typescript).toContain("P.instanceOf(Error)");
+
+      const classifyError = evaluateTsFunction(res.typescript, "classifyError");
+      expect(classifyError(new TypeError("bad argument"))).toBe(
+        "type error: bad argument",
+      );
+      expect(classifyError(new RangeError("out of bounds"))).toBe(
+        "range error",
+      );
+      expect(classifyError(new Error("not found"))).toBe("not found error");
+      expect(classifyError(new Error("something else"))).toBe("generic error");
+      expect(classifyError("just a string")).toBe("unknown");
+    });
   });
 });

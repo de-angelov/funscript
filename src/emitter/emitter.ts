@@ -1815,6 +1815,7 @@ export class Emitter {
       expr.callee.property.name === "fromNullishOrElse"
     ) {
       this.needsFromNullishOrElse = true;
+      this.effectImports.add("Option");
       return `fromNullishOrElse(${expr.args.map((a) => this.emitExpression(a)).join(", ")})`;
     }
 

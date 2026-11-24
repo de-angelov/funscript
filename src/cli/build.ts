@@ -3,6 +3,7 @@ import * as Effect from "effect/Effect";
 import { existsSync } from "node:fs";
 import * as fs from "node:fs/promises";
 import * as path from "node:path";
+import { uniq } from "es-toolkit";
 import { compileString } from "../compiler.js";
 import { toErrorMessage } from "../errors.js";
 import {
@@ -232,9 +233,7 @@ export const buildCommand = (
     }
 
     if (bunTarget) {
-      const entryFiles = [
-        ...new Set(filesToBuild.map((file) => path.resolve(file))),
-      ];
+      const entryFiles = uniq(filesToBuild.map((file) => path.resolve(file)));
       if (entryFiles.length !== 1) {
         process.exitCode = 1;
         return yield* Console.error(
@@ -300,10 +299,8 @@ export const buildCommand = (
       return;
     }
 
-    const entryFiles = [
-      ...new Set(filesToBuild.map((file) => path.resolve(file))),
-    ];
-    filesToBuild = [...new Set(yield* collectCliFiles(entryFiles))];
+    const entryFiles = uniq(filesToBuild.map((file) => path.resolve(file)));
+    filesToBuild = uniq(yield* collectCliFiles(entryFiles));
     if (outPath && filesToBuild.length > 1) {
       process.exitCode = 1;
       return yield* Console.error(

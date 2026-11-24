@@ -29,7 +29,7 @@ export function emitRuntimeHelpers(options: RuntimeHelperOptions): string {
   if (options.fromNullishOrElse) {
     header += `function fromNullishOrElse<A, B>(value: A | null | undefined, onNone: B): NonNullable<A> | B;\n`;
     header += `function fromNullishOrElse<B>(onNone: B): <A>(value: A | null | undefined) => NonNullable<A> | B;\n`;
-    header += `function fromNullishOrElse(...args: unknown[]): unknown {\n  if (args.length === 1) { const onNone = args[0]; return (value: unknown) => fromNullishOrElse(value, onNone); }\n  let [value, onNone] = args;\n  while (value !== null && value !== undefined && typeof value === "object" && "_tag" in value) {\n    const candidate = value as { readonly _tag: string; readonly value?: unknown };\n    if (candidate._tag === "Some") value = candidate.value;\n    else if (candidate._tag === "None") return onNone;\n    else break;\n  }\n  if (value !== null && value !== undefined) return value;\n  return onNone;\n}\n`;
+    header += `function fromNullishOrElse(...args: unknown[]): unknown {\n  if (args.length === 1) { const onNone = args[0]; return (value: unknown) => fromNullishOrElse(value, onNone); }\n  const [value, onNone] = args;\n  const unwrapped = Option.isOption(value) ? Option.getOrElse(value, () => onNone) : value;\n  return unwrapped ?? onNone;\n}\n`;
   }
   if (options.fromNullishOr) {
     header += `function fromNullishOr<A>(value: A): 0 extends (1 & A) ? import("effect/Option").Option<A> : import("effect/Option").Option<NonNullable<A>> {\n  return Option.fromNullishOr(value) as any;\n}\n`;
