@@ -3,7 +3,13 @@ import type { SourceMap } from "magic-string";
 export type { SourceMap };
 import * as fs from "node:fs";
 import * as path from "node:path";
-import { type Program, type RecordTypeNode, type Span } from "./ast/types.js";
+import {
+  type BindingTarget,
+  type Pattern,
+  type Program,
+  type RecordTypeNode,
+  type Span,
+} from "./ast/types.js";
 import { resolveImportedRecordFunctions } from "./compiler/imported-record-functions.js";
 import { resolveImportedSchemas } from "./compiler/imported-schemas.js";
 import { applyJsInteropNullability } from "./compiler/js-interop-nullability.js";
@@ -36,6 +42,12 @@ export interface CompileOptions {
   noOptional?: boolean;
   /** Enforce bare pipeline stages for known companions instead of redundant Module.method prefixes. */
   barePipelines?: boolean;
+  /** Reject deeply nested destructuring patterns exceeding maxDestructureDepth (defaults to 2). */
+  noDeepDestructure?: boolean;
+  /** Directories governed by the noDeepDestructure policy, relative to policyRoot. */
+  noDeepDestructurePaths?: string[];
+  /** Maximum destructuring depth allowed (defaults to 2 when noDeepDestructure is active). */
+  maxDestructureDepth?: number;
   /** Restrict authored source to Effect ecosystem imports and explicit Effect APIs. */
   effectOnly?: boolean;
   /** Directories governed by the Effect-only policy, relative to policyRoot. */
@@ -212,6 +224,94 @@ function validateNoOptional(ast: Program): void {
     for (const [key, child] of Object.entries(node))
       if (key !== "span") visit(child);
   };
+  visit(ast);
+}
+
+/** Calculate the structural destructuring depth of a pattern or binding target. */
+export function getPatternDepth(
+  pattern: Pattern | BindingTarget | undefined | null,
+): number {
+  if (!pattern) return 0;
+  switch (pattern.kind) {
+    case "Identifier":
+    case "UpperIdentifier":
+    case "WildcardPattern":
+    case "LiteralPattern":
+    case "VariablePattern":
+      return 0;
+    case "RestPattern":
+      return getPatternDepth(pattern.argument);
+    case "OrPattern":
+      return pattern.patterns.reduce(
+        (max, p) => Math.max(max, getPatternDepth(p)),
+        0,
+      );
+    case "ArrayPattern": {
+      let maxChild = 0;
+      for (const el of pattern.elements) {
+        if (el) maxChild = Math.max(maxChild, getPatternDepth(el));
+      }
+      return 1 + maxChild;
+    }
+    case "RecordPattern": {
+      let maxChild = 0;
+      for (const field of pattern.fields) {
+        if (field.pattern) {
+          maxChild = Math.max(maxChild, getPatternDepth(field.pattern));
+        }
+      }
+      return 1 + maxChild;
+    }
+    case "ConstructorPattern": {
+      if (pattern.args.length === 0) return 0;
+      let maxChild = 0;
+      for (const arg of pattern.args) {
+        maxChild = Math.max(maxChild, getPatternDepth(arg));
+      }
+      return 1 + maxChild;
+    }
+    default:
+      return 0;
+  }
+}
+
+/** Block deeply nested destructuring patterns when noDeepDestructure or maxDestructureDepth is active. */
+function validateMaxDestructureDepth(ast: Program, maxDepth: number): void {
+  const checkDepth = (
+    pattern: Pattern | BindingTarget | undefined | null,
+    span?: Span,
+  ) => {
+    if (!pattern) return;
+    const depth = getPatternDepth(pattern);
+    if (depth > maxDepth) {
+      throw new FunScriptError(
+        `Destructuring depth of ${depth} exceeds the maximum allowed depth of ${maxDepth} (configured via 'maxDestructureDepth' / 'noDeepDestructure')`,
+        span ?? pattern.span,
+      );
+    }
+  };
+
+  const visit = (value: unknown): void => {
+    if (!value || typeof value !== "object") return;
+    if (Array.isArray(value)) {
+      for (const item of value) visit(item);
+      return;
+    }
+    const node = value as Record<string, unknown>;
+    if (node.kind === "BindingDeclaration") {
+      checkDepth(node.id as BindingTarget, (node.id as BindingTarget).span);
+    } else if (node.kind === "Parameter") {
+      checkDepth(node.name as BindingTarget, (node.name as BindingTarget).span);
+    } else if (node.kind === "MatchArm") {
+      checkDepth(node.pattern as Pattern, (node.pattern as Pattern).span);
+    } else if (node.kind === "EffectBindStatement") {
+      checkDepth(node.id as BindingTarget, (node.id as BindingTarget).span);
+    }
+
+    for (const [key, child] of Object.entries(node))
+      if (key !== "span") visit(child);
+  };
+
   visit(ast);
 }
 
@@ -512,6 +612,19 @@ export const compileString = (
           if (options?.noGlobalThis) validateNoGlobalThis(ast);
           if (options?.noOptional) validateNoOptional(ast);
           if (options?.barePipelines) validateBarePipelines(ast);
+          const isDeepDestructureRestricted =
+            options?.noDeepDestructure ||
+            isPathPolicyEnabled(
+              options?.noDeepDestructurePaths,
+              options?.policyRoot ?? process.cwd(),
+              filename,
+            );
+          const effectiveMaxDepth =
+            options?.maxDestructureDepth ??
+            (isDeepDestructureRestricted ? 2 : undefined);
+          if (effectiveMaxDepth !== undefined) {
+            validateMaxDestructureDepth(ast, effectiveMaxDepth);
+          }
 
           // 3. Emit TypeScript
           const context =
@@ -656,7 +769,15 @@ export const checkString = (
   filename: string = "<anonymous>",
   options?: Pick<
     CompileOptions,
-    "noTs" | "noGlobalThis" | "noOptional" | "barePipelines" | "effectOnly"
+    | "noTs"
+    | "noGlobalThis"
+    | "noOptional"
+    | "barePipelines"
+    | "noDeepDestructure"
+    | "noDeepDestructurePaths"
+    | "maxDestructureDepth"
+    | "policyRoot"
+    | "effectOnly"
   >,
 ): Effect.Effect<Program, CompilerError> =>
   Effect.try({
@@ -670,6 +791,19 @@ export const checkString = (
       if (options?.noGlobalThis) validateNoGlobalThis(ast);
       if (options?.noOptional) validateNoOptional(ast);
       if (options?.barePipelines) validateBarePipelines(ast);
+      const isDeepDestructureRestricted =
+        options?.noDeepDestructure ||
+        isPathPolicyEnabled(
+          options?.noDeepDestructurePaths,
+          options?.policyRoot ?? process.cwd(),
+          filename,
+        );
+      const effectiveMaxDepth =
+        options?.maxDestructureDepth ??
+        (isDeepDestructureRestricted ? 2 : undefined);
+      if (effectiveMaxDepth !== undefined) {
+        validateMaxDestructureDepth(ast, effectiveMaxDepth);
+      }
       return ast;
     },
     catch: (error: unknown) =>

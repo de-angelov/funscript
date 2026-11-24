@@ -112,6 +112,11 @@ const program = Effect.gen(function* () {
         !commandArgs.includes("--bare-pipelines")
       )
         commandArgs.push("--bare-pipelines");
+      if (
+        projectPolicy.noDeepDestructure === true &&
+        !commandArgs.includes("--no-deep-destructure")
+      )
+        commandArgs.push("--no-deep-destructure");
     }
   }
 
@@ -144,6 +149,10 @@ const program = Effect.gen(function* () {
         projectPolicy.barePipelines === true ||
         (Array.isArray(projectPolicy.barePipelines) &&
           projectPolicy.barePipelines.length > 0) ||
+        projectPolicy.noDeepDestructure === true ||
+        (Array.isArray(projectPolicy.noDeepDestructure) &&
+          projectPolicy.noDeepDestructure.length > 0) ||
+        projectPolicy.maxDestructureDepth !== undefined ||
         !!projectPolicy.effectOnly?.length;
       if (hasSourcePolicy) {
         const hasSrc = yield* Effect.tryPromise({
@@ -165,6 +174,8 @@ const program = Effect.gen(function* () {
             noGlobalThis: projectPolicy.noGlobalThis === true,
             noOptional: projectPolicy.noOptional === true,
             barePipelines: projectPolicy.barePipelines === true,
+            noDeepDestructure: projectPolicy.noDeepDestructure === true,
+            maxDestructureDepth: projectPolicy.maxDestructureDepth,
             effectOnly: projectPolicy.effectOnly,
             noTsPaths: Array.isArray(projectPolicy.noTs)
               ? projectPolicy.noTs
@@ -177,6 +188,11 @@ const program = Effect.gen(function* () {
               : undefined,
             barePipelinesPaths: Array.isArray(projectPolicy.barePipelines)
               ? projectPolicy.barePipelines
+              : undefined,
+            noDeepDestructurePaths: Array.isArray(
+              projectPolicy.noDeepDestructure,
+            )
+              ? projectPolicy.noDeepDestructure
               : undefined,
           }))
         )

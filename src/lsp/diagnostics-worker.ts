@@ -89,6 +89,8 @@ parentPort?.on("message", async (request: Request) => {
             noGlobalThis: policy.noGlobalThis === true,
             noOptional: policy.noOptional === true,
             barePipelines: policy.barePipelines === true,
+            noDeepDestructure: policy.noDeepDestructure === true,
+            maxDestructureDepth: policy.maxDestructureDepth,
             noTsPaths: Array.isArray(policy.noTs) ? policy.noTs : undefined,
             noGlobalThisPaths: Array.isArray(policy.noGlobalThis)
               ? policy.noGlobalThis
@@ -98,6 +100,9 @@ parentPort?.on("message", async (request: Request) => {
               : undefined,
             barePipelinesPaths: Array.isArray(policy.barePipelines)
               ? policy.barePipelines
+              : undefined,
+            noDeepDestructurePaths: Array.isArray(policy.noDeepDestructure)
+              ? policy.noDeepDestructure
               : undefined,
             effectOnly: policy.effectOnly,
           }),

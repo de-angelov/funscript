@@ -36,6 +36,8 @@ export interface FunscriptPluginOptions {
   noGlobalThis?: boolean;
   noOptional?: boolean;
   barePipelines?: boolean;
+  noDeepDestructure?: boolean;
+  maxDestructureDepth?: number;
   /**
    * Filter pattern(s) for files to include. Defaults to [/\.fun$/, /\.funx$/].
    */
@@ -240,6 +242,15 @@ export function funscriptPlugin(options: FunscriptPluginOptions = {}): Plugin {
               policyRoot,
               cleanId,
             ),
+          noDeepDestructure:
+            options.noDeepDestructure ||
+            isPathPolicyEnabled(
+              projectPolicy.noDeepDestructure,
+              policyRoot,
+              cleanId,
+            ),
+          maxDestructureDepth:
+            options.maxDestructureDepth ?? projectPolicy.maxDestructureDepth,
           effectOnly: isEffectOnlyFile(projectPolicy, policyRoot, cleanId),
           effectOnlyDirectories: projectPolicy.effectOnly,
           policyRoot,

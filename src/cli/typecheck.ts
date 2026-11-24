@@ -91,11 +91,14 @@ export const checkCliFiles = (
     noGlobalThis?: boolean;
     noOptional?: boolean;
     barePipelines?: boolean;
+    noDeepDestructure?: boolean;
+    maxDestructureDepth?: number;
     effectOnly?: string[];
     noTsPaths?: string[];
     noGlobalThisPaths?: string[];
     noOptionalPaths?: string[];
     barePipelinesPaths?: string[];
+    noDeepDestructurePaths?: string[];
   },
 ) =>
   Effect.gen(function* () {
@@ -106,11 +109,14 @@ export const checkCliFiles = (
       noGlobalThis: options?.noGlobalThis,
       noOptional: options?.noOptional,
       barePipelines: options?.barePipelines,
+      noDeepDestructure: options?.noDeepDestructure,
+      maxDestructureDepth: options?.maxDestructureDepth,
       effectOnly: options?.effectOnly,
       noTsPaths: options?.noTsPaths,
       noGlobalThisPaths: options?.noGlobalThisPaths,
       noOptionalPaths: options?.noOptionalPaths,
       barePipelinesPaths: options?.barePipelinesPaths,
+      noDeepDestructurePaths: options?.noDeepDestructurePaths,
     });
     if (!result.success) {
       process.exitCode = 1;

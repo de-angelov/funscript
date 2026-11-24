@@ -10,6 +10,8 @@ export interface FunScriptProjectConfig {
   noGlobalThis?: boolean | string[];
   noOptional?: boolean | string[];
   barePipelines?: boolean | string[];
+  noDeepDestructure?: boolean | string[];
+  maxDestructureDepth?: number;
   effectOnly?: string[];
   modularEffectImports?: boolean;
 }
@@ -54,16 +56,30 @@ export function loadProjectConfig(cwd: string): FunScriptProjectConfig {
           "effectOnly",
           "format",
           "modularEffectImports",
+          "noDeepDestructure",
+          "maxDestructureDepth",
         ].includes(entry.key.name)
       ) {
         throw new Error(
-          "config accepts only 'noTs', 'noGlobalThis', 'noOptional', 'barePipelines', 'effectOnly', 'format', and 'modularEffectImports'",
+          "config accepts only 'noTs', 'noGlobalThis', 'noOptional', 'barePipelines', 'effectOnly', 'format', 'modularEffectImports', 'noDeepDestructure', and 'maxDestructureDepth'",
         );
       }
       const name = entry.key.name;
       if (seen.has(name)) throw new Error(`duplicate config field '${name}'`);
       seen.add(name);
-      if (name === "format") {
+      if (name === "maxDestructureDepth") {
+        if (
+          entry.value.kind !== "NumberLiteral" ||
+          !Number.isInteger(entry.value.value) ||
+          entry.value.value < 1 ||
+          entry.value.value > 10
+        ) {
+          throw new Error(
+            "maxDestructureDepth must be an integer between 1 and 10",
+          );
+        }
+        config.maxDestructureDepth = entry.value.value;
+      } else if (name === "format") {
         if (entry.value.kind !== "RecordExpression")
           throw new Error("format must be a literal record");
         const format: NonNullable<FunScriptProjectConfig["format"]> = {};
@@ -111,7 +127,12 @@ export function loadProjectConfig(cwd: string): FunScriptProjectConfig {
         if (name === "effectOnly") config.effectOnly = directories;
         else
           config[
-            name as "noTs" | "noGlobalThis" | "noOptional" | "barePipelines"
+            name as
+              | "noTs"
+              | "noGlobalThis"
+              | "noOptional"
+              | "barePipelines"
+              | "noDeepDestructure"
           ] = directories;
       } else {
         if (name === "effectOnly" || entry.value.kind !== "BooleanLiteral")
@@ -125,6 +146,7 @@ export function loadProjectConfig(cwd: string): FunScriptProjectConfig {
             | "noOptional"
             | "barePipelines"
             | "modularEffectImports"
+            | "noDeepDestructure"
         ] = entry.value.value;
       }
     }

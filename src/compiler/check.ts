@@ -96,11 +96,14 @@ export interface CheckOptions {
   noGlobalThis?: boolean;
   noOptional?: boolean;
   barePipelines?: boolean;
+  noDeepDestructure?: boolean;
+  maxDestructureDepth?: number;
   effectOnly?: string[];
   noTsPaths?: string[];
   noGlobalThisPaths?: string[];
   noOptionalPaths?: string[];
   barePipelinesPaths?: string[];
+  noDeepDestructurePaths?: string[];
   compilerOptions?: ts.CompilerOptions;
   cwd?: string;
   highlightCode?: boolean;
@@ -969,6 +972,14 @@ export const typeCheckVirtualFiles = (
         const barePipelines =
           !!options?.barePipelines ||
           isPathPolicyEnabled(options?.barePipelinesPaths, cwd, fullFunPath);
+        const noDeepDestructure =
+          !!options?.noDeepDestructure ||
+          isPathPolicyEnabled(
+            options?.noDeepDestructurePaths,
+            cwd,
+            fullFunPath,
+          );
+        const maxDestructureDepth = options?.maxDestructureDepth;
         const graphKey = dependencyKeys?.get(fullFunPath);
         const dependencyKey =
           graphKey &&
@@ -981,6 +992,8 @@ export const typeCheckVirtualFiles = (
             effectOnly,
             options?.effectOnly ?? [],
             compilerOptions,
+            noDeepDestructure,
+            maxDestructureDepth,
           ]);
         const existing = cache?.compiledFiles.get(fullFunPath);
         if (
@@ -1012,6 +1025,8 @@ export const typeCheckVirtualFiles = (
                 noGlobalThis,
                 noOptional,
                 barePipelines,
+                noDeepDestructure,
+                maxDestructureDepth,
                 effectOnly,
                 effectOnlyDirectories: options?.effectOnly,
                 policyRoot: cwd,

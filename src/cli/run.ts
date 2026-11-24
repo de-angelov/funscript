@@ -65,6 +65,10 @@ export const runCommand = (
         noGlobalThis: commandArgs.includes("--no-global-this"),
         noOptional: commandArgs.includes("--no-optional"),
         barePipelines: commandArgs.includes("--bare-pipelines"),
+        noDeepDestructure:
+          commandArgs.includes("--no-deep-destructure") ||
+          projectPolicy.noDeepDestructure === true,
+        maxDestructureDepth: projectPolicy.maxDestructureDepth,
         effectOnly: projectPolicy.effectOnly,
         noTsPaths: Array.isArray(projectPolicy.noTs)
           ? projectPolicy.noTs
@@ -77,6 +81,9 @@ export const runCommand = (
           : undefined,
         barePipelinesPaths: Array.isArray(projectPolicy.barePipelines)
           ? projectPolicy.barePipelines
+          : undefined,
+        noDeepDestructurePaths: Array.isArray(projectPolicy.noDeepDestructure)
+          ? projectPolicy.noDeepDestructure
           : undefined,
       }))
     )
@@ -100,6 +107,8 @@ export const runCommand = (
               noGlobalThis: commandArgs.includes("--no-global-this"),
               noOptional: commandArgs.includes("--no-optional"),
               barePipelines: commandArgs.includes("--bare-pipelines"),
+              noDeepDestructure: commandArgs.includes("--no-deep-destructure"),
+              maxDestructureDepth: projectPolicy.maxDestructureDepth,
             }) as unknown as { name: string; setup: (build: unknown) => void },
           );
           const fullPath = path.resolve(filePath);
@@ -143,6 +152,8 @@ plugin(funscriptBunPlugin({
   noGlobalThis: ${Boolean(commandArgs.includes("--no-global-this"))},
   noOptional: ${Boolean(commandArgs.includes("--no-optional"))},
   barePipelines: ${Boolean(commandArgs.includes("--bare-pipelines"))},
+  noDeepDestructure: ${Boolean(commandArgs.includes("--no-deep-destructure"))},
+  maxDestructureDepth: ${typeof projectPolicy.maxDestructureDepth === "number" ? projectPolicy.maxDestructureDepth : "undefined"},
 }));
 
 process.argv = [process.argv[0], ${JSON.stringify(fullPath)}, ...${JSON.stringify(programArgs)}];
@@ -181,6 +192,8 @@ if (mod && mod.main) {
           noGlobalThis: commandArgs.includes("--no-global-this"),
           noOptional: commandArgs.includes("--no-optional"),
           barePipelines: commandArgs.includes("--bare-pipelines"),
+          noDeepDestructure: commandArgs.includes("--no-deep-destructure"),
+          maxDestructureDepth: projectPolicy.maxDestructureDepth,
           engine: isFast ? "bun" : undefined,
         }),
       catch: (error) =>

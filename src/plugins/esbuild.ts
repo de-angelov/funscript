@@ -19,6 +19,8 @@ export interface EsbuildPluginOptions {
   noGlobalThis?: boolean;
   noOptional?: boolean;
   barePipelines?: boolean;
+  noDeepDestructure?: boolean;
+  maxDestructureDepth?: number;
   /** Working directory for resolving project configs and files. Defaults to process.cwd(). */
   cwd?: string;
   /** Filter pattern for onResolve/onLoad. Defaults to /\.funx?$/ */
@@ -226,6 +228,15 @@ export function funscriptEsbuildPlugin(
             barePipelines:
               options.barePipelines ||
               isPathPolicyEnabled(projectPolicy.barePipelines, cwd, filename),
+            noDeepDestructure:
+              options.noDeepDestructure ||
+              isPathPolicyEnabled(
+                projectPolicy.noDeepDestructure,
+                cwd,
+                filename,
+              ),
+            maxDestructureDepth:
+              options.maxDestructureDepth ?? projectPolicy.maxDestructureDepth,
             effectOnly: isEffectOnlyFile(projectPolicy, cwd, filename),
             effectOnlyDirectories: projectPolicy.effectOnly,
             policyRoot: cwd,

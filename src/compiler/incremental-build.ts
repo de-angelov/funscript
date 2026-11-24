@@ -105,6 +105,14 @@ export class IncrementalBuildSession {
                       cwd,
                       absolute,
                     ),
+                  noDeepDestructure:
+                    !!this.options.noDeepDestructure ||
+                    isPathPolicyEnabled(
+                      this.options.noDeepDestructurePaths,
+                      cwd,
+                      absolute,
+                    ),
+                  maxDestructureDepth: this.options.maxDestructureDepth,
                   effectOnly: isEffectOnlyFile(
                     { effectOnly: this.options.effectOnly },
                     cwd,

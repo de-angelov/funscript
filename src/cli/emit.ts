@@ -27,6 +27,7 @@ export const emitCommand = (
         a === "--no-global-this" ||
         a === "--no-optional" ||
         a === "--bare-pipelines" ||
+        a === "--no-deep-destructure" ||
         a === "--bin" ||
         a === "--modular-effect" ||
         a === "--effect-subpaths"
@@ -81,6 +82,14 @@ export const emitCommand = (
           process.cwd(),
           filePath,
         ),
+      noDeepDestructure:
+        args.includes("--no-deep-destructure") ||
+        isPathPolicyEnabled(
+          projectPolicy.noDeepDestructure,
+          process.cwd(),
+          filePath,
+        ),
+      maxDestructureDepth: projectPolicy.maxDestructureDepth,
       effectOnly: isEffectOnlyFile(projectPolicy, process.cwd(), filePath),
       effectOnlyDirectories: projectPolicy.effectOnly,
       modularEffectImports:

@@ -189,6 +189,7 @@ export const buildCommand = (
                   noGlobalThis: args.includes("--no-global-this"),
                   noOptional: args.includes("--no-optional"),
                   barePipelines: args.includes("--bare-pipelines"),
+                  noDeepDestructure: args.includes("--no-deep-destructure"),
                 },
                 onOutput: (file, content) => ownedOutputs.set(file, content),
                 audit: async (targets, policy) => {
@@ -259,6 +260,10 @@ export const buildCommand = (
           noGlobalThis: args.includes("--no-global-this"),
           noOptional: args.includes("--no-optional"),
           barePipelines: args.includes("--bare-pipelines"),
+          noDeepDestructure:
+            args.includes("--no-deep-destructure") ||
+            projectPolicy.noDeepDestructure === true,
+          maxDestructureDepth: projectPolicy.maxDestructureDepth,
           effectOnly: projectPolicy.effectOnly,
           noTsPaths: Array.isArray(projectPolicy.noTs)
             ? projectPolicy.noTs
@@ -271,6 +276,9 @@ export const buildCommand = (
             : undefined,
           barePipelinesPaths: Array.isArray(projectPolicy.barePipelines)
             ? projectPolicy.barePipelines
+            : undefined,
+          noDeepDestructurePaths: Array.isArray(projectPolicy.noDeepDestructure)
+            ? projectPolicy.noDeepDestructure
             : undefined,
         }))
       )
@@ -363,6 +371,10 @@ export const buildCommand = (
         noGlobalThis: args.includes("--no-global-this"),
         noOptional: args.includes("--no-optional"),
         barePipelines: args.includes("--bare-pipelines"),
+        noDeepDestructure:
+          args.includes("--no-deep-destructure") ||
+          projectPolicy.noDeepDestructure === true,
+        maxDestructureDepth: projectPolicy.maxDestructureDepth,
         effectOnly: projectPolicy.effectOnly,
         noTsPaths: Array.isArray(projectPolicy.noTs)
           ? projectPolicy.noTs
@@ -375,6 +387,9 @@ export const buildCommand = (
           : undefined,
         barePipelinesPaths: Array.isArray(projectPolicy.barePipelines)
           ? projectPolicy.barePipelines
+          : undefined,
+        noDeepDestructurePaths: Array.isArray(projectPolicy.noDeepDestructure)
+          ? projectPolicy.noDeepDestructure
           : undefined,
       }))
     )
@@ -427,6 +442,14 @@ export const buildCommand = (
             process.cwd(),
             filePath,
           ),
+        noDeepDestructure:
+          args.includes("--no-deep-destructure") ||
+          isPathPolicyEnabled(
+            projectPolicy.noDeepDestructure,
+            process.cwd(),
+            filePath,
+          ),
+        maxDestructureDepth: projectPolicy.maxDestructureDepth,
         effectOnly: isEffectOnlyFile(projectPolicy, process.cwd(), filePath),
         effectOnlyDirectories: projectPolicy.effectOnly,
         modularEffectImports:

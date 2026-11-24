@@ -201,6 +201,10 @@ export const checkCommand = (
       noGlobalThis: args.includes("--no-global-this"),
       noOptional: args.includes("--no-optional"),
       barePipelines: args.includes("--bare-pipelines"),
+      noDeepDestructure:
+        args.includes("--no-deep-destructure") ||
+        projectPolicy.noDeepDestructure === true,
+      maxDestructureDepth: projectPolicy.maxDestructureDepth,
       effectOnly: projectPolicy.effectOnly,
       noTsPaths: Array.isArray(projectPolicy.noTs)
         ? projectPolicy.noTs
@@ -213,6 +217,9 @@ export const checkCommand = (
         : undefined,
       barePipelinesPaths: Array.isArray(projectPolicy.barePipelines)
         ? projectPolicy.barePipelines
+        : undefined,
+      noDeepDestructurePaths: Array.isArray(projectPolicy.noDeepDestructure)
+        ? projectPolicy.noDeepDestructure
         : undefined,
     });
     const success =

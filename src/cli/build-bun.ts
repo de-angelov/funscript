@@ -14,6 +14,8 @@ export interface BunExecutableOptions {
   noGlobalThis?: boolean;
   noOptional?: boolean;
   barePipelines?: boolean;
+  noDeepDestructure?: boolean;
+  maxDestructureDepth?: number;
   /**
    * Bundler engine to use:
    * - "auto": Use native Bun.build if Bun is available, otherwise fall back to esbuild.
@@ -64,6 +66,8 @@ async function buildWithNativeBun(
           noGlobalThis: options.noGlobalThis,
           noOptional: options.noOptional,
           barePipelines: options.barePipelines,
+          noDeepDestructure: options.noDeepDestructure,
+          maxDestructureDepth: options.maxDestructureDepth,
         }) as unknown as NonNullable<
           Parameters<typeof Bun.build>[0]["plugins"]
         >[number],
@@ -102,6 +106,8 @@ const result = await Bun.build({
       noGlobalThis: ${Boolean(options.noGlobalThis)},
       noOptional: ${Boolean(options.noOptional)},
       barePipelines: ${Boolean(options.barePipelines)},
+      noDeepDestructure: ${Boolean(options.noDeepDestructure)},
+      maxDestructureDepth: ${typeof options.maxDestructureDepth === "number" ? options.maxDestructureDepth : "undefined"},
       runMain: ${Boolean(options.runMain)},
       executable: ${Boolean(options.executable)},
       entryFile: ${JSON.stringify(entry)},
@@ -168,6 +174,8 @@ async function buildWithEsbuild(
         noGlobalThis: options.noGlobalThis,
         noOptional: options.noOptional,
         barePipelines: options.barePipelines,
+        noDeepDestructure: options.noDeepDestructure,
+        maxDestructureDepth: options.maxDestructureDepth,
         runMain: options.runMain,
         executable: options.executable,
         entryFile: entry,
