@@ -103,6 +103,11 @@ export interface CheckOptions {
   cwd?: string;
   highlightCode?: boolean;
   cache?: TypeCheckCache;
+  /** Prepared async provider schemas keyed by absolute FunScript filename. */
+  preparedProviderSchemas?: ReadonlyMap<
+    string,
+    import("../compiler.js").PreparedProviderSchemas
+  >;
 }
 
 export const DEFAULT_COMPILER_OPTIONS: ts.CompilerOptions = {
@@ -914,6 +919,8 @@ export const typeCheckVirtualFiles = (
           !!options?.barePipelines ||
           isPathPolicyEnabled(options?.barePipelinesPaths, cwd, fullFunPath);
         const graphKey = dependencyKeys?.get(fullFunPath);
+        const preparedProviders =
+          options?.preparedProviderSchemas?.get(fullFunPath);
         const dependencyKey =
           graphKey &&
           JSON.stringify([
@@ -924,6 +931,8 @@ export const typeCheckVirtualFiles = (
             barePipelines,
             effectOnly,
             options?.effectOnly ?? [],
+            preparedProviders?.schemas ?? [],
+            preparedProviders?.dependencies ?? [],
             compilerOptions,
           ]);
         const existing = cache?.compiledFiles.get(fullFunPath);
@@ -959,6 +968,7 @@ export const typeCheckVirtualFiles = (
                 effectOnly,
                 effectOnlyDirectories: options?.effectOnly,
                 policyRoot: cwd,
+                preparedProviderSchemas: preparedProviders,
               }),
             );
             if (cache && dependencyKey) {

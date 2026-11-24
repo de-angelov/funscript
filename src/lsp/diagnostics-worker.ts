@@ -1,5 +1,7 @@
 import { parentPort } from "node:worker_threads";
+import { createRequire } from "node:module";
 import { fileURLToPath } from "node:url";
+import { pathToFileURL } from "node:url";
 import {
   DiagnosticSeverity,
   type Diagnostic,
@@ -8,7 +10,14 @@ import {
 } from "vscode-languageserver/node";
 import type { TypeCheckCache, TypeCheckResult } from "../compiler/check.js";
 import { loadProjectConfigForFile } from "../compiler/project-config.js";
-import { validateFunScript } from "./validation.js";
+import {
+  prepareProviderResults,
+  ProviderResolutionError,
+} from "../compiler/provider-resolution.js";
+import { renderProviderSchema } from "../compiler/provider-schema.js";
+import { Lexer } from "../lexer/lexer.js";
+import { Parser } from "../parser/parser.js";
+import { toDiagnostic, validateFunScript } from "./validation.js";
 
 type Request = { revision: number; documents: TextDocumentItem[] };
 const caches = new Map<string, TypeCheckCache>();
@@ -25,6 +34,10 @@ parentPort?.on("message", async (request: Request) => {
     >();
     const filenames = new Map<string, string>();
     const semantic = new Map<string, Diagnostic[]>();
+    const preparedProviderSchemas = new Map<
+      string,
+      import("../compiler.js").PreparedProviderSchemas
+    >();
     for (const doc of request.documents) {
       const direct = validateFunScript(doc.text, doc.uri);
       semantic.set(doc.uri, direct);
@@ -40,6 +53,47 @@ parentPort?.on("message", async (request: Request) => {
       try {
         const filename = fileURLToPath(doc.uri);
         const policy = loadProjectConfigForFile(filename);
+        if (policy.config.providers?.size) {
+          try {
+            const ast = new Parser(
+              new Lexer(doc.text, filename).tokenize(),
+              filename,
+              doc.text,
+            ).parse();
+            const hasDatabase = ast.body.some(
+              (item) =>
+                (item.kind === "ExportDeclaration" ? item.declaration : item)
+                  .kind === "DatabaseDeclaration",
+            );
+            if (hasDatabase) {
+              const require = createRequire(
+                pathToFileURL(`${policy.root}/package.json`),
+              );
+              const prepared = await prepareProviderResults(
+                ast,
+                filename,
+                policy.config.providers,
+                policy.config.providerRoots ?? [],
+                async (specifier) =>
+                  import(pathToFileURL(require.resolve(specifier)).href),
+              );
+              preparedProviderSchemas.set(filename, {
+                schemas: new Map(
+                  prepared.results.map(({ name, result }) => [
+                    name,
+                    renderProviderSchema(result.schema),
+                  ]),
+                ),
+                dependencies: prepared.dependencies.flatMap((item) =>
+                  item.kind === "file" ? [item.path] : [],
+                ),
+              });
+            }
+          } catch (error) {
+            if (error instanceof ProviderResolutionError)
+              semantic.set(doc.uri, [toDiagnostic(error)]);
+          }
+        }
         const group = groups.get(policy.root) ?? {
           files: {},
           config: policy.config,
@@ -100,6 +154,7 @@ parentPort?.on("message", async (request: Request) => {
               ? policy.barePipelines
               : undefined,
             effectOnly: policy.effectOnly,
+            preparedProviderSchemas,
           }),
         );
         for (const filename of Object.keys(group.files))
