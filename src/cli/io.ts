@@ -28,26 +28,13 @@ export const writeFile = (filePath: string, content: string) =>
   });
 
 export const findFunFiles = async (dir: string): Promise<string[]> => {
-  const entries = await fs.readdir(dir, { withFileTypes: true });
-  const files: string[] = [];
-  for (const entry of entries) {
-    if (
-      entry.name === "node_modules" ||
-      entry.name === ".git" ||
-      entry.name.startsWith(".")
-    )
-      continue;
-    const fullPath = path.join(dir, entry.name);
-    if (entry.isDirectory()) {
-      files.push(...(await findFunFiles(fullPath)));
-    } else if (
-      entry.isFile() &&
-      (entry.name.endsWith(".fun") || entry.name.endsWith(".funx"))
-    ) {
-      files.push(fullPath);
-    }
-  }
-  return files;
+  const matches = await fg.glob("**/*.{fun,funx}", {
+    cwd: dir,
+    onlyFiles: true,
+    dot: false,
+    ignore: FORMATTER_IGNORES,
+  });
+  return matches.map((file) => path.join(dir, file));
 };
 
 export const FORMATTER_IGNORES = [

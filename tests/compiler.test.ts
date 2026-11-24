@@ -1202,5 +1202,22 @@ export schema TagSet = Set<String>
         `export type TagSet = ReadonlySet<string>;`,
       );
     });
+
+    it("formats CompilerError with @babel/code-frame pointing to offending token", async () => {
+      const code = `
+export foo = 1
+export bar = var bad = 2
+`;
+      const failure = await Effect.runPromise(
+        Effect.flip(compileString(code, "test.fun")),
+      );
+      expect(failure).toBeInstanceOf(CompilerError);
+      expect(failure.span).toBeDefined();
+      const formatted = failure.format();
+      expect(formatted).toContain("CompilerError");
+      expect(formatted).toContain("FunScript has no 'var'");
+      expect(formatted).toContain("var bad = 2");
+      expect(formatted).toContain(">");
+    });
   });
 });

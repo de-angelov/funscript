@@ -91,9 +91,10 @@ export class CompilerError extends FunScriptError {
   constructor(
     public readonly message: string,
     public readonly error: LexerError | ParseError | Error,
+    source?: string,
   ) {
     const span = "span" in error ? (error as { span?: Span }).span : undefined;
-    super(message, span);
+    super(message, span, source);
     this.name = "CompilerError";
   }
 }
@@ -757,6 +758,7 @@ export const compileString = (
           new CompilerError(
             toErrorMessage(error),
             error instanceof Error ? error : new Error(String(error)),
+            source,
           ),
       }),
   );
@@ -810,5 +812,6 @@ export const checkString = (
       new CompilerError(
         toErrorMessage(error),
         error instanceof Error ? error : new Error(String(error)),
+        source,
       ),
   });
