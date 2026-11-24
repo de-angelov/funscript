@@ -62,30 +62,6 @@ export function resolvePackageRecordContracts(
       .getPropertiesOfType(type)
       .find((property) => property.getName().includes(RECORD_CONTRACT_BRAND));
     if (!brand) continue;
-    const hasNestedOptional = (value: ts.Type, seen: Set<ts.Type>): boolean => {
-      value = checker.getNonNullableType(value);
-      if (seen.has(value)) return false;
-      const next = new Set(seen).add(value);
-      if (value.isUnionOrIntersection())
-        return value.types.some((part) => hasNestedOptional(part, next));
-      if (!(value.flags & ts.TypeFlags.Object)) return false;
-      if (checker.isArrayType(value) || checker.isTupleType(value))
-        return checker
-          .getTypeArguments(value as ts.TypeReference)
-          .some((part) => hasNestedOptional(part, next));
-      if (checker.getSignaturesOfType(value, ts.SignatureKind.Call).length)
-        return false;
-      return checker
-        .getPropertiesOfType(value)
-        .some(
-          (property) =>
-            Boolean(property.flags & ts.SymbolFlags.Optional) ||
-            hasNestedOptional(
-              checker.getTypeOfSymbolAtLocation(property, statement),
-              next,
-            ),
-        );
-    };
     const shape = (
       value: ts.Type,
       seen: Set<ts.Type>,
@@ -111,46 +87,6 @@ export function resolvePackageRecordContracts(
             property,
             statement,
           );
-          const nonNullable = checker.getNonNullableType(propertyType);
-          if (
-            nonNullable.isUnion() &&
-            nonNullable.types.some((part) => hasNestedOptional(part, new Set()))
-          ) {
-            throw new FunScriptError(
-              `Optional records inside unions are not supported in imported contract ${name}`,
-              span,
-            );
-          }
-          if (
-            (checker.isArrayType(nonNullable) ||
-              checker.isTupleType(nonNullable)) &&
-            checker
-              .getTypeArguments(nonNullable as ts.TypeReference)
-              .some((part) => hasNestedOptional(part, new Set()))
-          ) {
-            throw new FunScriptError(
-              `Optional records inside containers are not supported in imported contract ${name}`,
-              span,
-            );
-          }
-          for (const signature of checker.getSignaturesOfType(
-            nonNullable,
-            ts.SignatureKind.Call,
-          )) {
-            if (
-              signature.parameters.some((parameter) =>
-                hasNestedOptional(
-                  checker.getTypeOfSymbolAtLocation(parameter, statement),
-                  new Set(),
-                ),
-              )
-            ) {
-              throw new FunScriptError(
-                `Optional records inside callbacks are not supported in imported contract ${name}`,
-                span,
-              );
-            }
-          }
           const nested = shape(propertyType, next);
           const leaf: TypeNode = {
             kind: "TypeReferenceNode",

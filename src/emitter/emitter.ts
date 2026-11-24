@@ -2456,32 +2456,6 @@ export class Emitter {
         type: TypeNode,
       ): Map<string, RecordFieldInfo> | undefined => {
         if (type.kind !== "RecordTypeNode") {
-          const containsOptionalRecord = (value: unknown): boolean => {
-            if (!value || typeof value !== "object") return false;
-            if (Array.isArray(value)) return value.some(containsOptionalRecord);
-            const node = value as Record<string, unknown>;
-            if (
-              node.kind === "RecordTypeNode" &&
-              Array.isArray(node.fields) &&
-              node.fields.some((field) =>
-                Boolean(
-                  (field as { optional?: boolean; defaultValue?: unknown })
-                    .optional ||
-                  (field as { optional?: boolean; defaultValue?: unknown })
-                    .defaultValue,
-                ),
-              )
-            )
-              return true;
-            return Object.entries(node).some(
-              ([key, child]) => key !== "span" && containsOptionalRecord(child),
-            );
-          };
-          if (containsOptionalRecord(type))
-            throw new FunScriptError(
-              "Optional records inside callbacks or container types are not supported yet",
-              type.span,
-            );
           return undefined;
         }
         const result = new Map<string, RecordFieldInfo>();

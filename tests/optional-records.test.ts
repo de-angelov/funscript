@@ -408,14 +408,18 @@ describe("optional fields in inline parameter records", () => {
       Option.some({ label: "Ada" }),
     );
     expect(leakNestedOpt({})).toEqual(Option.none());
-    await expectCompileError(
+    const { leak: leakCallback } = await execute(
       "export leak = (props: { callback: (value: { label?: String }) => String }) => props.callback",
-      /inside callbacks or container types/,
     );
-    await expectCompileError(
+    const dummyFn = (value: { label?: string }) => value.label ?? "none";
+    expect(leakCallback({ callback: dummyFn })).toBe(dummyFn);
+
+    const { leak: leakValues } = await execute(
       "export leak = (props: { values: Array<{ label?: String }> }) => props.values",
-      /inside callbacks or container types/,
     );
+    expect(leakValues({ values: [{ label: "Ada" }] })).toEqual([
+      { label: "Ada" },
+    ]);
   });
 
   it("handles an optional parent record through an explicit Some match", async () => {
