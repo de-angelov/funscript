@@ -323,8 +323,17 @@ export function funscriptBunPlugin(options: BunPluginOptions = {}): BunPlugin {
         let contents = res.typescript;
         const isEntry = options.entryFile
           ? path.resolve(args.path) === path.resolve(options.entryFile)
-          : true;
-        if ((options.runMain || options.executable) && isEntry) {
+          : typeof process !== "undefined" && process.argv?.[1]
+            ? path.resolve(args.path) === path.resolve(process.argv[1])
+            : true;
+        const shouldRunMain =
+          options.runMain ||
+          options.executable ||
+          (options.runMain !== false &&
+            typeof process !== "undefined" &&
+            process.argv?.[1] &&
+            path.resolve(args.path) === path.resolve(process.argv[1]));
+        if (shouldRunMain && isEntry) {
           contents = `${contents}\nimport * as __funscript_effect from "effect";\nif (typeof main !== "undefined") {\n  if (__funscript_effect.Effect.isEffect(main)) await __funscript_effect.Effect.runPromise(main);\n  else if (typeof main === "function") await main();\n}\n`;
         }
 

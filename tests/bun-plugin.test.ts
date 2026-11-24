@@ -56,12 +56,21 @@ describe("Bun Plugin (bun-plugin-funscript)", () => {
     plugin.setup(mockBuild);
     expect(loadHandler).toBeDefined();
 
-    const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), "bun-plugin-test-"));
+    const tempDir = await fs.mkdtemp(
+      path.join(os.tmpdir(), "bun-plugin-test-"),
+    );
     const tempFile = path.join(tempDir, "sample.fun");
     try {
-      await fs.writeFile(tempFile, 'export answer = 42\nexport add = (a: Int, b: Int) => a + b');
+      await fs.writeFile(
+        tempFile,
+        "export answer = 42\nexport add = (a: Int, b: Int) => a + b",
+      );
 
-      const result = await loadHandler({ path: tempFile, namespace: "file", loader: "ts" });
+      const result = await loadHandler({
+        path: tempFile,
+        namespace: "file",
+        loader: "ts",
+      });
       expect(result).toBeDefined();
       expect(result.loader).toBe("ts");
       expect(result.contents).toContain("export const answer = 42");
@@ -74,12 +83,21 @@ describe("Bun Plugin (bun-plugin-funscript)", () => {
   it("rejects raw TypeScript when noTs is enabled", async () => {
     let loadHandler: any;
     const plugin = funscriptBunPlugin({ noTs: true });
-    plugin.setup({ onResolve: () => {}, onLoad: (_options: any, cb: any) => { loadHandler = cb; } });
-    const dir = await fs.mkdtemp(path.join(os.tmpdir(), "funscript-no-ts-bun-"));
+    plugin.setup({
+      onResolve: () => {},
+      onLoad: (_options: any, cb: any) => {
+        loadHandler = cb;
+      },
+    });
+    const dir = await fs.mkdtemp(
+      path.join(os.tmpdir(), "funscript-no-ts-bun-"),
+    );
     try {
       const file = path.join(dir, "example.fun");
       await fs.writeFile(file, "ts { const x = 1; }");
-      await expect(loadHandler({ path: file, namespace: "file", loader: "ts" })).rejects.toThrow("TypeScript escapes are disabled by --no-ts");
+      await expect(
+        loadHandler({ path: file, namespace: "file", loader: "ts" }),
+      ).rejects.toThrow("TypeScript escapes are disabled by --no-ts");
     } finally {
       await fs.rm(dir, { recursive: true, force: true });
     }
@@ -140,11 +158,53 @@ describe("Bun Plugin (bun-plugin-funscript)", () => {
         namespace: "file",
         resolveDir: "/project/src",
       }),
-    ).toThrow("Server module './database.server.fun' cannot be imported into client module");
+    ).toThrow(
+      "Server module './database.server.fun' cannot be imported into client module",
+    );
+  });
+
+  it("automatically executes main when invoked as direct entry in Bun runtime", async () => {
+    let loadHandler: any;
+    const plugin = funscriptBunPlugin();
+    plugin.setup({
+      onResolve: () => {},
+      onLoad: (_opts: any, cb: any) => {
+        loadHandler = cb;
+      },
+    });
+
+    const tempDir = await fs.mkdtemp(
+      path.join(os.tmpdir(), "bun-plugin-entry-"),
+    );
+    const entryFile = path.join(tempDir, "entry.fun");
+    const origArgv1 = process.argv[1];
+    try {
+      process.argv[1] = entryFile;
+      await fs.writeFile(
+        entryFile,
+        'import { Console } from "effect"\nexport main = Console.log("bun-direct-run")',
+      );
+
+      const result = await loadHandler({
+        path: entryFile,
+        namespace: "file",
+        loader: "ts",
+      });
+      expect(result).toBeDefined();
+      expect(result.contents).toContain("import * as __funscript_effect");
+      expect(result.contents).toContain(
+        "if (__funscript_effect.Effect.isEffect(main)) await __funscript_effect.Effect.runPromise(main);",
+      );
+    } finally {
+      process.argv[1] = origArgv1;
+      await fs.rm(tempDir, { recursive: true, force: true });
+    }
   });
 
   it("generates and updates TypeView when types option is provided", async () => {
-    const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), "bun-plugin-types-"));
+    const tempDir = await fs.mkdtemp(
+      path.join(os.tmpdir(), "bun-plugin-types-"),
+    );
     const typesDir = path.join(tempDir, ".funscript", "types");
     const appDir = path.join(tempDir, "app");
     await fs.mkdir(appDir, { recursive: true });
@@ -171,7 +231,10 @@ describe("Bun Plugin (bun-plugin-funscript)", () => {
       await loadHandler({ path: funFile, namespace: "file", loader: "tsx" });
 
       const compiledTsx = path.join(typesDir, "app", "component.tsx");
-      const exists = await fs.stat(compiledTsx).then(() => true).catch(() => false);
+      const exists = await fs
+        .stat(compiledTsx)
+        .then(() => true)
+        .catch(() => false);
       expect(exists).toBe(true);
     } finally {
       process.chdir(origCwd);

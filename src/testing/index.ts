@@ -1,6 +1,15 @@
+let bunTest: Record<string, unknown> | undefined;
+if (typeof process !== "undefined" && Boolean(process.versions?.bun)) {
+  try {
+    bunTest = await import("bun:test");
+  } catch {
+    // Non-test Bun runtime environment
+  }
+}
+
 type TestRunnerGlobal = unknown;
 const getGlobal = (name: string): TestRunnerGlobal =>
-  (globalThis as Record<string, unknown>)[name];
+  (globalThis as Record<string, unknown>)[name] ?? bunTest?.[name];
 
 function createUniversalProxy(name: string): unknown {
   return new Proxy(

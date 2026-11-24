@@ -1,10 +1,11 @@
 import * as Effect from "effect/Effect";
 import { spawn } from "node:child_process";
-import { existsSync } from "node:fs";
+import { existsSync, mkdirSync, unlinkSync, writeFileSync } from "node:fs";
 import * as path from "node:path";
+import { findFunFiles } from "./io.js";
 
 export const testCommand = (args: string[]) =>
-  Effect.callback<void, Error>((resume) => {
+  Effect.gen(function* () {
     const isWatch = args.includes("--watch");
     const engineIndex = args.indexOf("--engine");
     const engine = engineIndex !== -1 ? args[engineIndex + 1] : undefined;
@@ -25,22 +26,83 @@ export const testCommand = (args: string[]) =>
     );
 
     if (isBun) {
+      const explicitFunFiles = forwardArgs.filter((arg) =>
+        /\.(fun|funx)$/.test(arg),
+      );
+      const nonFunArgs = forwardArgs.filter(
+        (arg) => !/\.(fun|funx)$/.test(arg),
+      );
+
+      const bridgeDir = path.resolve(".funscript-cache/bun-tests");
+      const bridges: string[] = [];
+
+      try {
+        let funTargets: string[] = [];
+        if (explicitFunFiles.length > 0) {
+          funTargets = explicitFunFiles;
+        } else if (nonFunArgs.every((arg) => arg.startsWith("-"))) {
+          const allFun = yield* Effect.tryPromise({
+            try: () => findFunFiles(process.cwd()),
+            catch: () => [],
+          });
+          funTargets = allFun.filter((f) =>
+            /\.(test|spec)\.(fun|funx)$/.test(f),
+          );
+        }
+
+        if (funTargets.length > 0) {
+          mkdirSync(bridgeDir, { recursive: true });
+          for (const file of funTargets) {
+            const absPath = path.resolve(file);
+            const baseName = path
+              .basename(file)
+              .replace(/\.(fun|funx)$/, "")
+              .replace(/[^a-zA-Z0-9_-]/g, "_");
+            const bridgeFile = path.join(
+              bridgeDir,
+              `__fun_${baseName}_${Date.now()}_${Math.random().toString(36).slice(2, 7)}.test.ts`,
+            );
+            writeFileSync(bridgeFile, `import ${JSON.stringify(absPath)};\n`);
+            bridges.push(bridgeFile);
+          }
+        }
+      } catch {
+        // Fall back to direct execution
+      }
+
       const bunArgs = [
         "test",
         "--preload",
         "funscript/bun/preload",
-        ...forwardArgs,
+        ...nonFunArgs,
+        ...bridges,
       ];
-      const child = spawn("bun", bunArgs, { stdio: "inherit" });
-      child.on("exit", (code) => {
-        if (code === 0) resume(Effect.void);
-        else {
-          process.exitCode = code ?? 1;
-          resume(Effect.void);
+
+      const cleanup = () => {
+        for (const b of bridges) {
+          try {
+            unlinkSync(b);
+          } catch {
+            // Bridge already removed
+          }
         }
+      };
+
+      return yield* Effect.callback<void, Error>((resume) => {
+        const child = spawn("bun", bunArgs, { stdio: "inherit" });
+        child.on("exit", (code) => {
+          cleanup();
+          if (code === 0) resume(Effect.void);
+          else {
+            process.exitCode = code ?? 1;
+            resume(Effect.void);
+          }
+        });
+        child.on("error", (err) => {
+          cleanup();
+          resume(Effect.fail(err));
+        });
       });
-      child.on("error", (err) => resume(Effect.fail(err)));
-      return;
     }
 
     const cwd = process.cwd();
@@ -58,16 +120,18 @@ export const testCommand = (args: string[]) =>
       ? (isWatch ? [] : ["run"]).concat(effectiveArgs)
       : ["vitest", ...(isWatch ? [] : ["run"]), ...effectiveArgs];
 
-    const child = spawn(vitestCmd, vitestArgs, {
-      stdio: "inherit",
-      shell: process.platform === "win32",
+    return yield* Effect.callback<void, Error>((resume) => {
+      const child = spawn(vitestCmd, vitestArgs, {
+        stdio: "inherit",
+        shell: process.platform === "win32",
+      });
+      child.on("exit", (code) => {
+        if (code === 0) resume(Effect.void);
+        else {
+          process.exitCode = code ?? 1;
+          resume(Effect.void);
+        }
+      });
+      child.on("error", (err) => resume(Effect.fail(err)));
     });
-    child.on("exit", (code) => {
-      if (code === 0) resume(Effect.void);
-      else {
-        process.exitCode = code ?? 1;
-        resume(Effect.void);
-      }
-    });
-    child.on("error", (err) => resume(Effect.fail(err)));
   });
