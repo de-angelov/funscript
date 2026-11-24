@@ -769,4 +769,56 @@ export readStreet = (user: User) => user.address.street
     });
     expect(readStreet(user)).toBe("123 Main St");
   });
+
+  it("supports record contracts and structural types as generic schema arguments", async () => {
+    const source = `
+schema Address = { street: String, suite?: String }
+export schema Box<T> = { value: T }
+export schema AddressEnvelope = { box: Box<Address> }
+export schema PointEnvelope = { box: Box<{ x: Number, y: Number }> }
+export schema MixedEnvelope = { box: Box<String | Number> }
+export readAddressStreet = (env: AddressEnvelope) => env.box.value.street
+export readPointX = (env: PointEnvelope) => env.box.value.x
+`;
+    const checked = await typeCheck(source, "contract-generic-schema.fun");
+    expect(checked.success, checked.formattedOutput).toBe(true);
+    const {
+      AddressEnvelopeFromUnknown,
+      readAddressStreet,
+      PointEnvelopeFromUnknown,
+      readPointX,
+    } = await execute(source);
+    const addrEnv = AddressEnvelopeFromUnknown({
+      box: { value: { street: "456 Elm St" } },
+    });
+    expect(readAddressStreet(addrEnv)).toBe("456 Elm St");
+    const ptEnv = PointEnvelopeFromUnknown({
+      box: { value: { x: 42, y: 100 } },
+    });
+    expect(readPointX(ptEnv)).toBe(42);
+  });
+
+  it("derives runtime schema when aliasing record contracts via export ts schema", async () => {
+    const source = `
+schema Address = { street: String, zip?: String }
+export ts schema AddressSchema = Address
+export readZip = (addr: AddressSchema) => addr.zip
+`;
+    const checked = await typeCheck(source, "contract-alias-schema.fun");
+    expect(checked.success, checked.formattedOutput).toBe(true);
+    const compiled = await compile(source, "contract-alias-schema.fun");
+    expect(compiled.typescript).toContain("const Address = Schema.Struct({");
+    expect(compiled.typescript).toContain(
+      "export const AddressSchema = Address;",
+    );
+    const { AddressSchemaFromUnknown, readZip } = await execute(source);
+    const decoded = AddressSchemaFromUnknown({
+      street: "789 Pine Rd",
+      zip: "90210",
+    });
+    expect(readZip(decoded)).toEqual(Option.some("90210"));
+    const decodedNoZip = AddressSchemaFromUnknown({ street: "789 Pine Rd" });
+    expect(readZip(decodedNoZip)).toEqual(Option.none());
+    expect(() => AddressSchemaFromUnknown({ zip: "90210" })).toThrow();
+  });
 });

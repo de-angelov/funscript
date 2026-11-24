@@ -476,13 +476,21 @@ export function resolveImportedSchemas(
   context: TypeScriptCompilationContext,
 ): ReadonlyMap<string, string> {
   const tsSchemas: Array<{ decl: SchemaDeclaration; rhsName: string }> = [];
+  const localContractNames = new Set<string>();
+  for (const item of ast.body) {
+    const decl = item.kind === "ExportDeclaration" ? item.declaration : item;
+    if (decl.kind === "SchemaDeclaration") {
+      localContractNames.add(decl.id.name);
+    }
+  }
 
   for (const item of ast.body) {
     if (item.kind === "SchemaDeclaration") {
       if (
         item.isTs &&
         item.body.kind === "TsDerivedSchema" &&
-        item.body.targetType.kind === "TypeReferenceNode"
+        item.body.targetType.kind === "TypeReferenceNode" &&
+        !localContractNames.has(item.body.targetType.name.name)
       ) {
         tsSchemas.push({ decl: item, rhsName: item.body.targetType.name.name });
       } else if (
@@ -502,7 +510,8 @@ export function resolveImportedSchemas(
       if (
         decl.isTs &&
         decl.body.kind === "TsDerivedSchema" &&
-        decl.body.targetType.kind === "TypeReferenceNode"
+        decl.body.targetType.kind === "TypeReferenceNode" &&
+        !localContractNames.has(decl.body.targetType.name.name)
       ) {
         tsSchemas.push({ decl, rhsName: decl.body.targetType.name.name });
       } else if (

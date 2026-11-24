@@ -1,5 +1,19 @@
 import { expect } from "vitest";
-import { Effect, Schema, Data, Context, Layer, pipe, Array as EffectArray, Option, Either, Equal, Order, Record as EffectRecord } from "effect";
+import {
+  Effect,
+  Schema,
+  SchemaAST,
+  Data,
+  Context,
+  Layer,
+  pipe,
+  Array as EffectArray,
+  Option,
+  Either,
+  Equal,
+  Order,
+  Record as EffectRecord,
+} from "effect";
 import { match, P } from "ts-pattern";
 import { create as mutativeCreate } from "mutative";
 import ts from "typescript";
@@ -45,7 +59,9 @@ export async function compileFailure(
   filename: string = "test.fun",
   options?: CompileOptions,
 ): Promise<CompilerError> {
-  return Effect.runPromise(Effect.flip(compileString(source, filename, options)));
+  return Effect.runPromise(
+    Effect.flip(compileString(source, filename, options)),
+  );
 }
 
 export interface ExpectedCompileErrorOptions {
@@ -70,7 +86,10 @@ export async function expectCompileError(
   } catch (err) {
     if (err instanceof CompilerError) {
       failure = err;
-    } else if (err instanceof Error && err.message === "Expected compilation to fail, but it succeeded") {
+    } else if (
+      err instanceof Error &&
+      err.message === "Expected compilation to fail, but it succeeded"
+    ) {
       throw err;
     } else {
       // In case it's wrapped or another error type
@@ -164,6 +183,8 @@ export function getDefaultRuntimeScope(): Record<string, any> {
   return {
     Effect,
     Schema: SchemaCompat,
+    SchemaAST,
+    $funscriptSchemaAST: SchemaAST,
     Data,
     Context: ContextCompat,
     Layer,
@@ -185,7 +206,8 @@ export function getDefaultRuntimeScope(): Record<string, any> {
  */
 export function extractExportedNames(typescript: string): string[] {
   const exportedNames: string[] = [];
-  const declRegex = /\bexport\s+(?:const|let|var|function\*?|class)\s+([A-Za-z0-9_$]+)/g;
+  const declRegex =
+    /\bexport\s+(?:const|let|var|function\*?|class)\s+([A-Za-z0-9_$]+)/g;
   let matchDecl: RegExpExecArray | null;
   while ((matchDecl = declRegex.exec(typescript)) !== null) {
     if (matchDecl[1] && !exportedNames.includes(matchDecl[1])) {
@@ -213,7 +235,10 @@ export function extractExportedNames(typescript: string): string[] {
 /**
  * Evaluates emitted TypeScript in a sandboxed Function with Effect ecosystem globals and custom scope.
  */
-export function evalTypescript(typescript: string, options?: EvalOptions): EvalResult {
+export function evalTypescript(
+  typescript: string,
+  options?: EvalOptions,
+): EvalResult {
   // Transpile TypeScript to modern JavaScript, removing types and interfaces cleanly
   const jsTranspiled = ts.transpile(typescript, {
     module: ts.ModuleKind.ESNext,
@@ -239,8 +264,11 @@ export function evalTypescript(typescript: string, options?: EvalOptions): EvalR
   const scopeKeys = Object.keys(scope);
   const scopeValues = Object.values(scope);
 
-  const returnExports = exportNames.length > 0 ? `{ ${exportNames.join(", ")} }` : "{}";
-  const returnResult = options?.expression ? `(${options.expression})` : "undefined";
+  const returnExports =
+    exportNames.length > 0 ? `{ ${exportNames.join(", ")} }` : "{}";
+  const returnResult = options?.expression
+    ? `(${options.expression})`
+    : "undefined";
 
   const functionBody = `
 ${jsCleaned}
@@ -348,7 +376,10 @@ export async function expectNoDiagnostics(
   return result;
 }
 
-function matchesDiagnostic(diag: TypeCheckDiagnostic, expected: string | RegExp | DiagnosticExpectation): boolean {
+function matchesDiagnostic(
+  diag: TypeCheckDiagnostic,
+  expected: string | RegExp | DiagnosticExpectation,
+): boolean {
   if (typeof expected === "string") {
     return diag.message.includes(expected);
   }
@@ -363,9 +394,14 @@ function matchesDiagnostic(diag: TypeCheckDiagnostic, expected: string | RegExp 
     if (!matchesMsg) return false;
   }
   if (expected.category && diag.category !== expected.category) return false;
-  if (expected.code !== undefined && String(diag.code) !== String(expected.code)) return false;
+  if (
+    expected.code !== undefined &&
+    String(diag.code) !== String(expected.code)
+  )
+    return false;
   if (expected.line !== undefined && diag.line !== expected.line) return false;
-  if (expected.column !== undefined && diag.column !== expected.column) return false;
+  if (expected.column !== undefined && diag.column !== expected.column)
+    return false;
   if (expected.file !== undefined && diag.file !== expected.file) return false;
   return true;
 }
@@ -410,7 +446,9 @@ export async function expectDiagnostics(
 
   const matched: TypeCheckDiagnostic[] = [];
   for (const expected of expectations) {
-    const found = result.diagnostics.find((d) => matchesDiagnostic(d, expected));
+    const found = result.diagnostics.find((d) =>
+      matchesDiagnostic(d, expected),
+    );
     expect(
       found,
       `Expected diagnostic matching ${JSON.stringify(expected)} not found among ${result.diagnostics.length} diagnostics:\n${result.formattedOutput}`,
@@ -433,7 +471,10 @@ export async function expectDiagnostics(
  * @param message Optional custom assertion message.
  * @returns The formatted output string from the first pass for further assertions.
  */
-export function assertFormattingIdempotent(source: string, message?: string): string {
+export function assertFormattingIdempotent(
+  source: string,
+  message?: string,
+): string {
   const firstPass = format(source);
   const secondPass = format(firstPass);
   expect(
@@ -446,11 +487,18 @@ export function assertFormattingIdempotent(source: string, message?: string): st
 /**
  * Asserts that formatting matches the expected output AND that formatting is idempotent.
  */
-export function assertFormat(source: string, expectedFormatted: string, message?: string): string {
+export function assertFormat(
+  source: string,
+  expectedFormatted: string,
+  message?: string,
+): string {
   const firstPass = format(source);
   expect(firstPass, message).toBe(expectedFormatted);
   const secondPass = format(firstPass);
-  expect(secondPass, "Formatting must be idempotent across multiple passes").toBe(firstPass);
+  expect(
+    secondPass,
+    "Formatting must be idempotent across multiple passes",
+  ).toBe(firstPass);
   return firstPass;
 }
 
@@ -458,7 +506,12 @@ export function assertFormat(source: string, expectedFormatted: string, message?
  * Reads a FunScript file from disk and asserts that formatting is idempotent.
  */
 export function assertFormattingIdempotentFile(filePath: string): string {
-  const fullPath = path.isAbsolute(filePath) ? filePath : path.resolve(filePath);
+  const fullPath = path.isAbsolute(filePath)
+    ? filePath
+    : path.resolve(filePath);
   const content = fs.readFileSync(fullPath, "utf-8");
-  return assertFormattingIdempotent(content, `Formatting must be idempotent for file: ${filePath}`);
+  return assertFormattingIdempotent(
+    content,
+    `Formatting must be idempotent for file: ${filePath}`,
+  );
 }

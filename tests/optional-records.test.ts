@@ -594,4 +594,30 @@ export js startServer = (props: { port: Number = 3000, host: String = "localhost
       "127.0.0.1:9000",
     );
   });
+
+  it("supports nested record destructuring inside Some", async () => {
+    const source = `
+import { Option } from "effect"
+export getDeepCity = (props: { user?: { name: String, location: { city: String } } }) =>
+  match props.user
+    | Some({ name, location: { city } }) => name + "@" + city
+    | None => "unknown"
+
+export getNestedAge = (props: { user?: { profile: { age: Number } } }) =>
+  match props.user
+    | Some({ profile: { age } }) => age
+    | None => 0
+`;
+    const checked = await typeCheck(source, "nested-some.fun");
+    expect(checked.success, checked.formattedOutput).toBe(true);
+    const { getDeepCity, getNestedAge } = await execute(source);
+    expect(
+      getDeepCity({
+        user: { name: "Alice", location: { city: "Wonderland" } },
+      }),
+    ).toBe("Alice@Wonderland");
+    expect(getDeepCity({})).toBe("unknown");
+    expect(getNestedAge({ user: { profile: { age: 30 } } })).toBe(30);
+    expect(getNestedAge({})).toBe(0);
+  });
 });

@@ -251,13 +251,7 @@ export function parseImportDeclaration(
     ctx.check(TokenType.UPPER_IDENTIFIER)
   ) {
     defaultBinding = ctx.parseAnyIdentifier();
-    if (ctx.match(TokenType.COMMA)) {
-      if (isTypeOnly)
-        throw new ParseError(
-          "A type-only import cannot combine a default binding with other bindings",
-          ctx.peek().span,
-        );
-    } else {
+    if (!ctx.match(TokenType.COMMA)) {
       ctx.consume(TokenType.FROM, "Expected 'from' after import binding");
       const source = parseImportSource(ctx);
       ctx.consumeNewlineOrEof("Expected newline after import declaration");

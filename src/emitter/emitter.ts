@@ -27,6 +27,7 @@ import {
   type PipelineExpression,
   type Program,
   type RecordExpression,
+  type RecordPattern,
   type RecordTypeField,
   type SchemaDeclaration,
   type ServiceDeclaration,
@@ -2822,40 +2823,66 @@ export class Emitter {
           }
         }
 
-        for (const f of pattern.fields) {
-          if (f.isRest) {
-            paramScope.set(f.key.name, false);
-            continue;
-          }
-          if (f.pattern?.kind === "WildcardPattern") continue;
-          const varName =
-            f.pattern?.kind === "VariablePattern"
-              ? f.pattern.name.name
-              : f.pattern
-                ? this.emitBindingTarget(f.pattern)
-                : f.key.name;
-          const info = fields?.get(f.key.name);
-          const isOpt = info?.optional === true;
-          paramScope.set(varName, isOpt);
-          if (info?.fields) {
-            recordScope.set(varName, info.fields);
-          }
-          const fieldTypeNode = typeFields?.find(
-            (tf) => tf.name.name === f.key.name,
-          )?.typeAnnotation;
-          if (fieldTypeNode) {
-            if (isOpt) {
-              varTypeScope.set(varName, {
-                kind: "TypeReferenceNode",
-                name: { kind: "Identifier", name: "Option", span: f.span },
-                typeArgs: [fieldTypeNode],
-                span: f.span,
-              });
+        const registerRecordPatternFields = (
+          pat: RecordPattern,
+          fieldsMap?: Map<string, RecordFieldInfo>,
+          recordTypeFields?: RecordTypeField[],
+        ) => {
+          for (const f of pat.fields) {
+            if (f.isRest) {
+              paramScope.set(f.key.name, false);
+              continue;
+            }
+            if (f.pattern?.kind === "WildcardPattern") continue;
+            const info = fieldsMap?.get(f.key.name);
+            const isOpt = info?.optional === true;
+            const fieldTypeNode = recordTypeFields?.find(
+              (tf) => tf.name.name === f.key.name,
+            )?.typeAnnotation;
+
+            if (f.pattern?.kind === "RecordPattern") {
+              let subTypeFields: RecordTypeField[] | undefined;
+              if (fieldTypeNode?.kind === "RecordTypeNode") {
+                subTypeFields = fieldTypeNode.fields;
+              } else if (fieldTypeNode?.kind === "TypeReferenceNode") {
+                const contract =
+                  this.getRecordTypeNode(fieldTypeNode.name.name) ??
+                  this.recordContracts.get(fieldTypeNode.name.name);
+                if (contract?.kind === "RecordTypeNode") {
+                  subTypeFields = contract.fields;
+                }
+              }
+              registerRecordPatternFields(
+                f.pattern,
+                info?.fields,
+                subTypeFields,
+              );
             } else {
-              varTypeScope.set(varName, fieldTypeNode);
+              const varName =
+                f.pattern?.kind === "VariablePattern"
+                  ? f.pattern.name.name
+                  : f.key.name;
+              paramScope.set(varName, isOpt);
+              if (info?.fields) {
+                recordScope.set(varName, info.fields);
+              }
+              if (fieldTypeNode) {
+                if (isOpt) {
+                  varTypeScope.set(varName, {
+                    kind: "TypeReferenceNode",
+                    name: { kind: "Identifier", name: "Option", span: f.span },
+                    typeArgs: [fieldTypeNode],
+                    span: f.span,
+                  });
+                } else {
+                  varTypeScope.set(varName, fieldTypeNode);
+                }
+              }
             }
           }
-        }
+        };
+
+        registerRecordPatternFields(pattern, fields, typeFields);
 
         this.recordScopes.push(recordScope);
         this.parameterScopes.push(paramScope);

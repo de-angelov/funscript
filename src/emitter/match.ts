@@ -150,10 +150,9 @@ export class MatchEmitter {
         } else if (
           pat.kind === "ConstructorPattern" &&
           pat.constructorName.name === "Some" &&
-          pat.args.length === 1 &&
-          pat.args[0].kind === "WildcardPattern"
+          pat.args.length === 1
         ) {
-          // Allowed: Some(_)
+          // Allowed: Some(...) with any pattern
         } else if (!(
           pat.kind === "WildcardPattern" ||
           (pat.kind === "ConstructorPattern" &&
@@ -280,10 +279,14 @@ export class MatchEmitter {
                   );
                 } else if (arm.pattern.kind === "VariablePattern") {
                   unpack = `const ${vars[0]} = $matched;`;
-                } else if (some && directOptional) {
-                  unpack = `const { value: ${vars[0]} } = $matched;`;
                 } else if (some) {
-                  unpack = `const { _tag: _, ...__fields } = $matched;\n    const [${vars[0]}] = Object.values(__fields) as [typeof $matched extends import("effect").Option.Some<infer V> ? V : any];`;
+                  const target = this.context.emitBindingTarget(
+                    (arm.pattern as ConstructorPattern).args[0],
+                  );
+                  unpack =
+                    directOptional || isOptional
+                      ? `const { value: ${target} } = $matched;`
+                      : `const { value: ${target} } = $matched as unknown as { value: typeof $matched extends import("effect").Option.Some<infer V> ? V : any };`;
                 } else {
                   unpack = `const { _tag: _, ...__fields } = $matched as any;\n    const [${vars.join(", ")}] = Object.values(__fields) as any[];`;
                 }

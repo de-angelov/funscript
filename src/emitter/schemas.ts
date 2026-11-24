@@ -293,6 +293,11 @@ export function emitSchemaDeclaration(
         schemaExpr = ctx.options.importedSchemas.get(decl.id.name)!;
       } else if (
         targetType.kind === "TypeReferenceNode" &&
+        ctx.recordContracts.has(targetType.name.name)
+      ) {
+        schemaExpr = emitSchemaTypeField(ctx, targetType);
+      } else if (
+        targetType.kind === "TypeReferenceNode" &&
         !PRIMITIVE_TYPES[targetType.name.name] &&
         targetType.name.name !== "Duration" &&
         targetType.name.name !== "UUID" &&
@@ -834,6 +839,11 @@ export function emitGenericSchemaArgument(
 ): string {
   if (type.kind === "ParenthesizedTypeNode")
     return emitGenericSchemaArgument(ctx, type.typeNode, verifyImports);
+  if (type.kind === "LiteralTypeNode")
+    return `Schema.Literal(${JSON.stringify(type.value)})`;
+  if (type.kind === "RecordTypeNode" || type.kind === "UnionTypeNode") {
+    return emitSchemaTypeField(ctx, type);
+  }
   if (type.kind === "TypeReferenceNode") {
     const name = type.name.name;
     if (ctx.activeSchemaParameters?.has(name) && !type.typeArgs?.length)
@@ -844,8 +854,12 @@ export function emitGenericSchemaArgument(
       !ctx.declaredTypeNames.has(name)
     )
       return emitSchemaTypeField(ctx, type);
+    if (name === "Option" && type.typeArgs?.length === 1)
+      return `Schema.Option(${emitGenericSchemaArgument(ctx, type.typeArgs[0], verifyImports)})`;
     if (name === "Array" && type.typeArgs?.length === 1)
       return `Schema.Array(${emitGenericSchemaArgument(ctx, type.typeArgs[0], verifyImports)})`;
+    if (name === "Record" && type.typeArgs?.length === 2)
+      return `Schema.Record(${emitGenericSchemaArgument(ctx, type.typeArgs[0], verifyImports)}, ${emitGenericSchemaArgument(ctx, type.typeArgs[1], verifyImports)})`;
     const arity =
       ctx.genericDataSchemas.get(name) ??
       ctx.options.importedGenericDataSchemas?.get(name);
@@ -854,6 +868,7 @@ export function emitGenericSchemaArgument(
     if (
       !type.typeArgs?.length &&
       (ctx.runtimeSchemaNames.has(name) ||
+        ctx.recordContracts.has(name) ||
         (ctx.userImportBindings.has(name) &&
           (!verifyImports || ctx.options.importedDataSchemas?.has(name))))
     )
