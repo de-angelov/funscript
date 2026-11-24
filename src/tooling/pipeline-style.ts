@@ -93,7 +93,6 @@ export function convertPipelineStyle(
       const stage = node.right;
       const target = stage.kind === "CallExpression" ? stage.callee : stage;
       const start = target.span.start.offset;
-      const _end = target.span.end.offset;
       const stageEnd = stage.span.end.offset;
       const selected =
         !range ||

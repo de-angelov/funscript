@@ -83,31 +83,6 @@ const DURATION_COMPANION_METHODS = new Set([
   "hours",
   "days",
 ]);
-const _NUMBER_COMPANION_METHODS = new Set([
-  "isGreaterThan",
-  "isGreaterThanOrEqualTo",
-  "isLessThan",
-  "isLessThanOrEqualTo",
-  "greaterThan",
-  "greaterThanOrEqualTo",
-  "lessThan",
-  "lessThanOrEqualTo",
-  "between",
-  "clamp",
-  "increment",
-  "decrement",
-]);
-const _DATETIME_COMPANION_METHODS = new Set([
-  "lessThan",
-  "lessThanOrEqualTo",
-  "greaterThan",
-  "greaterThanOrEqualTo",
-  "between",
-  "isLessThan",
-  "isLessThanOrEqualTo",
-  "isGreaterThan",
-  "isGreaterThanOrEqualTo",
-]);
 
 function unrollPipeline(expr: PipelineExpression): Expression[] {
   const chain: Expression[] = [];
