@@ -1,6 +1,7 @@
 import type {
   BindingTarget,
   BooleanLiteral,
+  ConstructorPattern,
   Expression,
   FunctionBody,
   LiteralPattern,
@@ -8,10 +9,12 @@ import type {
   MatchExpression,
   Pattern,
   RecordPattern,
+  RecordTypeNode,
   StringLiteral,
   TypeNode,
 } from "../ast/types.js";
 import { FunScriptError } from "../errors.js";
+import { patternHasOptionalField } from "./declarations.js";
 
 export type RecordFieldInfo = {
   optional: boolean;
@@ -26,10 +29,14 @@ interface MatchEmitterContext {
   emitBindingTarget(target: BindingTarget | Pattern): string;
   emitStringLiteral(literal: StringLiteral): string;
   recordField(expression: Expression): RecordFieldInfo | undefined;
+  recordFields?(name: string): Map<string, RecordFieldInfo> | undefined;
+  getRecordTypeNode?(name: string): RecordTypeNode | undefined;
+  recordContracts?: Map<string, RecordTypeNode>;
   getTypeNodeForExpression?(expression: Expression): TypeNode | undefined;
   isOptionalParameter(name: string): boolean;
   isOptionalValue(expression: Expression): boolean;
   requireTsPattern(): void;
+  addEffectImport?(name: string): void;
   enterOptionalPayload(
     name: string,
     fields: Map<string, RecordFieldInfo>,
@@ -37,6 +44,13 @@ interface MatchEmitterContext {
     payloadType?: TypeNode,
   ): void;
   leaveOptionalPayload(): void;
+  enterOptionalRecordPattern?(
+    pattern: RecordPattern,
+    fields: Map<string, RecordFieldInfo>,
+    arm: MatchArm,
+    payloadType?: TypeNode,
+  ): void;
+  leaveOptionalRecordPattern?(): void;
 }
 
 /** Renders match expressions and their patterns using the enclosing emitter's scope. */
@@ -78,6 +92,9 @@ export class MatchEmitter {
     const payloadFields = optionalRecord?.optional
       ? optionalRecord.fields
       : undefined;
+    const isOptional = expr.scrutinee
+      ? this.context.isOptionalValue(expr.scrutinee)
+      : false;
 
     const hasWildcard = expr.arms.some(
       (a) => a.pattern.kind === "WildcardPattern",
@@ -113,6 +130,7 @@ export class MatchEmitter {
       const arm = expr.arms[i];
       const isLastArm = i === expr.arms.length - 1;
       let payloadName: string | undefined;
+      let recordPattern: RecordPattern | undefined;
       if (payloadFields) {
         const pat = arm.pattern;
         if (
@@ -122,6 +140,20 @@ export class MatchEmitter {
           pat.args[0].kind === "VariablePattern"
         ) {
           payloadName = pat.args[0].name.name;
+        } else if (
+          pat.kind === "ConstructorPattern" &&
+          pat.constructorName.name === "Some" &&
+          pat.args.length === 1 &&
+          pat.args[0].kind === "RecordPattern"
+        ) {
+          recordPattern = pat.args[0];
+        } else if (
+          pat.kind === "ConstructorPattern" &&
+          pat.constructorName.name === "Some" &&
+          pat.args.length === 1 &&
+          pat.args[0].kind === "WildcardPattern"
+        ) {
+          // Allowed: Some(_)
         } else if (!(
           pat.kind === "WildcardPattern" ||
           (pat.kind === "ConstructorPattern" &&
@@ -129,29 +161,36 @@ export class MatchEmitter {
             pat.args.length === 0)
         )) {
           throw new FunScriptError(
-            "Match an optional record with Some(name), None, or _",
+            "Match an optional record with Some(name), Some({...}), None, or _",
             pat.span,
           );
         }
       }
-      if (payloadName && payloadFields) {
-        let payloadType: TypeNode | undefined;
-        if (expr.scrutinee && this.context.getTypeNodeForExpression) {
-          const scrutineeType = this.context.getTypeNodeForExpression(
-            expr.scrutinee,
-          );
-          if (
-            scrutineeType?.kind === "TypeReferenceNode" &&
-            scrutineeType.name.name === "Option" &&
-            scrutineeType.typeArgs?.length === 1
-          ) {
-            payloadType = scrutineeType.typeArgs[0];
-          } else {
-            payloadType = scrutineeType;
-          }
+      let payloadType: TypeNode | undefined;
+      if (expr.scrutinee && this.context.getTypeNodeForExpression) {
+        const scrutineeType = this.context.getTypeNodeForExpression(
+          expr.scrutinee,
+        );
+        if (
+          scrutineeType?.kind === "TypeReferenceNode" &&
+          scrutineeType.name.name === "Option" &&
+          scrutineeType.typeArgs?.length === 1
+        ) {
+          payloadType = scrutineeType.typeArgs[0];
+        } else {
+          payloadType = scrutineeType;
         }
+      }
+      if (payloadName && payloadFields) {
         this.context.enterOptionalPayload(
           payloadName,
+          payloadFields,
+          arm,
+          payloadType,
+        );
+      } else if (recordPattern && payloadFields) {
+        this.context.enterOptionalRecordPattern?.(
+          recordPattern,
           payloadFields,
           arm,
           payloadType,
@@ -166,6 +205,7 @@ export class MatchEmitter {
             arm.body,
             arm.pattern,
             expr.scrutinee,
+            payloadFields,
           );
           code += `\n  .otherwise(${body})`;
         } else {
@@ -174,6 +214,7 @@ export class MatchEmitter {
             arm.body,
             arm.pattern,
             expr.scrutinee,
+            payloadFields,
           );
           if (arm.guard) {
             let guardFn: string;
@@ -221,17 +262,31 @@ export class MatchEmitter {
                   arm.pattern.args.length === 1 &&
                   arm.pattern.args[0].kind === "VariablePattern" &&
                   vars.length === 1;
+                const someRecord =
+                  arm.pattern.kind === "ConstructorPattern" &&
+                  arm.pattern.constructorName.name === "Some" &&
+                  arm.pattern.args.length === 1 &&
+                  arm.pattern.args[0].kind === "RecordPattern";
                 const directOptional =
                   expr.scrutinee?.kind === "Identifier" &&
                   this.context.isOptionalParameter(expr.scrutinee.name);
-                const unpack =
-                  arm.pattern.kind === "VariablePattern"
-                    ? `const ${vars[0]} = $matched;`
-                    : some && directOptional
-                      ? `const { value: ${vars[0]} } = $matched;`
-                      : some
-                        ? `const { _tag: _, ...__fields } = $matched;\n    const [${vars[0]}] = Object.values(__fields) as [typeof $matched extends import("effect").Option.Some<infer V> ? V : any];`
-                        : `const { _tag: _, ...__fields } = $matched as any;\n    const [${vars.join(", ")}] = Object.values(__fields) as any[];`;
+                let unpack: string;
+                if (someRecord) {
+                  unpack = this.emitSomeRecordUnpack(
+                    (arm.pattern as ConstructorPattern)
+                      .args[0] as RecordPattern,
+                    payloadFields,
+                    directOptional || isOptional,
+                  );
+                } else if (arm.pattern.kind === "VariablePattern") {
+                  unpack = `const ${vars[0]} = $matched;`;
+                } else if (some && directOptional) {
+                  unpack = `const { value: ${vars[0]} } = $matched;`;
+                } else if (some) {
+                  unpack = `const { _tag: _, ...__fields } = $matched;\n    const [${vars[0]}] = Object.values(__fields) as [typeof $matched extends import("effect").Option.Some<infer V> ? V : any];`;
+                } else {
+                  unpack = `const { _tag: _, ...__fields } = $matched as any;\n    const [${vars.join(", ")}] = Object.values(__fields) as any[];`;
+                }
                 guardFn = `($matched) => {\n    ${unpack}\n    return ${this.context.emitExpression(arm.guard)};\n  }`;
               } else {
                 guardFn = `() => ${this.context.emitExpression(arm.guard)}`;
@@ -245,6 +300,8 @@ export class MatchEmitter {
       } finally {
         if (payloadName && payloadFields) {
           this.context.leaveOptionalPayload();
+        } else if (recordPattern && payloadFields) {
+          this.context.leaveOptionalRecordPattern?.();
         }
       }
     }
@@ -350,10 +407,55 @@ export class MatchEmitter {
     return parts;
   }
 
+  private emitSomeRecordUnpack(
+    pat: RecordPattern,
+    payloadFields?: Map<string, RecordFieldInfo>,
+    isOptional?: boolean,
+  ): string {
+    if (patternHasOptionalField(pat, payloadFields)) {
+      this.context.addEffectImport?.("Option");
+      const cast = isOptional
+        ? ""
+        : ` as unknown as { value: typeof $matched extends import("effect").Option.Some<infer V> ? V : any }`;
+      const lines: string[] = [
+        `const { value: $funscriptSomeInner } = $matched${cast};`,
+      ];
+      const restField = pat.fields.find((f) => f.isRest);
+      if (restField) {
+        const nonRest = pat.fields.filter((f) => !f.isRest);
+        lines.push(
+          `const { ${nonRest.map((f) => `${f.key.name}: _${f.key.name}`).join(", ")}, ...$funscriptRest } = $funscriptSomeInner;`,
+        );
+        lines.push(`const ${restField.key.name} = $funscriptRest;`);
+      }
+      for (const f of pat.fields) {
+        if (f.isRest) continue;
+        if (f.pattern?.kind === "WildcardPattern") continue;
+        const varName = f.pattern
+          ? this.context.emitBindingTarget(f.pattern)
+          : f.key.name;
+        const isOpt = payloadFields?.get(f.key.name)?.optional === true;
+        if (isOpt) {
+          lines.push(
+            `const ${varName} = Option.fromNullishOr($funscriptSomeInner.${f.key.name});`,
+          );
+        } else {
+          lines.push(`const ${varName} = $funscriptSomeInner.${f.key.name};`);
+        }
+      }
+      return lines.join("\n    ");
+    }
+    const bindingTarget = this.context.emitBindingTarget(pat);
+    return isOptional
+      ? `const { value: ${bindingTarget} } = $matched;`
+      : `const { value: ${bindingTarget} } = $matched as unknown as { value: typeof $matched extends import("effect").Option.Some<infer V> ? V : any };`;
+  }
+
   private emitArmHandler(
     body: FunctionBody,
     pat?: Pattern,
     scrutinee?: Expression,
+    payloadFields?: Map<string, RecordFieldInfo>,
   ): string {
     if (pat?.kind === "RecordPattern") {
       const destructParts = this.collectRecordDestructuring(pat);
@@ -435,6 +537,16 @@ export class MatchEmitter {
       pat.constructorName.name === "Some" &&
       pat.args.length === 1
     ) {
+      if (pat.args[0].kind === "RecordPattern") {
+        const unpack = this.emitSomeRecordUnpack(
+          pat.args[0],
+          payloadFields,
+          isOptional,
+        );
+        if (body.kind === "BlockStatement")
+          return `($matched) => {\n    ${unpack}\n${this.context.emitFunctionBody(body)}\n  }`;
+        return `($matched) => {\n    ${unpack}\n    return ${this.context.emitExpression(body)};\n  }`;
+      }
       const bindingTarget = this.context.emitBindingTarget(pat.args[0]);
       if (bindingTarget && bindingTarget !== "[]" && bindingTarget !== "{}") {
         const unpack = isOptional

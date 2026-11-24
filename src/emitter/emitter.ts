@@ -27,6 +27,7 @@ import {
   type PipelineExpression,
   type Program,
   type RecordExpression,
+  type RecordTypeField,
   type SchemaDeclaration,
   type ServiceDeclaration,
   type Statement,
@@ -2759,8 +2760,12 @@ export class Emitter {
       emitBindingTarget: (target) => this.emitBindingTarget(target),
       emitStringLiteral: (literal) => this.emitStringLiteral(literal),
       recordField: (expression) => this.recordField(expression),
+      recordFields: (name) => this.recordFields(name),
+      getRecordTypeNode: (name) => this.getRecordTypeNode(name),
+      recordContracts: this.recordContracts,
       isOptionalParameter: (name) => this.isOptionalParameter(name),
       isOptionalValue: (expression) => this.isOptionalValue(expression),
+      addEffectImport: (name) => this.addEffectImport(name),
       getTypeNodeForExpression: (expression) =>
         this.getTypeNodeForExpression(expression),
       requireTsPattern: () => {
@@ -2796,6 +2801,95 @@ export class Emitter {
         }
       },
       leaveOptionalPayload: () => {
+        this.variableTypeScopes.pop();
+        this.parameterScopes.pop();
+        this.recordScopes.pop();
+      },
+      enterOptionalRecordPattern: (pattern, fields, arm, payloadType) => {
+        const recordScope = new Map<string, Map<string, RecordFieldInfo>>();
+        const paramScope = new Map<string, boolean>();
+        const varTypeScope = new Map<string, TypeNode | undefined>();
+
+        let typeFields: RecordTypeField[] | undefined;
+        if (payloadType?.kind === "RecordTypeNode") {
+          typeFields = payloadType.fields;
+        } else if (payloadType?.kind === "TypeReferenceNode") {
+          const contract =
+            this.getRecordTypeNode(payloadType.name.name) ??
+            this.recordContracts.get(payloadType.name.name);
+          if (contract?.kind === "RecordTypeNode") {
+            typeFields = contract.fields;
+          }
+        }
+
+        for (const f of pattern.fields) {
+          if (f.isRest) {
+            paramScope.set(f.key.name, false);
+            continue;
+          }
+          if (f.pattern?.kind === "WildcardPattern") continue;
+          const varName =
+            f.pattern?.kind === "VariablePattern"
+              ? f.pattern.name.name
+              : f.pattern
+                ? this.emitBindingTarget(f.pattern)
+                : f.key.name;
+          const info = fields?.get(f.key.name);
+          const isOpt = info?.optional === true;
+          paramScope.set(varName, isOpt);
+          if (info?.fields) {
+            recordScope.set(varName, info.fields);
+          }
+          const fieldTypeNode = typeFields?.find(
+            (tf) => tf.name.name === f.key.name,
+          )?.typeAnnotation;
+          if (fieldTypeNode) {
+            if (isOpt) {
+              varTypeScope.set(varName, {
+                kind: "TypeReferenceNode",
+                name: { kind: "Identifier", name: "Option", span: f.span },
+                typeArgs: [fieldTypeNode],
+                span: f.span,
+              });
+            } else {
+              varTypeScope.set(varName, fieldTypeNode);
+            }
+          }
+        }
+
+        this.recordScopes.push(recordScope);
+        this.parameterScopes.push(paramScope);
+        this.variableTypeScopes.push(varTypeScope);
+
+        const validateBody = (body: FunctionBody) => {
+          for (const [boundName] of recordScope) {
+            const synthetic = {
+              kind: "FunctionExpression",
+              params: [
+                {
+                  kind: "Parameter",
+                  name: { kind: "Identifier", name: boundName, span: arm.span },
+                  span: arm.span,
+                },
+              ],
+              body,
+              span: arm.span,
+            } as FunctionExpression;
+            this.validateRecordParameterUse(synthetic, boundName, new Set());
+          }
+        };
+
+        try {
+          validateBody(arm.body);
+          if (arm.guard) validateBody(arm.guard);
+        } catch (error) {
+          this.variableTypeScopes.pop();
+          this.parameterScopes.pop();
+          this.recordScopes.pop();
+          throw error;
+        }
+      },
+      leaveOptionalRecordPattern: () => {
         this.variableTypeScopes.pop();
         this.parameterScopes.pop();
         this.recordScopes.pop();

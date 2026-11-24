@@ -490,4 +490,78 @@ describe("optional fields in inline parameter records", () => {
     expect(f("default-prefix", {})).toBe("default-prefix");
     expect(f("default-prefix", { label: "custom" })).toBe("custom");
   });
+
+  it("permits destructuring inside Some(...) when matching optional records without leaking undefined", async () => {
+    const source = `
+import { Option } from "effect"
+export read = (props: { nested?: { city: String, suite?: String } }) =>
+  match props.nested
+    | Some({ city, suite }) => city + Option.getOrElse(suite |> Option.map((s) => " - " + s), () => "")
+    | None => "missing"
+`;
+    const checked = await typeCheck(source, "destructure-some-record.fun");
+    expect(checked.success, checked.formattedOutput).toBe(true);
+    const { read } = await execute(source);
+    expect(read({})).toBe("missing");
+    expect(read({ nested: { city: "Paris" } })).toBe("Paris");
+    expect(read({ nested: { city: "Paris", suite: "Apt 4" } })).toBe(
+      "Paris - Apt 4",
+    );
+  });
+
+  it("permits alias destructuring, rest patterns, and wildcard patterns inside Some(...) when matching optional records", async () => {
+    const source = `
+import { Option } from "effect"
+export readAlias = (props: { nested?: { city: String, suite?: String } }) =>
+  match props.nested
+    | Some({ city: c, suite: s }) => c + Option.getOrElse(s |> Option.map((str) => " #" + str), () => "")
+    | None => "none"
+
+export checkWildcard = (props: { nested?: { city: String } }) =>
+  match props.nested
+    | Some(_) => true
+    | None => false
+
+export readRest = (props: { nested?: { city: String, suite?: String } }) =>
+  match props.nested
+    | Some({ city, ...rest }) => city
+    | None => "none"
+`;
+    const checked = await typeCheck(source, "destructure-some-advanced.fun");
+    expect(checked.success, checked.formattedOutput).toBe(true);
+    const { readAlias, checkWildcard, readRest } = await execute(source);
+    expect(readAlias({ nested: { city: "Rome", suite: "10" } })).toBe(
+      "Rome #10",
+    );
+    expect(readAlias({ nested: { city: "Rome" } })).toBe("Rome");
+    expect(readAlias({})).toBe("none");
+
+    expect(checkWildcard({ nested: { city: "Berlin" } })).toBe(true);
+    expect(checkWildcard({})).toBe(false);
+
+    expect(readRest({ nested: { city: "Tokyo" } })).toBe("Tokyo");
+    expect(readRest({})).toBe("none");
+  });
+
+  it("supports when guards with destructured Some patterns and rejects invalid match patterns on optional records", async () => {
+    const source = `
+import { Option } from "effect"
+export categorize = (props: { address?: { city: String, vip?: Boolean } }) =>
+  match props.address
+    | Some({ city, vip }) when city #= "Metropolis" => "super"
+    | Some({ city }) => city
+    | None => "unknown"
+`;
+    const checked = await typeCheck(source, "destructure-some-guard.fun");
+    expect(checked.success, checked.formattedOutput).toBe(true);
+    const { categorize } = await execute(source);
+    expect(categorize({ address: { city: "Metropolis" } })).toBe("super");
+    expect(categorize({ address: { city: "Gotham" } })).toBe("Gotham");
+    expect(categorize({})).toBe("unknown");
+
+    await expectCompileError(
+      'export f = (props: { address?: { city?: String } }) => match props.address\n  | 123 => "bad"\n  | _ => "ok"',
+      /Match an optional record with Some\(name\), Some\(\{\.\.\.\}\), None, or _/,
+    );
+  });
 });
