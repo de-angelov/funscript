@@ -25,7 +25,7 @@ export function renderProviderRuntimeExportType(
       if (names.has(parameter.name))
         throw new Error(`Duplicate callable parameter '${parameter.name}'`);
       names.add(parameter.name);
-      return `${JSON.stringify(parameter.name)}: ${renderNode(parameter.type, new Set())}`;
+      return `${parameter.name}: ${renderNode(parameter.type, new Set())}`;
     });
     return `(${parameters.join(", ")}) => ${renderNode(value.result, new Set())}`;
   }

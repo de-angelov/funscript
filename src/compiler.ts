@@ -545,6 +545,7 @@ export const compileString = (
               importedIdentitySchemas,
               importedDataSchemas,
               importedSchemas,
+              options?.preparedProviderSchemas?.runtimeApis,
             );
           }
           const {
@@ -563,6 +564,7 @@ export const compileString = (
             importedDataSchemas,
             options?.pipelineAnalysisOnly,
             importedSchemas,
+            options?.preparedProviderSchemas?.runtimeApis,
           );
           if (options?.pipelineAnalysisOnly) {
             return {
@@ -693,7 +695,7 @@ export const compileStringAsync = (
         for (const item of prepared.results) {
           const runtimeModule = item.result.runtimeModule;
           if (!runtimeModule) continue;
-          runtimeApis.set(item.declarationId, {
+          runtimeApis.set(item.name, {
             declarationId: item.declarationId,
             name: item.name,
             providerId: item.providerId,

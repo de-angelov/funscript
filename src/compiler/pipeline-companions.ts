@@ -1,6 +1,7 @@
 import ts from "typescript";
 import {
   Emitter,
+  type EmitterOptions,
   type StageResolution,
   COMPARISON_METHOD_MAP,
   PipelineResolutionError,
@@ -200,6 +201,7 @@ export function inferPipelineCompanions(
   importedDataSchemas?: ReadonlySet<string>,
   tolerateUnresolvedStages = false,
   importedSchemas?: ReadonlyMap<string, string>,
+  preparedRuntimeApis?: EmitterOptions["preparedRuntimeApis"],
 ): PipelineCompanionMap {
   const schemaNames = new Set<string>();
   const localBindings = new Set<string>();
@@ -235,6 +237,7 @@ export function inferPipelineCompanions(
     importedIdentitySchemas,
     importedDataSchemas,
     importedSchemas,
+    preparedRuntimeApis,
   }).emit();
 
   const emptyResult = new Map<number, PipelineCompanionModule>() as Map<

@@ -1,6 +1,6 @@
 import ts from "typescript";
 import { type Program, type Span, type RecordTypeNode } from "../ast/types.js";
-import { Emitter } from "../emitter/emitter.js";
+import { Emitter, type EmitterOptions } from "../emitter/emitter.js";
 import { type TypeScriptCompilationContext } from "./typescript-context.js";
 
 class NumericComparisonError extends Error {
@@ -140,6 +140,7 @@ export function validateNumericComparisons(
   importedIdentitySchemas?: ReadonlySet<string>,
   importedDataSchemas?: ReadonlySet<string>,
   importedSchemas?: ReadonlyMap<string, string>,
+  preparedRuntimeApis?: EmitterOptions["preparedRuntimeApis"],
 ): void {
   const marked = new Emitter(ast, undefined, {
     allowAmbiguousPipeline: true,
@@ -150,6 +151,7 @@ export function validateNumericComparisons(
     importedIdentitySchemas,
     importedDataSchemas,
     importedSchemas,
+    preparedRuntimeApis,
   }).emit();
   if (!marked.includes("__funscriptNumericOperand(")) return;
 
