@@ -30,6 +30,7 @@
     "./callback": "./dist/interop/callback.js",
     "./csv": "./dist/interop/csv.js",
     "./providers": "./dist/providers/index.js",
+    "./providers/contract": "./dist/providers/contract.js",
     "./providers/json": "./dist/providers/json.js",
     "./providers/sqlite": "./dist/providers/sqlite.js",
     "./providers/drizzle": "./dist/providers/drizzle.js",

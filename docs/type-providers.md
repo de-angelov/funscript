@@ -112,15 +112,19 @@ compiler and language server still use the TypeScript 5 API internally; the
 beta is installed separately while that integration is migrated. Third-party
 provider registration and remote database connections are not implemented.
 
-## External provider contract (proposed, version 1)
+## External provider contract (version 1)
 
-This section specifies the boundary for independently authored providers. The
-current compiler implementation above is built-in dispatch for `csv`, `json`,
+This section specifies the public boundary for independently authored
+providers. Its TypeScript types are exported from `funscript/providers/contract`
+and re-exported from `funscript/providers`. The current compiler implementation
+above is built-in dispatch for `csv`, `json`,
 `jsonSchema`, and `sqlite`; it is not an implementation of this extension
 contract. Today `resolveProviderSchemas` returns a map from schema name to an
 emitted expression, and `providerDependencies` recognizes local input files
-(and SQLite WAL/journal files). External registration, named runtime modules,
-and arbitrary dependency declarations remain future host work.
+(and SQLite WAL/journal files). External registration, invocation, named runtime
+module generation, and arbitrary dependency tracking remain future host work.
+The exported contract lets provider authors implement and type-check the
+boundary now; it does not imply that the compiler discovers or runs providers.
 
 ### F# background and FunScript adaptation
 
@@ -155,9 +159,8 @@ minimum manifest shape is:
 interface ProviderManifestV1 {
   id: string; // stable package-qualified provider ID
   version: string; // provider package SemVer
-  entryPoint: string; // host-resolved executable entry point
   contract: { major: 1; minMinor: number; maxMinor: number };
-  arguments: ReadonlyArray<{
+  parameters: ReadonlyArray<{
     name: string;
     kind: "string" | "number" | "boolean";
     required: boolean;
@@ -184,7 +187,7 @@ The host sends an immutable request equivalent to:
 interface ProviderRequestV1 {
   contract: { major: 1; minor: number }; // negotiated exact version
   provider: { id: string; version: string };
-  declaration: { source: string; name: string; span: SourceSpan };
+  declaration: { source: string; name: string; span: ProviderSourceSpanV1 };
   arguments: ReadonlyArray<string | number | boolean>;
   paths: ReadonlyArray<{ argumentIndex: number; canonicalPath: string }>;
 }
@@ -252,9 +255,9 @@ interface ProviderDiagnosticV1 {
 }
 ```
 
-The provider entry point consumes one request and returns one result; it does
-not retain host objects between calls. This interface describes the proposed
-host contract, not a currently callable extension API. The host sends only
+The provider's `provide` implementation consumes one request and returns one
+result; it does not retain host objects between calls. The typed package API is
+not a currently callable extension host. The host sends only
 fields defined by the negotiated minor version. A minor release may add
 optional fields or enum values only where older readers can safely ignore
 them; otherwise it requires a major increment. The result must echo the exact
@@ -329,12 +332,23 @@ dependency edges, and diagnostics. Cancellation, timeout, process failure, or
 malformed output discards the whole result; no partial types are published.
 Provider discovery releases its resources before the invocation ends.
 
+Version 1 rejects non-literal arguments, recursive schemas, unknown schema
+nodes, undeclared reads, arbitrary generated source, and provider callbacks
+into compiler internals. Remote fetching, network access, database operations,
+and lazy type/member expansion are not part of the contract. The host reports
+unsupported behavior as a source-located diagnostic and publishes no partial
+result. Generated TypeScript declarations and optional package modules are the
+supported output model; consumers do not maintain TypeScript bridges.
+
 ### Trust and diagnostics
 
 F# documentation notes that provider assemblies can execute while code is
 merely browsed in an editor, and describes trust decisions before loading them.
 FunScript adopts that security lesson with a distinct policy: a provider must
 be explicitly registered and trusted by the host before generation code runs.
+The exported `ProviderTrustV1` type represents this host-owned decision; a
+provider cannot grant trust to itself. Trust does not promise an operating
+system sandbox or permit arbitrary untrusted code execution.
 Build, language server, and editor features do not execute an unregistered or
 untrusted provider. The editor can still parse the declaration and report an
 unresolved-provider diagnostic. Trust is scoped to package identity, provider
