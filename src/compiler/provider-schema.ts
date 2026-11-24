@@ -11,6 +11,8 @@ export function renderProviderSchema(node: ProviderSchemaNodeV1): string {
       return "Schema.Boolean";
     case "null":
       return "Schema.Null";
+    case "array":
+      return `Schema.Array(${renderProviderSchema(node.items)})`;
     default:
       throw new Error(`Unsupported provider schema node '${node.kind}'`);
   }

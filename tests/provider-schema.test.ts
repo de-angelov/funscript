@@ -14,8 +14,21 @@ describe("renderProviderSchema", () => {
   });
 
   it.each([
+    [
+      { kind: "array", items: { kind: "string" } },
+      "Schema.Array(Schema.String)",
+    ],
+    [
+      { kind: "array", items: { kind: "array", items: { kind: "number" } } },
+      "Schema.Array(Schema.Array(Schema.Finite))",
+    ],
+  ] as const)("renders arrays deterministically", (node, expected) => {
+    expect(renderProviderSchema(node)).toBe(expected);
+    expect(renderProviderSchema(node)).toBe(expected);
+  });
+
+  it.each([
     { kind: "bytes" },
-    { kind: "array", items: { kind: "string" } },
     {
       kind: "object",
       properties: [{ name: "injected", schema: { kind: "string" } }],
@@ -31,4 +44,10 @@ describe("renderProviderSchema", () => {
       );
     },
   );
+
+  it("rejects unsupported item nodes inside arrays", () => {
+    expect(() =>
+      renderProviderSchema({ kind: "array", items: { kind: "bytes" } }),
+    ).toThrow("Unsupported provider schema node 'bytes'");
+  });
 });
