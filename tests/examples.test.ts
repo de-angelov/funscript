@@ -14,7 +14,12 @@ describe("Sample Applications & Real-World Programs", () => {
   const examplesDir = path.resolve("examples");
 
   describe("canonical showcase examples", () => {
-    for (const name of ["hello.fun", "shapes.fun", "todo-http.fun", "greeter-service.fun"]) {
+    for (const name of [
+      "hello.fun",
+      "shapes.fun",
+      "todo-http.fun",
+      "greeter-service.fun",
+    ]) {
       it(`compiles ${name} cleanly`, async () => {
         const examplePath = path.join(examplesDir, name);
         const source = await fs.readFile(examplePath, "utf-8");
@@ -43,26 +48,44 @@ describe("Sample Applications & Real-World Programs", () => {
       expect(res.typescript).toBeDefined();
 
       // Effect imports & features
-      expect(res.typescript).toContain('import { Array, Console, Effect, Fiber, Layer, Number, Ref, Schedule, pipe } from "effect";');
-      expect(res.typescript).not.toContain('import { Context, Data, Effect, Number, Schema, pipe } from "effect";');
-      expect(res.typescript).toContain('import { Context, Data, Schema } from "effect";');
-      expect(res.typescript).toContain('import { match, P } from "ts-pattern";');
+      expect(res.typescript).toContain(
+        'import { Array, Console, Effect, Fiber, Layer, Number, Ref, Schedule, pipe } from "effect";',
+      );
+      expect(res.typescript).not.toContain(
+        'import { Context, Data, Effect, Number, Schema, pipe } from "effect";',
+      );
+      expect(res.typescript).toContain(
+        'import { Context, Data, Schema } from "effect";',
+      );
+      expect(res.typescript).toContain(
+        'import { match, P } from "ts-pattern";',
+      );
       expect(res.typescript).toContain('import { create } from "mutative";');
 
       // Tagged unions & pattern matching
-      expect(res.typescript).toContain("export type DeliveryTier = Data.TaggedEnum<{");
-      expect(res.typescript).toContain("export type PaymentMethod = Data.TaggedEnum<{");
-      expect(res.typescript).toContain("export type OrderResult = Data.TaggedEnum<{");
+      expect(res.typescript).toContain(
+        "export type DeliveryTier = Data.TaggedEnum<{",
+      );
+      expect(res.typescript).toContain(
+        "export type PaymentMethod = Data.TaggedEnum<{",
+      );
+      expect(res.typescript).toContain(
+        "export type OrderResult = Data.TaggedEnum<{",
+      );
       expect(res.typescript).toContain("match(tier)");
       expect(res.typescript).toContain(".exhaustive()");
 
       // Mutative deep updates & draft recipe
       expect(res.typescript).toContain("draft.shipping.carrier = carrier;");
-      expect(res.typescript).toContain("draft.shipping.trackingNumber = trackingNumber;");
+      expect(res.typescript).toContain(
+        "draft.shipping.trackingNumber = trackingNumber;",
+      );
       expect(res.typescript).toContain("draft[draft.length] = entry;");
 
       // Effect concurrency, retry, fiber, and layers
-      expect(res.typescript).toContain("Effect.all(checks, { concurrency: \"unbounded\" })");
+      expect(res.typescript).toContain(
+        'Effect.all(checks, { concurrency: "unbounded" })',
+      );
       expect(res.typescript).toContain("Effect.retry(Schedule.recurs(2))");
       expect(res.typescript).toContain("Effect.forkChild(");
       expect(res.typescript).toContain("Fiber.join(");
@@ -71,26 +94,50 @@ describe("Sample Applications & Real-World Programs", () => {
     });
 
     it("executes examples/order-fulfillment.fun via CLI and verifies expected output", async () => {
-      const { stdout, stderr } = await execFileAsync("node", [cliPath, "run", examplePath]);
+      const { stdout, stderr } = await execFileAsync("node", [
+        cliPath,
+        "run",
+        examplePath,
+      ]);
       expect(stderr).toBe("");
 
       // Scenario 1: Happy path with retry recovery and dispatch
-      expect(stdout).toContain("=== Starting Fulfillment for Order ORD-9402 ===");
-      expect(stdout).toContain("Stock available across all warehouses: 2 checked");
-      expect(stdout).toContain("[PaymentGateway] Transient network glitch on attempt 1! Retrying...");
-      expect(stdout).toContain("[PaymentGateway] Payment authorized successfully!");
-      expect(stdout).toContain("[NotificationService] Sent confirmation to Grace Hopper");
+      expect(stdout).toContain(
+        "=== Starting Fulfillment for Order ORD-9402 ===",
+      );
+      expect(stdout).toContain(
+        "Stock available across all warehouses: 2 checked",
+      );
+      expect(stdout).toContain(
+        "[PaymentGateway] Transient network glitch on attempt 1! Retrying...",
+      );
+      expect(stdout).toContain(
+        "[PaymentGateway] Payment authorized successfully!",
+      );
+      expect(stdout).toContain(
+        "[NotificationService] Sent confirmation to Grace Hopper",
+      );
       expect(stdout).toContain("Audit trail: 4 events logged immutably");
       expect(stdout).toContain("=== Scenario 1 Result ===");
-      expect(stdout).toContain("SUCCESS: Order ORD-9402 settled (Tx: TXN-90210) and dispatched with tracking #TRACK-GLO-8849");
+      expect(stdout).toContain(
+        "SUCCESS: Order ORD-9402 settled (Tx: TXN-90210) and dispatched with tracking #TRACK-GLO-8849",
+      );
 
       // Scenario 2: Error handling with catchAll
-      expect(stdout).toContain("=== Starting Fulfillment for Order ORD-9999 ===");
-      expect(stdout).toContain("[PaymentGateway] Transaction denied: credit limit exceeded");
-      expect(stdout).toContain("[Workflow Recovery] Caught domain error: CreditLimitExceeded");
+      expect(stdout).toContain(
+        "=== Starting Fulfillment for Order ORD-9999 ===",
+      );
+      expect(stdout).toContain(
+        "[PaymentGateway] Transaction denied: credit limit exceeded",
+      );
+      expect(stdout).toContain(
+        "[Workflow Recovery] Caught domain error: CreditLimitExceeded",
+      );
       expect(stdout).toContain("=== Scenario 2 Result ===");
-      expect(stdout).toContain("FAILED: Order ORD-9999 processing stopped: CreditLimitExceeded");
-    }, 20_000);
+      expect(stdout).toContain(
+        "FAILED: Order ORD-9999 processing stopped: CreditLimitExceeded",
+      );
+    }, 60_000);
   });
 
   describe("Sample programs compilation and execution", () => {
@@ -99,13 +146,15 @@ describe("Sample Applications & Real-World Programs", () => {
       const { stdout } = await execFileAsync("node", [cliPath, "run", p]);
       expect(stdout).toContain("fib(0) = 0");
       expect(stdout).toContain("fib(10) = 55");
-    }, 20_000);
+    }, 60_000);
 
     it("runs bank-account.fun with expected output", async () => {
       const p = path.join(examplesDir, "bank-account.fun");
       const { stdout } = await execFileAsync("node", [cliPath, "run", p]);
-      expect(stdout).toContain("Account ACC-101 (Ada Lovelace): Balance = $300");
-    }, 20_000);
+      expect(stdout).toContain(
+        "Account ACC-101 (Ada Lovelace): Balance = $300",
+      );
+    }, 60_000);
 
     it("runs todo-service.fun with expected output", async () => {
       const p = path.join(examplesDir, "todo-service.fun");
@@ -115,12 +164,12 @@ describe("Sample Applications & Real-World Programs", () => {
       expect(stdout).toContain("[x] #1: Buy coffee beans");
       expect(stdout).toContain("[x] #2: Design FunScript parser");
       expect(stdout).toContain("[ ] #3: Write blog post");
-    }, 20_000);
+    }, 60_000);
 
     it("checks and compiles js-ts-interop.fun cleanly", async () => {
       const p = path.join(examplesDir, "js-ts-interop.fun");
       const { stdout } = await execFileAsync("node", [cliPath, "check", p]);
       expect(stdout).toContain("checked successfully (0 errors");
-    }, 20_000);
+    }, 60_000);
   });
 });

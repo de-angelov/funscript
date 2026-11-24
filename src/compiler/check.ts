@@ -1378,6 +1378,12 @@ export const typeCheckVirtualFiles = (
           if (
             diag.code === 2339 &&
             /Option<|Option\.|\bOption\b/.test(message) &&
+            !diag.file.text
+              .slice(
+                Math.max(0, (diag.start ?? 0) - 100),
+                (diag.start ?? 0) + (diag.length ?? 0),
+              )
+              .includes("Option.fromNullishOr") &&
             diag.file.text
               .slice(
                 Math.max(0, (diag.start ?? 0) - 100),
