@@ -10,6 +10,7 @@ import {
   type RecordTypeNode,
   type Span,
 } from "./ast/types.js";
+import { walkAst } from "./ast/walk.js";
 import { resolveImportedRecordFunctions } from "./compiler/imported-record-functions.js";
 import { resolveImportedSchemas } from "./compiler/imported-schemas.js";
 import { applyJsInteropNullability } from "./compiler/js-interop-nullability.js";
@@ -101,13 +102,7 @@ export class CompilerError extends FunScriptError {
 
 /** Reject authored raw TypeScript escapes without inspecting strings or comments. */
 function validateNoTs(ast: Program): void {
-  const visit = (value: unknown): void => {
-    if (!value || typeof value !== "object") return;
-    if (Array.isArray(value)) {
-      for (const item of value) visit(item);
-      return;
-    }
-    const node = value as Record<string, unknown>;
+  walkAst(ast, (node) => {
     if (
       node.kind === "TsEscapeDeclaration" ||
       node.kind === "TsEscapeExpression" ||
@@ -124,25 +119,12 @@ function validateNoTs(ast: Program): void {
         node.span as Span | undefined,
       );
     }
-    for (const [key, child] of Object.entries(node))
-      if (key !== "span") visit(child);
-  };
-  visit(ast);
+  });
 }
 
 /** Block globalThis references in authored AST, without matching property names or strings. */
 function validateNoGlobalThis(ast: Program): void {
-  const visit = (
-    value: unknown,
-    parent?: Record<string, unknown>,
-    property?: string,
-  ): void => {
-    if (!value || typeof value !== "object") return;
-    if (Array.isArray(value)) {
-      for (const item of value) visit(item, parent, property);
-      return;
-    }
-    const node = value as Record<string, unknown>;
+  walkAst(ast, (node, parent, property) => {
     if (
       (node.kind === "MemberExpression" || node.kind === "IndexExpression") &&
       ["window", "self", "global"].includes(
@@ -189,21 +171,12 @@ function validateNoGlobalThis(ast: Program): void {
         node.span as Span | undefined,
       );
     }
-    for (const [key, child] of Object.entries(node))
-      if (key !== "span") visit(child, node, key);
-  };
-  visit(ast);
+  });
 }
 
 /** Block optional parameters and fields ('?') in authored AST when noOptional policy is active. */
 function validateNoOptional(ast: Program): void {
-  const visit = (value: unknown): void => {
-    if (!value || typeof value !== "object") return;
-    if (Array.isArray(value)) {
-      for (const item of value) visit(item);
-      return;
-    }
-    const node = value as Record<string, unknown>;
+  walkAst(ast, (node) => {
     if (node.kind === "Parameter" && node.optional) {
       throw new FunScriptError(
         "Optional parameters ('?') are disabled by project policy; use Option<T> or handle optionality at the TS interop edge",
@@ -222,10 +195,7 @@ function validateNoOptional(ast: Program): void {
         node.span as Span | undefined,
       );
     }
-    for (const [key, child] of Object.entries(node))
-      if (key !== "span") visit(child);
-  };
-  visit(ast);
+  });
 }
 
 /** Calculate the structural destructuring depth of a pattern or binding target. */
@@ -292,13 +262,7 @@ function validateMaxDestructureDepth(ast: Program, maxDepth: number): void {
     }
   };
 
-  const visit = (value: unknown): void => {
-    if (!value || typeof value !== "object") return;
-    if (Array.isArray(value)) {
-      for (const item of value) visit(item);
-      return;
-    }
-    const node = value as Record<string, unknown>;
+  walkAst(ast, (node) => {
     if (node.kind === "BindingDeclaration") {
       checkDepth(node.id as BindingTarget, (node.id as BindingTarget).span);
     } else if (node.kind === "Parameter") {
@@ -308,23 +272,12 @@ function validateMaxDestructureDepth(ast: Program, maxDepth: number): void {
     } else if (node.kind === "EffectBindStatement") {
       checkDepth(node.id as BindingTarget, (node.id as BindingTarget).span);
     }
-
-    for (const [key, child] of Object.entries(node))
-      if (key !== "span") visit(child);
-  };
-
-  visit(ast);
+  });
 }
 
 /** Block redundant companion prefixes in pipeline stages when barePipelines policy is active. */
 function validateBarePipelines(ast: Program): void {
-  const visit = (value: unknown): void => {
-    if (!value || typeof value !== "object") return;
-    if (Array.isArray(value)) {
-      for (const item of value) visit(item);
-      return;
-    }
-    const node = value as Record<string, unknown>;
+  walkAst(ast, (node) => {
     if (node.kind === "PipelineExpression") {
       const stage = node.right as
         { kind?: string; callee?: { kind?: string } } | undefined;
@@ -369,10 +322,7 @@ function validateBarePipelines(ast: Program): void {
         }
       }
     }
-    for (const [key, child] of Object.entries(node))
-      if (key !== "span") visit(child);
-  };
-  visit(ast);
+  });
 }
 
 /** Conservative source-level Effect ecosystem boundary; this is not a purity proof. */
@@ -403,17 +353,8 @@ function validateEffectOnly(
     "Bun",
     "Deno",
   ]);
-  const visit = (
-    value: unknown,
-    parent?: Record<string, unknown>,
-    property?: string,
-  ): void => {
-    if (!value || typeof value !== "object") return;
-    if (Array.isArray(value)) {
-      for (const item of value) visit(item, parent, property);
-      return;
-    }
-    const node = value as Record<string, unknown>;
+  validateNoTs(ast);
+  walkAst(ast, (node, parent, property) => {
     if (
       node.kind === "ImportDeclaration" ||
       node.kind === "ExportFromDeclaration"
@@ -539,11 +480,7 @@ function validateEffectOnly(
         node.span as Span | undefined,
       );
     }
-    for (const [key, child] of Object.entries(node))
-      if (key !== "span") visit(child, node, key);
-  };
-  validateNoTs(ast);
-  visit(ast);
+  });
 }
 
 /**

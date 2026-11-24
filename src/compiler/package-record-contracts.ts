@@ -1,5 +1,6 @@
 import ts from "typescript";
 import type { Program, RecordTypeNode, Span, TypeNode } from "../ast/types.js";
+import { walkAst } from "../ast/walk.js";
 import { renderImport } from "../emitter/imports.js";
 import { FunScriptError } from "../errors.js";
 import { RECORD_CONTRACT_BRAND } from "./record-contracts.js";
@@ -13,19 +14,11 @@ export function resolvePackageRecordContracts(
 ): Map<string, RecordTypeNode> {
   const candidates = new Map<string, Span>();
   const usedTypes = new Set<string>();
-  const visit = (value: unknown): void => {
-    if (!value || typeof value !== "object") return;
-    if (Array.isArray(value)) {
-      value.forEach(visit);
-      return;
-    }
-    const node = value as Record<string, unknown>;
-    if (node.kind === "TypeReferenceNode")
+  walkAst(ast, (node) => {
+    if (node.kind === "TypeReferenceNode") {
       usedTypes.add((node.name as { name: string }).name);
-    for (const [key, child] of Object.entries(node))
-      if (key !== "span") visit(child);
-  };
-  visit(ast);
+    }
+  });
   const imports: string[] = [];
   for (const item of ast.body) {
     if (item.kind !== "ImportDeclaration" || item.isSideEffect) continue;

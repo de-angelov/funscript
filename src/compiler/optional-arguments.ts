@@ -2,6 +2,7 @@ import fs from "node:fs";
 import path from "node:path";
 import ts from "typescript";
 import type { Program, Span } from "../ast/types.js";
+import { walkAst } from "../ast/walk.js";
 import { Emitter, type EmitterOptions } from "../emitter/emitter.js";
 import { FunScriptError } from "../errors.js";
 import { Lexer } from "../lexer/lexer.js";
@@ -22,22 +23,15 @@ export function resolveOptionalArguments(
   nullProperties: ReadonlySet<number>;
 } {
   const spans = new Map<number, Span>();
-  const collect = (value: unknown): void => {
-    if (!value || typeof value !== "object") return;
-    if (Array.isArray(value)) {
-      value.forEach(collect);
-      return;
-    }
-    const node = value as Record<string, unknown>;
+  walkAst(ast, (node) => {
     const span = node.span as Span | undefined;
     if (span?.start) spans.set(span.start.offset, span);
-    if (node.kind === "CallExpression" && Array.isArray(node.args))
-      for (const arg of node.args as Array<{ span: Span }>)
+    if (node.kind === "CallExpression" && Array.isArray(node.args)) {
+      for (const arg of node.args as Array<{ span: Span }>) {
         spans.set(arg.span.start.offset, arg.span);
-    for (const [key, child] of Object.entries(node))
-      if (key !== "span") collect(child);
-  };
-  collect(ast);
+      }
+    }
+  });
   if (!spans.size)
     return {
       arguments: new Set(),
