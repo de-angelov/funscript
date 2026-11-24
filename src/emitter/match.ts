@@ -259,8 +259,8 @@ export class MatchEmitter {
                   arm.pattern.kind === "ConstructorPattern" &&
                   arm.pattern.constructorName.name === "Some" &&
                   arm.pattern.args.length === 1 &&
-                  arm.pattern.args[0].kind === "VariablePattern" &&
-                  vars.length === 1;
+                  (arm.pattern.args[0].kind === "VariablePattern" ||
+                    arm.pattern.args[0].kind === "ArrayPattern");
                 const someRecord =
                   arm.pattern.kind === "ConstructorPattern" &&
                   arm.pattern.constructorName.name === "Some" &&
@@ -351,6 +351,14 @@ export class MatchEmitter {
     if (pat.kind === "ConstructorPattern") {
       if (pat.args.length === 0) {
         return `{ _tag: "${pat.constructorName.name}" }`;
+      }
+      if (pat.constructorName.name === "Some" && pat.args.length === 1) {
+        if (pat.args[0].kind === "ArrayPattern") {
+          return `{ _tag: "Some", value: ${this.emitPattern(pat.args[0])} }`;
+        }
+        if (pat.args[0].kind === "LiteralPattern") {
+          return `{ _tag: "Some", value: ${this.emitPattern(pat.args[0])} }`;
+        }
       }
       // Tagged union positional pattern matches fields
       return `{ _tag: "${pat.constructorName.name}" }`;

@@ -2511,6 +2511,15 @@ export class Emitter {
                 } else {
                   unpackPatternFields(f.pattern, fieldPath, info?.fields);
                 }
+              } else if (f.pattern?.kind === "ArrayPattern") {
+                const varName = this.emitBindingTarget(f.pattern);
+                if (isOpt) {
+                  recordDefaults.push(
+                    `  const ${varName} = Option.fromNullishOr(${fieldPath});`,
+                  );
+                } else {
+                  recordDefaults.push(`  const ${varName} = ${fieldPath};`);
+                }
               } else {
                 const varName = f.pattern
                   ? this.emitBindingTarget(f.pattern)
@@ -2717,6 +2726,17 @@ export class Emitter {
                   subType = this.getRecordTypeNode(subType.name.name);
                 }
                 collectParamsFromPattern(f.pattern, info?.fields, subType);
+              } else if (f.pattern?.kind === "ArrayPattern") {
+                const elemType =
+                  matchingFieldType?.kind === "ArrayTypeNode"
+                    ? matchingFieldType.elementType
+                    : undefined;
+                for (const el of f.pattern.elements) {
+                  for (const n of this.collectBindingNames(el)) {
+                    paramScopeEntries.push([n, false]);
+                    varTypeEntries.push([n, elemType]);
+                  }
+                }
               } else {
                 const varName =
                   f.pattern?.kind === "VariablePattern"

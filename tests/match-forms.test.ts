@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { Effect, Equal, Data, pipe } from "effect";
+import { Effect, Equal, Data, pipe, Option } from "effect";
 import { match, P } from "ts-pattern";
 import ts from "typescript";
 import { compileString, CompilerError } from "../src/compiler.js";
@@ -769,6 +769,26 @@ export check = (event: Event) =>
         '    | { type: "payment_intent.payment_failed" } => "err"\n',
       );
       expect(format(formatted)).toBe(formatted);
+    });
+
+    it("destructures array patterns and rest elements inside Some(...) matches", async () => {
+      const source = `
+import { Option } from "effect"
+
+export headOrEmpty = (optList: Option<Array<String>>) =>
+  match optList
+    | Some([head, ...tail]) => head + " (" + 1 + ")"
+    | Some([]) => "empty"
+    | None => "none"
+`;
+      const res = await Effect.runPromise(compileString(source));
+      expect(res.typescript).toContain(".with");
+      const headOrEmpty = evaluateTsFunction(res.typescript, "headOrEmpty");
+      expect(headOrEmpty(Option.some(["alpha", "beta", "gamma"]))).toBe(
+        "alpha (1)",
+      );
+      expect(headOrEmpty(Option.some([]))).toBe("empty");
+      expect(headOrEmpty(Option.none())).toBe("none");
     });
   });
 });

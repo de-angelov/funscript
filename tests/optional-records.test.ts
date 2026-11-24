@@ -699,4 +699,36 @@ export readAge = ({ profile: { age } }: { name: String, profile: { age: Number, 
     );
     expect(readAge({ name: "Alice", profile: { age: 25 } })).toBe(25);
   });
+
+  it("validates and decodes destructured record parameters on export js bindings", async () => {
+    const source = `
+import { Effect } from "effect"
+schema UserInput = { username: String, age: Number }
+
+export js register = ({ username, age }: UserInput) => effect {
+  => username + ":" + age
+}
+`;
+    const checked = await typeCheck(source, "export-js-destructure.fun");
+    expect(checked.success, checked.formattedOutput).toBe(true);
+    const compiled = await compile(source, "export-js-destructure.fun");
+    expect(compiled.typescript).toContain("Schema.decodeUnknownSync");
+    const { register } = await execute(source);
+    expect(await register({ username: "alice", age: 30 })).toBe("alice:30");
+    expect(() => register({ username: "bob", age: "not-a-number" })).toThrow();
+    expect(() => register({})).toThrow();
+  });
+
+  it("supports nested array destructuring inside function parameter records", async () => {
+    const source = `
+export summarize = ({ count, tags: [first, ...rest] }: { count: Number, tags: Array<String> }) =>
+  first + " (+" + (count - 1) + ")"
+`;
+    const checked = await typeCheck(source, "nested-array-destructure.fun");
+    expect(checked.success, checked.formattedOutput).toBe(true);
+    const { summarize } = await execute(source);
+    expect(summarize({ count: 3, tags: ["urgent", "bug", "p0"] })).toBe(
+      "urgent (+2)",
+    );
+  });
 });
