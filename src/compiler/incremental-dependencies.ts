@@ -4,6 +4,7 @@ import { createRequire } from "node:module";
 import * as path from "node:path";
 import { Lexer } from "../lexer/lexer.js";
 import { Parser } from "../parser/parser.js";
+import { walkAst } from "../ast/walk.js";
 import { packageFingerprint } from "./package-fingerprint.js";
 
 /**
@@ -74,10 +75,8 @@ export function incrementalDependencyKeys(
         filename,
         source,
       ).parse();
-      const inspect = (node: unknown): void => {
-        if (!node || typeof node !== "object") return;
-        const n = node as Record<string, unknown>;
-        const kind = typeof n.kind === "string" ? n.kind : "";
+      walkAst(ast, (node) => {
+        const kind = typeof node.kind === "string" ? node.kind : "";
         if (
           [
             "TsEscapeDeclaration",
@@ -99,15 +98,7 @@ export function incrementalDependencyKeys(
           ].includes(kind)
         )
           usesImplicitEffect = true;
-        if (Array.isArray(node)) {
-          node.forEach(inspect);
-          return;
-        }
-        for (const [key, value] of Object.entries(node))
-          if (key !== "span" && value && typeof value === "object")
-            inspect(value);
-      };
-      inspect(ast);
+      });
       if (usesImplicitEffect) {
         try {
           const key = `effect\0${createRequire(filename).resolve("effect")}`;

@@ -71,7 +71,7 @@ describe("FunScript project policy", () => {
 
   it("allows ordinary properties and strings named globalThis", async () => {
     const source =
-      'export x = { globalThis: "globalThis" }\nexport read = (value: { globalThis: String }) => value.globalThis';
+      'export x = { globalThis: "globalThis" }\nexport read = (value: { globalThis: String }) => value.globalThis\nexport destructure = ({ globalThis: renamed }) => renamed';
     await expect(
       Effect.runPromise(
         compileString(source, "test.fun", { noGlobalThis: true }),
@@ -296,6 +296,10 @@ describe("FunScript project policy", () => {
         [
           "match constructor",
           'import { Option } from "effect"\nexport f = (opt) => match opt | Some({ user: { id } }) => id | None => 0',
+        ],
+        [
+          "effect bind statement",
+          "export f = effect {\n  { user: { profile: { name } } } <- getUser\n  => name\n}",
         ],
       ];
       for (const [kind, source] of violations) {

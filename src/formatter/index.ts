@@ -41,6 +41,7 @@ import {
 import { renderExportFrom, renderImport } from "../emitter/imports.js";
 import { Lexer } from "../lexer/lexer.js";
 import { Parser } from "../parser/parser.js";
+import { walkAst } from "../ast/walk.js";
 import { ASSOCIATIVITY, PRECEDENCE } from "./operator-precedence.js";
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -177,14 +178,7 @@ export class Formatter {
   private attachComments(): void {
     const standaloneComments: Comment[] = [];
     const rawCodeRanges: Array<{ start: number; end: number }> = [];
-    const collectRawCodeRanges = (value: unknown): void => {
-      if (!value || typeof value !== "object") return;
-      if (Array.isArray(value)) {
-        for (const item of value) collectRawCodeRanges(item);
-        return;
-      }
-
-      const node = value as Record<string, unknown>;
+    walkAst(this.ast, (node) => {
       const kind = node.kind;
       if (
         (kind === "TsEscapeDeclaration" ||
@@ -204,14 +198,9 @@ export class Formatter {
         ) {
           rawCodeRanges.push({ start: span.start.line, end: span.end.line });
         }
-        return;
+        return false;
       }
-
-      for (const [key, child] of Object.entries(node)) {
-        if (key !== "span") collectRawCodeRanges(child);
-      }
-    };
-    collectRawCodeRanges(this.ast);
+    });
 
     for (const c of this.comments) {
       // Comments in raw TypeScript escapes are already preserved verbatim by

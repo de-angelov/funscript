@@ -160,7 +160,10 @@ function validateNoGlobalThis(ast: Program): void {
       (parent?.kind === "MemberExpression" && property === "property") ||
       (parent?.kind === "FieldEntry" && property === "key") ||
       (parent?.kind === "RecordTypeField" && property === "name") ||
-      (parent?.kind === "RecordFieldSchema" && property === "name");
+      (parent?.kind === "RecordFieldSchema" && property === "name") ||
+      (parent?.kind === "RecordPatternField" &&
+        property === "key" &&
+        Boolean((parent as { pattern?: unknown }).pattern));
     if (
       node.kind === "Identifier" &&
       node.name === "globalThis" &&
@@ -469,7 +472,10 @@ function validateEffectOnly(
       (parent?.kind === "MemberExpression" && property === "property") ||
       (parent?.kind === "FieldEntry" && property === "key") ||
       (parent?.kind === "RecordTypeField" && property === "name") ||
-      (parent?.kind === "RecordFieldSchema" && property === "name");
+      (parent?.kind === "RecordFieldSchema" && property === "name") ||
+      (parent?.kind === "RecordPatternField" &&
+        property === "key" &&
+        Boolean((parent as { pattern?: unknown }).pattern));
     if (
       (node.kind === "Identifier" || node.kind === "UpperIdentifier") &&
       forbiddenGlobals.has(node.name as string) &&
