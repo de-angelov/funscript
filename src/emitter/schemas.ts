@@ -703,21 +703,21 @@ export function emitSchemaTypeField(
   if (typeNode.kind === "RecordTypeNode") {
     const inner = typeNode.fields
       .map((f) => {
-        if (f.defaultValue)
-          throw new FunScriptError(
-            "Nested schema field defaults are not supported yet",
-            f.span,
-          );
+        const fieldKey = emitPropertyKey(f.name.name);
         const schema = emitSchemaTypeField(
           ctx,
           f.typeAnnotation,
           rawRecordFields,
         );
+        if (f.defaultValue) {
+          ctx.addEffectImport("Effect");
+          return `  ${fieldKey}: ${schema}.pipe(Schema.withDecodingDefaultType(Effect.sync(() => ${ctx.emitExpression(f.defaultValue)})))`;
+        }
         if (rawRecordFields) {
           ctx.addEffectImport("Schema");
-          return `  ${f.name.name}: ${f.optional ? `Schema.optional(Schema.NullOr(${schema}))` : schema}`;
+          return `  ${fieldKey}: ${f.optional ? `Schema.optional(Schema.NullOr(${schema}))` : schema}`;
         }
-        return `  ${f.name.name}: ${f.optional ? `Schema.OptionFromOptionalNullOr(${schema}, { onNoneEncoding: "omit" })` : schema}`;
+        return `  ${fieldKey}: ${f.optional ? `Schema.OptionFromOptionalNullOr(${schema}, { onNoneEncoding: "omit" })` : schema}`;
       })
       .join(",\n");
     return `Schema.Struct({\n${inner}\n})`;
