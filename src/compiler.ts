@@ -576,6 +576,7 @@ export const compileString = (
             };
           }
           const emitterOptions: EmitterOptions = {
+            preparedRuntimeApis: options?.preparedProviderSchemas?.runtimeApis,
             pipelineCompanions,
             stageResolutions,
             directCallResolutions,

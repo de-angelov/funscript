@@ -16,6 +16,7 @@ import { FunScriptError } from "../errors.js";
 import { emitAssemblyScript } from "./assemblyscript.js";
 import { renderImport, renderExportFrom } from "./imports.js";
 import type { RecordFieldInfo } from "./match.js";
+import { renderProviderRuntimeExportType } from "../compiler/provider-runtime-types.js";
 
 export interface DeclarationEmitterContext {
   emitExpression(expr: Expression): string;
@@ -34,6 +35,12 @@ export interface DeclarationEmitterContext {
   isOptionalValue(expr: Expression): boolean;
   recordFields(name: string): Map<string, RecordFieldInfo> | undefined;
   isPrimitive(expr: Expression): boolean;
+  preparedRuntimeApis?: ReadonlyMap<
+    string,
+    import("../compiler.js").PreparedRuntimeApi
+  >;
+  addRuntimeImport(specifier: string, imported: string, local: string): void;
+  runtimeLocalName(base: string): string;
 }
 
 export function isPrimitiveType(type?: TypeNode): boolean {
@@ -252,9 +259,7 @@ export function emitTopLevelDeclaration(
     case "ServiceDeclaration":
       return emitServiceDeclaration(ctx, decl, isExport);
     case "DatabaseDeclaration":
-      throw new Error(
-        "Database declarations are not supported by code generation",
-      );
+      return emitDatabaseDeclaration(ctx, decl, isExport);
     case "BindingDeclaration":
       return emitBindingDeclaration(ctx, decl, isExport);
     case "WhenStatement":
@@ -266,4 +271,34 @@ export function emitTopLevelDeclaration(
       ctx.addEffectImport("Scope");
       return emitAssemblyScript(decl);
   }
+}
+
+function emitDatabaseDeclaration(
+  ctx: DeclarationEmitterContext,
+  decl: import("../ast/types.js").DatabaseDeclaration,
+  isExport: boolean,
+): string {
+  const api = ctx.preparedRuntimeApis?.get(decl.id.name);
+  if (!api)
+    throw new FunScriptError(
+      "Missing prepared provider runtime result",
+      decl.span,
+    );
+  const exp = isExport ? "export " : "";
+  const used = new Set<string>();
+  const lines = api.exports.map((item, index) => {
+    if (typeof item.name !== "string" || used.has(item.name))
+      throw new FunScriptError(
+        `Invalid or colliding provider runtime export '${item.name}'`,
+        decl.span,
+      );
+    used.add(item.name);
+    const local = ctx.runtimeLocalName(
+      `$funscriptRuntime_${decl.id.name}_${index}`,
+    );
+    ctx.addRuntimeImport(api.moduleSpecifier, item.name, local);
+    return `  ${JSON.stringify(item.name)}: ${local}`;
+  });
+  const type = `{ ${api.exports.map((item) => `${JSON.stringify(item.name)}: ${renderProviderRuntimeExportType(item)}`).join("; ")} }`;
+  return `${exp}const ${decl.id.name}: ${type} = {\n${lines.join(",\n")}\n};`;
 }

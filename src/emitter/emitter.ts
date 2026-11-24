@@ -151,6 +151,10 @@ export interface StageResolution {
 }
 
 export interface EmitterOptions {
+  preparedRuntimeApis?: ReadonlyMap<
+    string,
+    import("../compiler.js").PreparedRuntimeApi
+  >;
   /** TypeScript-directed companion facts keyed by the pipeline source offset. */
   pipelineCompanions?: ReadonlyMap<number, PipelineCompanionModule>;
   /** Stage resolutions keyed by pipeline stage offset. */
@@ -619,6 +623,9 @@ const NATIVE_CONSTRUCTOR_NAMES = new Set([
 ]);
 
 export class Emitter {
+  public preparedRuntimeApis: EmitterOptions["preparedRuntimeApis"];
+  private runtimeImports = new Map<string, Map<string, string>>();
+  private runtimeLocalNames = new Set<string>();
   private effectImports = new Set<string>();
   public parameterScopes: Array<Map<string, boolean>> = [];
   public variableTypeScopes: Array<Map<string, TypeNode | undefined>> = [];
@@ -670,11 +677,39 @@ export class Emitter {
     this.effectImports.add(name);
   }
 
+  public addRuntimeImport(
+    specifier: string,
+    imported: string,
+    local: string,
+  ): void {
+    const entries =
+      this.runtimeImports.get(specifier) ?? new Map<string, string>();
+    entries.set(imported, local);
+    this.runtimeImports.set(specifier, entries);
+  }
+
+  public runtimeLocalName(base: string): string {
+    const occupied = (name: string) =>
+      this.runtimeLocalNames.has(name) ||
+      this.userImportBindings.has(name) ||
+      this.bindings.has(name) ||
+      this.declaredTypeNames.has(name) ||
+      [...(this.preparedRuntimeApis?.values() ?? [])].some(
+        (api) => api.name === name,
+      );
+    let candidate = base;
+    let suffix = 1;
+    while (occupied(candidate)) candidate = `${base}_${suffix++}`;
+    this.runtimeLocalNames.add(candidate);
+    return candidate;
+  }
+
   constructor(
     private program?: Program,
     contextProgram?: Program,
     public options: EmitterOptions = {},
   ) {
+    this.preparedRuntimeApis = options.preparedRuntimeApis;
     for (const [name, contract] of options.importedRecordContracts ?? [])
       this.recordContracts.set(name, contract);
     // Source-map emission renders declarations individually, but resolution
@@ -906,6 +941,9 @@ export class Emitter {
       .sort((a, b) => a.localeCompare(b));
     if (generatedEsToolkitImports.length > 0) {
       header += `import { ${generatedEsToolkitImports.join(", ")} } from "es-toolkit";\n`;
+    }
+    for (const [specifier, entries] of this.runtimeImports) {
+      header += `import { ${[...entries].map(([name, local]) => `${JSON.stringify(name)} as ${local}`).join(", ")} } from ${JSON.stringify(specifier)};\n`;
     }
     if (this.needsCheckedRecordDecoder) {
       const helpers = ["decodeCheckedRecord as $funscriptDecodeCheckedRecord"];
