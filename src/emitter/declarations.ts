@@ -21,7 +21,7 @@ export interface DeclarationEmitterContext {
   emitExpression(expr: Expression): string;
   emitStatement(stmt: Statement): string;
   emitTypeNode(typeNode: TypeNode): string;
-  emitSchemaTypeField(typeNode: TypeNode): string;
+  emitSchemaTypeField(typeNode: TypeNode, rawRecordFields?: boolean): string;
   emitBindingTarget(target: BindingTarget | Pattern): string;
   emitSchemaDeclaration(decl: SchemaDeclaration, isExport: boolean): string;
   emitWhenStatement(stmt: WhenStatement): string;
@@ -104,6 +104,23 @@ export function emitServiceDeclaration(
   return `${exp}class ${name} extends Context.Service<${name}, {\n${members}\n}>()(${tag}) {}`;
 }
 
+function extractRecordFields(
+  typeNode: import("../ast/types.js").RecordTypeNode,
+): Map<string, RecordFieldInfo> {
+  const result = new Map<string, RecordFieldInfo>();
+  for (const field of typeNode.fields) {
+    const children =
+      field.typeAnnotation?.kind === "RecordTypeNode"
+        ? extractRecordFields(field.typeAnnotation)
+        : undefined;
+    result.set(field.name.name, {
+      optional: Boolean(field.optional),
+      fields: children,
+    });
+  }
+  return result;
+}
+
 export function emitBindingDeclaration(
   ctx: DeclarationEmitterContext,
   decl: BindingDeclaration,
@@ -157,7 +174,7 @@ export function emitBindingDeclaration(
         )
         .map(
           (p) =>
-            `  ${(p.name as Identifier).name} = Schema.decodeUnknownSync(${ctx.emitSchemaTypeField(p.typeAnnotation!)})(${(p.name as Identifier).name});`,
+            `  ${(p.name as Identifier).name} = Schema.decodeUnknownSync(${ctx.emitSchemaTypeField(p.typeAnnotation!, true)})(${(p.name as Identifier).name});`,
         )
         .join("\n");
       const optionalBindings = fn.params.flatMap((p, index) => {
@@ -168,7 +185,7 @@ export function emitBindingDeclaration(
         if (p.typeAnnotation && p.name.kind === "Identifier") {
           ctx.addEffectImport("Schema");
           return [
-            `  const ${targetName} = ${rawName} !== undefined ? Option.some(Schema.decodeUnknownSync(${ctx.emitSchemaTypeField(p.typeAnnotation)})(${rawName})) : Option.none();`,
+            `  const ${targetName} = ${rawName} !== undefined ? Option.some(Schema.decodeUnknownSync(${ctx.emitSchemaTypeField(p.typeAnnotation, true)})(${rawName})) : Option.none();`,
           ];
         }
         return [`  const ${targetName} = Option.fromUndefinedOr(${rawName});`];
@@ -201,13 +218,26 @@ export function emitBindingDeclaration(
         .filter(Boolean)
         .join("\n");
       const prefix = headerStatements ? `${headerStatements}\n` : "";
+      const paramScopeEntries: [string, boolean][] = [];
       const varTypeEntries: [string, TypeNode | undefined][] = [];
+      const recordScope = new Map<
+        string,
+        Map<string, RecordFieldInfo> | undefined
+      >();
       for (const p of fn.params) {
+        if (p.name.kind === "Identifier") {
+          paramScopeEntries.push([p.name.name, Boolean(p.optional)]);
+          if (p.typeAnnotation?.kind === "RecordTypeNode") {
+            recordScope.set(p.name.name, extractRecordFields(p.typeAnnotation));
+          }
+        }
         for (const n of collectBindingNames(p.name)) {
           varTypeEntries.push([n, p.typeAnnotation]);
         }
       }
+      ctx.parameterScopes.push(new Map(paramScopeEntries));
       ctx.variableTypeScopes.push(new Map(varTypeEntries));
+      ctx.recordScopes.push(recordScope);
       try {
         if (fn.body.kind === "BlockStatement") {
           const retExpr = fn.body.finalExpression
@@ -223,6 +253,8 @@ export function emitBindingDeclaration(
         }
         return `${exp}${keyword} ${target} = (${params}) => {\n${prefix}  return Effect.runPromise(${ctx.emitExpression(fn.body)});\n};`;
       } finally {
+        ctx.recordScopes.pop();
+        ctx.parameterScopes.pop();
         ctx.variableTypeScopes.pop();
       }
     }

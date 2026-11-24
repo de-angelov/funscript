@@ -463,10 +463,11 @@ describe("optional fields in inline parameter records", () => {
       'export x: { label: String = "x" } = { label: "x" }',
       /only on direct function parameters/,
     );
-    await expectCompileError(
-      "export js f = (props: { label?: String }) => props.label",
-      /not yet supported on js entry bindings/,
+    const jsCompiled = await compile(
+      "export js f = (props: { label?: String }) => effect { => props.label }",
     );
+    expect(jsCompiled.typescript).toContain("readonly label?: string");
+    expect(jsCompiled.typescript).toContain("Schema.decodeUnknownSync");
     await expectCompileError(
       'export js f = (props: { label: String = "guest" }) => props.label',
       /not yet supported on js entry bindings/,

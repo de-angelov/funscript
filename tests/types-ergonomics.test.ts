@@ -836,6 +836,25 @@ export js repeat = (n: Number = 3) => effect {
     expect(await repeat(5)).toBe(10);
   });
 
+  it("supports optional record fields on export js entry bindings", async () => {
+    const src = `
+export js greet = (props: { label?: String }) => effect {
+  => match props.label
+    | Some(n) => "Hello, " + n
+    | None => "Hello, stranger"
+}
+`;
+    const res = Effect.runSync(compileString(src));
+    expect(res.typescript).toContain("readonly label?: string");
+    expect(res.typescript).toContain("Schema.decodeUnknownSync");
+
+    const greet = evaluateTsFunction(res.typescript, "greet");
+    expect(await greet({ label: "Ada" })).toBe("Hello, Ada");
+    expect(await greet({})).toBe("Hello, stranger");
+    expect(await greet({ label: undefined })).toBe("Hello, stranger");
+    expect(await greet({ label: null })).toBe("Hello, stranger");
+  });
+
   it("automatically lowers Option into foreign optional and null parameters and record properties", () => {
     const src = `
 ts {

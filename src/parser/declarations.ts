@@ -781,13 +781,11 @@ export function parseBindingDeclaration(
     init.params.some(
       (p) =>
         p.typeAnnotation?.kind === "RecordTypeNode" &&
-        p.typeAnnotation.fields.some(
-          (field) => field.optional || field.defaultValue,
-        ),
+        p.typeAnnotation.fields.some((field) => field.defaultValue),
     )
   ) {
     throw new ParseError(
-      "Optional and defaulted parameters inside record contracts are not yet supported on js entry bindings",
+      "Defaulted parameters inside record contracts are not yet supported on js entry bindings",
       init.span,
     );
   }

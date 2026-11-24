@@ -675,6 +675,7 @@ export function emitCheckedRecordDecoder(
 export function emitSchemaTypeField(
   ctx: SchemaEmitterContext,
   typeNode: TypeNode,
+  rawRecordFields = false,
 ): string {
   if (
     typeNode.kind === "QualifiedTypeReferenceNode" ||
@@ -685,7 +686,7 @@ export function emitSchemaTypeField(
     return `(Schema.Unknown as unknown as Schema.Codec<${ctx.emitTypeNode(typeNode)}>)`;
   }
   if (typeNode.kind === "ParenthesizedTypeNode") {
-    return emitSchemaTypeField(ctx, typeNode.typeNode);
+    return emitSchemaTypeField(ctx, typeNode.typeNode, rawRecordFields);
   }
   ctx.addEffectImport("Schema");
   if (typeNode.kind === "LiteralTypeNode")
@@ -707,17 +708,25 @@ export function emitSchemaTypeField(
             "Nested schema field defaults are not supported yet",
             f.span,
           );
-        const schema = emitSchemaTypeField(ctx, f.typeAnnotation);
+        const schema = emitSchemaTypeField(
+          ctx,
+          f.typeAnnotation,
+          rawRecordFields,
+        );
+        if (rawRecordFields) {
+          ctx.addEffectImport("Schema");
+          return `  ${f.name.name}: ${f.optional ? `Schema.optional(Schema.NullOr(${schema}))` : schema}`;
+        }
         return `  ${f.name.name}: ${f.optional ? `Schema.OptionFromOptionalNullOr(${schema}, { onNoneEncoding: "omit" })` : schema}`;
       })
       .join(",\n");
     return `Schema.Struct({\n${inner}\n})`;
   }
   if (typeNode.kind === "ArrayTypeNode") {
-    return `Schema.Array(${emitSchemaTypeField(ctx, typeNode.elementType)})`;
+    return `Schema.Array(${emitSchemaTypeField(ctx, typeNode.elementType, rawRecordFields)})`;
   }
   if (typeNode.kind === "UnionTypeNode") {
-    return `Schema.Union([${typeNode.types.map((type) => emitSchemaTypeField(ctx, type)).join(", ")}])`;
+    return `Schema.Union([${typeNode.types.map((type) => emitSchemaTypeField(ctx, type, rawRecordFields)).join(", ")}])`;
   }
   if (typeNode.kind === "TypeReferenceNode") {
     const tName = typeNode.name.name;

@@ -927,8 +927,11 @@ export class Emitter {
     return emitSchemaDeclaration(this, decl, isExport);
   }
 
-  public emitSchemaTypeField(typeNode: TypeNode): string {
-    return emitSchemaTypeField(this, typeNode);
+  public emitSchemaTypeField(
+    typeNode: TypeNode,
+    rawRecordFields?: boolean,
+  ): string {
+    return emitSchemaTypeField(this, typeNode, rawRecordFields);
   }
 
   public emitErrorDeclaration(
