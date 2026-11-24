@@ -1,3 +1,4 @@
+import { Option } from "effect";
 import { describe, expect, it } from "vitest";
 import { compile, execute, typeCheck } from "./helpers/index.js";
 
@@ -40,7 +41,10 @@ export action = { type: "click", kind: "primary", status: 200 }
       expect(compiled.typescript).toContain('kind: "primary" as const');
       expect(compiled.typescript).toContain("status: 200 as const");
 
-      const checked = await typeCheck(source, "literal-preservation-discriminants.fun");
+      const checked = await typeCheck(
+        source,
+        "literal-preservation-discriminants.fun",
+      );
       expect(checked.success, checked.formattedOutput).toBe(true);
     });
   });
@@ -66,6 +70,33 @@ export testProvided = withDefaults({ order: "desc", limit: 10 })
       expect(testProvided.order).toBe("desc");
       expect(testProvided.limit).toBe(10);
       expect(testProvided.fallback).toBe(true);
+    });
+
+    it("safely accesses optional fields from spread records as Options without undefined leaks", async () => {
+      const source = `
+export readOrder = (opts: { order?: String, limit?: Number } = {}) => {
+  base = { ...opts, fallback: true }
+  => base.order
+}
+export readOverridden = (opts: { order?: String } = {}) => {
+  base = { ...opts, order: "asc" }
+  => base.order
+}
+`;
+      const compiled = await compile(source);
+      expect(compiled.typescript).toContain("Option.fromNullishOr(base.order)");
+      expect(compiled.typescript).toContain("base.order");
+
+      const checked = await typeCheck(
+        source,
+        "spread-optional-field-access.fun",
+      );
+      expect(checked.success, checked.formattedOutput).toBe(true);
+
+      const { readOrder, readOverridden } = await execute(source);
+      expect(readOrder({})).toEqual(Option.none());
+      expect(readOrder({ order: "desc" })).toEqual(Option.some("desc"));
+      expect(readOverridden({})).toBe("asc");
     });
   });
 
@@ -101,11 +132,21 @@ export testFail = render(fail)
 export testNum = getNumber(succ)
 `;
       const compiled = await compile(source);
-      expect(compiled.typescript).toContain("export type RemoteData<D, E> = Data.TaggedEnum<{");
-      expect(compiled.typescript).toContain("const $RemoteData = Data.taggedEnum<RemoteData<any, any>>();");
-      expect(compiled.typescript).toContain("export const Loading: RemoteData<never, never> = $RemoteData.Loading();");
-      expect(compiled.typescript).toContain("export const Success = <D, E = never>(value: D): RemoteData<D, E> => $RemoteData.Success({ value });");
-      expect(compiled.typescript).toContain("export const Failure = <E, D = never>(err: E): RemoteData<D, E> => $RemoteData.Failure({ err });");
+      expect(compiled.typescript).toContain(
+        "export type RemoteData<D, E> = Data.TaggedEnum<{",
+      );
+      expect(compiled.typescript).toContain(
+        "const $RemoteData = Data.taggedEnum<RemoteData<any, any>>();",
+      );
+      expect(compiled.typescript).toContain(
+        "export const Loading: RemoteData<never, never> = $RemoteData.Loading();",
+      );
+      expect(compiled.typescript).toContain(
+        "export const Success = <D, E = never>(value: D): RemoteData<D, E> => $RemoteData.Success({ value });",
+      );
+      expect(compiled.typescript).toContain(
+        "export const Failure = <E, D = never>(err: E): RemoteData<D, E> => $RemoteData.Failure({ err });",
+      );
 
       const checked = await typeCheck(source, "generic-tagged-unions.fun");
       expect(checked.success, checked.formattedOutput).toBe(true);
@@ -157,7 +198,10 @@ export t1 = invert(true)
       expect(compiled.typescript).toContain(".otherwise(() =>");
       expect(compiled.typescript).not.toContain(".exhaustive()");
 
-      const checked = await typeCheck(source, "boolean-exhaustive-false-first.fun");
+      const checked = await typeCheck(
+        source,
+        "boolean-exhaustive-false-first.fun",
+      );
       expect(checked.success, checked.formattedOutput).toBe(true);
 
       const { t0, t1 } = await execute(source);

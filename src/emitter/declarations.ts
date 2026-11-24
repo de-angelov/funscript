@@ -121,6 +121,48 @@ function extractRecordFields(
   return result;
 }
 
+function extractRecordFieldsForBinding(
+  ctx: DeclarationEmitterContext,
+  decl: BindingDeclaration,
+): Map<string, RecordFieldInfo> | undefined {
+  if (decl.isMut) return undefined;
+  if (decl.init.kind === "Identifier") {
+    return ctx.recordFields(decl.init.name);
+  }
+  if (decl.init.kind === "RecordExpression") {
+    const fields = new Map<string, RecordFieldInfo>();
+    let hasTracked = false;
+    for (const prop of decl.init.entries) {
+      if (prop.kind === "SpreadEntry") {
+        if (prop.argument.kind === "Identifier") {
+          const spreadFields = ctx.recordFields(prop.argument.name);
+          if (spreadFields) {
+            for (const [key, info] of spreadFields) {
+              if (info.optional) hasTracked = true;
+              fields.set(key, {
+                optional: info.optional,
+                defaultBinding: undefined,
+                fields: info.fields,
+              });
+            }
+          }
+        }
+      } else if (prop.kind === "FieldEntry" || prop.kind === "ShorthandEntry") {
+        const keyName = prop.key.name;
+        if (keyName) {
+          fields.set(keyName, {
+            optional: false,
+            defaultBinding: undefined,
+            fields: undefined,
+          });
+        }
+      }
+    }
+    if (hasTracked) return fields;
+  }
+  return undefined;
+}
+
 export function emitBindingDeclaration(
   ctx: DeclarationEmitterContext,
   decl: BindingDeclaration,
@@ -133,10 +175,7 @@ export function emitBindingDeclaration(
       : undefined;
   if (idName) {
     if (scope) scope.set(idName, ctx.isOptionalValue(decl.init));
-    const aliasedFields =
-      !decl.isMut && decl.init.kind === "Identifier"
-        ? ctx.recordFields(decl.init.name)
-        : undefined;
+    const aliasedFields = extractRecordFieldsForBinding(ctx, decl);
     ctx.recordScopes.at(-1)?.set(idName, aliasedFields);
     ctx.variableTypeScopes.at(-1)?.set(idName, decl.typeAnnotation);
     if (isPrimitiveType(decl.typeAnnotation) || ctx.isPrimitive(decl.init)) {

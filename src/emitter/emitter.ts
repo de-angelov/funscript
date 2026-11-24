@@ -2526,19 +2526,55 @@ export class Emitter {
           stmt.kind !== "BindingDeclaration" ||
           stmt.isMut ||
           stmt.isJs ||
-          stmt.init.kind !== "Identifier" ||
           !("name" in stmt.id) ||
           records.has(stmt.id.name)
         )
           continue;
-        const fields = records.get(stmt.init.name);
-        if (
-          !fields ||
-          [...fields.values()].some((field) => field.defaultBinding)
-        )
-          continue;
-        records.set(stmt.id.name, fields);
-        aliases.add(stmt);
+        if (stmt.init.kind === "Identifier") {
+          const fields = records.get(stmt.init.name);
+          if (
+            !fields ||
+            [...fields.values()].some((field) => field.defaultBinding)
+          )
+            continue;
+          records.set(stmt.id.name, fields);
+          aliases.add(stmt);
+        } else if (stmt.init.kind === "RecordExpression") {
+          const fields = new Map<string, RecordFieldInfo>();
+          let hasTracked = false;
+          for (const prop of stmt.init.entries) {
+            if (prop.kind === "SpreadEntry") {
+              if (prop.argument.kind === "Identifier") {
+                const spreadFields = records.get(prop.argument.name);
+                if (spreadFields) {
+                  for (const [key, info] of spreadFields) {
+                    if (info.optional) hasTracked = true;
+                    fields.set(key, {
+                      optional: info.optional,
+                      defaultBinding: undefined,
+                      fields: info.fields,
+                    });
+                  }
+                }
+              }
+            } else if (
+              prop.kind === "FieldEntry" ||
+              prop.kind === "ShorthandEntry"
+            ) {
+              const keyName = prop.key.name;
+              if (keyName) {
+                fields.set(keyName, {
+                  optional: false,
+                  defaultBinding: undefined,
+                  fields: undefined,
+                });
+              }
+            }
+          }
+          if (hasTracked) {
+            records.set(stmt.id.name, fields);
+          }
+        }
       }
     }
     const paramScopeEntries: [string, boolean][] = [];
