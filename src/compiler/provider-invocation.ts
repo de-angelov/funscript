@@ -229,8 +229,7 @@ function isSchema(value: unknown): value is ProviderSchemaNodeV1 {
 function isRuntimeModule(value: unknown, minor: number): boolean {
   return (
     isRecord(value) &&
-    typeof value.specifier === "string" &&
-    value.specifier.length > 0 &&
+    isBarePackageSpecifier(value.specifier) &&
     Array.isArray(value.exports) &&
     uniqueBy(value.exports, (item) =>
       isRecord(item) ? item.name : undefined,
@@ -266,9 +265,94 @@ function isRuntimeModule(value: unknown, minor: number): boolean {
     })
   );
 }
-function isIdentifier(value: unknown): value is string {
-  return typeof value === "string" && /^[A-Za-z_$][\w$]*$/.test(value);
+/** Runtime references are data for the eventual consumer; discovery never loads them. */
+function isBarePackageSpecifier(value: unknown): value is string {
+  if (
+    typeof value !== "string" ||
+    value.length === 0 ||
+    value.includes("?") ||
+    value.includes("#") ||
+    value.includes("\\") ||
+    [...value].some((character) => {
+      const code = character.charCodeAt(0);
+      return code < 32 || code === 127;
+    })
+  )
+    return false;
+  const parts = value.split("/");
+  if (parts.some((part) => part === "" || part === "." || part === ".."))
+    return false;
+  const scoped = value.startsWith("@");
+  const packageParts = scoped ? 2 : 1;
+  if (
+    (scoped &&
+      (parts.length < 2 || !/^@[a-z0-9][a-z0-9._-]*$/i.test(parts[0]))) ||
+    !/^[a-z0-9][a-z0-9._-]*$/i.test(parts[scoped ? 1 : 0])
+  )
+    return false;
+  return parts.every((part, index) =>
+    index < packageParts
+      ? index === 0 && scoped
+        ? /^@[a-z0-9][a-z0-9._-]*$/i.test(part)
+        : /^[a-z0-9][a-z0-9._-]*$/i.test(part)
+      : /^[A-Za-z0-9_$~-][A-Za-z0-9._$~-]*$/.test(part),
+  );
 }
+function isIdentifier(value: unknown): value is string {
+  return (
+    typeof value === "string" &&
+    /^[A-Za-z_$][\w$]*$/.test(value) &&
+    !reservedIdentifiers.has(value)
+  );
+}
+const reservedIdentifiers = new Set([
+  "await",
+  "break",
+  "case",
+  "catch",
+  "class",
+  "const",
+  "continue",
+  "debugger",
+  "default",
+  "delete",
+  "do",
+  "else",
+  "enum",
+  "export",
+  "extends",
+  "false",
+  "finally",
+  "for",
+  "function",
+  "if",
+  "implements",
+  "import",
+  "in",
+  "instanceof",
+  "interface",
+  "let",
+  "new",
+  "null",
+  "package",
+  "private",
+  "protected",
+  "public",
+  "return",
+  "static",
+  "super",
+  "switch",
+  "this",
+  "throw",
+  "true",
+  "try",
+  "typeof",
+  "var",
+  "void",
+  "while",
+  "with",
+  "yield",
+]);
 function uniqueBy(
   values: unknown[],
   keyOf: (value: unknown) => unknown,
