@@ -339,6 +339,14 @@ export class MatchEmitter {
     return "true";
   }
 
+  private isFilteringPattern(pat: Pattern | undefined): boolean {
+    if (!pat) return false;
+    if (pat.kind === "VariablePattern" || pat.kind === "WildcardPattern") {
+      return false;
+    }
+    return true;
+  }
+
   private emitPattern(pat: Pattern): string {
     if (pat.kind === "WildcardPattern") return "P._";
     if (pat.kind === "LiteralPattern") {
@@ -353,11 +361,25 @@ export class MatchEmitter {
         return `{ _tag: "${pat.constructorName.name}" }`;
       }
       if (pat.constructorName.name === "Some" && pat.args.length === 1) {
-        if (pat.args[0].kind === "ArrayPattern") {
-          return `{ _tag: "Some", value: ${this.emitPattern(pat.args[0])} }`;
+        const arg = pat.args[0];
+        if (
+          arg.kind === "ArrayPattern" ||
+          arg.kind === "LiteralPattern" ||
+          arg.kind === "OrPattern" ||
+          arg.kind === "ConstructorPattern"
+        ) {
+          return `{ _tag: "Some", value: ${this.emitPattern(arg)} }`;
         }
-        if (pat.args[0].kind === "LiteralPattern") {
-          return `{ _tag: "Some", value: ${this.emitPattern(pat.args[0])} }`;
+        if (arg.kind === "RecordPattern") {
+          const filteringFields = arg.fields.filter(
+            (f) => !f.isRest && this.isFilteringPattern(f.pattern),
+          );
+          if (filteringFields.length > 0) {
+            const fieldsStr = filteringFields
+              .map((f) => `${f.key.name}: ${this.emitPattern(f.pattern!)}`)
+              .join(", ");
+            return `{ _tag: "Some", value: { ${fieldsStr} } }`;
+          }
         }
       }
       // Tagged union positional pattern matches fields
@@ -369,6 +391,7 @@ export class MatchEmitter {
     }
     if (pat.kind === "RecordPattern") {
       const fields = pat.fields
+        .filter((f) => !f.isRest)
         .map((f) => {
           if (!f.pattern || f.pattern.kind === "VariablePattern") {
             return `${f.key.name}: P._`;
@@ -399,7 +422,10 @@ export class MatchEmitter {
 
   private collectRecordDestructuring(pat: RecordPattern): string[] {
     const parts: string[] = [];
+    const hasRest = pat.fields.some((f) => f.isRest);
+
     for (const f of pat.fields) {
+      if (f.isRest) continue;
       if (!f.pattern) {
         parts.push(f.key.name);
       } else if (f.pattern.kind === "VariablePattern") {
@@ -408,13 +434,23 @@ export class MatchEmitter {
         const sub = this.collectRecordDestructuring(f.pattern);
         if (sub.length > 0) {
           parts.push(`${f.key.name}: { ${sub.join(", ")} }`);
+        } else if (hasRest) {
+          parts.push(`${f.key.name}: _${f.key.name}`);
         }
       } else if (f.pattern.kind === "ArrayPattern") {
         parts.push(
           `${f.key.name}: ${this.context.emitBindingTarget(f.pattern)}`,
         );
+      } else if (hasRest) {
+        parts.push(`${f.key.name}: _${f.key.name}`);
       }
     }
+
+    if (hasRest) {
+      const restField = pat.fields.find((f) => f.isRest)!;
+      parts.push(`...${restField.key.name}`);
+    }
+
     return parts;
   }
 
@@ -441,7 +477,11 @@ export class MatchEmitter {
       }
       for (const f of pat.fields) {
         if (f.isRest) continue;
-        if (f.pattern?.kind === "WildcardPattern") continue;
+        if (
+          f.pattern?.kind === "WildcardPattern" ||
+          f.pattern?.kind === "LiteralPattern"
+        )
+          continue;
         const varName = f.pattern
           ? this.context.emitBindingTarget(f.pattern)
           : f.key.name;
@@ -456,10 +496,12 @@ export class MatchEmitter {
       }
       return lines.join("\n    ");
     }
-    const bindingTarget = this.context.emitBindingTarget(pat);
-    return isOptional
-      ? `const { value: ${bindingTarget} } = $matched;`
-      : `const { value: ${bindingTarget} } = $matched as unknown as { value: typeof $matched extends import("effect").Option.Some<infer V> ? V : any };`;
+    const destructParts = this.collectRecordDestructuring(pat);
+    if (destructParts.length === 0) return "";
+    const cast = isOptional
+      ? ""
+      : ` as unknown as { value: typeof $matched extends import("effect").Option.Some<infer V> ? V : any }`;
+    return `const { value: { ${destructParts.join(", ")} } } = $matched${cast};`;
   }
 
   private emitArmHandler(
@@ -554,9 +596,19 @@ export class MatchEmitter {
           payloadFields,
           isOptional,
         );
+        if (unpack) {
+          if (body.kind === "BlockStatement")
+            return `($matched) => {\n    ${unpack}\n${this.context.emitFunctionBody(body)}\n  }`;
+          return `($matched) => {\n    ${unpack}\n    return ${this.context.emitExpression(body)};\n  }`;
+        }
         if (body.kind === "BlockStatement")
-          return `($matched) => {\n    ${unpack}\n${this.context.emitFunctionBody(body)}\n  }`;
-        return `($matched) => {\n    ${unpack}\n    return ${this.context.emitExpression(body)};\n  }`;
+          return `() => {\n${this.context.emitFunctionBody(body)}\n}`;
+        return `() => ${this.context.emitArrowExpression(body)}`;
+      }
+      if (pat.args[0].kind === "LiteralPattern") {
+        if (body.kind === "BlockStatement")
+          return `() => {\n${this.context.emitFunctionBody(body)}\n}`;
+        return `() => ${this.context.emitArrowExpression(body)}`;
       }
       const bindingTarget = this.context.emitBindingTarget(pat.args[0]);
       if (bindingTarget && bindingTarget !== "[]" && bindingTarget !== "{}") {

@@ -790,5 +790,80 @@ export headOrEmpty = (optList: Option<Array<String>>) =>
       expect(headOrEmpty(Option.some([]))).toBe("empty");
       expect(headOrEmpty(Option.none())).toBe("none");
     });
+
+    it("matches and destructures record rest properties", async () => {
+      const source = `
+export inspectEvent = (event) =>
+  match event
+    | { type: "order", id, ...meta } => id + ":" + meta.priority
+    | { type: "ping", ...rest } => rest.timestamp
+    | _ => "unknown"
+`;
+      const res = await Effect.runPromise(compileString(source));
+      expect(res.typescript).toContain(".with");
+      const inspectEvent = evaluateTsFunction(res.typescript, "inspectEvent");
+      expect(
+        inspectEvent({
+          type: "order",
+          id: "ORD-123",
+          priority: "high",
+          source: "web",
+        }),
+      ).toBe("ORD-123:high");
+      expect(
+        inspectEvent({
+          type: "ping",
+          timestamp: "2026-11-25",
+        }),
+      ).toBe("2026-11-25");
+      expect(inspectEvent({ type: "other" })).toBe("unknown");
+    });
+
+    it("matches literals and record patterns inside Some(...) Option variants", async () => {
+      const source = `
+import { Option } from "effect"
+
+export route = (opt) =>
+  match opt
+    | Some(42) => "forty-two"
+    | Some({ role: "admin", name }) => "Admin " + name
+    | Some({ role: "guest" }) => "Guest"
+    | Some(1 | 2 | 3) => "small"
+    | None => "none"
+    | _ => "other"
+`;
+      const res = await Effect.runPromise(compileString(source));
+      const route = evaluateTsFunction(res.typescript, "route");
+      expect(route(Option.some(42))).toBe("forty-two");
+      expect(route(Option.some({ role: "admin", name: "Alice" }))).toBe(
+        "Admin Alice",
+      );
+      expect(route(Option.some({ role: "guest" }))).toBe("Guest");
+      expect(route(Option.some(2))).toBe("small");
+      expect(route(Option.none())).toBe("none");
+      expect(route(Option.some(999))).toBe("other");
+    });
+
+    it("matches and extracts rest properties inside Some(...) record patterns", async () => {
+      const source = `
+import { Option } from "effect"
+
+export handleOptionalOrder = (opt) =>
+  match opt
+    | Some({ type: "order", id, ...meta }) => id + " " + meta.channel
+    | None => "none"
+`;
+      const res = await Effect.runPromise(compileString(source));
+      const handleOptionalOrder = evaluateTsFunction(
+        res.typescript,
+        "handleOptionalOrder",
+      );
+      expect(
+        handleOptionalOrder(
+          Option.some({ type: "order", id: "O1", channel: "in-store" }),
+        ),
+      ).toBe("O1 in-store");
+      expect(handleOptionalOrder(Option.none())).toBe("none");
+    });
   });
 });
