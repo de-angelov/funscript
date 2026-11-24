@@ -112,13 +112,22 @@ let syntheticDestructureId = 0;
 
 export function extractRecordFields(
   typeNode: RecordTypeNode,
+  getRecordType?: (name: string) => RecordTypeNode | undefined,
 ): Map<string, RecordFieldInfo> {
   const result = new Map<string, RecordFieldInfo>();
   for (const field of typeNode.fields) {
-    const children =
-      field.typeAnnotation?.kind === "RecordTypeNode"
-        ? extractRecordFields(field.typeAnnotation)
-        : undefined;
+    let childNode: RecordTypeNode | undefined;
+    if (field.typeAnnotation?.kind === "RecordTypeNode") {
+      childNode = field.typeAnnotation;
+    } else if (
+      field.typeAnnotation?.kind === "TypeReferenceNode" &&
+      getRecordType
+    ) {
+      childNode = getRecordType(field.typeAnnotation.name.name);
+    }
+    const children = childNode
+      ? extractRecordFields(childNode, getRecordType)
+      : undefined;
     result.set(field.name.name, {
       optional: Boolean(field.optional),
       fields: children,
@@ -147,16 +156,19 @@ export function getRecordFieldInfoForBinding(
   ctx: DeclarationEmitterContext,
   decl: BindingDeclaration,
 ): Map<string, RecordFieldInfo> | undefined {
+  const lookup = (name: string): RecordTypeNode | undefined => {
+    const res = ctx.getRecordTypeNode?.(name) ?? ctx.recordContracts.get(name);
+    return res?.kind === "RecordTypeNode" ? res : undefined;
+  };
+
   if (decl.typeAnnotation) {
     if (decl.typeAnnotation.kind === "RecordTypeNode") {
-      return extractRecordFields(decl.typeAnnotation);
+      return extractRecordFields(decl.typeAnnotation, lookup);
     }
     if (decl.typeAnnotation.kind === "TypeReferenceNode") {
-      const contract =
-        ctx.getRecordTypeNode?.(decl.typeAnnotation.name.name) ??
-        ctx.recordContracts.get(decl.typeAnnotation.name.name);
-      if (contract?.kind === "RecordTypeNode") {
-        return extractRecordFields(contract);
+      const contract = lookup(decl.typeAnnotation.name.name);
+      if (contract) {
+        return extractRecordFields(contract, lookup);
       }
     }
   }
@@ -165,14 +177,12 @@ export function getRecordFieldInfoForBinding(
     if (fields) return fields;
     const typeNode = ctx.getTypeNodeForExpression?.(decl.init);
     if (typeNode?.kind === "RecordTypeNode") {
-      return extractRecordFields(typeNode);
+      return extractRecordFields(typeNode, lookup);
     }
     if (typeNode?.kind === "TypeReferenceNode") {
-      const contract =
-        ctx.getRecordTypeNode?.(typeNode.name.name) ??
-        ctx.recordContracts.get(typeNode.name.name);
-      if (contract?.kind === "RecordTypeNode") {
-        return extractRecordFields(contract);
+      const contract = lookup(typeNode.name.name);
+      if (contract) {
+        return extractRecordFields(contract, lookup);
       }
     }
   }
@@ -181,14 +191,12 @@ export function getRecordFieldInfoForBinding(
     if (field?.fields) return field.fields;
     const typeNode = ctx.getTypeNodeForExpression?.(decl.init);
     if (typeNode?.kind === "RecordTypeNode") {
-      return extractRecordFields(typeNode);
+      return extractRecordFields(typeNode, lookup);
     }
     if (typeNode?.kind === "TypeReferenceNode") {
-      const contract =
-        ctx.getRecordTypeNode?.(typeNode.name.name) ??
-        ctx.recordContracts.get(typeNode.name.name);
-      if (contract?.kind === "RecordTypeNode") {
-        return extractRecordFields(contract);
+      const contract = lookup(typeNode.name.name);
+      if (contract) {
+        return extractRecordFields(contract, lookup);
       }
     }
   }
@@ -203,15 +211,17 @@ function extractRecordFieldsForBinding(
   decl: BindingDeclaration,
 ): Map<string, RecordFieldInfo> | undefined {
   if (decl.isMut) return undefined;
+  const lookup = (name: string): RecordTypeNode | undefined => {
+    const res = ctx.getRecordTypeNode?.(name) ?? ctx.recordContracts.get(name);
+    return res?.kind === "RecordTypeNode" ? res : undefined;
+  };
   if (decl.typeAnnotation?.kind === "RecordTypeNode") {
-    return extractRecordFields(decl.typeAnnotation);
+    return extractRecordFields(decl.typeAnnotation, lookup);
   }
   if (decl.typeAnnotation?.kind === "TypeReferenceNode") {
-    const contract =
-      ctx.getRecordTypeNode?.(decl.typeAnnotation.name.name) ??
-      ctx.recordContracts.get(decl.typeAnnotation.name.name);
-    if (contract?.kind === "RecordTypeNode") {
-      return extractRecordFields(contract);
+    const contract = lookup(decl.typeAnnotation.name.name);
+    if (contract) {
+      return extractRecordFields(contract, lookup);
     }
   }
   if (decl.init.kind === "Identifier") {
@@ -238,8 +248,13 @@ function extractRecordFieldsForBinding(
       } else if (prop.kind === "FieldEntry" || prop.kind === "ShorthandEntry") {
         const keyName = prop.key.name;
         if (keyName) {
+          const isOpt =
+            prop.kind === "FieldEntry"
+              ? ctx.isOptionalValue(prop.value)
+              : ctx.isOptionalValue(prop.key);
+          if (isOpt) hasTracked = true;
           fields.set(keyName, {
-            optional: false,
+            optional: isOpt,
             defaultBinding: undefined,
             fields: undefined,
           });
@@ -376,45 +391,67 @@ export function emitBindingDeclaration(
       const optionalBindings = fn.params.flatMap((p, index) => {
         if (!p.optional) {
           if (p.name.kind === "RecordPattern") {
+            const lookup = (name: string): RecordTypeNode | undefined => {
+              const res =
+                ctx.getRecordTypeNode?.(name) ?? ctx.recordContracts.get(name);
+              return res?.kind === "RecordTypeNode" ? res : undefined;
+            };
             let recType: TypeNode | undefined = p.typeAnnotation;
             if (recType?.kind === "TypeReferenceNode") {
-              recType =
-                ctx.getRecordTypeNode?.(recType.name.name) ??
-                ctx.recordContracts.get(recType.name.name);
+              recType = lookup(recType.name.name);
             }
             const recFields =
               recType?.kind === "RecordTypeNode"
-                ? extractRecordFields(recType)
+                ? extractRecordFields(recType, lookup)
                 : undefined;
             if (patternHasOptionalField(p.name, recFields)) {
               ctx.addEffectImport("Option");
               const bindings: string[] = [];
-              const restField = p.name.fields.find((f) => f.isRest);
-              if (restField) {
-                const nonRest = p.name.fields.filter((f) => !f.isRest);
-                bindings.push(
-                  `  const { ${nonRest.map((f) => `${f.key.name}: _${f.key.name}`).join(", ")}, ...$funscriptRest${index} } = $funscriptParam${index};`,
-                );
-                bindings.push(
-                  `  const ${restField.key.name} = $funscriptRest${index};`,
-                );
-              }
-              for (const f of p.name.fields) {
-                if (f.isRest) continue;
-                const varName = f.pattern
-                  ? ctx.emitBindingTarget(f.pattern)
-                  : f.key.name;
-                const isOpt = recFields?.get(f.key.name)?.optional === true;
-                if (isOpt) {
+              let syntheticDestructureId = 0;
+              const unpackPatternFields = (
+                pat: RecordPattern,
+                basePath: string,
+                fieldsMap?: Map<string, RecordFieldInfo>,
+              ) => {
+                const restField = pat.fields.find((f) => f.isRest);
+                if (restField) {
+                  const nonRest = pat.fields.filter((f) => !f.isRest);
+                  const restTemp = `$funscriptRest${index}_${syntheticDestructureId++}`;
                   bindings.push(
-                    `  const ${varName} = Option.fromNullishOr($funscriptParam${index}.${f.key.name});`,
+                    `  const { ${nonRest.map((f) => `${f.key.name}: _${f.key.name}`).join(", ")}, ...${restTemp} } = ${basePath};`,
                   );
-                } else {
-                  bindings.push(
-                    `  const ${varName} = $funscriptParam${index}.${f.key.name};`,
-                  );
+                  bindings.push(`  const ${restField.key.name} = ${restTemp};`);
                 }
-              }
+                for (const f of pat.fields) {
+                  if (f.isRest) continue;
+                  if (f.pattern?.kind === "WildcardPattern") continue;
+                  const info = fieldsMap?.get(f.key.name);
+                  const isOpt = info?.optional === true;
+                  const fieldPath = `${basePath}.${f.key.name}`;
+                  if (f.pattern?.kind === "RecordPattern") {
+                    if (isOpt) {
+                      const varName = ctx.emitBindingTarget(f.pattern);
+                      bindings.push(
+                        `  const ${varName} = Option.fromNullishOr(${fieldPath});`,
+                      );
+                    } else {
+                      unpackPatternFields(f.pattern, fieldPath, info?.fields);
+                    }
+                  } else {
+                    const varName = f.pattern
+                      ? ctx.emitBindingTarget(f.pattern)
+                      : f.key.name;
+                    if (isOpt) {
+                      bindings.push(
+                        `  const ${varName} = Option.fromNullishOr(${fieldPath});`,
+                      );
+                    } else {
+                      bindings.push(`  const ${varName} = ${fieldPath};`);
+                    }
+                  }
+                }
+              };
+              unpackPatternFields(p.name, `$funscriptParam${index}`, recFields);
               return bindings;
             }
           }
@@ -456,15 +493,18 @@ export function emitBindingDeclaration(
           if (p.optional) {
             name = `$funscriptOptional${index}`;
           } else if (p.name.kind === "RecordPattern") {
+            const lookup = (name: string): RecordTypeNode | undefined => {
+              const res =
+                ctx.getRecordTypeNode?.(name) ?? ctx.recordContracts.get(name);
+              return res?.kind === "RecordTypeNode" ? res : undefined;
+            };
             let recType: TypeNode | undefined = p.typeAnnotation;
             if (recType?.kind === "TypeReferenceNode") {
-              recType =
-                ctx.getRecordTypeNode?.(recType.name.name) ??
-                ctx.recordContracts.get(recType.name.name);
+              recType = lookup(recType.name.name);
             }
             const recFields =
               recType?.kind === "RecordTypeNode"
-                ? extractRecordFields(recType)
+                ? extractRecordFields(recType, lookup)
                 : undefined;
             if (patternHasOptionalField(p.name, recFields)) {
               name = `$funscriptParam${index}`;
@@ -529,30 +569,61 @@ export function emitBindingDeclaration(
             }
           }
         } else if (p.name.kind === "RecordPattern") {
+          const lookup = (name: string): RecordTypeNode | undefined => {
+            const res =
+              ctx.getRecordTypeNode?.(name) ?? ctx.recordContracts.get(name);
+            return res?.kind === "RecordTypeNode" ? res : undefined;
+          };
           let recType: TypeNode | undefined = p.typeAnnotation;
           if (recType?.kind === "TypeReferenceNode") {
-            recType =
-              ctx.getRecordTypeNode?.(recType.name.name) ??
-              ctx.recordContracts.get(recType.name.name);
+            recType = lookup(recType.name.name);
           }
           const recFields =
             recType?.kind === "RecordTypeNode"
-              ? extractRecordFields(recType)
+              ? extractRecordFields(recType, lookup)
               : undefined;
           if (patternHasOptionalField(p.name, recFields)) {
-            for (const f of p.name.fields) {
-              if (f.isRest) continue;
-              const varName = f.pattern
-                ? f.pattern.kind === "VariablePattern"
-                  ? f.pattern.name.name
-                  : ctx.emitBindingTarget(f.pattern)
-                : f.key.name;
-              const isOpt = recFields?.get(f.key.name)?.optional === true;
-              paramScopeEntries.push([varName, isOpt]);
-              if (recFields?.get(f.key.name)?.fields) {
-                recordScope.set(varName, recFields.get(f.key.name)?.fields);
+            const collectParamsFromPattern = (
+              pat: RecordPattern,
+              fieldsMap?: Map<string, RecordFieldInfo>,
+              typeNode?: TypeNode,
+            ) => {
+              for (const f of pat.fields) {
+                if (f.isRest) {
+                  paramScopeEntries.push([f.key.name, false]);
+                  varTypeEntries.push([f.key.name, undefined]);
+                  continue;
+                }
+                const info = fieldsMap?.get(f.key.name);
+                const isOpt = info?.optional === true;
+                const matchingFieldType =
+                  typeNode?.kind === "RecordTypeNode"
+                    ? typeNode.fields.find((tf) => tf.name.name === f.key.name)
+                        ?.typeAnnotation
+                    : undefined;
+                if (f.pattern?.kind === "RecordPattern") {
+                  let subType: TypeNode | undefined = matchingFieldType;
+                  if (subType?.kind === "TypeReferenceNode") {
+                    subType = lookup(subType.name.name);
+                  }
+                  collectParamsFromPattern(f.pattern, info?.fields, subType);
+                } else {
+                  const varName = f.pattern
+                    ? f.pattern.kind === "VariablePattern"
+                      ? f.pattern.name.name
+                      : ctx.emitBindingTarget(f.pattern)
+                    : f.key.name;
+                  paramScopeEntries.push([varName, isOpt]);
+                  if (info?.fields) {
+                    recordScope.set(varName, info.fields);
+                  }
+                  if (matchingFieldType) {
+                    varTypeEntries.push([varName, matchingFieldType]);
+                  }
+                }
               }
-            }
+            };
+            collectParamsFromPattern(p.name, recFields, recType);
           }
         }
         for (const n of collectBindingNames(p.name)) {

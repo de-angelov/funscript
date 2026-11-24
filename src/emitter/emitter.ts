@@ -2354,51 +2354,55 @@ export class Emitter {
       .map((e) => {
         if (e.kind === "SpreadEntry")
           return `...${this.emitExpression(e.argument)}`;
-        if (e.kind === "FieldEntry") {
+        if (e.kind === "FieldEntry" || e.kind === "ShorthandEntry") {
+          const keyName = e.key.name;
+          const valueExpr = e.kind === "FieldEntry" ? e.value : e.key;
           let val: string;
-          if (isTryRecord && e.key.name === "try") {
-            if (e.value.kind === "FunctionExpression") {
+          if (isTryRecord && keyName === "try") {
+            if (valueExpr.kind === "FunctionExpression") {
               this.pendingTryThunk = true;
-              val = this.emitExpression(e.value);
+              val = this.emitExpression(valueExpr);
             } else {
               this.tryContextStack.push(true);
               try {
-                val = this.emitExpression(e.value);
+                val = this.emitExpression(valueExpr);
               } finally {
                 this.tryContextStack.pop();
               }
             }
           } else {
-            val = this.emitExpression(e.value);
+            val = this.emitExpression(valueExpr);
           }
           if (
-            this.options.forwardNullProperties?.has(e.value.span.start.offset)
+            this.options.forwardNullProperties?.has(valueExpr.span.start.offset)
           ) {
             this.effectImports.add("Option");
-            return `[${JSON.stringify(e.key.name)}]: Option.getOrNull(${val})`;
+            return `[${JSON.stringify(keyName)}]: Option.getOrNull(${val})`;
           }
           if (
             this.options.forwardOptionalProperties?.has(
-              e.value.span.start.offset,
+              valueExpr.span.start.offset,
             )
           ) {
             this.effectImports.add("Option");
-            return `...((__value: import("effect").Option.Option<any>) => Option.isSome(__value) ? { [${JSON.stringify(e.key.name)}]: __value.value } : {})(${val})`;
+            return `...((__value: import("effect").Option.Option<any>) => Option.isSome(__value) ? { [${JSON.stringify(keyName)}]: __value.value } : {})(${val})`;
           }
           if (this.options.markCallArguments)
-            val = `__funscriptCallArgument(${e.value.span.start.offset}, ${val})`;
-          if (e.value.kind === "BooleanLiteral") {
+            val = `__funscriptCallArgument(${valueExpr.span.start.offset}, ${val})`;
+          if (valueExpr.kind === "BooleanLiteral") {
             val = `${val} as const`;
           } else if (
-            (e.value.kind === "StringLiteral" ||
-              e.value.kind === "NumberLiteral") &&
-            DISCRIMINANT_RECORD_KEYS.has(e.key.name)
+            (valueExpr.kind === "StringLiteral" ||
+              valueExpr.kind === "NumberLiteral") &&
+            DISCRIMINANT_RECORD_KEYS.has(keyName)
           ) {
             val = `${val} as const`;
           }
-          return `${emitPropertyKey(e.key.name)}: ${val}`;
+          if (e.kind === "ShorthandEntry" && !this.options.markCallArguments) {
+            return keyName;
+          }
+          return `${emitPropertyKey(keyName)}: ${val}`;
         }
-        if (e.kind === "ShorthandEntry") return e.key.name;
         return "";
       })
       .join(", ");
@@ -2428,7 +2432,9 @@ export class Emitter {
           }
           const recFields =
             recType?.kind === "RecordTypeNode"
-              ? extractRecordFields(recType)
+              ? extractRecordFields(recType, (name) =>
+                  this.getRecordTypeNode(name),
+                )
               : undefined;
           if (patternHasOptionalField(p.name, recFields)) {
             name = `$funscriptParam${index}`;
@@ -2467,39 +2473,67 @@ export class Emitter {
         }
         const recFields =
           recType?.kind === "RecordTypeNode"
-            ? extractRecordFields(recType)
+            ? extractRecordFields(recType, (name) =>
+                this.getRecordTypeNode(name),
+              )
             : undefined;
         if (patternHasOptionalField(param.name, recFields)) {
           this.effectImports.add("Option");
-          const restField = param.name.fields.find((f) => f.isRest);
-          if (restField) {
-            const nonRest = param.name.fields.filter((f) => !f.isRest);
-            recordDefaults.push(
-              `  const { ${nonRest.map((f) => `${f.key.name}: _${f.key.name}`).join(", ")}, ...$funscriptRest${paramIndex} } = $funscriptParam${paramIndex};`,
-            );
-            recordDefaults.push(
-              `  const ${restField.key.name} = $funscriptRest${paramIndex};`,
-            );
-          }
-          for (const f of param.name.fields) {
-            if (f.isRest) continue;
-            const varName = f.pattern
-              ? this.emitBindingTarget(f.pattern)
-              : f.key.name;
-            const isOpt = recFields?.get(f.key.name)?.optional === true;
-            if (isOpt) {
+          let syntheticDestructureId = 0;
+          const unpackPatternFields = (
+            pat: RecordPattern,
+            basePath: string,
+            fieldsMap?: Map<string, RecordFieldInfo>,
+          ) => {
+            const restField = pat.fields.find((f) => f.isRest);
+            if (restField) {
+              const nonRest = pat.fields.filter((f) => !f.isRest);
+              const restTemp = `$funscriptRest${paramIndex}_${syntheticDestructureId++}`;
               recordDefaults.push(
-                `  const ${varName} = Option.fromNullishOr($funscriptParam${paramIndex}.${f.key.name});`,
+                `  const { ${nonRest.map((f) => `${f.key.name}: _${f.key.name}`).join(", ")}, ...${restTemp} } = ${basePath};`,
               );
-            } else {
               recordDefaults.push(
-                `  const ${varName} = $funscriptParam${paramIndex}.${f.key.name};`,
+                `  const ${restField.key.name} = ${restTemp};`,
               );
             }
-            if (recFields?.get(f.key.name)?.fields) {
-              records.set(varName, recFields.get(f.key.name)?.fields);
+            for (const f of pat.fields) {
+              if (f.isRest) continue;
+              if (f.pattern?.kind === "WildcardPattern") continue;
+              const info = fieldsMap?.get(f.key.name);
+              const isOpt = info?.optional === true;
+              const fieldPath = `${basePath}.${f.key.name}`;
+              if (f.pattern?.kind === "RecordPattern") {
+                if (isOpt) {
+                  const varName = this.emitBindingTarget(f.pattern);
+                  recordDefaults.push(
+                    `  const ${varName} = Option.fromNullishOr(${fieldPath});`,
+                  );
+                } else {
+                  unpackPatternFields(f.pattern, fieldPath, info?.fields);
+                }
+              } else {
+                const varName = f.pattern
+                  ? this.emitBindingTarget(f.pattern)
+                  : f.key.name;
+                if (isOpt) {
+                  recordDefaults.push(
+                    `  const ${varName} = Option.fromNullishOr(${fieldPath});`,
+                  );
+                } else {
+                  recordDefaults.push(`  const ${varName} = ${fieldPath};`);
+                }
+                if (info?.fields) {
+                  records.set(varName, info.fields);
+                }
+              }
             }
-          }
+          };
+
+          unpackPatternFields(
+            param.name,
+            `$funscriptParam${paramIndex}`,
+            recFields,
+          );
         }
         return;
       }
@@ -2654,29 +2688,46 @@ export class Emitter {
         }
         const recFields =
           recType?.kind === "RecordTypeNode"
-            ? extractRecordFields(recType)
+            ? extractRecordFields(recType, (name) =>
+                this.getRecordTypeNode(name),
+              )
             : undefined;
         if (patternHasOptionalField(p.name, recFields)) {
-          for (const f of p.name.fields) {
-            if (f.isRest) {
-              paramScopeEntries.push([f.key.name, false]);
-              varTypeEntries.push([f.key.name, undefined]);
-              continue;
+          const collectParamsFromPattern = (
+            pat: RecordPattern,
+            fieldsMap?: Map<string, RecordFieldInfo>,
+            typeNode?: TypeNode,
+          ) => {
+            for (const f of pat.fields) {
+              if (f.isRest) {
+                paramScopeEntries.push([f.key.name, false]);
+                varTypeEntries.push([f.key.name, undefined]);
+                continue;
+              }
+              const info = fieldsMap?.get(f.key.name);
+              const isOpt = info?.optional === true;
+              const matchingFieldType =
+                typeNode?.kind === "RecordTypeNode"
+                  ? typeNode.fields.find((tf) => tf.name.name === f.key.name)
+                      ?.typeAnnotation
+                  : undefined;
+              if (f.pattern?.kind === "RecordPattern") {
+                let subType: TypeNode | undefined = matchingFieldType;
+                if (subType?.kind === "TypeReferenceNode") {
+                  subType = this.getRecordTypeNode(subType.name.name);
+                }
+                collectParamsFromPattern(f.pattern, info?.fields, subType);
+              } else {
+                const varName =
+                  f.pattern?.kind === "VariablePattern"
+                    ? f.pattern.name.name
+                    : f.key.name;
+                paramScopeEntries.push([varName, isOpt]);
+                varTypeEntries.push([varName, matchingFieldType]);
+              }
             }
-            const varName = f.pattern
-              ? f.pattern.kind === "VariablePattern"
-                ? f.pattern.name.name
-                : this.emitBindingTarget(f.pattern)
-              : f.key.name;
-            const isOpt = recFields?.get(f.key.name)?.optional === true;
-            paramScopeEntries.push([varName, isOpt]);
-            const matchingFieldType =
-              recType?.kind === "RecordTypeNode"
-                ? recType.fields.find((tf) => tf.name.name === f.key.name)
-                    ?.typeAnnotation
-                : undefined;
-            varTypeEntries.push([varName, matchingFieldType]);
-          }
+          };
+          collectParamsFromPattern(p.name, recFields, recType);
           continue;
         }
       }

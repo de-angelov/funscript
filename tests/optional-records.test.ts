@@ -620,4 +620,83 @@ export getNestedAge = (props: { user?: { profile: { age: Number } } }) =>
     expect(getNestedAge({ user: { profile: { age: 30 } } })).toBe(30);
     expect(getNestedAge({})).toBe(0);
   });
+
+  it("forwards optional Option properties via record shorthand syntax", async () => {
+    const source = `
+import { Option } from "effect"
+ts {
+  function configure(options: { debug?: boolean; timeout?: number }): string {
+    return "debug=" + String(options.debug) + ", timeout=" + String(options.timeout);
+  }
+}
+
+export runWithShorthand = (debug: Option<Boolean>, timeout: Option<Number>) =>
+  configure({ debug, timeout })
+
+export runPartial = (debug: Option<Boolean>) =>
+  configure({ debug })
+`;
+    const checked = await typeCheck(source, "shorthand-forward.fun");
+    expect(checked.success, checked.formattedOutput).toBe(true);
+    const compiled = await compile(source, "shorthand-forward.fun");
+    expect(compiled.typescript).toContain("Option.isSome");
+    const { runWithShorthand, runPartial } = await execute(source);
+    expect(await runWithShorthand(Option.some(true), Option.some(5000))).toBe(
+      "debug=true, timeout=5000",
+    );
+    expect(await runWithShorthand(Option.none(), Option.none())).toBe(
+      "debug=undefined, timeout=undefined",
+    );
+    expect(await runPartial(Option.some(false))).toBe(
+      "debug=false, timeout=undefined",
+    );
+  });
+
+  it("preserves optional field tracking when spreading records with explicit field overrides", async () => {
+    const source = `
+import { Option } from "effect"
+schema User = { id: String, role?: String }
+
+export overrideWithOption = (base: User, newRole: Option<String>) => {
+  user = { ...base, role: newRole }
+  { role } = user
+  => role
+}
+
+export overrideWithRequired = (base: User) => {
+  user = { ...base, role: "admin" }
+  { role } = user
+  => role
+}
+`;
+    const checked = await typeCheck(source, "spread-override.fun");
+    expect(checked.success, checked.formattedOutput).toBe(true);
+    const { overrideWithOption, overrideWithRequired } = await execute(source);
+    expect(overrideWithOption({ id: "1" }, Option.some("editor"))).toEqual(
+      Option.some("editor"),
+    );
+    expect(overrideWithOption({ id: "1" }, Option.none())).toEqual(
+      Option.none(),
+    );
+    expect(overrideWithRequired({ id: "2" })).toBe("admin");
+  });
+
+  it("tracks optional and inner variable types in nested function parameter destructuring", async () => {
+    const source = `
+import { Option } from "effect"
+
+export readBio = ({ profile: { bio } }: { name: String, profile: { age: Number, bio?: String } }) => bio
+export readAge = ({ profile: { age } }: { name: String, profile: { age: Number, bio?: String } }) => age
+`;
+    const checked = await typeCheck(source, "nested-param-destructuring.fun");
+    expect(checked.success, checked.formattedOutput).toBe(true);
+    const { readBio, readAge } = await execute(source);
+    expect(
+      readBio({ name: "Alice", profile: { age: 25, bio: "coder" } }),
+    ).toEqual(Option.some("coder"));
+    expect(readBio({ name: "Bob", profile: { age: 30 } })).toEqual(
+      Option.none(),
+    );
+    expect(readAge({ name: "Alice", profile: { age: 25 } })).toBe(25);
+  });
 });
