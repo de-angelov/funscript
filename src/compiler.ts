@@ -1,5 +1,7 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
+import { createRequire } from "node:module";
+import { pathToFileURL } from "node:url";
 import { isPathPolicyEnabled } from "./compiler/project-config.js";
 import { prepareAssemblyScript } from "./emitter/assemblyscript.js";
 import { Effect } from "effect";
@@ -23,6 +25,9 @@ import { resolveImportedRecordFunctions } from "./compiler/imported-record-funct
 import { resolvePackageRecordContracts } from "./compiler/package-record-contracts.js";
 import { resolveOptionalArguments } from "./compiler/optional-arguments.js";
 import { PIPELINE_COMPANION_CATALOG } from "./emitter/pipeline-catalog.js";
+import { loadProjectConfigForFile } from "./compiler/project-config.js";
+import { prepareProviderResults } from "./compiler/provider-resolution.js";
+import { renderProviderSchema } from "./compiler/provider-schema.js";
 
 export {
   TypeScriptCompilationContext,
@@ -625,6 +630,66 @@ export const compileString = (
         catch: (error: any) => new CompilerError(error.message, error),
       }),
   );
+
+/** Compile source after invoking explicitly registered async database providers. */
+export const compileStringAsync = (
+  source: string,
+  filename: string = "<anonymous>",
+  options?: CompileOptions,
+): Effect.Effect<CompileResult, CompilerError> => {
+  const sourcePath = options?.sourcePath ?? filename;
+  const configured = loadProjectConfigForFile(sourcePath);
+  if (!configured.config.providers?.size)
+    return compileString(source, filename, options);
+  return Effect.flatMap(
+    Effect.tryPromise({
+      try: async () => {
+        const ast = new Parser(
+          new Lexer(source, filename).tokenize(),
+          filename,
+          source,
+        ).parse();
+        const declarations = ast.body.some((item) => {
+          const decl =
+            item.kind === "ExportDeclaration" ? item.declaration : item;
+          return decl.kind === "DatabaseDeclaration";
+        });
+        if (!declarations) return undefined;
+        const require = createRequire(
+          path.join(configured.root, "package.json"),
+        );
+        const prepared = await prepareProviderResults(
+          ast,
+          sourcePath,
+          configured.config.providers!,
+          configured.config.providerRoots ?? [],
+          async (specifier) =>
+            import(pathToFileURL(require.resolve(specifier)).href),
+        );
+        const schemas = new Map(
+          prepared.results.map(({ name, result }) => [
+            name,
+            renderProviderSchema(result.schema),
+          ]),
+        );
+        const dependencies = prepared.dependencies.flatMap((dependency) =>
+          dependency.kind === "file" ? [dependency.path] : [],
+        );
+        return { schemas, dependencies };
+      },
+      catch: (error: any) => {
+        const declaration = error?.declaration;
+        return new CompilerError(error.message, declaration ?? error);
+      },
+    }),
+    (prepared) =>
+      compileString(
+        source,
+        filename,
+        prepared ? { ...options, preparedProviderSchemas: prepared } : options,
+      ),
+  );
+};
 
 /**
  * Parses and checks a FunScript source string.

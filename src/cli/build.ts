@@ -2,7 +2,7 @@ import { Effect, Console } from "effect";
 import * as fs from "node:fs/promises";
 import * as path from "node:path";
 import { existsSync } from "node:fs";
-import { compileString } from "../compiler.js";
+import { compileStringAsync } from "../compiler.js";
 import { checkCliFiles, collectCliFiles } from "./typecheck.js";
 import { watchBuild } from "./build-watch.js";
 import { buildBunExecutable, isBunAvailable } from "./build-bun.js";
@@ -398,7 +398,7 @@ export const buildCommand = (
         }
       }
 
-      const result = yield* compileString(source, filePath, {
+      const result = yield* compileStringAsync(source, filePath, {
         sourcemap: isSourcemap,
         noTs:
           args.includes("--no-ts") ||
