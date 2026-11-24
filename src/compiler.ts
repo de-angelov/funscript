@@ -52,6 +52,14 @@ export interface CompileOptions {
   pipelineAnalysisOnly?: boolean;
   /** Absolute source path when the displayed filename is project-relative. */
   sourcePath?: string;
+  /** Prepared provider schema expressions and dependency paths. @internal */
+  preparedProviderSchemas?: PreparedProviderSchemas;
+}
+
+/** Provider output validated and prepared before compiler analysis. @internal */
+export interface PreparedProviderSchemas {
+  schemas: ReadonlyMap<string, string>;
+  dependencies: ReadonlyArray<string>;
 }
 
 export interface CompileResult {
@@ -484,10 +492,10 @@ export const compileString = (
           const importedSchemas = new Map(
             resolveImportedSchemas(ast, source, context),
           );
-          for (const [name, schema] of resolveProviderSchemas(
-            ast,
-            options?.sourcePath ?? filename,
-          ))
+          const providerSchemas =
+            options?.preparedProviderSchemas?.schemas ??
+            resolveProviderSchemas(ast, options?.sourcePath ?? filename);
+          for (const [name, schema] of providerSchemas)
             importedSchemas.set(name, schema);
           const importedRecordContracts = new Map<string, RecordTypeNode>();
           const importedIdentitySchemas = new Set<string>();
@@ -602,10 +610,9 @@ export const compileString = (
           return {
             source,
             ast,
-            providerDependencies: providerDependencies(
-              ast,
-              options?.sourcePath ?? filename,
-            ),
+            providerDependencies: options?.preparedProviderSchemas
+              ? [...options.preparedProviderSchemas.dependencies]
+              : providerDependencies(ast, options?.sourcePath ?? filename),
             typescript,
             targetExtension,
             pipelineStageResolutions: stageResolutions,
