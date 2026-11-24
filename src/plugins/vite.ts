@@ -250,6 +250,7 @@ export function funscriptPlugin(options: FunscriptPluginOptions = {}): Plugin {
 
       return {
         code: res.typescript,
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         map: (res.sourcemap ?? res.map ?? null) as any,
       };
     },

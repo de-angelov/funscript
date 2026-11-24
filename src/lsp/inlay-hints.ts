@@ -114,7 +114,7 @@ export function findInlayHints(
         if (matches && matches.length === 1) {
           const tsDecl = matches[0];
           if (decl.init.kind === "FunctionExpression") {
-            const func = decl.init as any;
+            const func = decl.init;
             if (!func.returnType && tsDecl.initializer) {
               const sig = checked.checker.getSignatureFromDeclaration(
                 tsDecl.initializer as ts.FunctionLikeDeclaration,

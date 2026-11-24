@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 import * as Effect from "effect/Effect";
 import * as Schema from "effect/Schema";
 import type * as SchemaAST from "effect/SchemaAST";

@@ -131,12 +131,9 @@ export function findAutoImportCodeActions(
       decl.kind === "ServiceDeclaration" ||
       decl.kind === "ErrorDeclaration"
     ) {
-      if ((decl as any).id?.name === symbolName) return [];
+      if ("id" in decl && decl.id && decl.id.name === symbolName) return [];
     } else if (decl.kind === "BindingDeclaration") {
-      if (
-        (decl as any).id?.kind === "Identifier" &&
-        (decl as any).id.name === symbolName
-      ) {
+      if (decl.id.kind === "Identifier" && decl.id.name === symbolName) {
         return [];
       }
     }

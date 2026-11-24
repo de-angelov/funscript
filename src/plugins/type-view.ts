@@ -111,8 +111,8 @@ export class TypeView {
     let stat;
     try {
       stat = await fs.lstat(entry);
-    } catch (error: any) {
-      if (error.code === "ENOENT") return [];
+    } catch (error: unknown) {
+      if ((error as { code?: string })?.code === "ENOENT") return [];
       throw error;
     }
     if (stat.isSymbolicLink()) return [];
@@ -150,8 +150,8 @@ export class TypeView {
     if (this.inputs.some((input) => this.inside(input, other))) {
       const exists = await fs.stat(other).then(
         (stat) => stat.isFile(),
-        (error: any) => {
-          if (error.code === "ENOENT") return false;
+        (error: unknown) => {
+          if ((error as { code?: string })?.code === "ENOENT") return false;
           throw error;
         },
       );
@@ -271,10 +271,11 @@ export class TypeView {
         this.known.add(file);
         if (hash) this.hashes.set(item, hash);
       }
-    } catch (error: any) {
-      if (error.code !== "ENOENT")
+    } catch (error: unknown) {
+      const err = error as { code?: string; message?: string };
+      if (err.code !== "ENOENT")
         throw new Error(
-          `Cannot read FunScript type view manifest: ${error.message}`,
+          `Cannot read FunScript type view manifest: ${err.message ?? String(error)}`,
         );
     }
     const files = [

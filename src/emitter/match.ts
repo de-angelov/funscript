@@ -90,9 +90,12 @@ export class MatchEmitter {
     const lastArmIsUnguardedBool = Boolean(
       lastArm && !lastArm.guard && isBooleanLiteralPattern(lastArm.pattern),
     );
-    const oppositeBoolValue = lastArmIsUnguardedBool
-      ? !(lastArm.pattern as any).literal.value
-      : undefined;
+    const oppositeBoolValue =
+      lastArmIsUnguardedBool &&
+      lastArm &&
+      isBooleanLiteralPattern(lastArm.pattern)
+        ? !lastArm.pattern.literal.value
+        : undefined;
     const hasOppositeUnguarded =
       oppositeBoolValue !== undefined &&
       expr.arms

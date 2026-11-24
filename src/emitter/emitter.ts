@@ -40,6 +40,7 @@ import {
   type UnaryExpression,
   type UpperIdentifier,
   type WhenStatement,
+  type Span,
 } from "../ast/types.js";
 import {
   isRecordContract,
@@ -991,7 +992,9 @@ export class Emitter {
       expr.kind === "IndexExpression" &&
       expr.index.kind === "StringLiteral"
     ) {
-      const propName = expr.index.parts.map((p: any) => p.value ?? "").join("");
+      const propName = expr.index.parts
+        .map((p) => ("value" in p ? String(p.value) : ""))
+        .join("");
       const fields =
         expr.object.kind === "Identifier"
           ? this.recordFields(expr.object.name)
@@ -1350,10 +1353,10 @@ export class Emitter {
       if (
         node.kind === "FunctionExpression" &&
         Array.isArray(node.params) &&
-        node.params.some(
-          (param: any) =>
-            param.name && this.collectBindingNames(param.name).includes(name),
-        )
+        node.params.some((param) => {
+          const p = param as { name?: BindingTarget };
+          return p.name && this.collectBindingNames(p.name).includes(name);
+        })
       )
         return;
       if (node.kind === "MemberExpression") {
@@ -1432,13 +1435,13 @@ export class Emitter {
         if (currentParamNames.has(node.name)) {
           throw new FunScriptError(
             `Defaulted record field cannot reference its own record parameter '${node.name}'`,
-            node.span as any,
+            node.span as Span | undefined,
           );
         }
         if (subsequentParamNames.has(node.name)) {
           throw new FunScriptError(
             `Parameter '${node.name}' cannot be referenced in a default value before its declaration`,
-            node.span as any,
+            node.span as Span | undefined,
           );
         }
       }
@@ -1648,7 +1651,7 @@ export class Emitter {
     }
     if (
       expr.expression.kind === "FunctionExpression" &&
-      (expr.expression as any).params?.length === 0
+      expr.expression.params.length === 0
     ) {
       return `__funscriptJs(${inner}, false)`;
     }
@@ -2287,10 +2290,11 @@ export class Emitter {
     if (hasDotPaths) {
       // Lower to Mutative create
       this.needsMutative = true;
-      const baseSpread = expr.entries.find(
-        (e) => e.kind === "SpreadEntry",
-      ) as any;
-      const base = baseSpread ? this.emitExpression(baseSpread.argument) : "{}";
+      const baseSpread = expr.entries.find((e) => e.kind === "SpreadEntry");
+      const base =
+        baseSpread && "argument" in baseSpread
+          ? this.emitExpression(baseSpread.argument)
+          : "{}";
       const mutations = expr.entries
         .filter((e) => e.kind !== "SpreadEntry")
         .map((e) => {
@@ -2443,8 +2447,13 @@ export class Emitter {
             if (
               node.kind === "RecordTypeNode" &&
               Array.isArray(node.fields) &&
-              node.fields.some(
-                (field: any) => field.optional || field.defaultValue,
+              node.fields.some((field) =>
+                Boolean(
+                  (field as { optional?: boolean; defaultValue?: unknown })
+                    .optional ||
+                  (field as { optional?: boolean; defaultValue?: unknown })
+                    .defaultValue,
+                ),
               )
             )
               return true;

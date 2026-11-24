@@ -144,12 +144,13 @@ function checkTsBlockCode(
   return diagnostics;
 }
 
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
 function traverseAst(node: any, visit: (n: any) => void) {
   if (!node || typeof node !== "object") return;
   visit(node);
   for (const key of Object.keys(node)) {
     if (key === "span") continue;
-    const child = node[key];
+    const child = (node as Record<string, unknown>)[key];
     if (Array.isArray(child)) {
       for (const c of child) traverseAst(c, visit);
     } else if (child && typeof child === "object") {

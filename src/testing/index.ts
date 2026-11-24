@@ -1,8 +1,10 @@
-const getGlobal = (name: string): any => (globalThis as any)[name];
+type TestRunnerGlobal = unknown;
+const getGlobal = (name: string): TestRunnerGlobal =>
+  (globalThis as Record<string, unknown>)[name];
 
-function createUniversalProxy(name: string): any {
+function createUniversalProxy(name: string): unknown {
   return new Proxy(
-    function (this: any, ...args: any[]) {
+    function (this: unknown, ...args: unknown[]) {
       const g = getGlobal(name);
       if (typeof g === "function") {
         return Reflect.apply(g, this, args);
@@ -14,7 +16,7 @@ function createUniversalProxy(name: string): any {
     {
       get(_target, prop, receiver) {
         const g = getGlobal(name);
-        if (g != null && prop in g) {
+        if (g != null && typeof g === "object" && prop in g) {
           const val = Reflect.get(g, prop, receiver);
           return typeof val === "function" ? val.bind(g) : val;
         }

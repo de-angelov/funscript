@@ -47,7 +47,9 @@ export function emitJsxAttribute(
   if (attr.value.kind === "StringLiteral") {
     const isSimple = attr.value.parts.every((p) => p.kind === "StringRawPart");
     if (isSimple) {
-      const rawVal = attr.value.parts.map((p) => (p as any).value).join("");
+      const rawVal = attr.value.parts
+        .map((p) => ("value" in p ? String(p.value) : ""))
+        .join("");
       return `${name}=${JSON.stringify(rawVal)}`;
     }
     return `${name}={${ctx.emitStringLiteral(attr.value)}}`;

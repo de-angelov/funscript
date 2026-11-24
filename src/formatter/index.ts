@@ -36,11 +36,15 @@ import {
   type TypeParameter,
   type UnaryExpression,
   type WhenStatement,
+  type Span,
 } from "../ast/types.js";
 import { renderExportFrom, renderImport } from "../emitter/imports.js";
 import { Lexer } from "../lexer/lexer.js";
 import { Parser } from "../parser/parser.js";
 import { ASSOCIATIVITY, PRECEDENCE } from "./operator-precedence.js";
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+type AstInspectNode = { kind: string; span?: Span; [key: string]: any };
 
 export interface FormatOptions {
   indentSize?: number;
@@ -155,7 +159,7 @@ export class Formatter {
   private indentSize: number;
   private lineWidth: number;
   private comments: Comment[];
-  private leadingComments = new Map<any, Comment[]>();
+  private leadingComments = new Map<AstInspectNode, Comment[]>();
   private trailingComments = new Map<number, Comment>();
   private eofComments: Comment[] = [];
 
@@ -240,7 +244,10 @@ export class Formatter {
     }
   }
 
-  private findCommentTarget(node: any, commentLine: number): any {
+  private findCommentTarget(
+    node: AstInspectNode,
+    commentLine: number,
+  ): AstInspectNode | null {
     const children = this.getNodeChildren(node);
     if (!children || children.length === 0) {
       return null;
@@ -263,7 +270,7 @@ export class Formatter {
     return null;
   }
 
-  private getNodeChildren(node: any): any[] | null {
+  private getNodeChildren(node: AstInspectNode): AstInspectNode[] | null {
     if (!node) return null;
     switch (node.kind) {
       case "Program":
@@ -311,7 +318,7 @@ export class Formatter {
       case "RecordExpression":
         return node.entries;
       case "PipelineExpression": {
-        const steps: any[] = [];
+        const steps: AstInspectNode[] = [];
         let curr = node;
         while (curr.kind === "PipelineExpression") {
           steps.unshift(curr.right);
@@ -339,7 +346,10 @@ export class Formatter {
       .replace(/\{/g, "\\{");
   }
 
-  private formatLeadingComments(node: any, indentStr: string): string {
+  private formatLeadingComments(
+    node: AstInspectNode,
+    indentStr: string,
+  ): string {
     const comments = this.leadingComments.get(node);
     if (!comments || comments.length === 0) return "";
 

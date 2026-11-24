@@ -1,6 +1,9 @@
 import { funscriptBunPlugin } from "./bun.js";
 
-declare const Bun: any;
+type BunGlobal = {
+  plugin: (plugin: unknown) => void;
+};
+declare const Bun: BunGlobal | undefined;
 if (typeof Bun !== "undefined" && typeof Bun.plugin === "function") {
   Bun.plugin(funscriptBunPlugin());
 }

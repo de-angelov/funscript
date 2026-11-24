@@ -13,8 +13,9 @@ import { TypeScriptCompilationContext } from "../compiler/typescript-context.js"
 import { Lexer } from "../lexer/lexer.js";
 import { Parser } from "../parser/parser.js";
 
-export function toDiagnostic(error: any): Diagnostic {
-  const span: Span | undefined = error.span;
+export function toDiagnostic(error: unknown): Diagnostic {
+  const err = error as { span?: Span; message?: string };
+  const span: Span | undefined = err.span;
   let startLine = 0;
   let startChar = 0;
   let endLine = 0;
@@ -47,8 +48,13 @@ export function toDiagnostic(error: any): Diagnostic {
   }
 
   let rawMessage =
-    typeof error.message === "string" ? error.message : String(error);
+    typeof err.message === "string" ? err.message : String(error);
   rawMessage = rawMessage.replace(/\s+at line \d+, col \d+$/, "");
+
+  const errorCode =
+    typeof error === "object" && error !== null && "code" in error
+      ? (error as { code?: unknown }).code
+      : undefined;
 
   return {
     range: {
@@ -58,8 +64,11 @@ export function toDiagnostic(error: any): Diagnostic {
     severity: DiagnosticSeverity.Error,
     source: "funscript",
     code:
-      error?.code ??
-      (error?.constructor?.name === "LexerError" ? "FS_LEXER" : "FS_SYNTAX"),
+      (errorCode as number | string | undefined) ??
+      ((error as { constructor?: { name?: string } })?.constructor?.name ===
+      "LexerError"
+        ? "FS_LEXER"
+        : "FS_SYNTAX"),
     message: rawMessage,
     ...(error instanceof ImportedSchemaError && error.related
       ? {
@@ -111,7 +120,7 @@ export function validateSyntax(
     const firstDiagnostic = parser.getDiagnostics()[0];
     if (firstDiagnostic) diagnostics.push(toDiagnostic(firstDiagnostic));
     return { diagnostics, ast };
-  } catch (error: any) {
+  } catch (error: unknown) {
     diagnostics.push(toDiagnostic(error));
     return { diagnostics };
   }
@@ -128,7 +137,7 @@ export function validateFunScript(
       if (!ast.body.some((decl) => decl.kind === "AsDeclaration"))
         validateNumericComparisons(ast, source, context);
       resolveImportedSchemas(ast, source, context);
-    } catch (error: any) {
+    } catch (error: unknown) {
       diagnostics.push(toDiagnostic(error));
     }
   }

@@ -512,7 +512,14 @@ export async function prepareAssemblyScript(
         }
         throw new Error(detail);
       }
-      const wasm = (globalThis as any).WebAssembly;
+      const wasm = (
+        globalThis as unknown as { WebAssembly?: typeof WebAssembly }
+      ).WebAssembly;
+      if (!wasm) {
+        throw new Error(
+          "WebAssembly is not supported in the current environment",
+        );
+      }
       const imports: { module: string; name: string; kind: string }[] =
         wasm.Module.imports(new wasm.Module(result.binary));
       if (

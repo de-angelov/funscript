@@ -264,7 +264,13 @@ export function extractModuleDoc(
         if (bdecl.init.kind === "FunctionExpression") {
           const fn = bdecl.init;
           const params = fn.params.map((p) => ({
-            name: "name" in p && p.name ? (p.name as any).name : "arg",
+            name:
+              "name" in p &&
+              p.name &&
+              typeof p.name === "object" &&
+              "name" in p.name
+                ? String((p.name as { name: unknown }).name)
+                : "arg",
             type: p.typeAnnotation
               ? source
                   .slice(

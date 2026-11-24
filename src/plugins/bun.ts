@@ -92,22 +92,25 @@ export interface BunPluginBuilder {
             | "text"
             | "wasm"
             | "napi";
-          exports?: Record<string, any>;
+          exports?: Record<string, unknown>;
         }
-      | Promise<{
-          contents?: string;
-          loader?:
-            | "js"
-            | "jsx"
-            | "ts"
-            | "tsx"
-            | "json"
-            | "toml"
-            | "text"
-            | "wasm"
-            | "napi";
-          exports?: Record<string, any>;
-        }>,
+      | Promise<
+          | {
+              contents?: string;
+              loader?:
+                | "js"
+                | "jsx"
+                | "ts"
+                | "tsx"
+                | "json"
+                | "toml"
+                | "text"
+                | "wasm"
+                | "napi";
+              exports?: Record<string, unknown>;
+            }
+          | undefined
+        >,
   ): void;
   onResolve(
     args: { filter: RegExp; namespace?: string },
@@ -123,7 +126,7 @@ export interface BunPluginBuilder {
           { path?: string; namespace?: string; external?: boolean } | undefined
         >,
   ): void;
-  config?: any;
+  config?: unknown;
 }
 
 export interface BunPlugin {
@@ -249,7 +252,7 @@ export function funscriptBunPlugin(options: BunPluginOptions = {}): BunPlugin {
             ? options.include
             : [options.include];
           if (!matchesAnyPattern(args.path, includes as (string | RegExp)[])) {
-            return undefined as any;
+            return undefined;
           }
         }
 
@@ -258,7 +261,7 @@ export function funscriptBunPlugin(options: BunPluginOptions = {}): BunPlugin {
             ? options.exclude
             : [options.exclude];
           if (matchesAnyPattern(args.path, excludes as (string | RegExp)[])) {
-            return undefined as any;
+            return undefined;
           }
         }
 
@@ -335,7 +338,11 @@ export function funscriptBunPlugin(options: BunPluginOptions = {}): BunPlugin {
 }
 
 // Auto-register when imported in a Bun environment (e.g. via bunfig.toml `preload = ["funscript/bun"]`)
-declare const Bun: any;
+type BunGlobal = {
+  file: (path: string) => { text: () => Promise<string> };
+  plugin: (plugin: unknown) => void;
+};
+declare const Bun: BunGlobal | undefined;
 if (typeof Bun !== "undefined" && typeof Bun.plugin === "function") {
   Bun.plugin(funscriptBunPlugin());
 }

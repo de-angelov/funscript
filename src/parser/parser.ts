@@ -218,7 +218,7 @@ export class Parser {
       }
       try {
         body.push(this.parseTopLevelDeclaration());
-      } catch (err: any) {
+      } catch (err: unknown) {
         if (err instanceof ParseError) {
           this.diagnostics.push(err);
           this.synchronize();
@@ -233,7 +233,8 @@ export class Parser {
 
     if (throwOnError && this.diagnostics.length > 0) {
       const err = this.diagnostics[0];
-      (err as any).diagnostics = this.diagnostics;
+      (err as ParseError & { diagnostics?: ParseError[] }).diagnostics =
+        this.diagnostics;
       throw err;
     }
 

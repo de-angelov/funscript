@@ -14,7 +14,7 @@ export const languages: SupportLanguage[] = [
 
 export const parsers: Record<string, Parser> = {
   funscript: {
-    parse: (text: string, options: any) => {
+    parse: (text: string, options: { filepath?: string } = {}) => {
       const filename = options?.filepath ?? "<anonymous>";
       const lexer = new Lexer(text, filename);
       const tokens = lexer.tokenize();
@@ -27,14 +27,19 @@ export const parsers: Record<string, Parser> = {
       };
     },
     astFormat: "funscript-ast",
-    locStart: (node: any) => node.span?.start?.offset ?? 0,
-    locEnd: (node: any) => node.span?.end?.offset ?? 0,
+    locStart: (node: { span?: { start?: { offset?: number } } }) =>
+      node.span?.start?.offset ?? 0,
+    locEnd: (node: { span?: { end?: { offset?: number } } }) =>
+      node.span?.end?.offset ?? 0,
   },
 };
 
 export const printers: Record<string, Printer> = {
   "funscript-ast": {
-    print: (path: any, options: any) => {
+    print: (
+      path: { node: { text: string } },
+      options: { tabWidth?: number; filepath?: string } = {},
+    ) => {
       const node = path.node;
       const formatOptions: FormatOptions = {
         indentSize: options?.tabWidth ?? 2,

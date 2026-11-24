@@ -34,6 +34,7 @@ export function convertPipelineStyle(
     source,
   ).parse();
   let hasCandidate = false;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const scan = (node: any): void => {
     if (!node || typeof node !== "object" || hasCandidate) return;
     if (node.kind === "PipelineExpression") {
@@ -85,6 +86,7 @@ export function convertPipelineStyle(
       : compiled.pipelineStageResolutions;
   const edits: Edit[] = [];
   let candidateCount = 0;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const visit = (node: any): void => {
     if (!node || typeof node !== "object") return;
     if (node.kind === "PipelineExpression") {
