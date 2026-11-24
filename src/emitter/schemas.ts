@@ -115,7 +115,8 @@ export function emitSchemaDeclaration(
     decl.typeParams?.length &&
     decl.body.kind !== "TypeSignatureSchema" &&
     decl.body.kind !== "TaggedUnionSchema" &&
-    !(decl.body.kind === "RecordSchema")
+    decl.body.kind !== "RecordSchema" &&
+    decl.body.kind !== "StructuralUnionSchema"
   ) {
     throw new FunScriptError(
       "Generic runtime schemas are not supported yet; use a TypeScript type alias",
@@ -239,6 +240,7 @@ export function emitSchemaDeclaration(
       return `${exp}type ${name}${typeParams} = Data.TaggedEnum<{\n${typeVariants}\n}>;\nconst $${name} = Data.taggedEnum<${name}${anyArgs}>();\n${constructors}`;
     }
     case "StructuralUnionSchema": {
+      if (decl.typeParams?.length) return emitGenericDataSchema(ctx, decl, exp);
       ctx.addEffectImport("Schema");
       const members = decl.body.members
         .map((member) => emitSchemaTypeField(ctx, member))
@@ -320,8 +322,12 @@ export function emitGenericDataSchema(
   decl: SchemaDeclaration,
   exp: string,
 ): string {
-  if (decl.body.kind !== "RecordSchema" || !decl.typeParams?.length)
-    throw new Error("Expected a generic record schema");
+  if (
+    (decl.body.kind !== "RecordSchema" &&
+      decl.body.kind !== "StructuralUnionSchema") ||
+    !decl.typeParams?.length
+  )
+    throw new Error("Expected a generic record or union schema");
   const parameters = decl.typeParams.map((param) => param.name.name);
   const names = new Set(parameters);
   if (
@@ -360,7 +366,12 @@ export function emitGenericDataSchema(
   const visitFactory = (name: string, active: Set<string>): boolean => {
     if (active.has(name)) return false;
     const target = ctx.genericSchemaDeclarations.get(name);
-    if (!target || target.body.kind !== "RecordSchema") return true;
+    if (
+      !target ||
+      (target.body.kind !== "RecordSchema" &&
+        target.body.kind !== "StructuralUnionSchema")
+    )
+      return true;
     const next = new Set(active).add(name);
     const params = new Set(target.typeParams?.map((param) => param.name.name));
     const visitType = (type: TypeNode): boolean => {
@@ -378,7 +389,12 @@ export function emitGenericDataSchema(
         (type.typeArgs?.every(visitType) ?? true)
       );
     };
-    return target.body.fields.every((field) => visitType(field.typeAnnotation));
+    if (target.body.kind === "RecordSchema") {
+      return target.body.fields.every((field) =>
+        visitType(field.typeAnnotation),
+      );
+    }
+    return target.body.members.every(visitType);
   };
   if (!visitFactory(decl.id.name, new Set())) {
     throw new FunScriptError(
@@ -444,16 +460,27 @@ export function emitGenericDataSchema(
         ctx.options.importedDataSchemas?.has(name) === true)
     );
   };
-  for (const field of decl.body.fields) {
-    if (
-      field.name.name === "__proto__" ||
-      field.defaultValue ||
-      !supports(field.typeAnnotation)
-    ) {
-      throw new FunScriptError(
-        `Generic data schema '${decl.id.name}' currently supports required or optional fields with primitive, local data-schema, type-parameter, array, union, verified generic application, or nested required-record types. Field '${field.name.name}' needs an explicit non-generic schema or contract.`,
-        field.span,
-      );
+  if (decl.body.kind === "RecordSchema") {
+    for (const field of decl.body.fields) {
+      if (
+        field.name.name === "__proto__" ||
+        field.defaultValue ||
+        !supports(field.typeAnnotation)
+      ) {
+        throw new FunScriptError(
+          `Generic data schema '${decl.id.name}' currently supports required or optional fields with primitive, local data-schema, type-parameter, array, union, verified generic application, or nested required-record types. Field '${field.name.name}' needs an explicit non-generic schema or contract.`,
+          field.span,
+        );
+      }
+    }
+  } else {
+    for (const member of decl.body.members) {
+      if (!supports(member)) {
+        throw new FunScriptError(
+          `Generic data schema '${decl.id.name}' currently supports primitive, local data-schema, type-parameter, array, union, verified generic application, or nested required-record types in union members. Member '${ctx.emitTypeNode(member)}' needs an explicit non-generic schema or contract.`,
+          member.span,
+        );
+      }
     }
   }
   ctx.addEffectImport("Schema");
@@ -461,12 +488,6 @@ export function emitGenericDataSchema(
   const previous = ctx.activeSchemaParameters;
   ctx.activeSchemaParameters = names;
   try {
-    const fields = decl.body.fields
-      .map((field) => {
-        const schema = emitSchemaTypeField(ctx, field.typeAnnotation);
-        return `  ${emitPropertyKey(field.name.name)}: ${field.optional ? `Schema.OptionFromOptionalNullOr(${schema}, { onNoneEncoding: "omit" })` : schema}`;
-      })
-      .join(",\n");
     const args = parameters
       .map(
         (param) =>
@@ -480,13 +501,30 @@ export function emitGenericDataSchema(
           `  if (!Schema.isSchema(${param}) || $funscriptSchemaAST.isOptional($funscriptSchemaAST.toType(${param}.ast)) || $funscriptSchemaAST.toType(${param}.ast).context?.isMutable) throw new TypeError(${JSON.stringify(`${decl.id.name} requires a schema without optional-key or mutable-key modifiers for ${param}`)});`,
       )
       .join("\n");
-    const dataType = `{ ${decl.body.fields
-      .map((field) => {
-        const type = ctx.emitTypeNode(field.typeAnnotation);
-        return `readonly ${emitPropertyKey(field.name.name)}: ${field.optional ? `import("effect").Option.Option<${type}>` : type}`;
-      })
-      .join("; ")} }`;
-    return `${exp}const ${decl.id.name} = <${args}>(${values}) => {\n${checks}\n  return Schema.Struct({\n${fields}\n  });\n};\n${exp}type ${decl.id.name}<${parameters.join(", ")}> = ${dataType};`;
+
+    if (decl.body.kind === "RecordSchema") {
+      const fields = decl.body.fields
+        .map((field) => {
+          const schema = emitSchemaTypeField(ctx, field.typeAnnotation);
+          return `  ${emitPropertyKey(field.name.name)}: ${field.optional ? `Schema.OptionFromOptionalNullOr(${schema}, { onNoneEncoding: "omit" })` : schema}`;
+        })
+        .join(",\n");
+      const dataType = `{ ${decl.body.fields
+        .map((field) => {
+          const type = ctx.emitTypeNode(field.typeAnnotation);
+          return `readonly ${emitPropertyKey(field.name.name)}: ${field.optional ? `import("effect").Option.Option<${type}>` : type}`;
+        })
+        .join("; ")} }`;
+      return `${exp}const ${decl.id.name} = <${args}>(${values}) => {\n${checks}\n  return Schema.Struct({\n${fields}\n  });\n};\n${exp}type ${decl.id.name}<${parameters.join(", ")}> = ${dataType};`;
+    } else {
+      const members = decl.body.members
+        .map((member) => emitSchemaTypeField(ctx, member))
+        .join(", ");
+      const dataType = decl.body.members
+        .map((member) => ctx.emitTypeNode(member))
+        .join(" | ");
+      return `${exp}const ${decl.id.name} = <${args}>(${values}) => {\n${checks}\n  return Schema.Union([${members}]);\n};\n${exp}type ${decl.id.name}<${parameters.join(", ")}> = ${dataType};`;
+    }
   } finally {
     ctx.activeSchemaParameters = previous;
   }

@@ -188,7 +188,11 @@ export function resolveImportedRecordFunctions(
     decl: import("../ast/types.js").SchemaDeclaration,
     seen: Set<string>,
   ): boolean => {
-    if (decl.body.kind !== "RecordSchema" || decl.typeParams?.length)
+    if (
+      (decl.body.kind !== "RecordSchema" &&
+        decl.body.kind !== "StructuralUnionSchema") ||
+      decl.typeParams?.length
+    )
       return false;
     const declarations = program.body.map((item) =>
       item.kind === "ExportDeclaration" ? item.declaration : item,
@@ -239,12 +243,15 @@ export function resolveImportedRecordFunctions(
         resolveDataLocal(program, file, name, seen, decl)
       );
     };
-    return decl.body.fields.every(
-      (field) =>
-        field.name.name !== "__proto__" &&
-        !field.defaultValue &&
-        supports(field.typeAnnotation),
-    );
+    if (decl.body.kind === "RecordSchema") {
+      return decl.body.fields.every(
+        (field) =>
+          field.name.name !== "__proto__" &&
+          !field.defaultValue &&
+          supports(field.typeAnnotation),
+      );
+    }
+    return decl.body.members.every(supports);
   };
   const resolveDataLocal = (
     program: Program,
@@ -352,7 +359,11 @@ export function resolveImportedRecordFunctions(
     decl: import("../ast/types.js").SchemaDeclaration,
     seen: Set<string>,
   ): number | undefined => {
-    if (decl.body.kind !== "RecordSchema" || !decl.typeParams?.length)
+    if (
+      (decl.body.kind !== "RecordSchema" &&
+        decl.body.kind !== "StructuralUnionSchema") ||
+      !decl.typeParams?.length
+    )
       return undefined;
     const names = new Set(decl.typeParams.map((p) => p.name.name));
     if (
@@ -473,12 +484,17 @@ export function resolveImportedRecordFunctions(
         type.typeArgs.every(supportsArgument)
       );
     };
-    return decl.body.fields.every(
-      (field) =>
-        field.name.name !== "__proto__" &&
-        !field.defaultValue &&
-        supports(field.typeAnnotation),
-    )
+    if (decl.body.kind === "RecordSchema") {
+      return decl.body.fields.every(
+        (field) =>
+          field.name.name !== "__proto__" &&
+          !field.defaultValue &&
+          supports(field.typeAnnotation),
+      )
+        ? decl.typeParams.length
+        : undefined;
+    }
+    return decl.body.members.every(supports)
       ? decl.typeParams.length
       : undefined;
   };

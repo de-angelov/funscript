@@ -833,7 +833,8 @@ export class Emitter {
       const decl = item.kind === "ExportDeclaration" ? item.declaration : item;
       if (
         decl.kind === "SchemaDeclaration" &&
-        decl.body.kind === "RecordSchema" &&
+        (decl.body.kind === "RecordSchema" ||
+          decl.body.kind === "StructuralUnionSchema") &&
         decl.typeParams?.length &&
         !this.recordContracts.has(decl.id.name)
       ) {
