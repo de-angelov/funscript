@@ -108,6 +108,10 @@ parentPort?.on("message", async (request: Request) => {
             allowHolesPaths: Array.isArray(policy.allowHoles)
               ? policy.allowHoles
               : undefined,
+            allowEarlyReturns: policy.allowEarlyReturns === true,
+            allowEarlyReturnsPaths: Array.isArray(policy.allowEarlyReturns)
+              ? policy.allowEarlyReturns
+              : undefined,
             effectOnly: policy.effectOnly,
           }),
         );

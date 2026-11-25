@@ -127,7 +127,7 @@ export compute = (x: Number) => Number {
   });
 
   describe("3. The 'when' Keyword (Conditional Blocks and Match Guards)", () => {
-    it("Early return 'when (...) =>' is rejected by compiler", async () => {
+    it("Early return 'when (...) =>' is rejected by default", async () => {
       const code = `
 export divide = (a: Number, b: Number) => Number {
   when (b #= 0) => 0
@@ -138,20 +138,39 @@ export divide = (a: Number, b: Number) => Number {
       const failure = await Effect.runPromise(Effect.flip(compileString(code)));
       expect(failure).toBeInstanceOf(CompilerError);
       expect(failure.message).toContain(
-        "Early return 'when (...) =>' has been removed from FunScript",
+        "Early returns ('when (...) =>') are disabled by default",
       );
     });
 
-    it("Early return 'when (...) =>' is rejected outside function context", async () => {
+    it("Early return 'when (...) =>' is allowed when allowEarlyReturns option is true", async () => {
+      const code = `
+export divide = (a: Number, b: Number) => Number {
+  when (b #= 0) => 0
+  => a / b
+}
+`.trim();
+
+      const res = await Effect.runPromise(
+        compileString(code, "test.fun", { allowEarlyReturns: true }),
+      );
+      expect(res.typescript).toContain("if ((b === 0)) return 0;");
+      expect(res.typescript).toContain("return (a / b);");
+    });
+
+    it("Early return 'when (...) =>' is rejected outside function context even with allowEarlyReturns", async () => {
       const code = `
 when (true) => "cannot return at top level"
 x = 10
 `.trim();
 
-      const failure = await Effect.runPromise(Effect.flip(compileString(code)));
+      const failure = await Effect.runPromise(
+        Effect.flip(
+          compileString(code, "test.fun", { allowEarlyReturns: true }),
+        ),
+      );
       expect(failure).toBeInstanceOf(CompilerError);
       expect(failure.message).toContain(
-        "Early return 'when (...) =>' has been removed from FunScript",
+        "Early return 'when (...) =>' is rejected outside function context",
       );
     });
 

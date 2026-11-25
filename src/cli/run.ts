@@ -95,6 +95,13 @@ export const runCommand = (
             process.cwd(),
             filePath,
           ),
+        allowEarlyReturns:
+          commandArgs.includes("--allow-early-returns") ||
+          isPathPolicyEnabled(
+            projectPolicy.allowEarlyReturns,
+            process.cwd(),
+            filePath,
+          ),
       }))
     )
       return;

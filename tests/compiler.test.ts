@@ -756,7 +756,7 @@ export early = (skip: Boolean) =>
   }
 `.trim();
     await expect(Effect.runPromise(compileString(badCode))).rejects.toThrow(
-      "Early return 'when (...) =>' has been removed",
+      "Early returns ('when (...) =>') are disabled by default",
     );
   });
 

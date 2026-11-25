@@ -454,6 +454,13 @@ export const buildCommand = (
             process.cwd(),
             filePath,
           ),
+        allowEarlyReturns:
+          args.includes("--allow-early-returns") ||
+          isPathPolicyEnabled(
+            projectPolicy.allowEarlyReturns,
+            process.cwd(),
+            filePath,
+          ),
         effectOnly: isEffectOnlyFile(projectPolicy, process.cwd(), filePath),
         effectOnlyDirectories: projectPolicy.effectOnly,
         modularEffectImports:

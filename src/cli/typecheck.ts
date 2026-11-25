@@ -101,6 +101,8 @@ export const checkCliFiles = (
     noDeepDestructurePaths?: string[];
     allowHoles?: boolean;
     allowHolesPaths?: string[];
+    allowEarlyReturns?: boolean;
+    allowEarlyReturnsPaths?: string[];
   },
 ) =>
   Effect.gen(function* () {
@@ -116,6 +118,8 @@ export const checkCliFiles = (
       effectOnly: options?.effectOnly,
       allowHoles: options?.allowHoles,
       allowHolesPaths: options?.allowHolesPaths,
+      allowEarlyReturns: options?.allowEarlyReturns,
+      allowEarlyReturnsPaths: options?.allowEarlyReturnsPaths,
       noTsPaths: options?.noTsPaths,
       noGlobalThisPaths: options?.noGlobalThisPaths,
       noOptionalPaths: options?.noOptionalPaths,

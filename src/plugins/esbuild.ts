@@ -21,6 +21,7 @@ export interface EsbuildPluginOptions {
   barePipelines?: boolean;
   noDeepDestructure?: boolean;
   maxDestructureDepth?: number;
+  allowEarlyReturns?: boolean;
   /** Working directory for resolving project configs and files. Defaults to process.cwd(). */
   cwd?: string;
   /** Filter pattern for onResolve/onLoad. Defaults to /\.funx?$/ */
@@ -237,6 +238,13 @@ export function funscriptEsbuildPlugin(
               ),
             maxDestructureDepth:
               options.maxDestructureDepth ?? projectPolicy.maxDestructureDepth,
+            allowEarlyReturns:
+              options.allowEarlyReturns ||
+              isPathPolicyEnabled(
+                projectPolicy.allowEarlyReturns,
+                cwd,
+                filename,
+              ),
             effectOnly: isEffectOnlyFile(projectPolicy, cwd, filename),
             effectOnlyDirectories: projectPolicy.effectOnly,
             policyRoot: cwd,

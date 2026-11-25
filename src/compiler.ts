@@ -55,6 +55,9 @@ export interface CompileOptions {
   effectOnlyDirectories?: string[];
   /** Allow unfinished typed holes ('???') during compilation (defaults to false; holes fail build by default). */
   allowHoles?: boolean;
+  /** Allow early returns ('when (...) =>') during compilation (defaults to false). */
+  allowEarlyReturns?: boolean;
+  allowEarlyReturnsPaths?: string[];
   policyRoot?: string;
   outputFile?: string;
   context?: TypeScriptCompilationContext;
@@ -142,6 +145,21 @@ function validateNoHoles(ast: Program): void {
       const label = (node as { label?: string }).label || "???";
       throw new FunScriptError(
         `Typed hole '${label}' is unfinished code. Implement this expression before building or type-checking.`,
+        node.span as Span | undefined,
+      );
+    }
+  });
+}
+
+/** Reject early returns ('when (...) =>') unless allowEarlyReturns is explicitly enabled. */
+function validateNoEarlyReturns(ast: Program): void {
+  walkAst(ast, (node) => {
+    if (
+      node.kind === "WhenStatement" &&
+      (node as { isEarlyReturn?: boolean }).isEarlyReturn
+    ) {
+      throw new FunScriptError(
+        "Early returns ('when (...) =>') are disabled by default; use 'match' for conditional branching or 'effect' blocks for sequential workflows, or enable 'allowEarlyReturns' in funscript.config.fun",
         node.span as Span | undefined,
       );
     }
@@ -602,6 +620,14 @@ export const compileString = (
 
           validateNoBannedTypes(ast);
           if (!options?.allowHoles) validateNoHoles(ast);
+          const allowEarlyReturns =
+            options?.allowEarlyReturns ||
+            isPathPolicyEnabled(
+              options?.allowEarlyReturnsPaths,
+              options?.policyRoot ?? process.cwd(),
+              filename,
+            );
+          if (!allowEarlyReturns) validateNoEarlyReturns(ast);
           if (options?.effectOnly) validateEffectOnly(ast, options, filename);
           else if (options?.noTs) validateNoTs(ast);
           if (options?.noGlobalThis) validateNoGlobalThis(ast);
@@ -775,6 +801,8 @@ export const checkString = (
     | "policyRoot"
     | "effectOnly"
     | "allowHoles"
+    | "allowEarlyReturns"
+    | "allowEarlyReturnsPaths"
   >,
 ): Effect.Effect<Program, CompilerError> =>
   Effect.try({
@@ -785,6 +813,14 @@ export const checkString = (
       const ast = parser.parse();
       validateNoBannedTypes(ast);
       if (!options?.allowHoles) validateNoHoles(ast);
+      const allowEarlyReturns =
+        options?.allowEarlyReturns ||
+        isPathPolicyEnabled(
+          options?.allowEarlyReturnsPaths,
+          options?.policyRoot ?? process.cwd(),
+          filename,
+        );
+      if (!allowEarlyReturns) validateNoEarlyReturns(ast);
       if (options?.effectOnly) validateEffectOnly(ast, options, filename);
       else if (options?.noTs) validateNoTs(ast);
       if (options?.noGlobalThis) validateNoGlobalThis(ast);

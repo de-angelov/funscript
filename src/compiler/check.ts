@@ -107,6 +107,9 @@ export interface CheckOptions {
   /** Allow unfinished typed holes ('???') during type-checking (defaults to false; holes fail check by default). */
   allowHoles?: boolean;
   allowHolesPaths?: string[];
+  /** Allow early returns ('when (...) =>') during type-checking (defaults to false). */
+  allowEarlyReturns?: boolean;
+  allowEarlyReturnsPaths?: string[];
   compilerOptions?: ts.CompilerOptions;
   cwd?: string;
   highlightCode?: boolean;
@@ -986,6 +989,13 @@ export const typeCheckVirtualFiles = (
         const allowHoles =
           !!options?.allowHoles ||
           isPathPolicyEnabled(options?.allowHolesPaths, cwd, fullFunPath);
+        const allowEarlyReturns =
+          !!options?.allowEarlyReturns ||
+          isPathPolicyEnabled(
+            options?.allowEarlyReturnsPaths,
+            cwd,
+            fullFunPath,
+          );
         const graphKey = dependencyKeys?.get(fullFunPath);
         const dependencyKey =
           graphKey &&
@@ -1001,6 +1011,7 @@ export const typeCheckVirtualFiles = (
             noDeepDestructure,
             maxDestructureDepth,
             allowHoles,
+            allowEarlyReturns,
           ]);
         const existing = cache?.compiledFiles.get(fullFunPath);
         if (
@@ -1035,6 +1046,7 @@ export const typeCheckVirtualFiles = (
                 noDeepDestructure,
                 maxDestructureDepth,
                 allowHoles,
+                allowEarlyReturns,
                 effectOnly,
                 effectOnlyDirectories: options?.effectOnly,
                 policyRoot: cwd,
@@ -1803,6 +1815,26 @@ export const typeCheckVirtualFiles = (
                   "error",
                   "Typed holes are placeholders for incomplete code during drafting. They throw at runtime and are prohibited by default in completed builds and type-checking.",
                   "Implement this expression before building or type-checking.",
+                );
+              }
+
+              if (
+                node.kind === "WhenStatement" &&
+                (node as { isEarlyReturn?: boolean }).isEarlyReturn &&
+                !options?.allowEarlyReturns &&
+                !isPathPolicyEnabled(
+                  options?.allowEarlyReturnsPaths,
+                  cwd,
+                  meta.funPath,
+                )
+              ) {
+                addAstDiag(
+                  node.span,
+                  "EARLY_RETURN",
+                  "Early returns ('when (...) =>') are disabled by default.",
+                  "error",
+                  "Early returns bypass functional purity and exhaustive matching guarantees. They are disabled by default in FunScript.",
+                  "Use 'match' for conditional branching or 'effect' blocks for sequential workflows, or enable 'allowEarlyReturns' in configuration.",
                 );
               }
 

@@ -226,6 +226,12 @@ export const checkCommand = (
       allowHolesPaths: Array.isArray(projectPolicy.allowHoles)
         ? projectPolicy.allowHoles
         : undefined,
+      allowEarlyReturns:
+        args.includes("--allow-early-returns") ||
+        projectPolicy.allowEarlyReturns === true,
+      allowEarlyReturnsPaths: Array.isArray(projectPolicy.allowEarlyReturns)
+        ? projectPolicy.allowEarlyReturns
+        : undefined,
     });
     const success =
       result.success &&

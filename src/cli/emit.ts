@@ -93,6 +93,13 @@ export const emitCommand = (
       allowHoles:
         args.includes("--allow-holes") ||
         isPathPolicyEnabled(projectPolicy.allowHoles, process.cwd(), filePath),
+      allowEarlyReturns:
+        args.includes("--allow-early-returns") ||
+        isPathPolicyEnabled(
+          projectPolicy.allowEarlyReturns,
+          process.cwd(),
+          filePath,
+        ),
       effectOnly: isEffectOnlyFile(projectPolicy, process.cwd(), filePath),
       effectOnlyDirectories: projectPolicy.effectOnly,
       modularEffectImports:

@@ -39,6 +39,7 @@ export interface BunPluginOptions {
   barePipelines?: boolean;
   noDeepDestructure?: boolean;
   maxDestructureDepth?: number;
+  allowEarlyReturns?: boolean;
   /**
    * Filter pattern for files to compile.
    * Defaults to /\.funx?$/
@@ -312,6 +313,13 @@ export function funscriptBunPlugin(options: BunPluginOptions = {}): BunPlugin {
               ),
             maxDestructureDepth:
               options.maxDestructureDepth ?? projectPolicy.maxDestructureDepth,
+            allowEarlyReturns:
+              options.allowEarlyReturns ||
+              isPathPolicyEnabled(
+                projectPolicy.allowEarlyReturns,
+                process.cwd(),
+                args.path,
+              ),
             effectOnly: isEffectOnlyFile(
               projectPolicy,
               process.cwd(),

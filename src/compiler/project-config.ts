@@ -15,6 +15,7 @@ export interface FunScriptProjectConfig {
   effectOnly?: string[];
   modularEffectImports?: boolean;
   allowHoles?: boolean | string[];
+  allowEarlyReturns?: boolean | string[];
 }
 
 /** Read a literal FunScript record without compiling or executing project code. */
@@ -60,10 +61,11 @@ export function loadProjectConfig(cwd: string): FunScriptProjectConfig {
           "noDeepDestructure",
           "maxDestructureDepth",
           "allowHoles",
+          "allowEarlyReturns",
         ].includes(entry.key.name)
       ) {
         throw new Error(
-          "config accepts only 'noTs', 'noGlobalThis', 'noOptional', 'barePipelines', 'effectOnly', 'format', 'modularEffectImports', 'noDeepDestructure', 'maxDestructureDepth', and 'allowHoles'",
+          "config accepts only 'noTs', 'noGlobalThis', 'noOptional', 'barePipelines', 'effectOnly', 'format', 'modularEffectImports', 'noDeepDestructure', 'maxDestructureDepth', 'allowHoles', and 'allowEarlyReturns'",
         );
       }
       const name = entry.key.name;
@@ -136,6 +138,7 @@ export function loadProjectConfig(cwd: string): FunScriptProjectConfig {
               | "barePipelines"
               | "noDeepDestructure"
               | "allowHoles"
+              | "allowEarlyReturns"
           ] = directories;
       } else {
         if (name === "effectOnly" || entry.value.kind !== "BooleanLiteral")
@@ -151,6 +154,7 @@ export function loadProjectConfig(cwd: string): FunScriptProjectConfig {
             | "modularEffectImports"
             | "noDeepDestructure"
             | "allowHoles"
+            | "allowEarlyReturns"
         ] = entry.value.value;
       }
     }
