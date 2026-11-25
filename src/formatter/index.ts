@@ -40,9 +40,15 @@ import {
 } from "../ast/types.js";
 import { renderExportFrom, renderImport } from "../emitter/imports.js";
 import { Lexer } from "../lexer/lexer.js";
+import { KEYWORDS, BANNED_KEYWORDS } from "../lexer/tokens.js";
 import { Parser } from "../parser/parser.js";
 import { walkAst } from "../ast/walk.js";
 import { ASSOCIATIVITY, PRECEDENCE } from "./operator-precedence.js";
+
+const RESERVED_IDENTIFIERS = new Set<string>([
+  ...Object.keys(KEYWORDS),
+  ...Object.keys(BANNED_KEYWORDS),
+]);
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type AstInspectNode = { kind: string; span?: Span; [key: string]: any };
@@ -790,8 +796,29 @@ export class Formatter {
       case "BindingDeclaration":
         return this.formatBindingDeclaration(stmt, indent);
       case "AssignmentStatement":
+        if (
+          stmt.value.kind === "PipelineExpression" &&
+          this.shouldExpandPipeline(
+            this.unrollPipeline(stmt.value),
+            indent + this.indentSize,
+          )
+        ) {
+          return `${this.formatTarget(stmt.target)} =\n${this.spaces(indent + this.indentSize)}${this.formatPipelineExpression(stmt.value, indent + this.indentSize)}`;
+        }
         return `${this.formatTarget(stmt.target)} = ${this.formatExpression(stmt.value, indent)}`;
       case "ExpressionStatement":
+        if (
+          stmt.expression.kind === "PipelineExpression" &&
+          this.shouldExpandPipeline(
+            this.unrollPipeline(stmt.expression),
+            indent + this.indentSize,
+          )
+        ) {
+          return this.formatPipelineExpression(
+            stmt.expression,
+            indent + this.indentSize,
+          );
+        }
         return this.formatExpression(stmt.expression, indent);
       case "ReturnStatement":
         if (
@@ -806,7 +833,17 @@ export class Formatter {
         return `=> ${this.formatExpression(stmt.argument, indent)}`;
       case "WhenStatement":
         if (stmt.isEarlyReturn) {
-          return `when (${this.formatExpression(stmt.condition, indent)}) => ${this.formatExpression(stmt.consequent as Expression, indent)}`;
+          const retExpr = stmt.consequent as Expression;
+          if (
+            retExpr.kind === "PipelineExpression" &&
+            this.shouldExpandPipeline(
+              this.unrollPipeline(retExpr),
+              indent + this.indentSize,
+            )
+          ) {
+            return `when (${this.formatExpression(stmt.condition, indent)}) =>\n${this.spaces(indent + this.indentSize)}${this.formatPipelineExpression(retExpr, indent + this.indentSize)}`;
+          }
+          return `when (${this.formatExpression(stmt.condition, indent)}) => ${this.formatExpression(retExpr, indent)}`;
         }
         return `when (${this.formatExpression(stmt.condition, indent)}) {\n${this.formatBlockStatement(stmt.consequent as BlockStatement, indent + this.indentSize)}\n${this.spaces(indent)}}`;
     }
@@ -1156,13 +1193,9 @@ export class Formatter {
       case "SpreadEntry":
         return `...${this.formatExpression(entry.argument, indent)}`;
       case "FieldEntry": {
-        const key =
-          entry.key.name === "try" ||
-          entry.key.name === "catch" ||
-          entry.key.name === "when" ||
-          entry.key.name === "match"
-            ? `"${entry.key.name}"`
-            : entry.key.name;
+        const key = RESERVED_IDENTIFIERS.has(entry.key.name)
+          ? `"${entry.key.name}"`
+          : entry.key.name;
         return `${key}: ${this.formatExpression(entry.value, indent)}`;
       }
       case "DotPathEntry":
@@ -1556,10 +1589,12 @@ export class Formatter {
           node.fields.length >= 3 ||
           node.span.start.line !== node.span.end.line;
         const inlineFields = node.fields
-          .map(
-            (f) =>
-              `${f.name.name}${f.optional ? "?" : ""}: ${this.formatType(f.typeAnnotation, indent)}${f.defaultValue ? ` = ${this.formatExpression(f.defaultValue, indent)}` : ""}`,
-          )
+          .map((f) => {
+            const key = RESERVED_IDENTIFIERS.has(f.name.name)
+              ? `"${f.name.name}"`
+              : f.name.name;
+            return `${key}${f.optional ? "?" : ""}: ${this.formatType(f.typeAnnotation, indent)}${f.defaultValue ? ` = ${this.formatExpression(f.defaultValue, indent)}` : ""}`;
+          })
           .join(", ");
         const maxInline = Math.min(60, this.lineWidth);
         if (
@@ -1572,10 +1607,12 @@ export class Formatter {
         const fieldIndent = this.spaces(indent + this.indentSize);
         const closingIndent = this.spaces(indent);
         const fields = node.fields
-          .map(
-            (f) =>
-              `${fieldIndent}${f.name.name}${f.optional ? "?" : ""}: ${this.formatType(f.typeAnnotation, indent + this.indentSize)}${f.defaultValue ? ` = ${this.formatExpression(f.defaultValue, indent + this.indentSize)}` : ""}`,
-          )
+          .map((f) => {
+            const key = RESERVED_IDENTIFIERS.has(f.name.name)
+              ? `"${f.name.name}"`
+              : f.name.name;
+            return `${fieldIndent}${key}${f.optional ? "?" : ""}: ${this.formatType(f.typeAnnotation, indent + this.indentSize)}${f.defaultValue ? ` = ${this.formatExpression(f.defaultValue, indent + this.indentSize)}` : ""}`;
+          })
           .join("\n");
         return `{\n${fields}\n${closingIndent}}`;
       }

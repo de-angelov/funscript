@@ -67,7 +67,15 @@ export function parseBlock(
 
         if (ctx.match(TokenType.ARROW)) {
           const retStart = ctx.previous().span.start;
+          let hasIndent = false;
+          if (ctx.match(TokenType.NEWLINE)) {
+            hasIndent = ctx.match(TokenType.INDENT);
+          }
           const retExpr = ctx.parseExpression();
+          if (hasIndent) {
+            ctx.skipNewlines();
+            ctx.match(TokenType.DEDENT);
+          }
           ctx.consumeNewlineOrEof();
           statements.push({
             kind: "ReturnStatement",
@@ -81,7 +89,15 @@ export function parseBlock(
         if (ctx.isAssignmentStart()) {
           const target = ctx.parseAssignmentTarget();
           ctx.consume(TokenType.EQ, "Expected '=' in assignment");
+          let hasIndent = false;
+          if (ctx.match(TokenType.NEWLINE)) {
+            hasIndent = ctx.match(TokenType.INDENT);
+          }
           const val = ctx.parseExpression();
+          if (hasIndent) {
+            ctx.skipNewlines();
+            ctx.match(TokenType.DEDENT);
+          }
           ctx.consumeNewlineOrEof();
           statements.push({
             kind: "AssignmentStatement",
@@ -103,16 +119,29 @@ export function parseBlock(
           ctx.isDestructuringBindingStart()
         ) {
           if (ctx.check(TokenType.UNDERSCORE)) {
+            const start = ctx.peek().span.start;
             ctx.advance(); // consume '_'
             ctx.advance(); // consume '='
+            let hasIndent = false;
+            if (ctx.match(TokenType.NEWLINE)) {
+              hasIndent = ctx.match(TokenType.INDENT);
+            }
             const discardExpr = ctx.parseExpression();
+            if (hasIndent) {
+              ctx.skipNewlines();
+              ctx.match(TokenType.DEDENT);
+            }
             ctx.consumeNewlineOrEof("Expected newline");
             statements.push({
               kind: "BindingDeclaration",
               isMut: false,
-              id: { kind: "Identifier", name: "_", span: discardExpr.span },
+              id: {
+                kind: "Identifier",
+                name: "_",
+                span: { start, end: discardExpr.span.end },
+              },
               init: discardExpr,
-              span: discardExpr.span,
+              span: { start, end: discardExpr.span.end },
             });
           } else {
             const bind = ctx.parseBindingDeclaration();
@@ -286,7 +315,15 @@ export function parseWhenStatement(ctx: StatementParserContext): WhenStatement {
         ctx.previous().span,
       );
     }
+    let hasIndent = false;
+    if (ctx.match(TokenType.NEWLINE)) {
+      hasIndent = ctx.match(TokenType.INDENT);
+    }
     const earlyExpr = ctx.parseExpression();
+    if (hasIndent) {
+      ctx.skipNewlines();
+      ctx.match(TokenType.DEDENT);
+    }
     ctx.consumeNewlineOrEof();
     return {
       kind: "WhenStatement",

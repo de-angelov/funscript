@@ -813,6 +813,25 @@ export schema Config = {
           '  |> filter((d: String) => d #! "")\n',
       );
       expect(format(formatted)).toBe(formatted);
+
+      const blockSource =
+        "process = () => {\n" +
+        '  _ = keys |> map((k) => k) |> filter((k) => k #! "")\n' +
+        "  => keys |> take(5) |> reverse\n" +
+        "}\n";
+      const formattedBlock = format(blockSource);
+      expect(formattedBlock).toBe(
+        "process = () =>\n" +
+          "  _ =\n" +
+          "    keys\n" +
+          "    |> map((k) => k)\n" +
+          '    |> filter((k) => k #! "")\n' +
+          "  =>\n" +
+          "    keys\n" +
+          "    |> take(5)\n" +
+          "    |> reverse\n",
+      );
+      expect(format(formattedBlock)).toBe(formattedBlock);
     });
 
     it("formats records with 3 or more fields, spreads, and record types vertically", () => {
