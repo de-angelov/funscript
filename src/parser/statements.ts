@@ -396,7 +396,15 @@ export function parseEffectBlock(
       if (atEnd()) break;
 
       if (ctx.match(TokenType.ARROW)) {
+        let hasIndent = false;
+        if (ctx.match(TokenType.NEWLINE)) {
+          hasIndent = ctx.match(TokenType.INDENT);
+        }
         finalExpression = ctx.parseExpression();
+        if (hasIndent) {
+          ctx.skipNewlines();
+          ctx.match(TokenType.DEDENT);
+        }
         ctx.skipNewlines();
         while (ctx.match(TokenType.INDENT) || ctx.match(TokenType.DEDENT)) {
           /* skip */
@@ -416,7 +424,15 @@ export function parseEffectBlock(
       ) {
         ctx.advance(); // consume '_'
         ctx.advance(); // consume '<-'
+        let hasIndent = false;
+        if (ctx.match(TokenType.NEWLINE)) {
+          hasIndent = ctx.match(TokenType.INDENT);
+        }
         const eff = ctx.parseExpression();
+        if (hasIndent) {
+          ctx.skipNewlines();
+          ctx.match(TokenType.DEDENT);
+        }
         ctx.consumeNewlineOrEof("Expected newline after discard bind");
         body.push({
           kind: "EffectDiscardStatement",
@@ -433,7 +449,15 @@ export function parseEffectBlock(
             ? ctx.parseBindingPattern()
             : ctx.parseIdentifier();
         ctx.consume(TokenType.LARROW, "Expected '<-' in effect bind");
+        let hasIndent = false;
+        if (ctx.match(TokenType.NEWLINE)) {
+          hasIndent = ctx.match(TokenType.INDENT);
+        }
         const eff = ctx.parseExpression();
+        if (hasIndent) {
+          ctx.skipNewlines();
+          ctx.match(TokenType.DEDENT);
+        }
         ctx.consumeNewlineOrEof("Expected newline after effect bind");
         body.push({
           kind: "EffectBindStatement",
@@ -448,7 +472,15 @@ export function parseEffectBlock(
       ) {
         const target = ctx.parseIdentifier();
         ctx.consume(TokenType.EQ, "Expected '=' in assignment");
+        let hasIndent = false;
+        if (ctx.match(TokenType.NEWLINE)) {
+          hasIndent = ctx.match(TokenType.INDENT);
+        }
         const val = ctx.parseExpression();
+        if (hasIndent) {
+          ctx.skipNewlines();
+          ctx.match(TokenType.DEDENT);
+        }
         ctx.consumeNewlineOrEof();
         body.push({
           kind: "AssignmentStatement",
@@ -468,16 +500,29 @@ export function parseEffectBlock(
         ctx.isDestructuringBindingStart()
       ) {
         if (ctx.check(TokenType.UNDERSCORE)) {
+          const start = ctx.peek().span.start;
           ctx.advance(); // consume '_'
           ctx.advance(); // consume '='
+          let hasIndent = false;
+          if (ctx.match(TokenType.NEWLINE)) {
+            hasIndent = ctx.match(TokenType.INDENT);
+          }
           const discardExpr = ctx.parseExpression();
+          if (hasIndent) {
+            ctx.skipNewlines();
+            ctx.match(TokenType.DEDENT);
+          }
           ctx.consumeNewlineOrEof("Expected newline");
           body.push({
             kind: "BindingDeclaration",
             isMut: false,
-            id: { kind: "Identifier", name: "_", span: discardExpr.span },
+            id: {
+              kind: "Identifier",
+              name: "_",
+              span: { start, end: discardExpr.span.end },
+            },
             init: discardExpr,
-            span: discardExpr.span,
+            span: { start, end: discardExpr.span.end },
           });
         } else {
           const bind = ctx.parseBindingDeclaration();
