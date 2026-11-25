@@ -806,17 +806,7 @@ export class Formatter {
         return `=> ${this.formatExpression(stmt.argument, indent)}`;
       case "WhenStatement":
         if (stmt.isEarlyReturn) {
-          const cons = stmt.consequent as Expression;
-          if (
-            cons.kind === "PipelineExpression" &&
-            this.shouldExpandPipeline(
-              this.unrollPipeline(cons),
-              indent + this.indentSize,
-            )
-          ) {
-            return `when (${this.formatExpression(stmt.condition, indent)}) =>\n${this.spaces(indent + this.indentSize)}${this.formatPipelineExpression(cons, indent + this.indentSize)}`;
-          }
-          return `when (${this.formatExpression(stmt.condition, indent)}) => ${this.formatExpression(cons, indent)}`;
+          return `when (${this.formatExpression(stmt.condition, indent)}) => ${this.formatExpression(stmt.consequent as Expression, indent)}`;
         }
         return `when (${this.formatExpression(stmt.condition, indent)}) {\n${this.formatBlockStatement(stmt.consequent as BlockStatement, indent + this.indentSize)}\n${this.spaces(indent)}}`;
     }
@@ -1165,8 +1155,16 @@ export class Formatter {
     switch (entry.kind) {
       case "SpreadEntry":
         return `...${this.formatExpression(entry.argument, indent)}`;
-      case "FieldEntry":
-        return `${entry.key.name}: ${this.formatExpression(entry.value, indent)}`;
+      case "FieldEntry": {
+        const key =
+          entry.key.name === "try" ||
+          entry.key.name === "catch" ||
+          entry.key.name === "when" ||
+          entry.key.name === "match"
+            ? `"${entry.key.name}"`
+            : entry.key.name;
+        return `${key}: ${this.formatExpression(entry.value, indent)}`;
+      }
       case "DotPathEntry":
         return `${entry.path.map((p) => p.name).join(".")}: ${this.formatExpression(entry.value, indent)}`;
       case "ShorthandEntry":
@@ -1293,14 +1291,18 @@ export class Formatter {
           )));
 
     if (isMultilineBlock) {
+      const formattedLast = this.formatExpression(lastArg, indent);
+      const close = formattedLast.endsWith("}")
+        ? ")"
+        : `\n${this.spaces(indent)})`;
       if (expr.args.length === 1) {
-        return `${callee}(${this.formatExpression(lastArg, indent)}\n${this.spaces(indent)})`;
+        return `${callee}(${formattedLast}${close}`;
       }
       const otherArgs = expr.args
         .slice(0, -1)
         .map((a) => this.formatExpression(a, indent))
         .join(", ");
-      return `${callee}(${otherArgs}, ${this.formatExpression(lastArg, indent)}\n${this.spaces(indent)})`;
+      return `${callee}(${otherArgs}, ${formattedLast}${close}`;
     }
 
     const args = expr.args
@@ -1453,7 +1455,39 @@ export class Formatter {
         "=>";
     const sig = isArrowOnly ? `=>` : `${typeParams}(${params})${ret} =>`;
 
-    if (expr.body.kind === "BlockStatement") {
+    if (
+      expr.body.kind === "BlockStatement" &&
+      expr.body.statements.length > 1
+    ) {
+      const body = this.formatBlockStatement(
+        expr.body,
+        indent + this.indentSize,
+      );
+      return `${sig} {\n${body}\n${this.spaces(indent)}}`;
+    } else if (expr.body.kind === "BlockStatement") {
+      const single = expr.body.statements[0];
+      const singleExpr =
+        single?.kind === "ReturnStatement"
+          ? single.argument
+          : single?.kind === "ExpressionStatement"
+            ? single.expression
+            : null;
+      if (
+        singleExpr &&
+        singleExpr.kind === "PipelineExpression" &&
+        this.shouldExpandPipeline(
+          this.unrollPipeline(singleExpr),
+          indent + this.indentSize,
+        )
+      ) {
+        const body = this.formatPipelineExpression(
+          singleExpr,
+          indent + this.indentSize,
+        );
+        return `${sig}\n${this.spaces(indent + this.indentSize)}${body}`;
+      } else if (singleExpr) {
+        return `${sig} ${this.formatExpression(singleExpr, indent)}`;
+      }
       const body = this.formatBlockStatement(
         expr.body,
         indent + this.indentSize,
