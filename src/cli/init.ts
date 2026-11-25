@@ -95,7 +95,7 @@ dist/
         ".gitignore": gitignore,
         "src/index.fun": `import { Console } from "effect"
 
-export handleRequest = (req: Any): Any =>
+export handleRequest = (req: Request): Response =>
   new Response("Hello from FunScript on Bun!", {
     headers: { "content-type": "text/plain" }
   })

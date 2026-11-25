@@ -64,14 +64,18 @@ export schema RedisClientProviderOptions<Client> = {
     );
   });
 
-  it("compiles Any, Null, and Undefined primitive types", () => {
+  it("rejects Any and compiles Null and Undefined primitive types", () => {
+    expect(() =>
+      Effect.runSync(compileString("export schema FlexibleError = Any")),
+    ).toThrow(
+      "The 'Any' type is disabled in FunScript; use 'Unknown' and decode with Schema, or specify a concrete type",
+    );
+
     const src = `
-export schema FlexibleError = Any
 export schema NullableResult = String | Null
 export schema OptionalParam = Number | Undefined
 `;
     const res = Effect.runSync(compileString(src));
-    expect(res.typescript).toContain("export type FlexibleError = any;");
     expect(res.typescript).toContain("string | null");
     expect(res.typescript).toContain("number | undefined");
   });
@@ -222,7 +226,7 @@ export run = (arr: Array<Number>, i: Number) =>
 
   it("preserves raw property indexing for string literal keys and mutable assignment targets", () => {
     const src = `
-export run = (obj: Any) =>
+export run = (obj: ts { any }) =>
   method = obj["toLocaleString"]
   mut arr = [1, 2]
   arr[0] = 99

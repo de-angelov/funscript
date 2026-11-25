@@ -14,7 +14,6 @@ export const PRIMITIVE_TYPES: Readonly<Record<string, string>> = {
   Void: "void",
   Unit: "void",
   Unknown: "unknown",
-  Any: "any",
   Null: "null",
   Undefined: "undefined",
   Never: "never",
@@ -180,6 +179,12 @@ export function emitTypeNode(ctx: TypeEmitterContext, node: TypeNode): string {
           ? ctx.emitTypeNode(node.typeArgs[0])
           : '"div"';
         return `React.ComponentPropsWithoutRef<${tag}>`;
+      }
+      if (name === "Any") {
+        throw new FunScriptError(
+          "The 'Any' type is disabled in FunScript; use 'Unknown' and decode with Schema, or specify a concrete type",
+          node.span,
+        );
       }
       if (PRIMITIVE_TYPES[name]) return PRIMITIVE_TYPES[name];
       if (name === "Array" && !ctx.declaredTypeNames.has(name))
