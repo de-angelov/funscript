@@ -672,6 +672,18 @@ export class Formatter {
           indent + this.indentSize,
         );
         return `${sig}\n${body}`;
+      } else if (
+        init.body.kind === "PipelineExpression" &&
+        this.shouldExpandPipeline(
+          this.unrollPipeline(init.body),
+          indent + this.indentSize,
+        )
+      ) {
+        const body = this.formatPipelineExpression(
+          init.body,
+          indent + this.indentSize,
+        );
+        return `${sig}\n${this.spaces(indent + this.indentSize)}${body}`;
       } else {
         const body = this.formatExpression(init.body, indent);
         return `${sig} ${body}`;
@@ -679,11 +691,7 @@ export class Formatter {
     }
 
     if (init.kind === "RecordExpression") {
-      const isMultiline =
-        init.entries.length > 0 &&
-        (init.entries[0].span.start.line > init.span.start.line ||
-          init.entries.some((e) => e.span.end.line > e.span.start.line));
-      if (isMultiline) {
+      if (this.shouldExpandRecord(init, indent)) {
         return ` ${this.formatRecordExpression(init, indent)}`;
       }
     }
@@ -735,7 +743,8 @@ export class Formatter {
     )
       return true;
     const text = `${this.formatExpression(chain[0], indent)} |> ${this.formatExpression(chain[1], indent)}`;
-    return !text.includes("\n") && indent + text.length > this.lineWidth;
+    const maxInline = Math.min(80, this.lineWidth);
+    return text.includes("\n") || indent + text.length > maxInline;
   }
 
   private formatPipelineExpression(
@@ -785,10 +794,29 @@ export class Formatter {
       case "ExpressionStatement":
         return this.formatExpression(stmt.expression, indent);
       case "ReturnStatement":
+        if (
+          stmt.argument.kind === "PipelineExpression" &&
+          this.shouldExpandPipeline(
+            this.unrollPipeline(stmt.argument),
+            indent + this.indentSize,
+          )
+        ) {
+          return `=>\n${this.spaces(indent + this.indentSize)}${this.formatPipelineExpression(stmt.argument, indent + this.indentSize)}`;
+        }
         return `=> ${this.formatExpression(stmt.argument, indent)}`;
       case "WhenStatement":
         if (stmt.isEarlyReturn) {
-          return `when (${this.formatExpression(stmt.condition, indent)}) => ${this.formatExpression(stmt.consequent as Expression, indent)}`;
+          const cons = stmt.consequent as Expression;
+          if (
+            cons.kind === "PipelineExpression" &&
+            this.shouldExpandPipeline(
+              this.unrollPipeline(cons),
+              indent + this.indentSize,
+            )
+          ) {
+            return `when (${this.formatExpression(stmt.condition, indent)}) =>\n${this.spaces(indent + this.indentSize)}${this.formatPipelineExpression(cons, indent + this.indentSize)}`;
+          }
+          return `when (${this.formatExpression(stmt.condition, indent)}) => ${this.formatExpression(cons, indent)}`;
         }
         return `when (${this.formatExpression(stmt.condition, indent)}) {\n${this.formatBlockStatement(stmt.consequent as BlockStatement, indent + this.indentSize)}\n${this.spaces(indent)}}`;
     }
@@ -1078,22 +1106,38 @@ export class Formatter {
     }
   }
 
-  private formatRecordExpression(expr: RecordExpression, indent = 0): string {
-    if (expr.entries.length === 0) return "{}";
-
-    const isMultiline =
-      expr.entries.length > 0 &&
-      (expr.entries[0].span.start.line > expr.span.start.line ||
-        expr.entries.some((e) => e.span.end.line > e.span.start.line));
-
+  private shouldExpandRecord(expr: RecordExpression, indent = 0): boolean {
+    if (expr.entries.length === 0) return false;
+    if (expr.entries.length >= 3) return true;
+    if (
+      expr.entries[0].span.start.line > expr.span.start.line ||
+      expr.entries.some((e) => e.span.end.line > e.span.start.line)
+    ) {
+      return true;
+    }
+    const hasSpread = expr.entries.some((e) => e.kind === "SpreadEntry");
     const entriesStr = expr.entries
       .map((e) => this.formatRecordEntry(e, indent))
       .join(", ");
+    if (entriesStr.includes("\n")) return true;
     if (
-      !isMultiline &&
-      indent + entriesStr.length + 4 <= this.lineWidth &&
-      !entriesStr.includes("\n")
+      hasSpread &&
+      expr.entries.length >= 2 &&
+      indent + entriesStr.length + 4 > 50
     ) {
+      return true;
+    }
+    const maxInline = Math.min(60, this.lineWidth);
+    return indent + entriesStr.length + 4 > maxInline;
+  }
+
+  private formatRecordExpression(expr: RecordExpression, indent = 0): string {
+    if (expr.entries.length === 0) return "{}";
+
+    if (!this.shouldExpandRecord(expr, indent)) {
+      const entriesStr = expr.entries
+        .map((e) => this.formatRecordEntry(e, indent))
+        .join(", ");
       return `{ ${entriesStr} }`;
     }
 
@@ -1241,7 +1285,12 @@ export class Formatter {
     const isMultilineBlock =
       lastArg.kind === "FunctionExpression" &&
       (lastArg.body.kind === "BlockStatement" ||
-        lastArg.body.kind === "MatchExpression");
+        lastArg.body.kind === "MatchExpression" ||
+        (lastArg.body.kind === "PipelineExpression" &&
+          this.shouldExpandPipeline(
+            this.unrollPipeline(lastArg.body),
+            indent + this.indentSize,
+          )));
 
     if (isMultilineBlock) {
       if (expr.args.length === 1) {
@@ -1410,6 +1459,18 @@ export class Formatter {
         indent + this.indentSize,
       );
       return `${sig}\n${body}`;
+    } else if (
+      expr.body.kind === "PipelineExpression" &&
+      this.shouldExpandPipeline(
+        this.unrollPipeline(expr.body),
+        indent + this.indentSize,
+      )
+    ) {
+      const body = this.formatPipelineExpression(
+        expr.body,
+        indent + this.indentSize,
+      );
+      return `${sig}\n${this.spaces(indent + this.indentSize)}${body}`;
     } else {
       const body = this.formatExpression(expr.body, indent);
       return `${sig} ${body}`;
@@ -1457,25 +1518,32 @@ export class Formatter {
       }
       case "RecordTypeNode": {
         if (node.fields.length === 0) return "{}";
-        const isMultiline = node.span.start.line !== node.span.end.line;
-        if (isMultiline) {
-          const fieldIndent = this.spaces(indent + this.indentSize);
-          const closingIndent = this.spaces(indent);
-          const fields = node.fields
-            .map(
-              (f) =>
-                `${fieldIndent}${f.name.name}${f.optional ? "?" : ""}: ${this.formatType(f.typeAnnotation, indent + this.indentSize)}${f.defaultValue ? ` = ${this.formatExpression(f.defaultValue, indent + this.indentSize)}` : ""}`,
-            )
-            .join("\n");
-          return `{\n${fields}\n${closingIndent}}`;
-        }
-        const fields = node.fields
+        const isMultiline =
+          node.fields.length >= 3 ||
+          node.span.start.line !== node.span.end.line;
+        const inlineFields = node.fields
           .map(
             (f) =>
               `${f.name.name}${f.optional ? "?" : ""}: ${this.formatType(f.typeAnnotation, indent)}${f.defaultValue ? ` = ${this.formatExpression(f.defaultValue, indent)}` : ""}`,
           )
           .join(", ");
-        return `{ ${fields} }`;
+        const maxInline = Math.min(60, this.lineWidth);
+        if (
+          !isMultiline &&
+          indent + inlineFields.length + 4 <= maxInline &&
+          !inlineFields.includes("\n")
+        ) {
+          return `{ ${inlineFields} }`;
+        }
+        const fieldIndent = this.spaces(indent + this.indentSize);
+        const closingIndent = this.spaces(indent);
+        const fields = node.fields
+          .map(
+            (f) =>
+              `${fieldIndent}${f.name.name}${f.optional ? "?" : ""}: ${this.formatType(f.typeAnnotation, indent + this.indentSize)}${f.defaultValue ? ` = ${this.formatExpression(f.defaultValue, indent + this.indentSize)}` : ""}`,
+          )
+          .join("\n");
+        return `{\n${fields}\n${closingIndent}}`;
       }
       case "ArrayTypeNode":
         return `Array<${this.formatType(node.elementType, indent)}>`;

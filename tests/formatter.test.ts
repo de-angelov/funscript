@@ -796,5 +796,54 @@ export schema Config = {
       const formatted = format(source);
       expect(formatted).toBe(source);
     });
+
+    it("formats multi-step pipelines and nested lambda pipelines vertically", () => {
+      const source =
+        'deps = afterColon |> split(",") |> map((d: String) => d |> trim |> replace(cleanRx, "")) |> filter((d: String) => d #! "")';
+      const formatted = format(source);
+      expect(formatted).toBe(
+        "deps =\n" +
+          "  afterColon\n" +
+          '  |> split(",")\n' +
+          "  |> map((d: String) =>\n" +
+          "    d\n" +
+          "    |> trim\n" +
+          '    |> replace(cleanRx, "")\n' +
+          "  )\n" +
+          '  |> filter((d: String) => d #! "")\n',
+      );
+      expect(format(formatted)).toBe(formatted);
+    });
+
+    it("formats records with 3 or more fields, spreads, and record types vertically", () => {
+      const source =
+        "parse = () => {\n" +
+        '  when (trimmed |> startsWith("task id:")) => { ...state, id: afterColon, currentSection: "none" }\n' +
+        "  => state\n" +
+        "}\n";
+      const formatted = format(source);
+      expect(formatted).toBe(
+        "parse = () =>\n" +
+          '  when (trimmed |> startsWith("task id:")) => {\n' +
+          "    ...state\n" +
+          "    id: afterColon\n" +
+          '    currentSection: "none"\n' +
+          "  }\n" +
+          "  => state\n",
+      );
+      expect(format(formatted)).toBe(formatted);
+
+      const typeSource =
+        "export f = (cfg: { id: String, count: Number, name: String }) => 42";
+      const formattedType = format(typeSource);
+      expect(formattedType).toBe(
+        "export f = (cfg: {\n" +
+          "  id: String\n" +
+          "  count: Number\n" +
+          "  name: String\n" +
+          "}) => 42\n",
+      );
+      expect(format(formattedType)).toBe(formattedType);
+    });
   });
 });
