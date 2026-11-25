@@ -441,7 +441,11 @@ create a modified copy of an immutable record, use spread (supporting both shall
 and nested dot-paths, see §6.2):
 
 ```funscript
-older = { ...user, age: user.age + 1, address.city: "Paris" }
+older = {
+  ...user
+  age: user.age + 1
+  address.city: "Paris"
+}
 ```
 
 A top-level binding is private unless exported:
@@ -1498,7 +1502,11 @@ casts: values are either constructed or decoded, never asserted with `as`.
 ```funscript
 id = UUID("0b9e6c1e-5f6a-4c6e-9a43-0c2f3b1d9e7a")
 name = Username("ada")
-ada = User({ id, name, age: 36 })
+ada = User({
+  id
+  name
+  age: 36
+})
 ```
 
 ```ts
