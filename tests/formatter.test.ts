@@ -837,18 +837,18 @@ export schema Config = {
     it("formats records with 3 or more fields, spreads, and record types vertically", () => {
       const source =
         "parse = () => {\n" +
-        '  when (trimmed |> startsWith("task id:")) => { ...state, id: afterColon, currentSection: "none" }\n' +
-        "  => state\n" +
+        '  res = { ...state, id: afterColon, currentSection: "none" }\n' +
+        "  => res\n" +
         "}\n";
       const formatted = format(source);
       expect(formatted).toBe(
         "parse = () =>\n" +
-          '  when (trimmed |> startsWith("task id:")) => {\n' +
+          "  res = {\n" +
           "    ...state\n" +
           "    id: afterColon\n" +
           '    currentSection: "none"\n' +
           "  }\n" +
-          "  => state\n",
+          "  => res\n",
       );
       expect(format(formatted)).toBe(formatted);
 

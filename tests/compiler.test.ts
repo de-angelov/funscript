@@ -731,20 +731,8 @@ export fetch =
     expect(result.typescript).toContain("Custom.transform(1)");
   });
 
-  it("compiles when statements inside effect blocks", async () => {
+  it("compiles conditional when blocks inside effect blocks and rejects early returns", async () => {
     const code = `
-export earlyValue = (skip: Boolean) =>
-  effect {
-    when (skip) => "early"
-    => "done"
-
-  }
-export failEarly = (shouldFail: Boolean) =>
-  effect {
-    when (shouldFail) => Effect.fail("failed")
-    => "done"
-
-  }
 export conditionalBlock = (enabled: Boolean) =>
   effect {
     when (enabled) {
@@ -755,14 +743,21 @@ export conditionalBlock = (enabled: Boolean) =>
 `.trim();
 
     const res = await Effect.runPromise(compileString(code));
-    expect(res.typescript).toContain(`if (skip) return "early";`);
-    expect(res.typescript).toContain(
-      `if (shouldFail) return yield* Effect.fail("failed");`,
-    );
     expect(res.typescript).toContain(
       `if (enabled) {\n  const selected = "inside";\n}`,
     );
     expect(res.typescript).toContain(`return "done";`);
+
+    const badCode = `
+export early = (skip: Boolean) =>
+  effect {
+    when (skip) => "early"
+    => "done"
+  }
+`.trim();
+    await expect(Effect.runPromise(compileString(badCode))).rejects.toThrow(
+      "Early return 'when (...) =>' has been removed",
+    );
   });
 
   it("compiles effect blocks scoped by default and unscoped with escape hatch", async () => {

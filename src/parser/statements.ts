@@ -309,29 +309,10 @@ export function parseWhenStatement(ctx: StatementParserContext): WhenStatement {
   }
 
   if (ctx.match(TokenType.ARROW)) {
-    if (ctx.functionDepth === 0) {
-      throw new ParseError(
-        "Early return 'when (...) =>' is rejected outside function context",
-        ctx.previous().span,
-      );
-    }
-    let hasIndent = false;
-    if (ctx.match(TokenType.NEWLINE)) {
-      hasIndent = ctx.match(TokenType.INDENT);
-    }
-    const earlyExpr = ctx.parseExpression();
-    if (hasIndent) {
-      ctx.skipNewlines();
-      ctx.match(TokenType.DEDENT);
-    }
-    ctx.consumeNewlineOrEof();
-    return {
-      kind: "WhenStatement",
-      condition,
-      consequent: earlyExpr,
-      isEarlyReturn: true,
-      span: { start, end: earlyExpr.span.end },
-    };
+    throw new ParseError(
+      "Early return 'when (...) =>' has been removed from FunScript; use 'match' for conditional branching or 'effect' blocks for sequential workflows.",
+      ctx.previous().span,
+    );
   }
 
   if (ctx.check(TokenType.LBRACE)) {
