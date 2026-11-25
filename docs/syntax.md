@@ -623,8 +623,8 @@ export schema StorageVote =
   | "dislike"
 
 export schema VoteResult =
-  | { ok: true, data: String }
-  | { ok: false, error: String }
+  | { ok: true, "data": String }
+  | { ok: false, "error": String }
 
 export parseVote = (input: Unknown) => StorageVoteFromUnknown(input)
 ```
