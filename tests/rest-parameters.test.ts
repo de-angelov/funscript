@@ -17,8 +17,12 @@ export joined = joinAll("Items", "apple", "banana", "cherry")
 `.trim();
 
     const res = await compile(code);
-    expect(res.typescript).toContain("const sum = (...numbers: ReadonlyArray<Int>): Int =>");
-    expect(res.typescript).toContain("const joinAll = (prefix: string, ...items: ReadonlyArray<string>): string =>");
+    expect(res.typescript).toContain(
+      "const sum = (...numbers: ReadonlyArray<Int>): Int =>",
+    );
+    expect(res.typescript).toContain(
+      "const joinAll = (prefix: string, ...items: ReadonlyArray<string>): string =>",
+    );
 
     const exports = await execute(code);
     expect(exports.result).toBe(10);
@@ -32,8 +36,12 @@ export add = (first: Int, ...rest: Array<Int>): Int => first
 `.trim();
 
     const res = await compile(code);
-    expect(res.typescript).toContain("export const sum = (...numbers: ReadonlyArray<Int>): Int => 42;");
-    expect(res.typescript).toContain("export const add = (first: Int, ...rest: ReadonlyArray<Int>): Int => first;");
+    expect(res.typescript).toContain(
+      "export const sum = (...numbers: ReadonlyArray<Int>): Int => 42;",
+    );
+    expect(res.typescript).toContain(
+      "export const add = (first: Int, ...rest: ReadonlyArray<Int>): Int => first;",
+    );
   });
 
   it("compiles and executes call argument spread and array spread", async () => {
@@ -55,14 +63,18 @@ export res = sum(...fullList)
 
   it("compiles function signatures with rest parameters", async () => {
     const code = `
-schema Logger = (...messages: Array<String>) => Unit
-export logAll = (logger: Logger, ...msgs: Array<String>): Unit =>
+schema Logger = (...messages: Array<String>) => Void
+export logAll = (logger: Logger, ...msgs: Array<String>): Void =>
   => logger(...msgs)
 `.trim();
 
     const res = await compile(code);
-    expect(res.typescript).toContain("type Logger = (...messages: ReadonlyArray<string>) => void;");
-    expect(res.typescript).toContain("const logAll = (logger: Logger, ...msgs: ReadonlyArray<string>): void =>");
+    expect(res.typescript).toContain(
+      "type Logger = (...messages: ReadonlyArray<string>) => void;",
+    );
+    expect(res.typescript).toContain(
+      "const logAll = (logger: Logger, ...msgs: ReadonlyArray<string>): void =>",
+    );
   });
 
   it("rejects rest parameters that are not the final parameter", async () => {
@@ -70,7 +82,9 @@ export logAll = (logger: Logger, ...msgs: Array<String>): Unit =>
 invalid = (...rest: Array<Int>, last: Int) => 0
 `.trim();
 
-    await expect(compile(code)).rejects.toThrow("A rest parameter must be the last parameter in a parameter list");
+    await expect(compile(code)).rejects.toThrow(
+      "A rest parameter must be the last parameter in a parameter list",
+    );
   });
 
   it("rejects optional rest parameters", async () => {
@@ -78,7 +92,9 @@ invalid = (...rest: Array<Int>, last: Int) => 0
 invalid = (...rest?: Array<Int>) => 0
 `.trim();
 
-    await expect(compile(code)).rejects.toThrow("A rest parameter cannot be optional");
+    await expect(compile(code)).rejects.toThrow(
+      "A rest parameter cannot be optional",
+    );
   });
 
   it("rejects rest parameters with default values", async () => {
@@ -86,7 +102,9 @@ invalid = (...rest?: Array<Int>) => 0
 invalid = (...rest: Array<Int> = []) => 0
 `.trim();
 
-    await expect(compile(code)).rejects.toThrow("A rest parameter cannot have a default value");
+    await expect(compile(code)).rejects.toThrow(
+      "A rest parameter cannot have a default value",
+    );
   });
 
   it("formats rest parameters and spread expressions idempotently", () => {
@@ -96,14 +114,18 @@ export cn = (...inputs: Array<String>): String =>
 
 export arr = [1, ...items, 3]
 
-export log = (prefix: String, ...rest: Array<String>): Unit =>
+export log = (prefix: String, ...rest: Array<String>): Void =>
   => Console.log(prefix, ...rest)
 `.trim();
 
     const formatted = format(code);
-    expect(formatted).toContain("export cn = (...inputs: Array<String>): String =>");
+    expect(formatted).toContain(
+      "export cn = (...inputs: Array<String>): String =>",
+    );
     expect(formatted).toContain("export arr = [1, ...items, 3]");
-    expect(formatted).toContain("export log = (prefix: String, ...rest: Array<String>): Unit =>");
+    expect(formatted).toContain(
+      "export log = (prefix: String, ...rest: Array<String>): Void =>",
+    );
     expect(format(formatted)).toBe(formatted);
   });
 
@@ -113,7 +135,9 @@ export sum = (...numbers: Array<Number>): Number => numbers |> Array.reduce(0, (
 export val: Number = sum(1, 2, 3)
 `.trim();
 
-    const validResult = await Effect.runPromise(typeCheckSource(validCode, "valid.fun"));
+    const validResult = await Effect.runPromise(
+      typeCheckSource(validCode, "valid.fun"),
+    );
     expect(validResult.success).toBe(true);
     expect(validResult.diagnostics).toHaveLength(0);
 
@@ -122,9 +146,15 @@ export sum = (...numbers: Array<Number>): Number => numbers |> Array.reduce(0, (
 export val: Number = sum(1, "not-a-number", 3)
 `.trim();
 
-    const invalidResult = await Effect.runPromise(typeCheckSource(invalidCode, "invalid.fun"));
+    const invalidResult = await Effect.runPromise(
+      typeCheckSource(invalidCode, "invalid.fun"),
+    );
     expect(invalidResult.success).toBe(false);
     expect(invalidResult.diagnostics.length).toBeGreaterThan(0);
-    expect(invalidResult.diagnostics.some(d => d.message.includes("is not assignable to parameter of type 'number'"))).toBe(true);
+    expect(
+      invalidResult.diagnostics.some((d) =>
+        d.message.includes("is not assignable to parameter of type 'number'"),
+      ),
+    ).toBe(true);
   });
 });

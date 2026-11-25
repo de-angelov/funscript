@@ -1506,7 +1506,7 @@ export class Emitter {
             `${expr.name} is a compile-time record contract, not a runtime schema. Validate data separately and use an explicit checked callback boundary for foreign functions.`,
             expr.span,
           );
-        if (expr.name === "Unit") return "undefined";
+        if (expr.name === "Void") return "undefined";
         if (expr.name === "dbg" && !this.isUserBinding("dbg")) {
           return `((__v: any) => { console.log(__v); return __v; })`;
         }
@@ -2741,7 +2741,7 @@ export class Emitter {
         body.finalExpression &&
         (body.finalExpression.kind === "Identifier" ||
           body.finalExpression.kind === "UpperIdentifier") &&
-        body.finalExpression.name === "Unit";
+        body.finalExpression.name === "Void";
       const ret = isUnit
         ? "  return;"
         : body.finalExpression
@@ -2754,7 +2754,7 @@ export class Emitter {
     }
     const isUnit =
       (body.kind === "Identifier" || body.kind === "UpperIdentifier") &&
-      body.name === "Unit";
+      body.name === "Void";
     if (isUnit) return "  return;";
     return `  return ${this.emitExpression(body)};`;
   }

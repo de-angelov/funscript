@@ -41,7 +41,7 @@ flagged by `funscript check`, not left as style advice.
 | Typed errors                           | `error`                                                                                         | error classes written by hand                                    |
 | Primitive numbers                      | `Number`, refined with `Int` / `Float` / `Decimal` when needed                                  | unchecked external numeric input                                 |
 | Nullable values                        | `Option`                                                                                        | `null`, `undefined`, `any`                                       |
-| Equality & comparisons                 | value `#=` / `#!`, reference `@=` / `@!`; primitive comparisons or Effect companion functions | coercing equality                                                |
+| Equality & comparisons                 | value `#=` / `#!`, reference `@=` / `@!`; primitive comparisons or Effect companion functions   | coercing equality                                                |
 | Booleans                               | `and` / `or` / `not`                                                                            | `&&`, `                                                          |     | `, `!` |
 | Runtime reflection                     | `Schema.is(MyType)` / `match`                                                                   | `typeof`, `instanceof`, `eval`                                   |
 | Functions                              | `=>` lambda; `=> value` closes block bodies                                                     | `function`, `return`, method shorthand                           |
@@ -654,7 +654,7 @@ it and runs its finalizers (`acquireRelease`, `ensuring`). `funscript check` add
   `Layer.effectDiscard(Effect.forkScoped(...))` for application-lifetime background work);
 - `concurrency: "unbounded"` is a warning (suggest a number);
 - `FS_PREMATURE_FINALIZER_CLOSE` is an error when a scoped `effect` registers `Effect.addFinalizer` or
-  `Effect.acquireRelease` and returns a non-Unit resource (suggest `effect (unscoped)` so the resource's
+  `Effect.acquireRelease` and returns a non-Void resource (suggest `effect (unscoped)` so the resource's
   lifetime is bound to the caller's scope);
 - closure-captured `mut` across fibers is already a compile error (§1.5); shared state uses
   `Ref`, `SynchronizedRef`, `Queue`, or `PubSub`.

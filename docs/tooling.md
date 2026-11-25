@@ -272,7 +272,7 @@ Automated mechanical insertion of `=>` was rejected because semantic equivalence
      effect {
        user <- fetchUser()
        _ <- Console.log("Done")
-       => Unit
+       => Void
      }
    ```
 

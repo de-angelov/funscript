@@ -30,13 +30,18 @@ describe("In-Memory Type-Checking (funscript check via TypeScript API)", () => {
 
   describe("typeCheckSource unit checks", () => {
     it("type-checks brace-delimited Effect expressions", async () => {
-      const result = await Effect.runPromise(typeCheckSource(`
+      const result = await Effect.runPromise(
+        typeCheckSource(
+          `
 fetchValue = () => Effect.succeed(42)
 export result: Effect<Number> = effect {
   value <- fetchValue()
   => value + 1
 }
-`.trim(), "brace-effect.fun"));
+`.trim(),
+          "brace-effect.fun",
+        ),
+      );
       expect(result.success).toBe(true);
       expect(result.diagnostics).toHaveLength(0);
     });
@@ -49,7 +54,9 @@ export greet = (n: String) => "Hello, " + n
 export message = greet(name)
 `.trim();
 
-      const result = await Effect.runPromise(typeCheckSource(code, "valid.fun"));
+      const result = await Effect.runPromise(
+        typeCheckSource(code, "valid.fun"),
+      );
       expect(result.success).toBe(true);
       expect(result.diagnostics).toHaveLength(0);
       expect(result.errorCount).toBe(0);
@@ -57,25 +64,43 @@ export message = greet(name)
     });
 
     it("rejects reference equality for value-only types", async () => {
-      const result = await Effect.runPromise(typeCheckSource(`
+      const result = await Effect.runPromise(
+        typeCheckSource(
+          `
 export same = (left: Number, right: Number) => left @= right
-`.trim(), "reference-equality.fun"));
+`.trim(),
+          "reference-equality.fun",
+        ),
+      );
 
       expect(result.success).toBe(false);
-      expect(result.diagnostics.some((d) => d.message.includes("cannot be used with primitive values"))).toBe(true);
+      expect(
+        result.diagnostics.some((d) =>
+          d.message.includes("cannot be used with primitive values"),
+        ),
+      ).toBe(true);
     });
 
     it("requires handling and validation for an untrusted js result", async () => {
-      const result = await Effect.runPromise(typeCheckSource(`
+      const result = await Effect.runPromise(
+        typeCheckSource(
+          `
 ts { declare function nativeJson(): Promise<any> }
 export result = effect {
   payload <- js nativeJson()
   => payload.name
 }
-`.trim(), "untrusted-js.fun"));
+`.trim(),
+          "untrusted-js.fun",
+        ),
+      );
 
       expect(result.success).toBe(false);
-      expect(result.diagnostics.some((d) => d.message.includes("Property 'name' does not exist"))).toBe(true);
+      expect(
+        result.diagnostics.some((d) =>
+          d.message.includes("Property 'name' does not exist"),
+        ),
+      ).toBe(true);
     });
 
     it("rejects binding raw Promises in effect blocks with PROMISE_BIND and actionable guidance", async () => {
@@ -87,12 +112,20 @@ run = (client: { hIncrBy: (k: String) => Promise<Number> }) =>
   }
 `.trim();
 
-      const result = await Effect.runPromise(typeCheckSource(code, "raw-promise.fun"));
+      const result = await Effect.runPromise(
+        typeCheckSource(code, "raw-promise.fun"),
+      );
       expect(result.success).toBe(false);
-      expect(result.diagnostics.some((d) => d.code === "PROMISE_BIND")).toBe(true);
+      expect(result.diagnostics.some((d) => d.code === "PROMISE_BIND")).toBe(
+        true,
+      );
       const diag = result.diagnostics.find((d) => d.code === "PROMISE_BIND");
-      expect(diag!.message).toContain("Cannot bind raw Promise in effect block");
-      expect(diag!.message).toContain("must be explicitly lifted using the 'js' operator");
+      expect(diag!.message).toContain(
+        "Cannot bind raw Promise in effect block",
+      );
+      expect(diag!.message).toContain(
+        "must be explicitly lifted using the 'js' operator",
+      );
     });
 
     it("accepts Promise binds when explicitly lifted with the 'js' operator", async () => {
@@ -104,7 +137,9 @@ run = (client: { hIncrBy: (k: String) => Promise<Number> }) =>
   }
 `.trim();
 
-      const result = await Effect.runPromise(typeCheckSource(code, "js-promise.fun"));
+      const result = await Effect.runPromise(
+        typeCheckSource(code, "js-promise.fun"),
+      );
       expect(result.success).toBe(true);
       expect(result.diagnostics).toHaveLength(0);
     });
@@ -122,11 +157,15 @@ run = () =>
   }
 `.trim();
 
-      const result = await Effect.runPromise(typeCheckSource(code, "any-bind.fun"));
+      const result = await Effect.runPromise(
+        typeCheckSource(code, "any-bind.fun"),
+      );
       expect(result.success).toBe(false);
       expect(result.diagnostics.some((d) => d.code === "ANY_BIND")).toBe(true);
       const diag = result.diagnostics.find((d) => d.code === "ANY_BIND");
-      expect(diag!.message).toContain("Cannot bind untyped 'any' expression in effect block");
+      expect(diag!.message).toContain(
+        "Cannot bind untyped 'any' expression in effect block",
+      );
     });
 
     it("detects variable type mismatch and maps back to original line and column", async () => {
@@ -135,11 +174,15 @@ export title: String = "FunScript"
 export count: Number = "not-a-number"
 `.trim();
 
-      const result = await Effect.runPromise(typeCheckSource(code, "type-err.fun"));
+      const result = await Effect.runPromise(
+        typeCheckSource(code, "type-err.fun"),
+      );
       expect(result.success).toBe(false);
       expect(result.errorCount).toBeGreaterThanOrEqual(1);
 
-      const err = result.diagnostics.find((d) => d.message.includes("not assignable to type 'number'"));
+      const err = result.diagnostics.find((d) =>
+        d.message.includes("not assignable to type 'number'"),
+      );
       expect(err).toBeDefined();
       expect(err?.diagnosticCode).toMatch(/^TS\d+$/);
       expect(err?.explanation).toContain("generated source");
@@ -147,7 +190,7 @@ export count: Number = "not-a-number"
       expect(err!.line).toBe(2);
       expect(err!.column).toBeGreaterThan(0);
       expect(err!.frame).toBeDefined();
-      expect(err!.frame).toContain("export count: Number = \"not-a-number\"");
+      expect(err!.frame).toContain('export count: Number = "not-a-number"');
       expect(err!.formatted).toContain("type-err.fun:2:");
     });
 
@@ -157,24 +200,33 @@ calculate = (a: Number, b: Number) => a + b
 export result = calculate("hello", 42)
 `.trim();
 
-      const result = await Effect.runPromise(typeCheckSource(code, "func-err.fun"));
+      const result = await Effect.runPromise(
+        typeCheckSource(code, "func-err.fun"),
+      );
       expect(result.success).toBe(false);
 
       const err = result.diagnostics.find((d) =>
-        d.message.includes("Argument of type 'string' is not assignable to parameter of type 'number'")
+        d.message.includes(
+          "Argument of type 'string' is not assignable to parameter of type 'number'",
+        ),
       );
       expect(err).toBeDefined();
       expect(err!.file).toBe("func-err.fun");
       expect(err!.line).toBe(2);
       expect(err!.column).toBe(27); // Points to "hello"
       expect(err!.frame).toBeDefined();
-      expect(err!.frame).toContain("calculate(\"hello\", 42)");
+      expect(err!.frame).toContain('calculate("hello", 42)');
     });
 
     it("reports repeated invalid members on their respective source lines", async () => {
-      const code = 'export check = (value: Number) =>\n  first = value.missingMember()\n  => value.missingMember()';
-      const result = await Effect.runPromise(typeCheckSource(code, "repeated.fun"));
-      const errors = result.diagnostics.filter((d) => d.message.includes("missingMember"));
+      const code =
+        "export check = (value: Number) =>\n  first = value.missingMember()\n  => value.missingMember()";
+      const result = await Effect.runPromise(
+        typeCheckSource(code, "repeated.fun"),
+      );
+      const errors = result.diagnostics.filter((d) =>
+        d.message.includes("missingMember"),
+      );
       expect(errors.map((d) => d.line).sort()).toEqual([2, 3]);
     });
 
@@ -185,10 +237,12 @@ getAnswer = (): Number => {
 }
 `.trim();
 
-      const result = await Effect.runPromise(typeCheckSource(code, "ret-err.fun"));
+      const result = await Effect.runPromise(
+        typeCheckSource(code, "ret-err.fun"),
+      );
       expect(result.success).toBe(false);
       const err = result.diagnostics.find((d) =>
-        d.message.includes("Type 'string' is not assignable to type 'number'")
+        d.message.includes("Type 'string' is not assignable to type 'number'"),
       );
       expect(err).toBeDefined();
       expect(err!.line).toBeGreaterThanOrEqual(1);
@@ -207,18 +261,20 @@ export user: User = {
 }
 `.trim();
 
-      const result = await Effect.runPromise(typeCheckSource(code, "schema-err.fun"));
+      const result = await Effect.runPromise(
+        typeCheckSource(code, "schema-err.fun"),
+      );
       expect(result.success).toBe(false);
       expect(result.errorCount).toBeGreaterThanOrEqual(2);
 
-      const idErr = result.diagnostics.find(
-        (d) => d.message.includes("Type 'string' is not assignable to type 'number'")
+      const idErr = result.diagnostics.find((d) =>
+        d.message.includes("Type 'string' is not assignable to type 'number'"),
       );
       expect(idErr).toBeDefined();
       expect(idErr!.line).toBe(7);
 
-      const emailErr = result.diagnostics.find(
-        (d) => d.message.includes("Type 'number' is not assignable to type 'string'")
+      const emailErr = result.diagnostics.find((d) =>
+        d.message.includes("Type 'number' is not assignable to type 'string'"),
       );
       expect(emailErr).toBeDefined();
       expect(emailErr!.line).toBe(8);
@@ -229,11 +285,15 @@ export user: User = {
 export eff: Effect<Number, Never, Never> = Effect.succeed("string-value")
 `.trim();
 
-      const result = await Effect.runPromise(typeCheckSource(code, "effect-err.fun"));
+      const result = await Effect.runPromise(
+        typeCheckSource(code, "effect-err.fun"),
+      );
       expect(result.success).toBe(false);
-      const err = result.diagnostics.find((d) =>
-        d.message.includes("Type 'string' is not assignable to type 'number'") ||
-        d.message.includes("Effect<string, never, never>")
+      const err = result.diagnostics.find(
+        (d) =>
+          d.message.includes(
+            "Type 'string' is not assignable to type 'number'",
+          ) || d.message.includes("Effect<string, never, never>"),
       );
       expect(err).toBeDefined();
       expect(err!.line).toBe(1);
@@ -244,7 +304,9 @@ export eff: Effect<Number, Never, Never> = Effect.succeed("string-value")
 x = (
 `.trim();
 
-      const result = await Effect.runPromise(typeCheckSource(code, "syntax-err.fun"));
+      const result = await Effect.runPromise(
+        typeCheckSource(code, "syntax-err.fun"),
+      );
       expect(result.success).toBe(false);
       expect(result.errorCount).toBe(1);
       expect(result.diagnostics[0].category).toBe("error");
@@ -270,7 +332,9 @@ export schema UserWithoutAge = from ts<WithoutAge>
 export schema UserOptAge = from ts<OptAge>
 `.trim();
 
-      const result = await Effect.runPromise(typeCheckSource(code, "type-fest-ambient.fun"));
+      const result = await Effect.runPromise(
+        typeCheckSource(code, "type-fest-ambient.fun"),
+      );
       expect(result.success).toBe(true);
       expect(result.diagnostics).toHaveLength(0);
       expect(result.errorCount).toBe(0);
@@ -287,13 +351,16 @@ ts {
 }
 `.trim();
 
-      const result = await Effect.runPromise(typeCheckSource(code, "tagged-err.fun"));
+      const result = await Effect.runPromise(
+        typeCheckSource(code, "tagged-err.fun"),
+      );
       expect(result.success).toBe(false);
       expect(result.errorCount).toBeGreaterThanOrEqual(1);
       const tagErr = result.diagnostics.find(
         (d) =>
-          d.message.includes("Argument of type 'string' is not assignable to parameter of type 'UserId'") ||
-          d.message.includes("Tag<\"UserId\", never>")
+          d.message.includes(
+            "Argument of type 'string' is not assignable to parameter of type 'UserId'",
+          ) || d.message.includes('Tag<"UserId", never>'),
       );
       expect(tagErr).toBeDefined();
     });
@@ -315,7 +382,9 @@ export res = multiply(6, "invalid")
       expect(result.success).toBe(false);
 
       const err = result.diagnostics.find((d) =>
-        d.message.includes("Argument of type 'string' is not assignable to parameter of type 'number'")
+        d.message.includes(
+          "Argument of type 'string' is not assignable to parameter of type 'number'",
+        ),
       );
       expect(err).toBeDefined();
       expect(err!.file).toBe("src/main.fun");
@@ -355,10 +424,12 @@ export Button = (props: Props) =>
   => <button>{props.unknownProp}</button>
 `.trim();
 
-      const result = await Effect.runPromise(typeCheckSource(code, "Button.funx"));
+      const result = await Effect.runPromise(
+        typeCheckSource(code, "Button.funx"),
+      );
       expect(result.success).toBe(false);
       const err = result.diagnostics.find((d) =>
-        d.message.includes("Property 'unknownProp' does not exist")
+        d.message.includes("Property 'unknownProp' does not exist"),
       );
       expect(err).toBeDefined();
       expect(err!.file).toBe("Button.funx");
@@ -389,12 +460,15 @@ export Button = (props: Props) =>
           message: "Unused variable",
           category: "warning",
           code: 6133,
-          formatted: "b.fun:3:2 - warning TS6133: Unused variable\n  3 | let unused",
+          formatted:
+            "b.fun:3:2 - warning TS6133: Unused variable\n  3 | let unused",
         },
       ]);
 
       expect(formatted).toContain("a.fun:1:5 - error TS2322: Type mismatch");
-      expect(formatted).toContain("b.fun:3:2 - warning TS6133: Unused variable");
+      expect(formatted).toContain(
+        "b.fun:3:2 - warning TS6133: Unused variable",
+      );
       expect(formatted).toContain("Found 1 error and 1 warning.");
     });
   });
@@ -402,8 +476,16 @@ export Button = (props: Props) =>
   describe("CLI integration (funscript check)", () => {
     it("maps a generic constraint violation to its FunScript call", async () => {
       const testFile = path.join(tmpDir, "cli-generic.fun");
-      await fs.writeFile(testFile, 'ts { type Client = { close: () => void } }\nexport connect = <A extends Client>(factory: () => A) => factory()\nexport bad = connect(() => "bad")', "utf-8");
-      const result = await execFileAsync("node", [CLI_PATH, "check", testFile]).then(
+      await fs.writeFile(
+        testFile,
+        'ts { type Client = { close: () => void } }\nexport connect = <A extends Client>(factory: () => A) => factory()\nexport bad = connect(() => "bad")',
+        "utf-8",
+      );
+      const result = await execFileAsync("node", [
+        CLI_PATH,
+        "check",
+        testFile,
+      ]).then(
         () => undefined,
         (error: any) => error,
       );
@@ -422,10 +504,14 @@ export Button = (props: Props) =>
 export square = (x: Number) => x * x
 export res = square(5)
 `.trim(),
-        "utf-8"
+        "utf-8",
       );
 
-      const { stdout, stderr } = await execFileAsync("node", [CLI_PATH, "check", testFile]);
+      const { stdout, stderr } = await execFileAsync("node", [
+        CLI_PATH,
+        "check",
+        testFile,
+      ]);
       expect(stderr).toBe("");
       expect(stdout).toContain(`✓ ${testFile} checked successfully (0 errors`);
     });
@@ -438,7 +524,7 @@ export res = square(5)
 greet = (name: String) => "Hello, " + name
 export res = greet(12345)
 `.trim(),
-        "utf-8"
+        "utf-8",
       );
 
       let failed = false;
@@ -449,7 +535,9 @@ export res = greet(12345)
         expect(err.code).toBe(1);
         const output = (err.stderr || "") + (err.stdout || "");
         expect(output).toContain("cli-invalid.fun:2:");
-        expect(output).toContain("Argument of type 'number' is not assignable to parameter of type 'string'");
+        expect(output).toContain(
+          "Argument of type 'number' is not assignable to parameter of type 'string'",
+        );
         expect(output).toContain("greet(12345)");
         expect(output).toContain("Found 1 error.");
       }
@@ -460,9 +548,14 @@ export res = greet(12345)
       const fileA = path.join(tmpDir, "cli-multi-a.fun");
       const fileB = path.join(tmpDir, "cli-multi-b.fun");
       await fs.writeFile(fileA, 'export name = "Ada"\n', "utf-8");
-      await fs.writeFile(fileB, 'export age = 36\n', "utf-8");
+      await fs.writeFile(fileB, "export age = 36\n", "utf-8");
 
-      const { stdout } = await execFileAsync("node", [CLI_PATH, "check", fileA, fileB]);
+      const { stdout } = await execFileAsync("node", [
+        CLI_PATH,
+        "check",
+        fileA,
+        fileB,
+      ]);
       expect(stdout).toContain("✓ Checked 2 files successfully (0 errors");
     });
   });
@@ -577,7 +670,9 @@ export run = Effect.all([task], { concurrency: "unbounded" })
       );
 
       expect(result.warningCount).toBe(1);
-      const warn = result.diagnostics.find((d) => d.code === "UNBOUNDED_CONCURRENCY");
+      const warn = result.diagnostics.find(
+        (d) => d.code === "UNBOUNDED_CONCURRENCY",
+      );
       expect(warn).toBeDefined();
       expect(warn?.category).toBe("warning");
       expect(warn?.message).toContain('concurrency: "unbounded"');
@@ -618,11 +713,15 @@ export counter = Ref.unsafeMake(0)
         ),
       );
 
-      const refDiag = result.diagnostics.find((d) => d.code === "TOP_LEVEL_REF");
+      const refDiag = result.diagnostics.find(
+        (d) => d.code === "TOP_LEVEL_REF",
+      );
       expect(refDiag).toBeDefined();
       expect(refDiag?.diagnosticCode).toBe("FS_TOP_LEVEL_REF");
       expect(refDiag?.category).toBe("error");
-      expect(refDiag?.message).toContain("allocates a mutable Ref at module scope");
+      expect(refDiag?.message).toContain(
+        "allocates a mutable Ref at module scope",
+      );
     });
 
     it("warns FS_EAGER_SUCCEED when calling functions inside Effect.succeed", async () => {
@@ -660,7 +759,9 @@ export failNum = () => Effect.fail(404)
         ),
       );
 
-      const untyped = result.diagnostics.filter((d) => d.code === "UNTYPED_ERROR");
+      const untyped = result.diagnostics.filter(
+        (d) => d.code === "UNTYPED_ERROR",
+      );
       expect(untyped.length).toBe(2);
       expect(untyped[0].diagnosticCode).toBe("FS_UNTYPED_ERROR");
       expect(untyped[0].category).toBe("warning");
@@ -713,11 +814,15 @@ export inc = () => effect {
         ),
       );
 
-      const captured1 = res1.diagnostics.filter((d) => d.code === "CAPTURED_MUT");
+      const captured1 = res1.diagnostics.filter(
+        (d) => d.code === "CAPTURED_MUT",
+      );
       expect(captured1.length).toBeGreaterThan(0);
       expect(captured1[0].diagnosticCode).toBe("FS_CAPTURED_MUT");
       expect(captured1[0].category).toBe("error");
-      expect(captured1[0].message).toContain("Mutable variable 'globalCounter' declared outside this effect block cannot be captured inside an effect block");
+      expect(captured1[0].message).toContain(
+        "Mutable variable 'globalCounter' declared outside this effect block cannot be captured inside an effect block",
+      );
       expect(captured1[0].suggestedAction).toContain("Ref.make");
 
       // 2. Local mut variable in outer function captured in effect block
@@ -737,10 +842,14 @@ export run = () =>
         ),
       );
 
-      const captured2 = res2.diagnostics.filter((d) => d.code === "CAPTURED_MUT");
+      const captured2 = res2.diagnostics.filter(
+        (d) => d.code === "CAPTURED_MUT",
+      );
       expect(captured2.length).toBeGreaterThan(0);
       expect(captured2[0].diagnosticCode).toBe("FS_CAPTURED_MUT");
-      expect(captured2[0].message).toContain("Mutable variable 'count' declared outside this effect block cannot be captured inside an effect block");
+      expect(captured2[0].message).toContain(
+        "Mutable variable 'count' declared outside this effect block cannot be captured inside an effect block",
+      );
 
       // 3. Mut variable captured in par block
       const res3 = await Effect.runPromise(
@@ -759,7 +868,9 @@ export run = () => par {
         ),
       );
 
-      const captured3 = res3.diagnostics.filter((d) => d.code === "CAPTURED_MUT");
+      const captured3 = res3.diagnostics.filter(
+        (d) => d.code === "CAPTURED_MUT",
+      );
       expect(captured3.length).toBeGreaterThan(0);
       expect(captured3[0].diagnosticCode).toBe("FS_CAPTURED_MUT");
 
@@ -779,7 +890,9 @@ export run = () => effect {
         ),
       );
 
-      const captured4 = res4.diagnostics.filter((d) => d.code === "CAPTURED_MUT");
+      const captured4 = res4.diagnostics.filter(
+        (d) => d.code === "CAPTURED_MUT",
+      );
       expect(captured4.length).toBe(0);
 
       // 5. Permitted: immutable variables closed over across effect blocks
@@ -798,7 +911,9 @@ export scale = (n: Number) => effect {
         ),
       );
 
-      const captured5 = res5.diagnostics.filter((d) => d.code === "CAPTURED_MUT");
+      const captured5 = res5.diagnostics.filter(
+        (d) => d.code === "CAPTURED_MUT",
+      );
       expect(captured5.length).toBe(0);
     });
 
@@ -819,11 +934,15 @@ export run = (sem: Semaphore) => effect {
         ),
       );
 
-      const semDiag = result.diagnostics.find((d) => d.code === "MANUAL_SEMAPHORE");
+      const semDiag = result.diagnostics.find(
+        (d) => d.code === "MANUAL_SEMAPHORE",
+      );
       expect(semDiag).toBeDefined();
       expect(semDiag?.diagnosticCode).toBe("FS_MANUAL_SEMAPHORE");
       expect(semDiag?.category).toBe("error");
-      expect(semDiag?.message).toContain("Manual semaphore permit management leaks permits");
+      expect(semDiag?.message).toContain(
+        "Manual semaphore permit management leaks permits",
+      );
     });
 
     it("warns FS_UNBOUNDED_QUEUE on Queue.unbounded() and bare Queue.make()", async () => {
@@ -842,11 +961,15 @@ export run = effect {
         ),
       );
 
-      const queueWarnings = result.diagnostics.filter((d) => d.code === "UNBOUNDED_QUEUE");
+      const queueWarnings = result.diagnostics.filter(
+        (d) => d.code === "UNBOUNDED_QUEUE",
+      );
       expect(queueWarnings.length).toBe(2);
       expect(queueWarnings[0].diagnosticCode).toBe("FS_UNBOUNDED_QUEUE");
       expect(queueWarnings[0].category).toBe("warning");
-      expect(queueWarnings[0].message).toContain("Queue created with infinite capacity");
+      expect(queueWarnings[0].message).toContain(
+        "Queue created with infinite capacity",
+      );
     });
 
     it("rejects running Effects mid-program (EFFECT_RUN) outside entry modules", async () => {
@@ -868,7 +991,9 @@ export sync = task |> Effect.runSync
       expect(codes).toContain("EFFECT_RUN");
       expect(result.formattedOutput).toContain("Effect.runPromise");
       expect(result.formattedOutput).toContain("Effect.runSync");
-      expect(result.formattedOutput).toContain("executes an Effect mid-program");
+      expect(result.formattedOutput).toContain(
+        "executes an Effect mid-program",
+      );
     });
 
     it("permits running Effects in entry modules (main.fun or export main)", async () => {
@@ -958,17 +1083,31 @@ ts {
     it("rejects throw keyword and throwing functions (Option.getOrThrow, JSON.parse, Error) with THROW", async () => {
       // 1. Keyword throw
       const resultThrow = await Effect.runPromise(
-        typeCheckSource("export fail = () => throw new Error('boom')", "lib/throw.fun"),
+        typeCheckSource(
+          "export fail = () => throw new Error('boom')",
+          "lib/throw.fun",
+        ),
       );
       expect(resultThrow.success).toBe(false);
-      expect(resultThrow.diagnostics.some((d) => d.code === "THROW" || d.diagnosticCode === "FS_THROW")).toBe(true);
+      expect(
+        resultThrow.diagnostics.some(
+          (d) => d.code === "THROW" || d.diagnosticCode === "FS_THROW",
+        ),
+      ).toBe(true);
 
       // 2. JSON.parse (checked at emission)
       const resultJson = await Effect.runPromise(
-        typeCheckSource("export parse = (s: String) => JSON.parse(s)", "lib/json-parse.fun"),
+        typeCheckSource(
+          "export parse = (s: String) => JSON.parse(s)",
+          "lib/json-parse.fun",
+        ),
       );
       expect(resultJson.success).toBe(false);
-      expect(resultJson.diagnostics.some((d) => d.code === "THROW" || d.diagnosticCode === "FS_THROW")).toBe(true);
+      expect(
+        resultJson.diagnostics.some(
+          (d) => d.code === "THROW" || d.diagnosticCode === "FS_THROW",
+        ),
+      ).toBe(true);
       expect(resultJson.formattedOutput).toContain("JSON.parse");
 
       // 3. Option.getOrThrow and Error(...)
@@ -986,7 +1125,9 @@ export rawError = (msg: String) => Error(msg)
       );
 
       expect(resultThrowCalls.success).toBe(false);
-      const throwDiags = resultThrowCalls.diagnostics.filter((d) => d.code === "THROW");
+      const throwDiags = resultThrowCalls.diagnostics.filter(
+        (d) => d.code === "THROW",
+      );
       expect(throwDiags.length).toBeGreaterThanOrEqual(3);
       expect(resultThrowCalls.formattedOutput).toContain("Option.getOrThrow");
       expect(resultThrowCalls.formattedOutput).toContain("Error(...)");
@@ -996,7 +1137,7 @@ export rawError = (msg: String) => Error(msg)
       const resultNative = await Effect.runPromise(
         typeCheckSource(
           `
-export timer = (cb: () => Unit) => setTimeout(cb, 100)
+export timer = (cb: () => Void) => setTimeout(cb, 100)
 export callApi = (url: String) => fetch(url)
 export log = (msg: String) => console.log(msg)
 `.trim(),
@@ -1005,7 +1146,9 @@ export log = (msg: String) => console.log(msg)
       );
 
       expect(resultNative.success).toBe(false);
-      const nativeDiags = resultNative.diagnostics.filter((d) => d.code === "NATIVE_API");
+      const nativeDiags = resultNative.diagnostics.filter(
+        (d) => d.code === "NATIVE_API",
+      );
       expect(nativeDiags.length).toBeGreaterThanOrEqual(3);
       expect(resultNative.formattedOutput).toContain("setTimeout");
       expect(resultNative.formattedOutput).toContain("fetch");
@@ -1065,10 +1208,14 @@ export task = effect {
       );
 
       expect(resultNested.success).toBe(false);
-      const nestedDiag = resultNested.diagnostics.find((d) => d.code === "NESTED_EFFECT");
+      const nestedDiag = resultNested.diagnostics.find(
+        (d) => d.code === "NESTED_EFFECT",
+      );
       expect(nestedDiag).toBeDefined();
       expect(nestedDiag?.diagnosticCode).toBe("FS_NESTED_EFFECT");
-      expect(nestedDiag?.message).toContain("Returning an Effect from inside an 'effect' block creates a nested 'Effect<Effect<...>>'");
+      expect(nestedDiag?.message).toContain(
+        "Returning an Effect from inside an 'effect' block creates a nested 'Effect<Effect<...>>'",
+      );
       expect(resultNested.formattedOutput).toContain("fetchData()");
 
       // Valid: binding with <- and returning result
@@ -1128,11 +1275,15 @@ export addItem = (arr: Array<Number>, item: Number) => {
 
       expect(resultMutate.success).toBe(false);
       const mutDiag = resultMutate.diagnostics.find(
-        (d) => d.code === "INPLACE_MUTATION" || d.diagnosticCode === "FS_INPLACE_MUTATION",
+        (d) =>
+          d.code === "INPLACE_MUTATION" ||
+          d.diagnosticCode === "FS_INPLACE_MUTATION",
       );
       expect(mutDiag).toBeDefined();
       expect(mutDiag?.diagnosticCode).toBe("FS_INPLACE_MUTATION");
-      expect(mutDiag?.message).toContain("In-place mutation '.push()' is quarantined in FunScript");
+      expect(mutDiag?.message).toContain(
+        "In-place mutation '.push()' is quarantined in FunScript",
+      );
       expect(mutDiag?.suggestedAction).toContain("mut (draft) =>");
 
       // 2. Permitted inside mut (draft) =>
@@ -1167,16 +1318,22 @@ export badErr = TypeError("invalid argument")
       );
 
       expect(resultLegacy.success).toBe(false);
-      const fetchDiag = resultLegacy.diagnostics.find((d) => d.message.includes("fetch"));
+      const fetchDiag = resultLegacy.diagnostics.find((d) =>
+        d.message.includes("fetch"),
+      );
       expect(fetchDiag).toBeDefined();
       expect(fetchDiag?.category).toBe("error");
       expect(fetchDiag?.suggestedAction).toContain("HttpClient");
 
-      const timerDiag = resultLegacy.diagnostics.find((d) => d.message.includes("setTimeout"));
+      const timerDiag = resultLegacy.diagnostics.find((d) =>
+        d.message.includes("setTimeout"),
+      );
       expect(timerDiag).toBeDefined();
       expect(timerDiag?.suggestedAction).toContain("Effect.sleep");
 
-      const errorDiag = resultLegacy.diagnostics.find((d) => d.message.includes("TypeError"));
+      const errorDiag = resultLegacy.diagnostics.find((d) =>
+        d.message.includes("TypeError"),
+      );
       expect(errorDiag).toBeDefined();
       expect(errorDiag?.code).toBe("THROW");
       expect(errorDiag?.suggestedAction).toContain("Effect.dieMessage");
@@ -1233,13 +1390,17 @@ export handle = (tier: DeliveryTier) =>
 
       expect(resultMissing.success).toBe(false);
       const exhDiag = resultMissing.diagnostics.find(
-        (d) => d.code === "NON_EXHAUSTIVE_MATCH" || d.diagnosticCode === "FS_NON_EXHAUSTIVE_MATCH",
+        (d) =>
+          d.code === "NON_EXHAUSTIVE_MATCH" ||
+          d.diagnosticCode === "FS_NON_EXHAUSTIVE_MATCH",
       );
       expect(exhDiag).toBeDefined();
       expect(exhDiag?.diagnosticCode).toBe("FS_NON_EXHAUSTIVE_MATCH");
       expect(exhDiag?.message).toContain("Pattern match is not exhaustive");
       expect(exhDiag?.message).toContain("Overnight");
-      expect(exhDiag?.suggestedAction).toContain("Add arm '| Overnight => ...'");
+      expect(exhDiag?.suggestedAction).toContain(
+        "Add arm '| Overnight => ...'",
+      );
 
       // 2. Exhaustive match with all arms passes cleanly
       const resultExhaustive = await Effect.runPromise(
@@ -1278,11 +1439,17 @@ export agentName = state.agents[0].id
       );
 
       expect(resultInvalid.success).toBe(false);
-      const diag = resultInvalid.diagnostics.find((d) => d.code === "INDEX_OPTION_PROPERTY" || d.diagnosticCode === "FS_INDEX_OPTION_PROPERTY");
+      const diag = resultInvalid.diagnostics.find(
+        (d) =>
+          d.code === "INDEX_OPTION_PROPERTY" ||
+          d.diagnosticCode === "FS_INDEX_OPTION_PROPERTY",
+      );
       expect(diag).toBeDefined();
       expect(diag?.diagnosticCode).toBe("FS_INDEX_OPTION_PROPERTY");
       expect(diag?.category).toBe("error");
-      expect(diag?.message).toBe("Array indexing returns an Option<T>. Unwrap with match, Option.map, or Option.getOrElse before accessing properties.");
+      expect(diag?.message).toBe(
+        "Array indexing returns an Option<T>. Unwrap with match, Option.map, or Option.getOrElse before accessing properties.",
+      );
       expect(diag?.suggestedAction).toContain("Option.map");
 
       // 2. Chaining a method call onto an indexed array element is also rejected
@@ -1297,7 +1464,11 @@ export status = list[0].getStatus()
         ),
       );
       expect(resultMethod.success).toBe(false);
-      const methodDiag = resultMethod.diagnostics.find((d) => d.code === "INDEX_OPTION_PROPERTY" || d.diagnosticCode === "FS_INDEX_OPTION_PROPERTY");
+      const methodDiag = resultMethod.diagnostics.find(
+        (d) =>
+          d.code === "INDEX_OPTION_PROPERTY" ||
+          d.diagnosticCode === "FS_INDEX_OPTION_PROPERTY",
+      );
       expect(methodDiag).toBeDefined();
 
       // 3. String literal indexing (e.g. dictionary / record lookup) is allowed
@@ -1310,7 +1481,11 @@ export id = lookup["dev"].id
           "lib/valid-string-key.fun",
         ),
       );
-      const stringKeyDiag = resultStringKey.diagnostics.find((d) => d.code === "INDEX_OPTION_PROPERTY" || d.diagnosticCode === "FS_INDEX_OPTION_PROPERTY");
+      const stringKeyDiag = resultStringKey.diagnostics.find(
+        (d) =>
+          d.code === "INDEX_OPTION_PROPERTY" ||
+          d.diagnosticCode === "FS_INDEX_OPTION_PROPERTY",
+      );
       expect(stringKeyDiag).toBeUndefined();
 
       // 4. Explicit unwrapping via Option.map passes cleanly
@@ -1326,7 +1501,11 @@ export agentName = state.agents[0] |> Option.map((a) => a.id)
           "lib/valid-option-map.fun",
         ),
       );
-      const optionMapDiag = resultOptionMap.diagnostics.find((d) => d.code === "INDEX_OPTION_PROPERTY" || d.diagnosticCode === "FS_INDEX_OPTION_PROPERTY");
+      const optionMapDiag = resultOptionMap.diagnostics.find(
+        (d) =>
+          d.code === "INDEX_OPTION_PROPERTY" ||
+          d.diagnosticCode === "FS_INDEX_OPTION_PROPERTY",
+      );
       expect(optionMapDiag).toBeUndefined();
     });
 
@@ -1338,7 +1517,7 @@ export agentName = state.agents[0] |> Option.map((a) => a.id)
 import { Effect } from "effect"
 
 export spawnProcess = (cmd: Array<String>) => effect {
-  proc = { pid: 1234, kill: () => Unit }
+  proc = { pid: 1234, kill: () => Void }
   _ <- Effect.addFinalizer(() => proc.kill())
   => proc
 }
@@ -1347,12 +1526,18 @@ export spawnProcess = (cmd: Array<String>) => effect {
         ),
       );
       const badDiag = badResult.diagnostics.find(
-        (d) => d.code === "PREMATURE_FINALIZER_CLOSE" || d.diagnosticCode === "FS_PREMATURE_FINALIZER_CLOSE",
+        (d) =>
+          d.code === "PREMATURE_FINALIZER_CLOSE" ||
+          d.diagnosticCode === "FS_PREMATURE_FINALIZER_CLOSE",
       );
       expect(badDiag).toBeDefined();
       expect(badDiag?.category).toBe("error");
-      expect(badDiag?.message).toContain("Finalizer registered with 'Effect.addFinalizer' in a scoped effect block");
-      expect(badDiag?.suggestedAction).toContain("Change 'effect' to 'effect (unscoped)'");
+      expect(badDiag?.message).toContain(
+        "Finalizer registered with 'Effect.addFinalizer' in a scoped effect block",
+      );
+      expect(badDiag?.suggestedAction).toContain(
+        "Change 'effect' to 'effect (unscoped)'",
+      );
 
       // 2. effect (unscoped) returning a resource passes cleanly without FS_PREMATURE_FINALIZER_CLOSE
       const goodUnscoped = await Effect.runPromise(
@@ -1361,7 +1546,7 @@ export spawnProcess = (cmd: Array<String>) => effect {
 import { Effect } from "effect"
 
 export spawnProcess = (cmd: Array<String>) => effect (unscoped) {
-  proc = { pid: 1234, kill: () => Unit }
+  proc = { pid: 1234, kill: () => Void }
   _ <- Effect.addFinalizer(() => proc.kill())
   => proc
 }
@@ -1370,27 +1555,31 @@ export spawnProcess = (cmd: Array<String>) => effect (unscoped) {
         ),
       );
       const unscopedDiag = goodUnscoped.diagnostics.find(
-        (d) => d.code === "PREMATURE_FINALIZER_CLOSE" || d.diagnosticCode === "FS_PREMATURE_FINALIZER_CLOSE",
+        (d) =>
+          d.code === "PREMATURE_FINALIZER_CLOSE" ||
+          d.diagnosticCode === "FS_PREMATURE_FINALIZER_CLOSE",
       );
       expect(unscopedDiag).toBeUndefined();
 
-      // 3. Scoped effect returning Unit is a valid consumer boundary and passes without diagnostic
+      // 3. Scoped effect returning Void is a valid consumer boundary and passes without diagnostic
       const goodUnit = await Effect.runPromise(
         typeCheckSource(
           `
 import { Effect } from "effect"
 
 export runTask = (cmd: Array<String>) => effect {
-  proc = { pid: 1234, kill: () => Unit }
+  proc = { pid: 1234, kill: () => Void }
   _ <- Effect.addFinalizer(() => proc.kill())
-  => Unit
+  => Void
 }
 `.trim(),
           "lib/task-unit.fun",
         ),
       );
       const unitDiag = goodUnit.diagnostics.find(
-        (d) => d.code === "PREMATURE_FINALIZER_CLOSE" || d.diagnosticCode === "FS_PREMATURE_FINALIZER_CLOSE",
+        (d) =>
+          d.code === "PREMATURE_FINALIZER_CLOSE" ||
+          d.diagnosticCode === "FS_PREMATURE_FINALIZER_CLOSE",
       );
       expect(unitDiag).toBeUndefined();
 
@@ -1409,7 +1598,9 @@ export openResource = effect {
         ),
       );
       const acquireDiag = badAcquire.diagnostics.find(
-        (d) => d.code === "PREMATURE_FINALIZER_CLOSE" || d.diagnosticCode === "FS_PREMATURE_FINALIZER_CLOSE",
+        (d) =>
+          d.code === "PREMATURE_FINALIZER_CLOSE" ||
+          d.diagnosticCode === "FS_PREMATURE_FINALIZER_CLOSE",
       );
       expect(acquireDiag).toBeDefined();
     });

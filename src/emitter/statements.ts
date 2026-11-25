@@ -66,7 +66,7 @@ export function emitStatement(
     if (
       (stmt.argument.kind === "Identifier" ||
         stmt.argument.kind === "UpperIdentifier") &&
-      stmt.argument.name === "Unit"
+      stmt.argument.name === "Void"
     ) {
       return "return;";
     }
@@ -191,7 +191,7 @@ export function emitEffectBlockExpression(
   const isUnit =
     (expr.finalExpression.kind === "Identifier" ||
       expr.finalExpression.kind === "UpperIdentifier") &&
-    expr.finalExpression.name === "Unit";
+    expr.finalExpression.name === "Void";
   const ret = isUnit
     ? `    return;`
     : `    return ${ctx.emitExpression(expr.finalExpression)};`;

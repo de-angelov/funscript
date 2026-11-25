@@ -35,14 +35,18 @@ export calculate = (x: Number) => {
       }
 
       expect(err).toBeDefined();
-      expect(err.message).toContain("Function block must end with an explicit '=> returnValue'");
       expect(err.message).toContain(
-        "Multi-statement functions require an explicit return arrow to distinguish returned values from side effects."
+        "Function block must end with an explicit '=> returnValue'",
       );
       expect(err.message).toContain(
-        "Use '=> value' or rewrite as an inline single-expression lambda '(args) => expr'."
+        "Multi-statement functions require an explicit return arrow to distinguish returned values from side effects.",
       );
-      expect(err.message).toContain("docs/syntax.md#311-explicit-returns-and-conditional-execution");
+      expect(err.message).toContain(
+        "Use '=> value' or rewrite as an inline single-expression lambda '(args) => expr'.",
+      );
+      expect(err.message).toContain(
+        "docs/syntax.md#311-explicit-returns-and-conditional-execution",
+      );
       expect(err.span).toBeDefined();
       expect(err.span.start.line).toBe(3);
       expect(err.span.start.column).toBe(3);
@@ -57,7 +61,7 @@ export calculate = (x: Number) =>
 
       expect(() => parseCode(source)).toThrow(ParseError);
       expect(() => parseCode(source)).toThrow(
-        "Function block must end with an explicit '=> returnValue'. Multi-statement functions require an explicit return arrow to distinguish returned values from side effects. Use '=> value' or rewrite as an inline single-expression lambda '(args) => expr'. See docs/syntax.md#311-explicit-returns-and-conditional-execution."
+        "Function block must end with an explicit '=> returnValue'. Multi-statement functions require an explicit return arrow to distinguish returned values from side effects. Use '=> value' or rewrite as an inline single-expression lambda '(args) => expr'. See docs/syntax.md#311-explicit-returns-and-conditional-execution.",
       );
     });
 
@@ -69,7 +73,7 @@ export calculate = (x: Number) =>
 
       expect(() => parseCode(source)).toThrow(ParseError);
       expect(() => parseCode(source)).toThrow(
-        "Function block must end with an explicit '=> returnValue'. Multi-statement functions require an explicit return arrow to distinguish returned values from side effects. Use '=> value' or rewrite as an inline single-expression lambda '(args) => expr'. See docs/syntax.md#311-explicit-returns-and-conditional-execution."
+        "Function block must end with an explicit '=> returnValue'. Multi-statement functions require an explicit return arrow to distinguish returned values from side effects. Use '=> value' or rewrite as an inline single-expression lambda '(args) => expr'. See docs/syntax.md#311-explicit-returns-and-conditional-execution.",
       );
     });
 
@@ -82,7 +86,7 @@ export bad = () => {
 
       expect(() => parseCode(source)).toThrow(ParseError);
       expect(() => parseCode(source)).toThrow(
-        "Function block must end with an explicit '=> returnValue'. Multi-statement functions require an explicit return arrow to distinguish returned values from side effects. Use '=> value' or rewrite as an inline single-expression lambda '(args) => expr'. See docs/syntax.md#311-explicit-returns-and-conditional-execution."
+        "Function block must end with an explicit '=> returnValue'. Multi-statement functions require an explicit return arrow to distinguish returned values from side effects. Use '=> value' or rewrite as an inline single-expression lambda '(args) => expr'. See docs/syntax.md#311-explicit-returns-and-conditional-execution.",
       );
     });
 
@@ -95,7 +99,9 @@ export calculate = (x: Number) => {
 export inlineCalc = (x: Number) => x + 1
 `.trim();
 
-      const result = await Effect.runPromise(compileString(source, "valid-fn.fun"));
+      const result = await Effect.runPromise(
+        compileString(source, "valid-fn.fun"),
+      );
       expect(result.typescript).toContain("return (temp);");
       expect(result.typescript).toContain("(x + 1)");
     });
@@ -118,14 +124,18 @@ export compute = effect {
       }
 
       expect(err).toBeDefined();
-      expect(err.message).toContain("Effect block must end with an explicit '=> returnValue'");
       expect(err.message).toContain(
-        "Effect blocks require an explicit return arrow to ensure values are yielded and returned properly."
+        "Effect block must end with an explicit '=> returnValue'",
       );
       expect(err.message).toContain(
-        "Use '=> value' to return, or '_ <- effect' followed by '=> Unit' to discard."
+        "Effect blocks require an explicit return arrow to ensure values are yielded and returned properly.",
       );
-      expect(err.message).toContain("docs/syntax.md#93-the-non-final-expression-rule-and-control-flow-lowering");
+      expect(err.message).toContain(
+        "Use '=> value' to return, or '_ <- effect' followed by '=> Void' to discard.",
+      );
+      expect(err.message).toContain(
+        "docs/syntax.md#93-the-non-final-expression-rule-and-control-flow-lowering",
+      );
       expect(err.span).toBeDefined();
       expect(err.span.start.line).toBe(1);
       expect(err.span.start.column).toBe(18);
@@ -141,7 +151,7 @@ export compute = effect {
 
       expect(() => parseCode(source)).toThrow(ParseError);
       expect(() => parseCode(source)).toThrow(
-        "Effect block must end with an explicit '=> returnValue'. Effect blocks require an explicit return arrow to ensure values are yielded and returned properly. Use '=> value' to return, or '_ <- effect' followed by '=> Unit' to discard. See docs/syntax.md#93-the-non-final-expression-rule-and-control-flow-lowering."
+        "Effect block must end with an explicit '=> returnValue'. Effect blocks require an explicit return arrow to ensure values are yielded and returned properly. Use '=> value' to return, or '_ <- effect' followed by '=> Void' to discard. See docs/syntax.md#93-the-non-final-expression-rule-and-control-flow-lowering.",
       );
     });
 
@@ -156,7 +166,7 @@ export compute = effect {
 
       expect(() => parseCode(source)).toThrow(ParseError);
       expect(() => parseCode(source)).toThrow(
-        "Non-final bare expression in effect block is not executed. Use '<-' to run an effect or '_ <-' to discard its value. See docs/syntax.md#93-the-non-final-expression-rule-and-control-flow-lowering."
+        "Non-final bare expression in effect block is not executed. Use '<-' to run an effect or '_ <-' to discard its value. See docs/syntax.md#93-the-non-final-expression-rule-and-control-flow-lowering.",
       );
     });
 
@@ -168,7 +178,9 @@ export compute = effect {
 }
 `.trim();
 
-      const result = await Effect.runPromise(compileString(source, "valid-effect.fun"));
+      const result = await Effect.runPromise(
+        compileString(source, "valid-effect.fun"),
+      );
       expect(result.typescript).toContain("return (x * 2);");
     });
   });
@@ -187,11 +199,15 @@ export check = (a: String, b: String) => a < b
       }
 
       expect(err).toBeDefined();
-      expect(err.message).toContain("< is only available for numbers; this operand has type string.");
       expect(err.message).toContain(
-        "Use Order.isLessThan(String.Order)(...) or an explicit domain Order."
+        "< is only available for numbers; this operand has type string.",
       );
-      expect(err.message).toContain("docs/syntax.md#42-equality-and-comparisons");
+      expect(err.message).toContain(
+        "Use Order.isLessThan(String.Order)(...) or an explicit domain Order.",
+      );
+      expect(err.message).toContain(
+        "docs/syntax.md#42-equality-and-comparisons",
+      );
       expect(err.span).toBeDefined();
     });
 
@@ -212,11 +228,15 @@ export check = (a: String, b: String) => a < b
         }
 
         expect(err).toBeDefined();
-        expect(err.message).toContain(`${op} is only available for numbers; this operand has type string.`);
         expect(err.message).toContain(
-          `Use Order.${helper}(String.Order)(...) or an explicit domain Order.`
+          `${op} is only available for numbers; this operand has type string.`,
         );
-        expect(err.message).toContain("docs/syntax.md#42-equality-and-comparisons");
+        expect(err.message).toContain(
+          `Use Order.${helper}(String.Order)(...) or an explicit domain Order.`,
+        );
+        expect(err.message).toContain(
+          "docs/syntax.md#42-equality-and-comparisons",
+        );
       }
     });
 
@@ -225,7 +245,9 @@ export check = (a: String, b: String) => a < b
 export inRange = (n: Number) => n >= 0 and n <= 100
 `.trim();
 
-      const result = await Effect.runPromise(compileString(source, "numeric.fun"));
+      const result = await Effect.runPromise(
+        compileString(source, "numeric.fun"),
+      );
       expect(result.typescript).toContain("n >= 0");
       expect(result.typescript).toContain("n <= 100");
     });
@@ -247,14 +269,18 @@ export bad = (x: Number) => {
       }
 
       expect(err).toBeDefined();
-      expect(err.message).toContain("FunScript uses '=> value' for explicit returns in function and effect blocks; replace 'return x' with '=> x'.");
-      expect(err.message).toContain("docs/syntax.md#311-explicit-returns-and-conditional-execution");
+      expect(err.message).toContain(
+        "FunScript uses '=> value' for explicit returns in function and effect blocks; replace 'return x' with '=> x'.",
+      );
+      expect(err.message).toContain(
+        "docs/syntax.md#311-explicit-returns-and-conditional-execution",
+      );
     });
 
     it("rejects 'let' keyword with immutable and mutable binding alternatives", () => {
       const source = "let x = 1";
       expect(() => parseCode(source)).toThrow(
-        "FunScript has no 'let'; use 'name = value' for immutable bindings, or 'mut name = value' for local mutable drafts."
+        "FunScript has no 'let'; use 'name = value' for immutable bindings, or 'mut name = value' for local mutable drafts.",
       );
     });
   });
@@ -273,14 +299,18 @@ calculate = (x: Number) => {
       const diag = diagnostics[0];
       expect(diag.severity).toBe(DiagnosticSeverity.Error);
       expect(diag.source).toBe("funscript");
-      expect(diag.message).toContain("Function block must end with an explicit '=> returnValue'");
       expect(diag.message).toContain(
-        "Multi-statement functions require an explicit return arrow to distinguish returned values from side effects."
+        "Function block must end with an explicit '=> returnValue'",
       );
       expect(diag.message).toContain(
-        "Use '=> value' or rewrite as an inline single-expression lambda '(args) => expr'."
+        "Multi-statement functions require an explicit return arrow to distinguish returned values from side effects.",
       );
-      expect(diag.message).toContain("docs/syntax.md#311-explicit-returns-and-conditional-execution");
+      expect(diag.message).toContain(
+        "Use '=> value' or rewrite as an inline single-expression lambda '(args) => expr'.",
+      );
+      expect(diag.message).toContain(
+        "docs/syntax.md#311-explicit-returns-and-conditional-execution",
+      );
       expect(diag.range).toEqual({
         start: { line: 2, character: 2 },
         end: { line: 2, character: 6 },
@@ -300,14 +330,18 @@ compute = effect {
       const diag = diagnostics[0];
       expect(diag.severity).toBe(DiagnosticSeverity.Error);
       expect(diag.source).toBe("funscript");
-      expect(diag.message).toContain("Effect block must end with an explicit '=> returnValue'");
       expect(diag.message).toContain(
-        "Effect blocks require an explicit return arrow to ensure values are yielded and returned properly."
+        "Effect block must end with an explicit '=> returnValue'",
       );
       expect(diag.message).toContain(
-        "Use '=> value' to return, or '_ <- effect' followed by '=> Unit' to discard."
+        "Effect blocks require an explicit return arrow to ensure values are yielded and returned properly.",
       );
-      expect(diag.message).toContain("docs/syntax.md#93-the-non-final-expression-rule-and-control-flow-lowering");
+      expect(diag.message).toContain(
+        "Use '=> value' to return, or '_ <- effect' followed by '=> Void' to discard.",
+      );
+      expect(diag.message).toContain(
+        "docs/syntax.md#93-the-non-final-expression-rule-and-control-flow-lowering",
+      );
       expect(diag.range).toEqual({
         start: { line: 0, character: 10 },
         end: { line: 3, character: 1 },
@@ -315,17 +349,22 @@ compute = effect {
     });
 
     it("surfaces enhanced diagnostic for non-numeric comparison in validateFunScript", () => {
-      const code = "export valid = (left: String, right: String) => left < right";
+      const code =
+        "export valid = (left: String, right: String) => left < right";
       const diagnostics = validateFunScript(code, "file:///test.fun");
       expect(diagnostics).toHaveLength(1);
       const diag = diagnostics[0];
       expect(diag.severity).toBe(DiagnosticSeverity.Error);
       expect(diag.source).toBe("funscript");
-      expect(diag.message).toContain("< is only available for numbers; this operand has type string.");
       expect(diag.message).toContain(
-        "Use Order.isLessThan(String.Order)(...) or an explicit domain Order."
+        "< is only available for numbers; this operand has type string.",
       );
-      expect(diag.message).toContain("docs/syntax.md#42-equality-and-comparisons");
+      expect(diag.message).toContain(
+        "Use Order.isLessThan(String.Order)(...) or an explicit domain Order.",
+      );
+      expect(diag.message).toContain(
+        "docs/syntax.md#42-equality-and-comparisons",
+      );
       expect(diag.range).toEqual({
         start: { line: 0, character: 48 },
         end: { line: 0, character: 49 },
@@ -345,14 +384,22 @@ export ts schema UserSchema = User
         error = caught;
       }
       expect(error).toBeDefined();
-      expect(error.message).toContain("Type 'Date' in 'User.created' is not supported for schema derivation.");
-      expect(error.message).toContain("Provide an explicit runtime schema that defines how this value is validated or decoded.");
+      expect(error.message).toContain(
+        "Type 'Date' in 'User.created' is not supported for schema derivation.",
+      );
+      expect(error.message).toContain(
+        "Provide an explicit runtime schema that defines how this value is validated or decoded.",
+      );
       expect(error.span.start.line).toBe(2);
 
       const diagnostics = validateFunScript(code, "file:///schema.fun");
       expect(diagnostics).toHaveLength(1);
-      expect(diagnostics[0].message).toContain("Type 'Date' in 'User.created' is not supported for schema derivation.");
-      expect(diagnostics[0].message).toContain("Provide an explicit runtime schema that defines how this value is validated or decoded.");
+      expect(diagnostics[0].message).toContain(
+        "Type 'Date' in 'User.created' is not supported for schema derivation.",
+      );
+      expect(diagnostics[0].message).toContain(
+        "Provide an explicit runtime schema that defines how this value is validated or decoded.",
+      );
       expect(diagnostics[0].range.start.line).toBe(1);
     });
 
@@ -392,13 +439,13 @@ calculate = (x: Number) => {
       const openDiag = diagEvents[0].diagnostics;
       expect(openDiag).toHaveLength(1);
       expect(openDiag[0].message).toContain(
-        "Function block must end with an explicit '=> returnValue'"
+        "Function block must end with an explicit '=> returnValue'",
       );
       expect(openDiag[0].message).toContain(
-        "Use '=> value' or rewrite as an inline single-expression lambda '(args) => expr'."
+        "Use '=> value' or rewrite as an inline single-expression lambda '(args) => expr'.",
       );
       expect(openDiag[0].message).toContain(
-        "docs/syntax.md#311-explicit-returns-and-conditional-execution"
+        "docs/syntax.md#311-explicit-returns-and-conditional-execution",
       );
 
       const fixedCode = `

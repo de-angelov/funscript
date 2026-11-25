@@ -325,13 +325,13 @@ export const DOC_MAP: Record<string, DocDef> = {
     "logInfo: (msg: string) => Effect<void>",
     ["never", "unknown"],
   ],
-  Unit: [
+  Void: [
     "primitive",
-    "type Unit = void",
-    "Unit type and value representing the absence of meaningful data.",
-    "Used as the canonical unit type and discard return value in FunScript (e.g. '=> Unit' or 'Effect<Unit>'). Compiles cleanly to TypeScript void.",
-    "logInfo = (msg: String): Effect<Unit> => effect {\n  _ <- Console.log(msg)\n  => Unit\n}",
-    ["Void", "void", "effect"],
+    "type Void = void",
+    "Void type and value representing the absence of meaningful data.",
+    "Used as the canonical void type and discard return value in FunScript (e.g. '=> Void' or 'Effect<Void>'). Compiles cleanly to TypeScript void.",
+    "logInfo = (msg: String): Effect<Void> => effect {\n  _ <- Console.log(msg)\n  => Void\n}",
+    ["void", "effect"],
   ],
   unknown: [
     "primitive",

@@ -42,14 +42,14 @@ The design rule is simple:
 | Or-pattern                   | `\| Admin \| Owner => "elevated"`                                                                |
 | Tagged union schema          | `schema Shape =` newline `\| Circle(radius: Number)`                                             |
 | Record schema                | `schema User = { id: UUID, name: NonEmptyString, role: String = "member", bio: Option<String> }` |
-| Imported TS schema           | `schema User = from ts<UserProfile>` (derives Effect Schema from TypeScript type)                 |
+| Imported TS schema           | `schema User = from ts<UserProfile>` (derives Effect Schema from TypeScript type)                |
 | Refined schema               | `schema Age = Int \|> Schema.between(0, 150)`                                                    |
 | Schema constructor           | `UUID("1")`, `Age(36)`, `User({ id, name })` (literals validated at compile time)                |
 | Compile-time type alias      | `schema Lookup = (id: String) => Effect<User, NotFound>`                                         |
 | Error                        | `error NotFound(id: String)`                                                                     |
 | Service                      | `service Greeter` newline `greet: (name: String) => Effect<String>`                              |
-| Layer (pure / effectful)     | `Layer.succeed(Greeter, { ... })` or `Layer.effect(Greeter, effect { ... })`                    |
-| Effect block                 | `effect { user <- UserRepo.find(id); => user }` (braces required) |
+| Layer (pure / effectful)     | `Layer.succeed(Greeter, { ... })` or `Layer.effect(Greeter, effect { ... })`                     |
+| Effect block                 | `effect { user <- UserRepo.find(id); => user }` (braces required)                                |
 | Effect bind                  | `name <- effect`                                                                                 |
 | Discard effect               | `_ <- effect`                                                                                    |
 | Typed hole                   | `???` or `??? "todo: handle pagination"`                                                         |
@@ -87,7 +87,7 @@ form and rejects the other one.
 | Effectful iteration            | `Effect.forEach`                                                        | Effect                                                                                           | `for await`, `Promise.all`                           |
 | Validated data & tagged unions | `schema` (records, `?`, `= default`, `\|> Schema.*`, `\| Variant(...)`) | `Schema` + `Data.TaggedEnum` + `typeof Name.Type`                                                | duplicate TS `type` + validator, `enum`, `interface` |
 | Absent / optional value        | `Option` (`Some` / `None`)                                              | `Option`                                                                                         | `null`, `undefined` literals                         |
-| Boundary decoding              | `Unknown` + `raw \|> decode(MyType)`                    | `Unknown`, `Schema`                                                                              | `any`, `as any`                                      |
+| Boundary decoding              | `Unknown` + `raw \|> decode(MyType)`                                    | `Unknown`, `Schema`                                                                              | `any`, `as any`                                      |
 | Value / identity equality      | `#=` / `#!`; `@=` / `@!`                                                | `Equal.equals` for structured values; strict JS equality for primitives; identity for references | coercing equality                                    |
 | Boolean                        | `and` / `or` / `not`                                                    | `&&` / `\|\|` / `!`                                                                              | `&&`, `\|\|`, `!`                                    |
 | Conditional & pattern match    | `match` (value, boolean, `\|> match`, `\| A \| B =>`)                   | ts-pattern (value) / conditional & `if` (boolean)                                                | `if`, `else`, `switch`, ternary `? :`, `return`      |
@@ -242,11 +242,13 @@ The compiler enforces the convention for declarations it generates. Imported Jav
 values may have any casing; they are only relevant in expression position.
 
 <!-- GENERATED: keywords -->
+
 ### 1.5 Keywords (19 total)
 
 ```text
 and default effect error export false from import js match mut not or par schema service true ts when
 ```
+
 <!-- /GENERATED: keywords -->
 
 `_` is a special token (wildcard in patterns, discard in `_ <-`, and call-argument
@@ -503,7 +505,8 @@ Rules for `mut`:
 ```funscript
 add = (a: Number, b: Number) => a + b
 
-identity = <A>(value: A) => A { => value }
+identity = <A>(value: A): A =>
+  value
 
 greet = (name: String) =>
   trimmed = name |> String.trim()
@@ -680,10 +683,9 @@ An inline expression returns from a lambda. In a braced or indented function blo
 return. A return type can precede a braced body:
 
 ```funscript
-absolute = (value: Number) => Number {
+absolute = (value: Number): Number =>
   when (value < 0) => -value
   => value
-}
 ```
 
 `when` has three forms: `when (condition) => value` returns early from a function;
@@ -750,18 +752,18 @@ lowering. That is output, not source syntax; the FunScript surface still has no 
 
 From lowest to highest:
 
-| Level | Operators                | Notes                                                                               |
-| ----- | ------------------------ | ----------------------------------------------------------------------------------- |
-| 1     | `\|>`                    | pipeline, left-associative                                                          |
-| 2     | `or`                     | logical or                                                                          |
-| 3     | `and`                    | logical and                                                                         |
-| 4     | `#=`, `#!`, `@=`, `@!` | value equality and reference identity                                               |
-| 5     | `<`, `<=`, `>`, `>=`     | relational comparison; valid only when both operands are proven numbers             |
-| 6     | `+`, `-`                 | additive                                                                            |
-| 7     | `*`, `/`, `%`            | multiplicative                                                                      |
-| 8     | `**`                     | exponent, right-associative                                                         |
-| 9     | `not`, unary `-`         | prefix                                                                              |
-| 10    | call, member, index      | postfix                                                                             |
+| Level | Operators              | Notes                                                                   |
+| ----- | ---------------------- | ----------------------------------------------------------------------- |
+| 1     | `\|>`                  | pipeline, left-associative                                              |
+| 2     | `or`                   | logical or                                                              |
+| 3     | `and`                  | logical and                                                             |
+| 4     | `#=`, `#!`, `@=`, `@!` | value equality and reference identity                                   |
+| 5     | `<`, `<=`, `>`, `>=`   | relational comparison; valid only when both operands are proven numbers |
+| 6     | `+`, `-`               | additive                                                                |
+| 7     | `*`, `/`, `%`          | multiplicative                                                          |
+| 8     | `**`                   | exponent, right-associative                                             |
+| 9     | `not`, unary `-`       | prefix                                                                  |
+| 10    | call, member, index    | postfix                                                                 |
 
 `match`, `effect`, functions, records, arrays, and literals are primary expressions.
 
@@ -830,6 +832,7 @@ isPast = lessThan(currentTimestamp, expiresAt)
 ```
 
 Direct calls and pipeline stages lower to the matching Effect companion method:
+
 - `score |> lessThan(target)` -> `Number.isLessThan(score, target)`
 - `lessThan(score, target)` -> `Number.isLessThan(score, target)`
 - `ts |> lessThan(deadline)` -> `DateTime.isLessThan(ts, deadline)`
@@ -1016,6 +1019,7 @@ result = (c: HttpClient) |> Afn |> Bfn
 ```
 
 This works identically for companion functions, custom services, and typed comparisons:
+
 1. **Stage chaining:** The static type of stage $N$ determines the available functions for stage $N+1$, chaining inferred types across the entire pipeline.
 2. **Deterministic matching:** Functions must exist on the type or companion module. Missing, incompatible, or ambiguous matches produce source-mapped `PipelineResolutionError` diagnostics pointing directly to the offending stage.
 3. **Explicit qualification escape hatch:** When multiple abstractions expose the same function name or when explicit clarity is preferred, `Module.function` qualification (e.g. `HttpClient.Afn`) is always valid.
@@ -1575,8 +1579,14 @@ parameter to create the concrete decoder; the corresponding generic type describ
 decoded values:
 
 ```funscript
-export schema Page<A> = { items: Array<A>, next?: String }
-export schema Country = { name: String }
+export schema Page<A> = {
+  items: Array<A>
+  next?: String
+}
+
+export schema Country = {
+  name: String
+}
 
 export countryPageSchema = Page(Country)
 export names = (page: Page<Country>) => page.items |> Array.map((country) => country.name)
@@ -1594,7 +1604,10 @@ records with required fields. Generic data schemas can also compose verified gen
 factories, including through named imports:
 
 ```funscript
-export schema Result<A> = { data: Page<A>, requestId: String }
+export schema Result<A> = {
+  data: Page<A>
+  requestId: String
+}
 ```
 
 Defaults, recursive generic declarations, and generic tagged-union decoders are not
@@ -1761,25 +1774,25 @@ at compile time without manual duplication or drift.
 
 The compiler introspects the imported type using the TypeScript compiler API and derives corresponding Effect schemas:
 
-| TypeScript construct | Derived Effect Schema | Notes |
-| -------------------- | --------------------- | ----- |
-| `string` | `Schema.String` | Primitives |
-| `number` | `Schema.Number` | Primitives |
-| `boolean` | `Schema.Boolean` | Primitives |
-| `null` | `Schema.Null` | Primitives |
-| `undefined` | `Schema.Undefined` | Primitives |
-| String literal (`"admin"`) | `Schema.Literal("admin")` | Exact string value |
-| Number literal (`200`) | `Schema.Literal(200)` | Exact numeric value |
-| Boolean literal (`true`) | `Schema.Literal(true)` | Literal boolean (or `Schema.Boolean` if both true and false are in a union) |
-| Arrays (`T[]`, `Array<T>`, `ReadonlyArray<T>`) | `Schema.Array(ElemSchema)` | Supports nested arrays (`T[][]`) |
-| Record index signatures (`Record<string, V>`) | `Schema.Record(Schema.String, ValSchema)` | Key must be string |
-| Object interfaces and type literals (`{ ... }`) | `Schema.Struct({ ... })` | Field names preserved; nested structs supported |
-| Recursive root record | `Schema.suspend(() => schemaRef)` | Supports finite data whose recursive references lead back to the imported root record, including through arrays and optional fields. Decoded arrays and records have readonly static types. |
-| Optional properties (`field?: T`) | `field: Schema.optional(FieldSchema)` | Accepts omitted properties and present `undefined` values. `Schema.Struct` decoding strips undeclared extra keys from decoded output. |
-| Nullable unions (`T \| null`) | `Schema.NullOr(InnerSchema)` | Explicit nullable wrapper |
-| Optional unions (`T \| undefined`) | `Schema.UndefinedOr(InnerSchema)` | Explicit undefined wrapper |
-| Nullish unions (`T \| null \| undefined`) | `Schema.NullishOr(InnerSchema)` | Null or undefined |
-| General unions (`A \| B`) | `Schema.Union([SchemaA, SchemaB])` | Disjoint or variant unions |
+| TypeScript construct                            | Derived Effect Schema                     | Notes                                                                                                                                                                                       |
+| ----------------------------------------------- | ----------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `string`                                        | `Schema.String`                           | Primitives                                                                                                                                                                                  |
+| `number`                                        | `Schema.Number`                           | Primitives                                                                                                                                                                                  |
+| `boolean`                                       | `Schema.Boolean`                          | Primitives                                                                                                                                                                                  |
+| `null`                                          | `Schema.Null`                             | Primitives                                                                                                                                                                                  |
+| `undefined`                                     | `Schema.Undefined`                        | Primitives                                                                                                                                                                                  |
+| String literal (`"admin"`)                      | `Schema.Literal("admin")`                 | Exact string value                                                                                                                                                                          |
+| Number literal (`200`)                          | `Schema.Literal(200)`                     | Exact numeric value                                                                                                                                                                         |
+| Boolean literal (`true`)                        | `Schema.Literal(true)`                    | Literal boolean (or `Schema.Boolean` if both true and false are in a union)                                                                                                                 |
+| Arrays (`T[]`, `Array<T>`, `ReadonlyArray<T>`)  | `Schema.Array(ElemSchema)`                | Supports nested arrays (`T[][]`)                                                                                                                                                            |
+| Record index signatures (`Record<string, V>`)   | `Schema.Record(Schema.String, ValSchema)` | Key must be string                                                                                                                                                                          |
+| Object interfaces and type literals (`{ ... }`) | `Schema.Struct({ ... })`                  | Field names preserved; nested structs supported                                                                                                                                             |
+| Recursive root record                           | `Schema.suspend(() => schemaRef)`         | Supports finite data whose recursive references lead back to the imported root record, including through arrays and optional fields. Decoded arrays and records have readonly static types. |
+| Optional properties (`field?: T`)               | `field: Schema.optional(FieldSchema)`     | Accepts omitted properties and present `undefined` values. `Schema.Struct` decoding strips undeclared extra keys from decoded output.                                                       |
+| Nullable unions (`T \| null`)                   | `Schema.NullOr(InnerSchema)`              | Explicit nullable wrapper                                                                                                                                                                   |
+| Optional unions (`T \| undefined`)              | `Schema.UndefinedOr(InnerSchema)`         | Explicit undefined wrapper                                                                                                                                                                  |
+| Nullish unions (`T \| null \| undefined`)       | `Schema.NullishOr(InnerSchema)`           | Null or undefined                                                                                                                                                                           |
+| General unions (`A \| B`)                       | `Schema.Union([SchemaA, SchemaB])`        | Disjoint or variant unions                                                                                                                                                                  |
 
 #### Rejected types and strict diagnostics
 
@@ -1843,11 +1856,11 @@ export schema User = from ts<UserProfile>
 
 // Decode unknown input returning Option<User> via Schema.decodeUnknownOption
 export decodeUserOption = (raw: Unknown) =>
-  => Schema.decodeUnknownOption(User)(raw)
+  Schema.decodeUnknownOption(User)(raw)
 
 // Decode unknown input returning Result<User, SchemaError> via Schema.decodeUnknownResult
 export decodeUserResult = (raw: Unknown) =>
-  => Schema.decodeUnknownResult(User)(raw)
+  Schema.decodeUnknownResult(User)(raw)
 
 export main =
   effect {
@@ -1940,11 +1953,13 @@ export getUser = (id: String) =>
 
 ```ts
 export const getUser = (id: string) =>
-  Effect.scoped(Effect.gen(function* () {
-    const user = yield* (yield* UserRepo).find(id);
-    const org = yield* (yield* OrgRepo).find(user.orgId);
-    return { user, org };
-  }));
+  Effect.scoped(
+    Effect.gen(function* () {
+      const user = yield* (yield* UserRepo).find(id);
+      const org = yield* (yield* OrgRepo).find(user.orgId);
+      return { user, org };
+    }),
+  );
 ```
 
 #### Scoped vs. Unscoped Effects (`effect` vs. `effect (unscoped)`)
@@ -1968,7 +1983,7 @@ export const processFile = (path: string) =>
       const file = yield* acquireFile(path);
       const data = yield* readFile(file);
       return data;
-    })
+    }),
   );
 ```
 
@@ -1978,10 +1993,10 @@ When writing a reusable **resource constructor** (provider) that creates a resou
 
 To build resource constructors that pass open resources and attach finalizers to the **caller's scope**, use `effect (unscoped)`:
 
-| Role | Responsibility | Keyword | Emitted TypeScript |
-|---|---|---|---|
-| **Resource Constructor** (Provider) | Creates a resource and attaches cleanup to the caller's scope without closing it. | `effect (unscoped)` | `Effect.gen(...)` (requires `Scope` in environment `R`) |
-| **Resource Consumer** (Boundary) | Creates a fresh `Scope`, runs work using resources, and ensures all resources are torn down. | `effect` (default) | `Effect.scoped(Effect.gen(...))` |
+| Role                                | Responsibility                                                                               | Keyword             | Emitted TypeScript                                      |
+| ----------------------------------- | -------------------------------------------------------------------------------------------- | ------------------- | ------------------------------------------------------- |
+| **Resource Constructor** (Provider) | Creates a resource and attaches cleanup to the caller's scope without closing it.            | `effect (unscoped)` | `Effect.gen(...)` (requires `Scope` in environment `R`) |
+| **Resource Consumer** (Boundary)    | Creates a fresh `Scope`, runs work using resources, and ensures all resources are torn down. | `effect` (default)  | `Effect.scoped(Effect.gen(...))`                        |
 
 #### Resource Constructor Example:
 
@@ -2015,13 +2030,13 @@ export const spawnScopedProcess = (cmd: ReadonlyArray<string>, cwd: string) =>
 
 #### Compile-Time Guardrail: `FS_PREMATURE_FINALIZER_CLOSE`
 
-FunScript enforces structured concurrency at compile time via `funscript check`. If an `effect` block without `(unscoped)` calls `Effect.addFinalizer` or `Effect.acquireRelease` and returns a non-Unit value, the compiler raises a diagnostic:
+FunScript enforces structured concurrency at compile time via `funscript check`. If an `effect` block without `(unscoped)` calls `Effect.addFinalizer` or `Effect.acquireRelease` and returns a non-Void value, the compiler raises a diagnostic:
 
 ```text
 src/proc.fun:4:8 - error PREMATURE_FINALIZER_CLOSE: Finalizer registered with 'Effect.addFinalizer' in a scoped effect block will execute immediately when this function returns, closing the returned resource.
   4 |   _ <- Effect.addFinalizer(() => proc.kill("SIGTERM"))
     |        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  help: Change 'effect' to 'effect (unscoped)' so the resource's lifetime is bound to the caller's scope, or return 'Unit' if all work is completed inside this block.
+  help: Change 'effect' to 'effect (unscoped)' so the resource's lifetime is bound to the caller's scope, or return 'Void' if all work is completed inside this block.
 ```
 
 #### Direct service calls
@@ -2267,15 +2282,19 @@ export fetchDashboard = (userId: String) =>
 
 ```ts
 export const fetchDashboard = (userId: string) =>
-  Effect.all({
-    user: fetchUser(userId),
-    orders: fetchOrders(userId)
-  }, { concurrency: "inherit" });
+  Effect.all(
+    {
+      user: fetchUser(userId),
+      orders: fetchOrders(userId),
+    },
+    { concurrency: "inherit" },
+  );
 ```
 
 Custom concurrency limits can be specified in parentheses:
+
 ```funscript
-export fetchLimited = par (concurrency = 2) {
+export fetchLimited = par (2) {
   a <- taskA()
   b <- taskB()
   => a + b
@@ -2306,10 +2325,11 @@ export const fetchWithRetry = pipe(
   apiCall,
   Effect.retry({
     schedule: Schedule.jittered(Schedule.exponential("100 millis")),
-    times: 3
-  })
+    times: 3,
+  }),
 );
 ```
+
 To opt out of jitter (e.g., in deterministic unit tests), specify `jitter: false`.
 
 #### Structured parallelism with Effect combinators
@@ -2671,23 +2691,24 @@ nor `Unknown` itself proves that an external value satisfies a schema.
 
 `funscript check` enforces architectural boundaries to eliminate non-determinism, goroutine leaks, and ambient state coupling at compile time:
 
-| Diagnostic Code | Category | Enforced Rule | Safe Replacement |
-|---|---|---|---|
-| `FS_HIDDEN_INPUT` | Error | Non-deterministic global APIs (`Date.now()`, `Date()`, `Math.random()`, `performance.now()`, `crypto.randomUUID()`, `crypto.getRandomValues()`) are quarantined. | Effect `Clock` (`Clock.currentTimeMillis`), `DateTime.now`, or `Random` (`Random.nextIntBetween`). Makes logic deterministic and testable with `TestClock`. |
-| `FS_EFFECT_RUN` | Error | Effect runners (`Effect.runPromise`, `Effect.runSync`, `Effect.runFork`, `Runtime.run*`, `NodeRuntime.runMain`, etc.) are forbidden outside entry modules. | Return the composed `Effect` and execute it once at the application boundary (`main.fun`, `main.funx`, or modules exporting `main`). |
-| `FS_ENV_GLOBAL` | Error | Ambient environment variables (`process.env`, `Deno.env`, `Bun.env`) are forbidden outside entry modules. | Declare configuration using Effect's `Config` service (e.g. `Config.string("PORT")`) or pass configuration as explicit parameters. |
-| `FS_DETACHED_FIBER` | Error | `Effect.forkDetach` is forbidden outside entry modules because detached fibers outlive their caller with no owner. | Use `Effect.forkScoped` (tied to an enclosing `Scope`) or `Effect.forkChild` (tied to parent fiber). Long-lived background tasks belong in a `Layer` (`Layer.effectDiscard(Effect.forkScoped(...))`). |
-| `FS_UNBOUNDED_CONCURRENCY` | Warning | `{ concurrency: "unbounded" }` is flagged to prevent resource exhaustion (socket, descriptor, or memory starvation under burst load). | Specify an explicit concurrency limit (e.g. `{ concurrency: 10 }`). |
-| `FS_THROW` | Error | Raw `throw` statements and throwing methods (`Option.getOrThrow`, `Either.getOrThrow`, `JSON.parse`, `Error(...)`) are forbidden. | Model failures with Effect typed errors (`Effect.fail`, `error Name { ... }`), handle absence with `Option.getOrElse`/`match`, or decode JSON with `Schema.parseJson`. |
-| `FS_NATIVE_API` | Error | Unmanaged native JS/Node APIs (`fetch`, `setTimeout`, `setInterval`, `console.log` in library code, `Promise.resolve`, etc.) are forbidden. | Use Effect ecosystem equivalents (`@effect/platform` `HttpClient`, `Effect.sleep`, `Schedule.spaced`, `Console.log`, `Effect.promise`) or isolate foreign calls with `js ...`. |
-| `FS_INPLACE_MUTATION` | Error | In-place mutating array methods (`.push()`, `.pop()`, `.shift()`, `.unshift()`, `.splice()`, `.sort()`, `.reverse()`) are quarantined outside draft proxy blocks. | Use immutable functional alternatives (`Array.append`, `Array.remove`, `Array.modify`) or isolate mutable recipes inside `mut (draft) => { ... }`. |
-| `FS_NON_EXHAUSTIVE_MATCH` | Error | Pattern match on schemas, variants, or tagged unions fails to handle all cases without a wildcard fallback. | Add an explicit pattern arm for the missing variant (e.g. `\| Overnight => ...`) or add a wildcard fallback `\| _ => ...`. |
-| `FS_NESTED_EFFECT` | Error | Returning an `Effect` value from inside an `effect` block creates a nested `Effect<Effect<...>>`. | Bind the effect using `<-` before returning it (`res <- myEffect; => res`). Prevents accidentally returning unexecuted effects. |
-| `FS_REF_RACE` | Error | Consecutive `Ref.get` and `Ref.set` on the same `Ref` identifier within an effect block creates race conditions under concurrency. | Use atomic transition combinators: `Ref.update(ref, fn)` or `Ref.modify(ref, fn)`. |
-| `FS_MANUAL_SEMAPHORE` | Error | Calling `.take()` or `.release()` directly on semaphores leaks permits if the fiber is interrupted. | Use `semaphore.withPermits(n)(effect)` to guarantee permit acquisition and release. |
-| `FS_UNBOUNDED_QUEUE` | Warning | Calling `Queue.unbounded()` or bare `Queue.make()` creates queues with infinite capacity that exhaust memory under backpressure. | Prefer bounded queues (`Queue.bounded(capacity)`) or dropping/sliding strategies (`Queue.dropping(capacity)` / `Queue.sliding(capacity)`). |
+| Diagnostic Code            | Category | Enforced Rule                                                                                                                                                     | Safe Replacement                                                                                                                                                                                      |
+| -------------------------- | -------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `FS_HIDDEN_INPUT`          | Error    | Non-deterministic global APIs (`Date.now()`, `Date()`, `Math.random()`, `performance.now()`, `crypto.randomUUID()`, `crypto.getRandomValues()`) are quarantined.  | Effect `Clock` (`Clock.currentTimeMillis`), `DateTime.now`, or `Random` (`Random.nextIntBetween`). Makes logic deterministic and testable with `TestClock`.                                           |
+| `FS_EFFECT_RUN`            | Error    | Effect runners (`Effect.runPromise`, `Effect.runSync`, `Effect.runFork`, `Runtime.run*`, `NodeRuntime.runMain`, etc.) are forbidden outside entry modules.        | Return the composed `Effect` and execute it once at the application boundary (`main.fun`, `main.funx`, or modules exporting `main`).                                                                  |
+| `FS_ENV_GLOBAL`            | Error    | Ambient environment variables (`process.env`, `Deno.env`, `Bun.env`) are forbidden outside entry modules.                                                         | Declare configuration using Effect's `Config` service (e.g. `Config.string("PORT")`) or pass configuration as explicit parameters.                                                                    |
+| `FS_DETACHED_FIBER`        | Error    | `Effect.forkDetach` is forbidden outside entry modules because detached fibers outlive their caller with no owner.                                                | Use `Effect.forkScoped` (tied to an enclosing `Scope`) or `Effect.forkChild` (tied to parent fiber). Long-lived background tasks belong in a `Layer` (`Layer.effectDiscard(Effect.forkScoped(...))`). |
+| `FS_UNBOUNDED_CONCURRENCY` | Warning  | `{ concurrency: "unbounded" }` is flagged to prevent resource exhaustion (socket, descriptor, or memory starvation under burst load).                             | Specify an explicit concurrency limit (e.g. `{ concurrency: 10 }`).                                                                                                                                   |
+| `FS_THROW`                 | Error    | Raw `throw` statements and throwing methods (`Option.getOrThrow`, `Either.getOrThrow`, `JSON.parse`, `Error(...)`) are forbidden.                                 | Model failures with Effect typed errors (`Effect.fail`, `error Name { ... }`), handle absence with `Option.getOrElse`/`match`, or decode JSON with `Schema.parseJson`.                                |
+| `FS_NATIVE_API`            | Error    | Unmanaged native JS/Node APIs (`fetch`, `setTimeout`, `setInterval`, `console.log` in library code, `Promise.resolve`, etc.) are forbidden.                       | Use Effect ecosystem equivalents (`@effect/platform` `HttpClient`, `Effect.sleep`, `Schedule.spaced`, `Console.log`, `Effect.promise`) or isolate foreign calls with `js ...`.                        |
+| `FS_INPLACE_MUTATION`      | Error    | In-place mutating array methods (`.push()`, `.pop()`, `.shift()`, `.unshift()`, `.splice()`, `.sort()`, `.reverse()`) are quarantined outside draft proxy blocks. | Use immutable functional alternatives (`Array.append`, `Array.remove`, `Array.modify`) or isolate mutable recipes inside `mut (draft) => { ... }`.                                                    |
+| `FS_NON_EXHAUSTIVE_MATCH`  | Error    | Pattern match on schemas, variants, or tagged unions fails to handle all cases without a wildcard fallback.                                                       | Add an explicit pattern arm for the missing variant (e.g. `\| Overnight => ...`) or add a wildcard fallback `\| _ => ...`.                                                                            |
+| `FS_NESTED_EFFECT`         | Error    | Returning an `Effect` value from inside an `effect` block creates a nested `Effect<Effect<...>>`.                                                                 | Bind the effect using `<-` before returning it (`res <- myEffect; => res`). Prevents accidentally returning unexecuted effects.                                                                       |
+| `FS_REF_RACE`              | Error    | Consecutive `Ref.get` and `Ref.set` on the same `Ref` identifier within an effect block creates race conditions under concurrency.                                | Use atomic transition combinators: `Ref.update(ref, fn)` or `Ref.modify(ref, fn)`.                                                                                                                    |
+| `FS_MANUAL_SEMAPHORE`      | Error    | Calling `.take()` or `.release()` directly on semaphores leaks permits if the fiber is interrupted.                                                               | Use `semaphore.withPermits(n)(effect)` to guarantee permit acquisition and release.                                                                                                                   |
+| `FS_UNBOUNDED_QUEUE`       | Warning  | Calling `Queue.unbounded()` or bare `Queue.make()` creates queues with infinite capacity that exhaust memory under backpressure.                                  | Prefer bounded queues (`Queue.bounded(capacity)`) or dropping/sliding strategies (`Queue.dropping(capacity)` / `Queue.sliding(capacity)`).                                                            |
 
 #### Escape hatches
+
 When interacting with third-party JavaScript libraries that require `Date`, raw `process.env`, or detached promises, isolate the foreign interop inside an explicit `ts { ... }` block. Raw TypeScript blocks bypass these static AST guardrails and remain visible in code review.
 
 ### 12.3.2 Standard Library Prelude & JSON Codec Helpers
@@ -2725,6 +2746,7 @@ export syncJson = user |> encodeJsonSync(User)
 ```
 
 In `effect { ... }` blocks:
+
 ```funscript
 user <- rawJson |> decodeJson(User)
 jsonText <- user |> encodeJson(User)
@@ -2774,7 +2796,7 @@ Top-level `as { ... }` blocks embed high-performance WebAssembly routines writte
 
 ```funscript
 as {
-  export function square(value: f64): f64 {
+export function square(value: f64): f64 {
     return value * value;
   }
 
@@ -2829,18 +2851,14 @@ To guarantee zero memory leaks and deterministic heap cleanup when working with 
 ```funscript
 import { Effect, Scope } from "effect"
 
-as {
-  export function processData(data: Float64Array): Float64Array { ... }
-}
+as { export function processData(data: Float64Array): Float64Array { ... } }
 
 export runTask = (input: Float64Array) =>
-  Effect.scoped(
-    effect {
-      handle <- processData.scoped(input)
-      result = handle.read()
-      => result
-    }
-  )
+  Effect.scoped(effect {
+    handle <- processData.scoped(input)
+    result = handle.read()
+    => result
+  })
 ```
 
 Upon exiting the `Scope` (whether by success, failure, or fiber interruption), the Wasm linear heap is automatically and deterministically reset.
@@ -3087,7 +3105,7 @@ These are the choices that came out of checking the surface for ambiguity:
 | Decision                                                                      | Why                                                                                                                                                                                                                                                      |
 | ----------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Unified `schema` = Effect `Schema` + Tagged Unions (`\| Variant`) + TS `type` | Naming the keyword `schema` (instead of `type` or `data`) makes it explicit that declarations compile to runtime Effect `Schema` validators + `Data.TaggedEnum` + static TypeScript types.                                                               |
-| `\|> Schema.*` refinements + `?` / `= default` in `schema`                    | Constraints and branding are schema refinements; optional fields decode to Effect `Option`, and defaults are applied during decoding.                                                                                                                     |
+| `\|> Schema.*` refinements + `?` / `= default` in `schema`                    | Constraints and branding are schema refinements; optional fields decode to Effect `Option`, and defaults are applied during decoding.                                                                                                                    |
 | `{ ...x, a.b: 1 }` and `mut` for immutable updates (no `with`)                | Shallow spreads emit `{ ...x, k: v }`, while nested dot-paths (`a.b: 1`) and `mut draft = x` / `\|> mut (d) => ...` lower to Mutative's `create(...)` with fast structural sharing on plain `Schema`/`ts-pattern` objects.                               |
 | Local `mut` + `=` with copy-on-write                                          | `mut` marks local mutable bindings and `\|> mut (d) =>` drafts explicitly up front; reassignment uses normal `=` (no extra `:=` operator) and path updates on a `mut` binding lower to `create(...)`.                                                    |
 | `\|> f(a, _)` pipeline argument placeholder                                   | Lets uncurried multi-argument functions participate in pipelines without throwaway lambdas, while banning nested `_` (`_.x`, `f(g(_))`) to prevent scope ambiguity.                                                                                      |
@@ -3095,7 +3113,7 @@ These are the choices that came out of checking the surface for ambiguity:
 | `\|> match` and `\| A \| B =>` or-patterns                                    | Eliminates dummy scrutinee names at the end of pipelines and maps multi-pattern arms directly to `ts-pattern`'s `.with(p1, p2, handler)`.                                                                                                                |
 | No dedicated `layer` keyword                                                  | Because `effect` is already an expression, `Layer.succeed(Svc, { ... })`, `Layer.effect(Svc, effect ...)`, and `Layer.scoped(Svc, effect ...)` are already concise and keep lifecycle semantics (`effect` vs `scoped`) explicit.                         |
 | No `>>` point-free composition operator                                       | Point-free `flow(f, g)` degrades TypeScript generic type inference; `(x) => x \|> f \|> g` is explicit and preserves contextual inference.                                                                                                               |
-| No `return` keyword                                                           | Function and effect blocks return with `=> value`; expression-bodied functions and match arms produce their expression.                                                                                                           |
+| No `return` keyword                                                           | Function and effect blocks return with `=> value`; expression-bodied functions and match arms produce their expression.                                                                                                                                  |
 | No `undefined` expression literal                                             | Alongside `null`, `undefined` is banned in expressions; use `Option` (`Option.none()`, `Option.fromNullable`, `Option.getOrUndefined`) or `Effect.void`.                                                                                                 |
 | Typed holes (`???`)                                                           | Lowers to `never`-typed throw and inspects `checker.getContextualType` + scope symbols; warns in `dev`/`check`, fails in `build`.                                                                                                                        |
 | Constructor-header cache for `match`                                          | Resolves tagged-union `schema` and `error` positional field names across `.fun` files so generated TypeScript keeps readable named destructuring without `_0`, `_1` tuple pollution.                                                                     |

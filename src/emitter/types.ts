@@ -12,10 +12,7 @@ export const PRIMITIVE_TYPES: Readonly<Record<string, string>> = {
   Number: "number",
   Boolean: "boolean",
   Void: "void",
-  Unit: "void",
   Unknown: "unknown",
-  Null: "null",
-  Undefined: "undefined",
   Never: "never",
 };
 
@@ -183,6 +180,24 @@ export function emitTypeNode(ctx: TypeEmitterContext, node: TypeNode): string {
       if (name === "Any") {
         throw new FunScriptError(
           "The 'Any' type is disabled in FunScript; use 'Unknown' and decode with Schema, or specify a concrete type",
+          node.span,
+        );
+      }
+      if (name === "Unit") {
+        throw new FunScriptError(
+          "The 'Unit' type has been unified to 'Void' in FunScript; use 'Void' instead",
+          node.span,
+        );
+      }
+      if (name === "Null") {
+        throw new FunScriptError(
+          "The 'Null' type is disabled in FunScript; model absence using 'Option<T>' instead",
+          node.span,
+        );
+      }
+      if (name === "Undefined") {
+        throw new FunScriptError(
+          "The 'Undefined' type is disabled in FunScript; model absence using 'Option<T>' instead",
           node.span,
         );
       }

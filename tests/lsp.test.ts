@@ -763,7 +763,7 @@ getUser = () =>
         "Effect blocks require an explicit return arrow to ensure values are yielded and returned properly.",
       );
       expect(diagnostics[0].message).toContain(
-        "Use '=> value' to return, or '_ <- effect' followed by '=> Unit' to discard.",
+        "Use '=> value' to return, or '_ <- effect' followed by '=> Void' to discard.",
       );
       expect(diagnostics[0].message).toContain(
         "docs/syntax.md#93-the-non-final-expression-rule-and-control-flow-lowering",

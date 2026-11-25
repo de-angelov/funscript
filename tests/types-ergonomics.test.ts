@@ -64,20 +64,31 @@ export schema RedisClientProviderOptions<Client> = {
     );
   });
 
-  it("rejects Any and compiles Null and Undefined primitive types", () => {
+  it("rejects Any, Unit, Null, and Undefined banned types", () => {
     expect(() =>
       Effect.runSync(compileString("export schema FlexibleError = Any")),
     ).toThrow(
       "The 'Any' type is disabled in FunScript; use 'Unknown' and decode with Schema, or specify a concrete type",
     );
-
-    const src = `
-export schema NullableResult = String | Null
-export schema OptionalParam = Number | Undefined
-`;
-    const res = Effect.runSync(compileString(src));
-    expect(res.typescript).toContain("string | null");
-    expect(res.typescript).toContain("number | undefined");
+    expect(() =>
+      Effect.runSync(compileString("export schema UnitAlias = Unit")),
+    ).toThrow(
+      "The 'Unit' type has been unified to 'Void' in FunScript; use 'Void' instead",
+    );
+    expect(() =>
+      Effect.runSync(
+        compileString("export schema NullableResult = String | Null"),
+      ),
+    ).toThrow(
+      "The 'Null' type is disabled in FunScript; model absence using 'Option<T>' instead",
+    );
+    expect(() =>
+      Effect.runSync(
+        compileString("export schema OptionalParam = Number | Undefined"),
+      ),
+    ).toThrow(
+      "The 'Undefined' type is disabled in FunScript; model absence using 'Option<T>' instead",
+    );
   });
 
   it("compiles Option.fromNullishOrElse with eager values", () => {
@@ -385,21 +396,21 @@ export typedQuery = (id: Number) =>
     expect(formatted).toBe(src);
   });
 
-  it("compiles and evaluates Unit type and Unit discard expressions", () => {
+  it("compiles and evaluates Void type and Void discard expressions", () => {
     const src = `
-export logMessage = (msg: String): Unit =>
+export logMessage = (msg: String): Void =>
   Console.log(msg)
-  => Unit
+  => Void
 
 export runEffect = effect {
   _ <- Effect.succeed("started")
-  => Unit
+  => Void
 }
 
-export schema Task = Effect<Unit, Error>
+export schema Task = Effect<Void, Error>
 
-export doNothing = (): Unit =>
-  Unit
+export doNothing = (): Void =>
+  Void
 `;
     const res = Effect.runSync(compileString(src));
     expect(res.typescript).toContain(
@@ -409,7 +420,7 @@ export doNothing = (): Unit =>
       "export type Task = Effect.Effect<void, Error, never>;",
     );
     expect(res.typescript).toContain("export const doNothing = (): void =>");
-    expect(res.typescript).not.toContain("return Unit;");
+    expect(res.typescript).not.toContain("return Void;");
 
     const doNothing = evaluateTsFunction(res.typescript, "doNothing");
     expect(doNothing()).toBeUndefined();
@@ -1083,7 +1094,7 @@ schema ServerConfig = {
   ping: () => Void,
 }
 
-cfg: ServerConfig = { port: 8080, ping: () => Unit }
+cfg: ServerConfig = { port: 8080, ping: () => Void }
 export { host, port } = cfg
 
 export js handleServer = ({ host, port }: ServerConfig) =>

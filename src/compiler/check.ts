@@ -2487,7 +2487,7 @@ export const typeCheckVirtualFiles = (
                 const isUnit =
                   (node.finalExpression?.kind === "Identifier" ||
                     node.finalExpression?.kind === "UpperIdentifier") &&
-                  node.finalExpression.name === "Unit";
+                  node.finalExpression.name === "Void";
 
                 if (!isUnit) {
                   const findFinalizer = (
@@ -2568,7 +2568,7 @@ export const typeCheckVirtualFiles = (
                       `Finalizer registered with '${callInfo.name}' in a scoped effect block will execute immediately when this function returns, closing the returned resource.`,
                       "error",
                       "By default, 'effect' blocks create a scoped boundary ('Effect.scoped'). Any finalizer registered via 'Effect.addFinalizer' or 'Effect.acquireRelease' executes as soon as the block returns, tearing down the resource before the caller can use it.",
-                      "Change 'effect' to 'effect (unscoped)' so the resource's lifetime is bound to the caller's scope, or return 'Unit' if all work is completed inside this block.",
+                      "Change 'effect' to 'effect (unscoped)' so the resource's lifetime is bound to the caller's scope, or return 'Void' if all work is completed inside this block.",
                     );
                   }
                 }

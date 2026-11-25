@@ -100,17 +100,35 @@ export class CompilerError extends FunScriptError {
   }
 }
 
-/** Reject authored raw TypeScript escapes without inspecting strings or comments. */
-function validateNoAny(ast: Program): void {
+/** Reject authored raw TypeScript escapes and banned legacy/unsafe types. */
+function validateNoBannedTypes(ast: Program): void {
   walkAst(ast, (node) => {
-    if (
-      node.kind === "TypeReferenceNode" &&
-      (node.name as { name?: string })?.name === "Any"
-    ) {
-      throw new FunScriptError(
-        "The 'Any' type is disabled in FunScript; use 'Unknown' and decode with Schema, or specify a concrete type",
-        node.span as Span | undefined,
-      );
+    if (node.kind === "TypeReferenceNode") {
+      const typeName = (node.name as { name?: string })?.name;
+      if (typeName === "Any") {
+        throw new FunScriptError(
+          "The 'Any' type is disabled in FunScript; use 'Unknown' and decode with Schema, or specify a concrete type",
+          node.span as Span | undefined,
+        );
+      }
+      if (typeName === "Unit") {
+        throw new FunScriptError(
+          "The 'Unit' type has been unified to 'Void' in FunScript; use 'Void' instead",
+          node.span as Span | undefined,
+        );
+      }
+      if (typeName === "Null") {
+        throw new FunScriptError(
+          "The 'Null' type is disabled in FunScript; model absence using 'Option<T>' instead",
+          node.span as Span | undefined,
+        );
+      }
+      if (typeName === "Undefined") {
+        throw new FunScriptError(
+          "The 'Undefined' type is disabled in FunScript; model absence using 'Option<T>' instead",
+          node.span as Span | undefined,
+        );
+      }
     }
   });
 }
@@ -567,7 +585,7 @@ export const compileString = (
               source,
             ).parse();
 
-          validateNoAny(ast);
+          validateNoBannedTypes(ast);
           if (options?.effectOnly) validateEffectOnly(ast, options, filename);
           else if (options?.noTs) validateNoTs(ast);
           if (options?.noGlobalThis) validateNoGlobalThis(ast);
@@ -748,7 +766,7 @@ export const checkString = (
       const tokens = lexer.tokenize();
       const parser = new Parser(tokens, filename, source);
       const ast = parser.parse();
-      validateNoAny(ast);
+      validateNoBannedTypes(ast);
       if (options?.effectOnly) validateEffectOnly(ast, options, filename);
       else if (options?.noTs) validateNoTs(ast);
       if (options?.noGlobalThis) validateNoGlobalThis(ast);
