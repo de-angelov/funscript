@@ -21,7 +21,7 @@ describe("FunScript project policy", () => {
     const file = path.join(dir, "funscript.config.fun");
     writeFileSync(
       file,
-      'export config = { noTs: true, noGlobalThis: true, noOptional: true, barePipelines: true, noDeepDestructure: true, maxDestructureDepth: 2, effectOnly: ["src/domain"] }',
+      'export config = { noTs: true, noGlobalThis: true, noOptional: true, barePipelines: true, noDeepDestructure: true, maxDestructureDepth: 2, effectOnly: ["src/domain"], allowHoles: true }',
     );
     expect(loadProjectConfig(dir)).toEqual({
       noTs: true,
@@ -31,6 +31,7 @@ describe("FunScript project policy", () => {
       noDeepDestructure: true,
       maxDestructureDepth: 2,
       effectOnly: ["src/domain"],
+      allowHoles: true,
     });
     expect(
       isEffectOnlyFile(loadProjectConfig(dir), dir, "src/domain/model.fun"),

@@ -447,6 +447,13 @@ export const buildCommand = (
             filePath,
           ),
         maxDestructureDepth: projectPolicy.maxDestructureDepth,
+        allowHoles:
+          args.includes("--allow-holes") ||
+          isPathPolicyEnabled(
+            projectPolicy.allowHoles,
+            process.cwd(),
+            filePath,
+          ),
         effectOnly: isEffectOnlyFile(projectPolicy, process.cwd(), filePath),
         effectOnlyDirectories: projectPolicy.effectOnly,
         modularEffectImports:

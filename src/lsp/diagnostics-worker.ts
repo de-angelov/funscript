@@ -104,6 +104,10 @@ parentPort?.on("message", async (request: Request) => {
             noDeepDestructurePaths: Array.isArray(policy.noDeepDestructure)
               ? policy.noDeepDestructure
               : undefined,
+            allowHoles: policy.allowHoles === true,
+            allowHolesPaths: Array.isArray(policy.allowHoles)
+              ? policy.allowHoles
+              : undefined,
             effectOnly: policy.effectOnly,
           }),
         );

@@ -53,6 +53,8 @@ export interface CompileOptions {
   effectOnly?: boolean;
   /** Directories governed by the Effect-only policy, relative to policyRoot. */
   effectOnlyDirectories?: string[];
+  /** Allow unfinished typed holes ('???') during compilation (defaults to false; holes fail build by default). */
+  allowHoles?: boolean;
   policyRoot?: string;
   outputFile?: string;
   context?: TypeScriptCompilationContext;
@@ -129,6 +131,19 @@ function validateNoBannedTypes(ast: Program): void {
           node.span as Span | undefined,
         );
       }
+    }
+  });
+}
+
+/** Reject unfinished typed holes ('???') unless allowHoles is explicitly enabled. */
+function validateNoHoles(ast: Program): void {
+  walkAst(ast, (node) => {
+    if (node.kind === "TypedHole") {
+      const label = (node as { label?: string }).label || "???";
+      throw new FunScriptError(
+        `Typed hole '${label}' is unfinished code. Implement this expression before building or type-checking.`,
+        node.span as Span | undefined,
+      );
     }
   });
 }
@@ -586,6 +601,7 @@ export const compileString = (
             ).parse();
 
           validateNoBannedTypes(ast);
+          if (!options?.allowHoles) validateNoHoles(ast);
           if (options?.effectOnly) validateEffectOnly(ast, options, filename);
           else if (options?.noTs) validateNoTs(ast);
           if (options?.noGlobalThis) validateNoGlobalThis(ast);
@@ -758,6 +774,7 @@ export const checkString = (
     | "maxDestructureDepth"
     | "policyRoot"
     | "effectOnly"
+    | "allowHoles"
   >,
 ): Effect.Effect<Program, CompilerError> =>
   Effect.try({
@@ -767,6 +784,7 @@ export const checkString = (
       const parser = new Parser(tokens, filename, source);
       const ast = parser.parse();
       validateNoBannedTypes(ast);
+      if (!options?.allowHoles) validateNoHoles(ast);
       if (options?.effectOnly) validateEffectOnly(ast, options, filename);
       else if (options?.noTs) validateNoTs(ast);
       if (options?.noGlobalThis) validateNoGlobalThis(ast);

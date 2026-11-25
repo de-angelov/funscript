@@ -221,6 +221,11 @@ export const checkCommand = (
       noDeepDestructurePaths: Array.isArray(projectPolicy.noDeepDestructure)
         ? projectPolicy.noDeepDestructure
         : undefined,
+      allowHoles:
+        args.includes("--allow-holes") || projectPolicy.allowHoles === true,
+      allowHolesPaths: Array.isArray(projectPolicy.allowHoles)
+        ? projectPolicy.allowHoles
+        : undefined,
     });
     const success =
       result.success &&

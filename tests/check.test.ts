@@ -1604,5 +1604,37 @@ export openResource = effect {
       );
       expect(acquireDiag).toBeDefined();
     });
+
+    it("rejects typed holes (???) by default with actionable error code-frame and allows them when allowHoles is enabled", async () => {
+      const code = `
+export calculateTax = (amount: Number): Number => ???
+`.trim();
+
+      const resultBad = await Effect.runPromise(
+        typeCheckSource(code, "src/billing.fun"),
+      );
+      expect(resultBad.success).toBe(false);
+      expect(resultBad.errorCount).toBeGreaterThanOrEqual(1);
+
+      const holeDiag = resultBad.diagnostics.find(
+        (d) => d.code === "TYPED_HOLE" || d.diagnosticCode === "FS_TYPED_HOLE",
+      );
+      expect(holeDiag).toBeDefined();
+      expect(holeDiag?.category).toBe("error");
+      expect(holeDiag?.message).toContain(
+        "Typed hole '???' is unfinished code.",
+      );
+      expect(holeDiag?.suggestedAction).toContain(
+        "Implement this expression before building or type-checking.",
+      );
+      expect(holeDiag?.formatted).toContain("src/billing.fun");
+      expect(holeDiag?.formatted).toContain("???");
+
+      const resultGood = await Effect.runPromise(
+        typeCheckSource(code, "src/billing.fun", { allowHoles: true }),
+      );
+      expect(resultGood.success).toBe(true);
+      expect(resultGood.errorCount).toBe(0);
+    });
   });
 });

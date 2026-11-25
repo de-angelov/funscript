@@ -1077,12 +1077,20 @@ export extern "stripe" service StripeClient {
       );
     });
 
-    it("compiles typed holes to runtime throw expressions", async () => {
+    it("rejects typed holes by default and compiles them with allowHoles", async () => {
       const code = `
 export unfinished = () => ??? "implement later"
 `.trim();
 
-      const res = await Effect.runPromise(compileString(code));
+      const failure = await Effect.runPromise(Effect.flip(compileString(code)));
+      expect(failure).toBeInstanceOf(CompilerError);
+      expect(failure.message).toContain(
+        "Typed hole 'implement later' is unfinished code. Implement this expression before building or type-checking.",
+      );
+
+      const res = await Effect.runPromise(
+        compileString(code, "test.fun", { allowHoles: true }),
+      );
       expect(res.typescript).toContain(
         `throw new Error("Typed hole reached: implement later");`,
       );

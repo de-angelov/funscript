@@ -104,6 +104,9 @@ export interface CheckOptions {
   noOptionalPaths?: string[];
   barePipelinesPaths?: string[];
   noDeepDestructurePaths?: string[];
+  /** Allow unfinished typed holes ('???') during type-checking (defaults to false; holes fail check by default). */
+  allowHoles?: boolean;
+  allowHolesPaths?: string[];
   compilerOptions?: ts.CompilerOptions;
   cwd?: string;
   highlightCode?: boolean;
@@ -980,6 +983,9 @@ export const typeCheckVirtualFiles = (
             fullFunPath,
           );
         const maxDestructureDepth = options?.maxDestructureDepth;
+        const allowHoles =
+          !!options?.allowHoles ||
+          isPathPolicyEnabled(options?.allowHolesPaths, cwd, fullFunPath);
         const graphKey = dependencyKeys?.get(fullFunPath);
         const dependencyKey =
           graphKey &&
@@ -994,6 +1000,7 @@ export const typeCheckVirtualFiles = (
             compilerOptions,
             noDeepDestructure,
             maxDestructureDepth,
+            allowHoles,
           ]);
         const existing = cache?.compiledFiles.get(fullFunPath);
         if (
@@ -1027,6 +1034,7 @@ export const typeCheckVirtualFiles = (
                 barePipelines,
                 noDeepDestructure,
                 maxDestructureDepth,
+                allowHoles,
                 effectOnly,
                 effectOnlyDirectories: options?.effectOnly,
                 policyRoot: cwd,
@@ -1087,7 +1095,14 @@ export const typeCheckVirtualFiles = (
               schemaError?.suggestedAction ??
               "Fix the syntax at the highlighted location and run `funscript check` again.";
 
-            if (
+            if (compErr.message.includes("Typed hole")) {
+              code = "TYPED_HOLE";
+              diagnosticCode = "FS_TYPED_HOLE";
+              explanation =
+                "Typed holes are placeholders for incomplete code during drafting. They throw at runtime and are prohibited by default in completed builds and type-checking.";
+              suggestedAction =
+                "Implement this expression before building or type-checking.";
+            } else if (
               compErr.message.includes("FunScript has no 'throw'") ||
               compErr.message.includes("is unsafe because it throws")
             ) {
@@ -1770,6 +1785,26 @@ export const typeCheckVirtualFiles = (
                 node.kind === "ArrowFunction"
                   ? false
                   : inMatchArm;
+
+              if (
+                node.kind === "TypedHole" &&
+                !options?.allowHoles &&
+                !isPathPolicyEnabled(
+                  options?.allowHolesPaths,
+                  cwd,
+                  meta.funPath,
+                )
+              ) {
+                const label = (node as { label?: string }).label || "???";
+                addAstDiag(
+                  node.span,
+                  "TYPED_HOLE",
+                  `Typed hole '${label}' is unfinished code.`,
+                  "error",
+                  "Typed holes are placeholders for incomplete code during drafting. They throw at runtime and are prohibited by default in completed builds and type-checking.",
+                  "Implement this expression before building or type-checking.",
+                );
+              }
 
               if (node.kind === "MatchExpression" && currentInMatchArm) {
                 addAstDiag(

@@ -14,6 +14,7 @@ export interface FunScriptProjectConfig {
   maxDestructureDepth?: number;
   effectOnly?: string[];
   modularEffectImports?: boolean;
+  allowHoles?: boolean | string[];
 }
 
 /** Read a literal FunScript record without compiling or executing project code. */
@@ -58,10 +59,11 @@ export function loadProjectConfig(cwd: string): FunScriptProjectConfig {
           "modularEffectImports",
           "noDeepDestructure",
           "maxDestructureDepth",
+          "allowHoles",
         ].includes(entry.key.name)
       ) {
         throw new Error(
-          "config accepts only 'noTs', 'noGlobalThis', 'noOptional', 'barePipelines', 'effectOnly', 'format', 'modularEffectImports', 'noDeepDestructure', and 'maxDestructureDepth'",
+          "config accepts only 'noTs', 'noGlobalThis', 'noOptional', 'barePipelines', 'effectOnly', 'format', 'modularEffectImports', 'noDeepDestructure', 'maxDestructureDepth', and 'allowHoles'",
         );
       }
       const name = entry.key.name;
@@ -133,6 +135,7 @@ export function loadProjectConfig(cwd: string): FunScriptProjectConfig {
               | "noOptional"
               | "barePipelines"
               | "noDeepDestructure"
+              | "allowHoles"
           ] = directories;
       } else {
         if (name === "effectOnly" || entry.value.kind !== "BooleanLiteral")
@@ -147,6 +150,7 @@ export function loadProjectConfig(cwd: string): FunScriptProjectConfig {
             | "barePipelines"
             | "modularEffectImports"
             | "noDeepDestructure"
+            | "allowHoles"
         ] = entry.value.value;
       }
     }

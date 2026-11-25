@@ -3,7 +3,10 @@ import * as Effect from "effect/Effect";
 import { fork, spawn } from "node:child_process";
 import * as path from "node:path";
 import { fileURLToPath } from "node:url";
-import { type FunScriptProjectConfig } from "../compiler/project-config.js";
+import {
+  type FunScriptProjectConfig,
+  isPathPolicyEnabled,
+} from "../compiler/project-config.js";
 import { buildRunBundle, isBunAvailable } from "./build-bun.js";
 import { checkNoTsPaths } from "./io.js";
 import { checkCliFiles } from "./typecheck.js";
@@ -85,6 +88,13 @@ export const runCommand = (
         noDeepDestructurePaths: Array.isArray(projectPolicy.noDeepDestructure)
           ? projectPolicy.noDeepDestructure
           : undefined,
+        allowHoles:
+          commandArgs.includes("--allow-holes") ||
+          isPathPolicyEnabled(
+            projectPolicy.allowHoles,
+            process.cwd(),
+            filePath,
+          ),
       }))
     )
       return;
