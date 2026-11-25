@@ -1502,6 +1502,7 @@ casts: values are either constructed or decoded, never asserted with `as`.
 ```funscript
 id = UUID("0b9e6c1e-5f6a-4c6e-9a43-0c2f3b1d9e7a")
 name = Username("ada")
+
 ada = User({
   id
   name
