@@ -13,6 +13,7 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 import { Worker } from "node:worker_threads";
 import {
   createConnection,
+  CodeActionKind,
   ErrorCodes,
   StreamMessageReader,
   StreamMessageWriter,
@@ -532,6 +533,32 @@ export class FunScriptLspServer extends EventEmitter {
 
     if (!doc.text.includes("|>")) return actions;
     const filename = uri.startsWith("file:") ? fileURLToPath(uri) : uri;
+    const redundantDiag = params.context?.diagnostics?.find((d) =>
+      typeof d.message === "string"
+        ? d.message.includes("Redundant pipeline prefix")
+        : d.message?.value?.includes("Redundant pipeline prefix"),
+    );
+    if (redundantDiag) {
+      try {
+        const result = convertPipelineStyle(doc.text, filename, "bare", {
+          start: offset(params.range.start),
+          end: offset(params.range.end),
+        });
+        if (result.changed) {
+          actions.push({
+            title: "Remove redundant pipeline prefix",
+            kind: CodeActionKind.QuickFix,
+            diagnostics: [redundantDiag],
+            isPreferred: true,
+            edit: {
+              changes: { [uri]: [{ range: wholeRange, newText: result.text }] },
+            },
+          });
+        }
+      } catch {
+        /* Incomplete or ambiguous source cannot safely be rewritten. */
+      }
+    }
     for (const style of ["bare", "qualified"] as const) {
       try {
         const result = convertPipelineStyle(doc.text, filename, style, {

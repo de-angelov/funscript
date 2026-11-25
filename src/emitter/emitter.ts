@@ -629,6 +629,7 @@ export class Emitter {
   public checkedCallbackKinds = new Set<"sync" | "void" | "effect">();
   public identityRecordSchemas = new Set<string>();
   public checkedTaggedSchemas = new Map<string, TaggedUnionSchema>();
+  public variantFields = new Map<string, string[]>();
   public modularEffectImports: boolean;
 
   public getRecordTypeNode(
@@ -763,6 +764,20 @@ export class Emitter {
         ) {
           this.identityRecordSchemas.add(decl.id.name);
           addedIdentity = true;
+        }
+      }
+    }
+    for (const item of allItems) {
+      const decl = item.kind === "ExportDeclaration" ? item.declaration : item;
+      if (
+        decl.kind === "SchemaDeclaration" &&
+        decl.body.kind === "TaggedUnionSchema"
+      ) {
+        for (const variant of decl.body.variants) {
+          this.variantFields.set(
+            variant.name.name,
+            variant.fields.map((f) => f.name.name),
+          );
         }
       }
     }
@@ -2770,6 +2785,7 @@ export class Emitter {
       recordField: (expression) => this.recordField(expression),
       recordFields: (name) => this.recordFields(name),
       getRecordTypeNode: (name) => this.getRecordTypeNode(name),
+      getVariantFields: (name) => this.variantFields.get(name),
       recordContracts: this.recordContracts,
       isOptionalParameter: (name) => this.isOptionalParameter(name),
       isOptionalValue: (expression) => this.isOptionalValue(expression),

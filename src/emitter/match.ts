@@ -41,6 +41,7 @@ interface MatchEmitterContext {
   recordField(expression: Expression): RecordFieldInfo | undefined;
   recordFields?(name: string): Map<string, RecordFieldInfo> | undefined;
   getRecordTypeNode?(name: string): RecordTypeNode | undefined;
+  getVariantFields?(name: string): string[] | undefined;
   recordContracts?: Map<string, RecordTypeNode>;
   getTypeNodeForExpression?(expression: Expression): TypeNode | undefined;
   isOptionalParameter(name: string): boolean;
@@ -303,7 +304,29 @@ export class MatchEmitter {
                 ) {
                   unpack = `const { ${vars.join(", ")} } = $matched as any;`;
                 } else {
-                  unpack = `const { _tag: _, ...__fields } = $matched as any;\n    const [${vars.join(", ")}] = Object.values(__fields) as any[];`;
+                  const fieldNames =
+                    arm.pattern.kind === "ConstructorPattern" &&
+                    arm.pattern.constructorName.name !== "Some"
+                      ? this.context.getVariantFields?.(
+                          arm.pattern.constructorName.name,
+                        )
+                      : undefined;
+                  if (
+                    arm.pattern.kind === "ConstructorPattern" &&
+                    fieldNames &&
+                    fieldNames.length === arm.pattern.args.length
+                  ) {
+                    const parts: string[] = [];
+                    for (let i = 0; i < fieldNames.length; i++) {
+                      const arg = arm.pattern.args[i];
+                      if (arg.kind === "VariablePattern") {
+                        parts.push(`${fieldNames[i]}: ${arg.name.name}`);
+                      }
+                    }
+                    unpack = `const { ${parts.join(", ")} } = $matched as any;`;
+                  } else {
+                    unpack = `const { _tag: _, ...__fields } = $matched as any;\n    const [${vars.join(", ")}] = Object.values(__fields) as any[];`;
+                  }
                 }
                 guardFn = `($matched) => {\n    ${unpack}\n    return ${this.context.emitExpression(arm.guard)};\n  }`;
               } else {
@@ -403,6 +426,21 @@ export class MatchEmitter {
               .join(", ");
             return `{ _tag: "Some", value: { ${fieldsStr} } }`;
           }
+        }
+      }
+      const fieldNames = this.context.getVariantFields?.(
+        pat.constructorName.name,
+      );
+      if (fieldNames && fieldNames.length === pat.args.length) {
+        const filteringFields: string[] = [];
+        for (let i = 0; i < fieldNames.length; i++) {
+          const arg = pat.args[i];
+          if (this.isFilteringPattern(arg)) {
+            filteringFields.push(`${fieldNames[i]}: ${this.emitPattern(arg)}`);
+          }
+        }
+        if (filteringFields.length > 0) {
+          return `{ _tag: "${pat.constructorName.name}", ${filteringFields.join(", ")} }`;
         }
       }
       // Tagged union positional pattern matches fields
@@ -663,10 +701,32 @@ export class MatchEmitter {
       return `() => ${this.context.emitArrowExpression(body)}`;
     }
     if (vars.length > 0) {
-      const unpack =
-        pat?.kind === "VariablePattern"
-          ? `const { ${vars[0]} } = $matched as any;`
-          : `const { _tag: _, ...__fields } = $matched as any;\n    const [${vars.join(", ")}] = Object.values(__fields) as any[];`;
+      let unpack: string;
+      const fieldNames =
+        pat?.kind === "ConstructorPattern" &&
+        pat.constructorName.name !== "Some" &&
+        !JS_ERROR_NAMES.has(pat.constructorName.name)
+          ? this.context.getVariantFields?.(pat.constructorName.name)
+          : undefined;
+
+      if (
+        pat?.kind === "ConstructorPattern" &&
+        fieldNames &&
+        fieldNames.length === pat.args.length
+      ) {
+        const parts: string[] = [];
+        for (let i = 0; i < fieldNames.length; i++) {
+          const arg = pat.args[i];
+          if (arg.kind === "VariablePattern") {
+            parts.push(`${fieldNames[i]}: ${arg.name.name}`);
+          }
+        }
+        unpack = `const { ${parts.join(", ")} } = $matched as any;`;
+      } else if (pat?.kind === "VariablePattern") {
+        unpack = `const { ${vars[0]} } = $matched as any;`;
+      } else {
+        unpack = `const { _tag: _, ...__fields } = $matched as any;\n    const [${vars.join(", ")}] = Object.values(__fields) as any[];`;
+      }
       if (body.kind === "BlockStatement") {
         return `($matched) => {\n    ${unpack}\n${this.context.emitFunctionBody(body)}\n  }`;
       }

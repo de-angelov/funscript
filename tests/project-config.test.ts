@@ -270,6 +270,8 @@ describe("FunScript project policy", () => {
         "export [head, ...tail] = [1, 2, 3]",
         "export [[x, y]] = [[1, 2]]",
         "export { items: [first] } = { items: [1] }",
+        "export [] = [1, 2]",
+        "export {} = { a: 1 }",
         'import { Option } from "effect"\nexport f = (opt) => match opt | Some({ id }) => id | None => 0',
       ];
       for (const source of sources) {

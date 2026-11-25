@@ -307,7 +307,8 @@ export function emitBindingDeclaration(
     }
   }
 
-  const exp = isExport ? "export " : "";
+  const bindingNames = collectBindingNames(decl.id);
+  const exp = isExport && bindingNames.length > 0 ? "export " : "";
   const keyword = decl.isMut ? "let" : "const";
   const typeAnn = decl.typeAnnotation
     ? `: ${ctx.emitTypeNode(decl.typeAnnotation)}`

@@ -221,6 +221,7 @@ export function getPatternDepth(
         0,
       );
     case "ArrayPattern": {
+      if (pattern.elements.length === 0) return 0;
       let maxChild = 0;
       for (const el of pattern.elements) {
         if (el) maxChild = Math.max(maxChild, getPatternDepth(el));
@@ -228,6 +229,7 @@ export function getPatternDepth(
       return 1 + maxChild;
     }
     case "RecordPattern": {
+      if (pattern.fields.length === 0) return 0;
       let maxChild = 0;
       for (const field of pattern.fields) {
         if (field.pattern) {

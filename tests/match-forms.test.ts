@@ -6,6 +6,10 @@ import { compileString, CompilerError } from "../src/compiler.js";
 import { format } from "../src/formatter/index.js";
 
 function evaluateTsFunction(tsCode: string, fnName: string) {
+  return evaluateTsExports(tsCode)[fnName];
+}
+
+function evaluateTsExports(tsCode: string) {
   const cjs = ts.transpileModule(tsCode, {
     compilerOptions: {
       module: ts.ModuleKind.CommonJS,
@@ -25,7 +29,7 @@ function evaluateTsFunction(tsCode: string, fnName: string) {
     match,
     P,
   );
-  return module.exports[fnName];
+  return module.exports;
 }
 
 describe("Equality Type Constraints & Match Forms Test Suite Matrix (TASK-026)", () => {
@@ -891,6 +895,34 @@ export classifyError = (err) =>
       expect(classifyError(new Error("not found"))).toBe("not found error");
       expect(classifyError(new Error("something else"))).toBe("generic error");
       expect(classifyError("just a string")).toBe("unknown");
+    });
+
+    it("matches custom schema constructor patterns with literals and extracts variables by name", async () => {
+      const source = `
+export schema Shape =
+  | Circle(radius: Number)
+  | Rectangle(width: Number, height: Number)
+  | Dot
+
+export classifyShape = (s) =>
+  match s
+    | Circle(0) => "point circle"
+    | Circle(r) => "circle: " + r
+    | Rectangle(10, h) => "ten-wide: " + h
+    | Rectangle(w, h) => "rect: " + w + "x" + h
+    | Dot => "dot"
+`;
+      const res = await Effect.runPromise(compileString(source));
+      expect(res.typescript).toContain('{ _tag: "Circle", radius: 0 }');
+      expect(res.typescript).toContain('{ _tag: "Rectangle", width: 10 }');
+
+      const exports = evaluateTsExports(res.typescript);
+      const { Circle, Rectangle, Dot, classifyShape } = exports;
+      expect(classifyShape(Circle(0))).toBe("point circle");
+      expect(classifyShape(Circle(5))).toBe("circle: 5");
+      expect(classifyShape(Rectangle(10, 20))).toBe("ten-wide: 20");
+      expect(classifyShape(Rectangle(15, 30))).toBe("rect: 15x30");
+      expect(classifyShape(Dot)).toBe("dot");
     });
   });
 });
