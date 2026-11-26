@@ -152,7 +152,7 @@ export function patternHasOptionalField(
   return false;
 }
 
-export function getRecordFieldInfoForBinding(
+function getRecordFieldInfoForBinding(
   ctx: DeclarationEmitterContext,
   decl: BindingDeclaration,
 ): Map<string, RecordFieldInfo> | undefined {

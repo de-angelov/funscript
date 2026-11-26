@@ -37,7 +37,7 @@ export const findFunFiles = async (dir: string): Promise<string[]> => {
   return matches.map((file) => path.join(dir, file));
 };
 
-export const FORMATTER_IGNORES = [
+const FORMATTER_IGNORES = [
   "**/node_modules/**",
   "**/.git/**",
   "**/.funscript/**",
@@ -75,7 +75,7 @@ export const readStdin = () =>
   });
 
 /** Audit source paths for standalone JS/TS, including declarations and symlinks. */
-export const findNonFunScriptSources = async (
+const findNonFunScriptSources = async (
   targets: string[],
 ): Promise<string[]> => {
   const found = new Set<string>();

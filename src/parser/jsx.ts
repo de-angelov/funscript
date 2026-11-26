@@ -125,7 +125,7 @@ export function parseJsxElement(
   };
 }
 
-export function parseJsxTagName(ctx: JsxParserContext): JSXTagName {
+function parseJsxTagName(ctx: JsxParserContext): JSXTagName {
   if (ctx.check(TokenType.JSX_TAG_CLOSE)) {
     // Empty fragment tag (<> or </>)
     const pos = ctx.peek().span.start;
@@ -159,7 +159,7 @@ export function parseJsxTagName(ctx: JsxParserContext): JSXTagName {
   return name;
 }
 
-export function parseJsxAttribute(ctx: JsxParserContext): JSXAttribute {
+function parseJsxAttribute(ctx: JsxParserContext): JSXAttribute {
   if (ctx.match(TokenType.LBRACE)) {
     const start = ctx.previous().span.start;
     ctx.consume(TokenType.DOTDOTDOT, "Expected '...' in JSX spread attribute");
@@ -215,7 +215,7 @@ export function parseJsxAttribute(ctx: JsxParserContext): JSXAttribute {
   };
 }
 
-export function parseJsxExpressionContainer(
+function parseJsxExpressionContainer(
   ctx: JsxParserContext,
 ): JSXExpressionContainer {
   const start = ctx.consume(TokenType.LBRACE, "Expected '{'").span.start;
@@ -237,7 +237,7 @@ export function parseJsxExpressionContainer(
   };
 }
 
-export function formatTagName(name: JSXTagName): string {
+function formatTagName(name: JSXTagName): string {
   if (name.kind === "Identifier" || name.kind === "UpperIdentifier") {
     return name.name;
   }
@@ -248,6 +248,6 @@ export function formatTagName(name: JSXTagName): string {
   return "";
 }
 
-export function areTagNamesEqual(a: JSXTagName, b: JSXTagName): boolean {
+function areTagNamesEqual(a: JSXTagName, b: JSXTagName): boolean {
   return formatTagName(a) === formatTagName(b);
 }

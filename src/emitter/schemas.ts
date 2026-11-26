@@ -49,7 +49,7 @@ export interface SchemaEmitterContext {
   emitTypeParameters(typeParams?: TypeParameter[]): string;
 }
 
-export function flattenPipelineStages(expr: Expression): Expression[] {
+function flattenPipelineStages(expr: Expression): Expression[] {
   if (expr.kind === "PipelineExpression") {
     return [
       ...flattenPipelineStages(expr.left),
@@ -59,7 +59,7 @@ export function flattenPipelineStages(expr: Expression): Expression[] {
   return [expr];
 }
 
-export function extractBrandNames(stages: Expression[]): string[] {
+function extractBrandNames(stages: Expression[]): string[] {
   const brands: string[] = [];
   for (const stage of stages) {
     const b = getBrandNameFromStage(stage);
@@ -68,7 +68,7 @@ export function extractBrandNames(stages: Expression[]): string[] {
   return brands;
 }
 
-export function getBrandNameFromStage(stage: Expression): string | null {
+function getBrandNameFromStage(stage: Expression): string | null {
   if (stage.kind !== "CallExpression") return null;
   const callee = stage.callee;
   let isBrand = false;
@@ -96,7 +96,7 @@ export function getBrandNameFromStage(stage: Expression): string | null {
   return null;
 }
 
-export function emitRefinementStage(
+function emitRefinementStage(
   ctx: SchemaEmitterContext,
   stage: Expression,
 ): string {
@@ -332,7 +332,7 @@ export function emitSchemaDeclaration(
   }
 }
 
-export function emitGenericDataSchema(
+function emitGenericDataSchema(
   ctx: SchemaEmitterContext,
   decl: SchemaDeclaration,
   exp: string,
@@ -548,7 +548,7 @@ export function emitGenericDataSchema(
   });
 }
 
-export function emitCheckedRecordDecoder(
+function emitCheckedRecordDecoder(
   ctx: SchemaEmitterContext,
   decl: SchemaDeclaration,
   exp: string,
@@ -855,7 +855,7 @@ export function emitSchemaTypeField(
   return ctx.emitTypeNode(typeNode);
 }
 
-export function emitGenericSchemaArgument(
+function emitGenericSchemaArgument(
   ctx: SchemaEmitterContext,
   type: TypeNode,
   verifyImports = false,

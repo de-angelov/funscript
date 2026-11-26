@@ -7,7 +7,7 @@ import { toErrorMessage } from "../errors.js";
 export type TemplateType =
   "effect-cli" | "bun-server" | "vite-react" | "vite-solid";
 
-export const SUPPORTED_TEMPLATES: Record<string, TemplateType> = {
+const SUPPORTED_TEMPLATES: Record<string, TemplateType> = {
   default: "effect-cli",
   "effect-cli": "effect-cli",
   effect: "effect-cli",

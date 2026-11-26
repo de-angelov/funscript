@@ -23,12 +23,12 @@ import type { Parser } from "./parser.js";
 
 export type StatementParserContext = Parser;
 
-export interface BlockOptions {
+interface BlockOptions {
   isBraced: boolean;
   requireExplicitReturn?: boolean;
 }
 
-export function parseBlock(
+function parseBlock(
   ctx: StatementParserContext,
   options: BlockOptions,
 ): BlockStatement {

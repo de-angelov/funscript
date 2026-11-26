@@ -61,7 +61,7 @@ export interface ReplOptions {
 /**
  * Extracts a clean error message from an Effect/Compiler failure.
  */
-export function extractErrorMessage(err: unknown): string {
+function extractErrorMessage(err: unknown): string {
   if (!err) return "Unknown error";
   if (typeof err === "object") {
     const causeSymbol = Symbol.for("effect/Runtime/FiberFailure/Cause");
@@ -101,7 +101,7 @@ export function extractErrorMessage(err: unknown): string {
  * Adjusts line and column numbers in error messages when an expression
  * was wrapped inside a multi-line template.
  */
-export function adjustErrorLocation(message: string): string {
+function adjustErrorLocation(message: string): string {
   return message.replace(/at line (\d+), col (\d+)/g, (_, l, c) => {
     const line = Math.max(1, Number(l) - 1);
     const col = Math.max(1, Number(c) - 2);
@@ -134,7 +134,7 @@ export function isRecoverable(err: unknown): boolean {
 /**
  * Wraps an expression so that the FunScript compiler treats it as a binding expression.
  */
-export function wrapExpression(expr: string): string {
+function wrapExpression(expr: string): string {
   const lines = expr.split("\n").map((line) => "  " + line);
   return `__repl_res =\n` + lines.join("\n");
 }

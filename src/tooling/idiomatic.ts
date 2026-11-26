@@ -4,7 +4,7 @@ import { FunScriptError } from "../errors.js";
 import { Lexer } from "../lexer/lexer.js";
 import { Parser } from "../parser/parser.js";
 
-export type IdiomaticViolationKind =
+type IdiomaticViolationKind =
   | "non-ambient-function-declaration"
   | "non-ambient-function-definition"
   | "non-ambient-variable-declaration"
@@ -12,7 +12,7 @@ export type IdiomaticViolationKind =
   | "non-ambient-statement"
   | "non-ambient-expression";
 
-export interface IdiomaticDiagnostic {
+interface IdiomaticDiagnostic {
   file: string;
   line: number;
   column: number;

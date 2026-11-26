@@ -32,7 +32,7 @@ export function parsePattern(ctx: PatternParserContext): Pattern {
   return pat;
 }
 
-export function parsePrimaryPattern(ctx: PatternParserContext): Pattern {
+function parsePrimaryPattern(ctx: PatternParserContext): Pattern {
   if (ctx.match(TokenType.UNDERSCORE)) {
     return { kind: "WildcardPattern", span: ctx.previous().span };
   }

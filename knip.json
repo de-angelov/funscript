@@ -1,0 +1,30 @@
+{
+  "$schema": "https://unpkg.com/knip@5/schema.json",
+  "entry": [
+    "src/lsp/diagnostics-worker.ts",
+    "src/lsp/code-action-worker.ts",
+    "src/lsp/rename-worker.ts"
+  ],
+  "ignore": [
+    "docs/prototypes/**",
+    "examples/**",
+    "scripts/benchmark-*.mjs",
+    "tests/fixtures/**",
+    "tests/helpers/**"
+  ],
+  "ignoreDependencies": [
+    "@total-typescript/ts-reset",
+    "assemblyscript",
+    "type-fest",
+    "@effect/platform-node",
+    "@effect/sql-sqlite-node",
+    "@types/react",
+    "pino",
+    "react",
+    "solid-js",
+    "vscode"
+  ],
+  "rules": {
+    "duplicates": "off"
+  }
+}

@@ -5,10 +5,10 @@ import { FunScriptError } from "../errors.js";
 const cache = new Map<string, string>();
 const prepared = new WeakMap<AsDeclaration, string>();
 
-export const SCALAR_TYPES = new Set(["i32", "u32", "i64", "u64", "f32", "f64"]);
-export const BOOLEAN_TYPES = new Set(["bool", "boolean"]);
-export const BIGINT_SCALAR_TYPES = new Set(["i64", "u64"]);
-export const TYPED_ARRAY_TYPES = new Set([
+const SCALAR_TYPES = new Set(["i32", "u32", "i64", "u64", "f32", "f64"]);
+const BOOLEAN_TYPES = new Set(["bool", "boolean"]);
+const BIGINT_SCALAR_TYPES = new Set(["i64", "u64"]);
+const TYPED_ARRAY_TYPES = new Set([
   "Float32Array",
   "Float64Array",
   "Int32Array",
@@ -24,7 +24,7 @@ export const TYPED_ARRAY_TYPES = new Set([
   "Uint64Array",
 ]);
 
-export function parseArrayElementType(t: string): string | null {
+function parseArrayElementType(t: string): string | null {
   const trimmed = t.trim();
   if (trimmed.endsWith("[]")) return trimmed.slice(0, -2).trim();
   const match = /^Array<(.+)>$/.exec(trimmed);
@@ -32,7 +32,7 @@ export function parseArrayElementType(t: string): string | null {
   return null;
 }
 
-export function parseTupleElementTypeList(t: string): string[] | null {
+function parseTupleElementTypeList(t: string): string[] | null {
   const trimmed = t.trim();
   if (!trimmed.startsWith("[") || !trimmed.endsWith("]")) return null;
   const inner = trimmed.slice(1, -1).trim();
@@ -53,12 +53,12 @@ export function parseTupleElementTypeList(t: string): string[] | null {
   return elements;
 }
 
-export function tupleClassName(elements: string[]): string {
+function tupleClassName(elements: string[]): string {
   const sanitize = (s: string) => s.replace(/[^a-zA-Z0-9_]/g, "_");
   return `__fs_tuple_${elements.length}_${elements.map(sanitize).join("_")}`;
 }
 
-export function transformKernelSource(code: string): {
+function transformKernelSource(code: string): {
   transformed: string;
   allTuples: Map<string, string[]>;
 } {

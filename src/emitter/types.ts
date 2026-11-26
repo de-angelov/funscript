@@ -16,7 +16,7 @@ export const PRIMITIVE_TYPES: Readonly<Record<string, string>> = {
   Never: "never",
 };
 
-export const EFFECT_TYPE_MODULES = new Set([
+const EFFECT_TYPE_MODULES = new Set([
   "Option",
   "Duration",
   "Result",
