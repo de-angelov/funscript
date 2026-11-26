@@ -78,7 +78,7 @@ function findTagKey(objects: SchemaAST.Objects[]): string | undefined {
 
 /** Wrap a Valibot schema as an Effect codec, preserving Valibot paths/messages. */
 export function fromValibotSchema<T extends AnySchema>(schema: T): AnySchema {
-  const wrapped = Schema.declareConstructor<any, unknown>()(
+  const wrapped = Schema.declareConstructor<unknown, unknown>()(
     [],
     () => (input, ast, options) => {
       const result = v.safeParse(
@@ -94,7 +94,7 @@ export function fromValibotSchema<T extends AnySchema>(schema: T): AnySchema {
         );
         return issue.path?.length
           ? new SchemaIssue.Pointer(
-              issue.path.map((part: any) => part.key),
+              issue.path.map((part) => part.key as PropertyKey),
               leaf,
             )
           : leaf;

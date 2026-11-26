@@ -77,8 +77,8 @@ function extractErrorMessage(err: unknown): string {
     if (typeof errObj.message === "string") {
       if (errObj.message.startsWith("{") && errObj.message.endsWith("}")) {
         try {
-          const parsed = JSON.parse(errObj.message);
-          if (parsed.message) return parsed.message;
+          const parsed = JSON.parse(errObj.message) as { message?: unknown };
+          if (typeof parsed?.message === "string") return parsed.message;
         } catch (error) {
           if (!(error instanceof SyntaxError)) throw error;
         }

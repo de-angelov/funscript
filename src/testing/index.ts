@@ -16,7 +16,7 @@ function createUniversalProxy(name: string): unknown {
     function (this: unknown, ...args: unknown[]) {
       const g = getGlobal(name);
       if (typeof g === "function") {
-        return Reflect.apply(g, this, args);
+        return Reflect.apply(g, this, args) as unknown;
       }
       throw new Error(
         `Testing function '${name}' is not available in the current environment. Ensure tests are executed with a supported runner (e.g. 'funscript test', Vitest, or Bun).`,

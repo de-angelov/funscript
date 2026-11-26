@@ -52,7 +52,7 @@ export async function runTsc(
     .then(
       (text) => {
         try {
-          return JSON.parse(text);
+          return JSON.parse(text) as unknown;
         } catch (error) {
           if (!(error instanceof SyntaxError)) throw error;
           return [];

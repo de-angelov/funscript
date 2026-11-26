@@ -190,11 +190,17 @@ export const decodeUnknownResult = Schema.decodeUnknownResult;
 export const InteropSchema: typeof Schema & {
   decodeUnknown: typeof Schema.decodeUnknownEffect;
   decode: typeof Schema.decodeUnknownEffect;
-} = new Proxy(Schema as any, {
+} = new Proxy(Schema, {
   get(target, prop, receiver) {
     if (prop === "decodeUnknown" || prop === "decode") {
-      return target.decodeUnknown ?? target.decodeUnknownEffect;
+      return (
+        (target as Record<string, unknown>).decodeUnknown ??
+        target.decodeUnknownEffect
+      );
     }
-    return Reflect.get(target, prop, receiver);
+    return Reflect.get(target, prop, receiver) as unknown;
   },
-});
+}) as typeof Schema & {
+  decodeUnknown: typeof Schema.decodeUnknownEffect;
+  decode: typeof Schema.decodeUnknownEffect;
+};

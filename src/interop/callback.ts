@@ -148,7 +148,11 @@ export function decodeCheckedRecord<
   if (prototype !== Object.prototype && prototype !== null) {
     throw new TypeError("The data schema must decode to a plain record");
   }
-  const output = Object.create(prototype);
+  const output = Object.create(prototype) as S["Type"] & {
+    [K in Exclude<keyof A, O[number]>]: ReturnType<A[K]>;
+  } & {
+    [K in O[number]]?: ReturnType<A[K]> | undefined;
+  };
   for (const key of Reflect.ownKeys(decoded)) {
     const descriptor = Object.getOwnPropertyDescriptor(decoded, key);
     if (descriptor?.enumerable) Object.defineProperty(output, key, descriptor);

@@ -267,57 +267,86 @@ export class Formatter {
 
   private getNodeChildren(node: AstInspectNode): AstInspectNode[] | null {
     if (!node) return null;
+    const n = node as {
+      body?: unknown;
+      declaration?: AstInspectNode;
+      expression?: AstInspectNode;
+      init?: AstInspectNode;
+      targetType?: AstInspectNode;
+      fields?: AstInspectNode[];
+      variants?: AstInspectNode[];
+      typeArguments?: AstInspectNode[];
+      members?: AstInspectNode[];
+      statements?: AstInspectNode[];
+      finalExpression?: AstInspectNode;
+      arms?: AstInspectNode[];
+      entries?: AstInspectNode[];
+      left?: AstInspectNode;
+      right?: AstInspectNode;
+    };
     switch (node.kind) {
       case "Program":
-        return node.body;
+        return n.body as AstInspectNode[];
       case "ExportDeclaration":
-        return [node.declaration];
+        return [n.declaration!];
       case "ExportDefaultDeclaration":
-        return [node.expression];
+        return [n.expression!];
       case "BindingDeclaration":
-        return [node.init];
+        return [n.init!];
       case "SchemaDeclaration":
-        return this.getNodeChildren(node.body);
+        return this.getNodeChildren(n.body as AstInspectNode);
       case "TsDerivedSchema":
-        return [node.targetType];
+        return [n.targetType!];
       case "RecordSchema":
-        return node.fields;
+        return n.fields!;
       case "TaggedUnionSchema":
-        return node.variants;
+        return n.variants!;
       case "ImportedTsSchema":
-        return node.typeArguments;
+        return n.typeArguments!;
       case "ServiceDeclaration":
-        return node.members;
+        return n.members!;
       case "BlockStatement":
         return [
-          ...node.statements,
-          ...(node.finalExpression ? [node.finalExpression] : []),
+          ...(n.statements ?? []),
+          ...(n.finalExpression ? [n.finalExpression] : []),
         ];
       case "EffectBlockExpression":
         return [
-          ...node.body,
-          ...(node.finalExpression ? [node.finalExpression] : []),
+          ...((n.body as AstInspectNode[] | undefined) ?? []),
+          ...(n.finalExpression ? [n.finalExpression] : []),
         ];
       case "MatchExpression":
-        return node.arms;
+        return n.arms!;
       case "MatchArm":
-        return [node.body];
-      case "FunctionExpression":
-        if (node.body.kind === "BlockStatement") {
+        return [n.body as AstInspectNode];
+      case "FunctionExpression": {
+        const body = n.body as
+          | {
+              kind?: string;
+              statements?: AstInspectNode[];
+              finalExpression?: AstInspectNode;
+            }
+          | undefined;
+        if (body?.kind === "BlockStatement") {
           return [
-            ...node.body.statements,
-            ...(node.body.finalExpression ? [node.body.finalExpression] : []),
+            ...(body.statements ?? []),
+            ...(body.finalExpression ? [body.finalExpression] : []),
           ];
         }
-        return [node.body];
+        return [n.body as AstInspectNode];
+      }
       case "RecordExpression":
-        return node.entries;
+        return n.entries!;
       case "PipelineExpression": {
         const steps: AstInspectNode[] = [];
-        let curr = node;
+        let curr: AstInspectNode = node;
         while (curr.kind === "PipelineExpression") {
-          steps.unshift(curr.right);
-          curr = curr.left;
+          const pipeNode = curr as {
+            left?: AstInspectNode;
+            right?: AstInspectNode;
+          };
+          steps.unshift(pipeNode.right!);
+          curr = pipeNode.left!;
         }
         steps.unshift(curr);
         return steps;
