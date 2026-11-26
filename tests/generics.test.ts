@@ -30,7 +30,8 @@ function parseAst(source: string, filename = "generics.fun") {
 describe("generic functions and constraints", () => {
   it("parses generic function expressions and constraints", () => {
     const ast = parseAst(`
-identity = <A>(value: A) => A { => value }
+identity = <A>(value: A) => A
+  => value
 connect = <Client extends RedisConnectableClient>(factory: () => Client) => factory()
 `);
     const identity = ast.body[0] as BindingDeclaration;
@@ -63,13 +64,13 @@ connect = <Client extends RedisConnectableClient>(factory: () => Client) => fact
 
   it("compiles generic lambdas without widening", async () => {
     const result = await compile(
-      "export identity = <A>(value: A) => A { => value }",
+      "export identity = <A>(value: A) => A\n  => value",
     );
     expect(result.typescript).toContain(
-      "export const identity = <A,>(value: A): A =>",
+      "export const identity = <A,>(value: A): A => {\n  return (value);\n};",
     );
     const checked = await typeCheck(
-      "export identity = <A>(value: A) => A { => value }",
+      "export identity = <A>(value: A) => A\n  => value",
     );
     expect(checked.success, checked.formattedOutput).toBe(true);
   });

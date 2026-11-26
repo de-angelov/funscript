@@ -51,9 +51,8 @@ describe("Unified '=>' Arrow, 'when' Keyword Forms & Equality Operators", () => 
   describe("2. Unified '=>' Arrow Semantics", () => {
     it("supports '=>' for function return types and block bodies", async () => {
       const code = `
-export add = (a: Number, b: Number) => Number {
+export add = (a: Number, b: Number) => Number
   => a + b
-}
 `.trim();
 
       const res = await Effect.runPromise(compileString(code));
@@ -112,13 +111,12 @@ export label = (s: Status) =>
 
     it("supports explicit return statement '=> expr' emitted as 'return (expr);'", async () => {
       const code = `
-export compute = (x: Number) => Number {
+export compute = (x: Number) => Number
   mut r = x
   when (x #= 0) {
     r = 1
   }
   => r * 10
-}
 `.trim();
 
       const res = await Effect.runPromise(compileString(code));
@@ -129,10 +127,9 @@ export compute = (x: Number) => Number {
   describe("3. The 'when' Keyword (Conditional Blocks and Match Guards)", () => {
     it("Early return 'when (...) =>' is rejected by default", async () => {
       const code = `
-export divide = (a: Number, b: Number) => Number {
+export divide = (a: Number, b: Number) => Number
   when (b #= 0) => 0
   => a / b
-}
 `.trim();
 
       const failure = await Effect.runPromise(Effect.flip(compileString(code)));
@@ -144,10 +141,9 @@ export divide = (a: Number, b: Number) => Number {
 
     it("Early return 'when (...) =>' is allowed when allowEarlyReturns option is true", async () => {
       const code = `
-export divide = (a: Number, b: Number) => Number {
+export divide = (a: Number, b: Number) => Number
   when (b #= 0) => 0
   => a / b
-}
 `.trim();
 
       const res = await Effect.runPromise(
@@ -176,13 +172,12 @@ x = 10
 
     it("Form 2 (Conditional block): emits 'if (cond) { stmts }' with curly braces", async () => {
       const code = `
-export test = (x: Number) => Number {
+export test = (x: Number) => Number
   mut result = 0
   when (x #= 10) {
     result = x * 2
   }
   => result
-}
 `.trim();
 
       const res = await Effect.runPromise(compileString(code));
@@ -193,12 +188,11 @@ export test = (x: Number) => Number {
 
     it("Form 2 (Conditional block): supports indented block", async () => {
       const code = `
-export testIndented = (x: Number) => Number {
+export testIndented = (x: Number) => Number
   mut result = 0
   when (x #= 5)
     result = 100
   => result
-}
 `.trim();
 
       const res = await Effect.runPromise(compileString(code));
@@ -309,13 +303,12 @@ export checkRefNeq = (a, b) => a @! b
 
     it("executes conditional block 'when' branching logic", async () => {
       const code = `
-export safeDiv = (num, den) => {
+export safeDiv = (num, den) =>
   mut result = num / den
   when (den #= 0) {
     result = -1
   }
   => result
-}
 `.trim();
 
       const res = await Effect.runPromise(compileString(code));
@@ -328,13 +321,12 @@ export safeDiv = (num, den) => {
 
     it("executes conditional block 'when' logic", async () => {
       const code = `
-export threshold = (x) => {
+export threshold = (x) =>
   mut bonus = 0
   when (x #= 100) {
     bonus = 50
   }
   => x + bonus
-}
 `.trim();
 
       const res = await Effect.runPromise(compileString(code));
@@ -349,10 +341,9 @@ export threshold = (x) => {
   describe("5. Pipeline Placeholder Expression Wrapping", () => {
     it("wraps placeholder binary expressions in generated arrow lambdas and evaluates", async () => {
       const code = `
-export compute = (x) => {
+export compute = (x) =>
   res = x |> (_ + 1)
   => res
-}
 `.trim();
 
       const res = await Effect.runPromise(compileString(code));
@@ -369,10 +360,9 @@ export compute = (x) => {
 
     it("wraps placeholder member expressions in generated arrow lambdas and evaluates", async () => {
       const code = `
-export getName = (user) => {
+export getName = (user) =>
   res = user |> _.profile.name
   => res
-}
 `.trim();
 
       const res = await Effect.runPromise(compileString(code));
@@ -389,12 +379,10 @@ export getName = (user) => {
 
     it("handles placeholder in unary, logical and equality expressions", async () => {
       const code = `
-export isNotZero = (x) => {
+export isNotZero = (x) =>
   => x |> not (_ #= 0)
-}
-export checkInRange = (x) => {
+export checkInRange = (x) =>
   => x |> (_ #! 0 and _ #! 100)
-}
 `.trim();
 
       const res = await Effect.runPromise(compileString(code));

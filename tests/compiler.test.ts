@@ -1269,14 +1269,13 @@ export g = (x: User, y: User) => x @= y
 
     it("safely unpacks optional RecordPattern, ArrayPattern, and WildcardPattern in params and bindings", async () => {
       const code = `
-export readHost = ({ server: { host, port }, tags: [first, ...rest], ignored: _ }: Config) => {
+export readHost = ({ server: { host, port }, tags: [first, ...rest], ignored: _ }: Config) =>
   => {
     host: Option.getOrElse(host, "localhost"),
     port: Option.getOrElse(port, 8080),
     first: Option.getOrElse(first, "none"),
     restCount: Option.getOrElse(Option.map(rest, (items) => items.length), 0)
   }
-}
 
 export { server: { host: boundHost }, tags: [head], ignored: _ }: Config = rawConfig
 `.trim();

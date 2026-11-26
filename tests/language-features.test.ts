@@ -8,11 +8,10 @@ describe("FunScript Language Features", () => {
       const source = `
 export okRes = { ok: true, dataValue: "hello" }
 export errRes = { ok: false, error: "something went wrong" }
-export getStatus = (r: { ok: true, dataValue: String } | { ok: false, error: String }) => {
+export getStatus = (r: { ok: true, dataValue: String } | { ok: false, error: String }) =>
   match r.ok
     | true => "success"
     | false => "error"
-}
 export testOk = getStatus(okRes)
 export testErr = getStatus(errRes)
 `;
@@ -52,10 +51,9 @@ export action = { type: "click", kind: "primary", status: 200 }
   describe("Feature 2: Record Parameter Spreads with Option and Defaulted Fields", () => {
     it("permits spreading a record parameter with defaulted fields into a new record", async () => {
       const source = `
-export withDefaults = (opts: { order: String = "asc", limit: Number = 20 } = {}) => {
+export withDefaults = (opts: { order: String = "asc", limit: Number = 20 } = {}) =>
   base = { ...opts, fallback: true }
   => base
-}
 export testEmpty = withDefaults({})
 export testProvided = withDefaults({ order: "desc", limit: 10 })
 `;
@@ -75,14 +73,12 @@ export testProvided = withDefaults({ order: "desc", limit: 10 })
     it("safely accesses Option fields from spread records without undefined leaks", async () => {
       const source = `
 import { Option } from "effect"
-export readOrder = (opts: { order: Option<String>, limit: Option<Number> }) => {
+export readOrder = (opts: { order: Option<String>, limit: Option<Number> }) =>
   base = { ...opts, fallback: true }
   => base.order
-}
-export readOverridden = (opts: { order: Option<String> }) => {
+export readOverridden = (opts: { order: Option<String> }) =>
   base = { ...opts, order: "asc" }
   => base.order
-}
 `;
       const compiled = await compile(source);
       expect(compiled.typescript).toContain("base.order");
@@ -116,19 +112,17 @@ export load = Loading
 export succ = Success(42)
 export fail = Failure("network error")
 
-export render = (r: RemoteData<Number, String>) => {
+export render = (r: RemoteData<Number, String>) =>
   match r
     | Loading => "loading..."
     | Success(d) => "success"
     | Failure(e) => e
-}
 
-export getNumber = (r: RemoteData<Number, String>) => {
+export getNumber = (r: RemoteData<Number, String>) =>
   match r
     | Loading => 0
     | Success(d) => d
     | Failure(_) => -1
-}
 
 export testLoad = render(load)
 export testSucc = render(succ)
@@ -166,11 +160,10 @@ export testNum = getNumber(succ)
   describe("Feature 4: Exhaustive Boolean Match Lowering", () => {
     it("lowers exhaustive boolean match to ts-pattern otherwise arm without NonExhaustiveError", async () => {
       const source = `
-export checkBool = (flag: Boolean) => {
+export checkBool = (flag: Boolean) =>
   match flag
     | true => "it is true"
     | false => "it is false"
-}
 export testT = checkBool(true)
 export testF = checkBool(false)
 `;
@@ -189,11 +182,10 @@ export testF = checkBool(false)
 
     it("lowers exhaustive boolean match with false first correctly", async () => {
       const source = `
-export invert = (flag: Boolean) => {
+export invert = (flag: Boolean) =>
   match flag
     | false => 0
     | true => 1
-}
 export t0 = invert(false)
 export t1 = invert(true)
 `;
@@ -215,12 +207,11 @@ export t1 = invert(true)
 
     it("lowers guarded boolean match followed by exhaustive arms correctly", async () => {
       const source = `
-export evaluate = (flag: Boolean, debug: Boolean) => {
+export evaluate = (flag: Boolean, debug: Boolean) =>
   match flag
     | true when debug => "debug-true"
     | true => "normal-true"
     | false => "false"
-}
 export r1 = evaluate(true, true)
 export r2 = evaluate(true, false)
 export r3 = evaluate(false, false)
@@ -245,10 +236,9 @@ export r3 = evaluate(false, false)
       const source = `
 import { Array } from "effect"
 
-export doubleEvens = (numbers: Array<Number>): Array<Number> => {
+export doubleEvens = (numbers: Array<Number>): Array<Number> =>
   evens = numbers |> Array.filter((n: Number) => n % 2 #= 0) |> dbg("evens") |> Array.map((n: Number) => n * 2) |> dbg
   => evens
-}
 
 export result = doubleEvens([1, 2, 3, 4, 5, 6])
 `;

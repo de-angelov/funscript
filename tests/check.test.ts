@@ -232,9 +232,7 @@ export result = calculate("hello", 42)
 
     it("detects function return type mismatch", async () => {
       const code = `
-getAnswer = (): Number => {
-  => "forty-two"
-}
+getAnswer = (): Number => "forty-two"
 `.trim();
 
       const result = await Effect.runPromise(
@@ -773,7 +771,7 @@ export failNum = () => Effect.fail(404)
       const result = await Effect.runPromise(
         typeCheckSource(
           `
-export checkLock = (pid: Number) => {
+export checkLock = (pid: Number) =>
   res = match
     | pid > 0 =>
       alive = true
@@ -782,7 +780,6 @@ export checkLock = (pid: Number) => {
         | false => 2
     | _ => 0
   => res
-}
 `.trim(),
           "lock.fun",
         ),
@@ -836,16 +833,14 @@ export describeUnknown = (x: Unknown): Number =>
 
 export readBlockGuard = (x: Unknown): Number =>
   match
-  | Predicate.isString(x) => {
+  | Predicate.isString(x) =>
       len = x.length
       => len + 1
-  }
-  | Option.isOption(x) => {
+  | Option.isOption(x) =>
       hasVal = Option.isSome(x)
       => match hasVal
         | true => 1
         | false => 0
-  }
   | _ => 0
 
 export unsafeReflectCall = (obj: Record<String, Unknown>): Unknown =>
@@ -1440,10 +1435,9 @@ export readTime = effect {
       const resultMutate = await Effect.runPromise(
         typeCheckSource(
           `
-export addItem = (arr: Array<Number>, item: Number) => {
+export addItem = (arr: Array<Number>, item: Number) =>
   arr.push(item)
   => arr
-}
 `.trim(),
           "lib/bad-mutation.fun",
         ),
@@ -1467,10 +1461,9 @@ export addItem = (arr: Array<Number>, item: Number) => {
         typeCheckSource(
           `
 export addItem = (arr: Array<Number>, item: Number) =>
-  arr |> mut (draft) => {
+  arr |> mut (draft) =>
     draft.push(item)
     => draft
-  }
 `.trim(),
           "lib/good-mutation.fun",
         ),
@@ -2051,7 +2044,7 @@ export run = (e: Either.Either<Number, String>) => e |> Either.getOrThrow
 
       const earlyReturnRes = await Effect.runPromise(
         typeCheckSource(
-          `export f = (x: Number) => {\n  when (x > 0) => 1\n  => 0\n}`,
+          `export f = (x: Number) =>\n  when (x > 0) => 1\n  => 0`,
           "src/early-return-policy.fun",
         ),
       );
@@ -2067,10 +2060,9 @@ export run = (e: Either.Either<Number, String>) => e |> Either.getOrThrow
 ts {
   declare function maybe(): string | null;
 }
-export bad = () => {
+export bad = () =>
   x = fromNullishOr(maybe())
   => x.missingProp
-}
 `.trim(),
           "src/from-nullish-missing-prop.fun",
         ),
@@ -2126,13 +2118,12 @@ ts {
   declare const jsNullArr: (number | undefined)[];
 }
 
-export run = () => {
+export run = () =>
   { a } = jsAnyObj
   [x] = jsAnyArr
   { a: b } = jsNullObj
   [y] = jsNullArr
   => [a, x, b, y]
-}
 `.trim(),
           "src/destructure-interop.fun",
         ),

@@ -178,7 +178,7 @@
       "patterns": [
         {
           "name": "keyword.operator.pipeline.funscript",
-          "match": "\\|>"
+          "match": "\\|>>?"
         },
         {
           "name": "keyword.operator.arrow.left.funscript",

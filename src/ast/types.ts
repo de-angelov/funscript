@@ -244,6 +244,7 @@ export interface PipelineExpression extends NodeBase {
   kind: "PipelineExpression";
   left: Expression;
   right: Expression;
+  deferred?: boolean;
 }
 
 export interface BinaryExpression extends NodeBase {

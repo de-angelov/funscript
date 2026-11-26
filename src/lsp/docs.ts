@@ -728,6 +728,14 @@ export const DOC_MAP: Record<string, DocDef> = {
     'formatted =\n  data\n  |> Array.filter((x) => x > 0)\n  |> Array.map((x) => x * 2)\n\ntransformed =\n  Effect.succeed(1)\n  |> map((value) => value + 1)\n  |> timeout("1 second")\n\nvoted =\n  rawPayload\n  |> decode(VotePayload)',
     ["pipe", "Effect.map", "Effect.timeout"],
   ],
+  "|>>": [
+    "operator",
+    "expression |>> thunkFunction",
+    "Pass a deferred expression to a function.",
+    "Wraps the expression and earlier pipeline stages in a zero-argument function. The receiving function decides when and how often to evaluate it.",
+    "readFile(path) |>> try |> orDie\nmakePage() |>> sync",
+    ["|>", "Effect.sync"],
+  ],
   "<-": [
     "operator",
     "binding <- effectExpression",

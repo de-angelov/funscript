@@ -912,6 +912,27 @@ score =
   |> formatScore(_, "en-US")
 ```
 
+### Deferred pipeline `|>>`
+
+`expression |>> f` passes `() => expression` to `f`. The expression is evaluated
+when the receiving function calls that thunk; it is not memoized. `|>>` has the
+same precedence as `|>` and pipelines associate left to right, so all preceding
+stages are deferred:
+
+```funscript
+result = readFile(path) |>> try |> orDie
+response = makePage() |> render |>> sync
+```
+
+These correspond to `Effect.try(() => readFile(path)) |> Effect.orDie` and
+`Effect.sync(() => render(makePage()))`. Bare `sync`, `try`, `suspend`,
+`promise`, `tryPromise`, and `failSync` resolve to their Effect constructors
+at a deferred stage unless shadowed by a local binding. Qualified constructors
+and user-defined thunk-taking functions also work. As with ordinary `|>`,
+subsequent stages run on the result. Use parentheses to control which expression
+is delayed. `|>>` does not itself execute an Effect or catch errors; the receiving
+function determines both behavior and error semantics.
+
 ### 5.1 Type-directed pipeline resolution (auto-namespace)
 
 To eliminate visual repetition, pipeline stages do not require repeating the module

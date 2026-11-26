@@ -2079,7 +2079,11 @@ export const typeCheckVirtualFiles = (
                 );
               }
 
-              if (node.kind === "MatchExpression" && currentInMatchArm) {
+              if (
+                node.kind === "MatchExpression" &&
+                !astBool(node, "isCatch") &&
+                currentInMatchArm
+              ) {
                 addAstDiag(
                   node.span,
                   "NESTED_MATCH",

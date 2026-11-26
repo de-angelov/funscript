@@ -671,10 +671,10 @@ export safeJsJson = (raw: String) =>
   it("does not leak try-context into nested closures", () => {
     const nestedClosureOption = `
 export leak = (raw: String) =>
-  Option.try(() => {
+  Option.try(() =>
     later = () => JSON.parse(raw)
     => later
-  })
+  )
 `;
     expect(() => Effect.runSync(compileString(nestedClosureOption))).toThrow(
       "'JSON.parse()' is unsafe because it throws on malformed input.",
@@ -682,10 +682,10 @@ export leak = (raw: String) =>
 
     const nestedClosureResult = `
 export leak = (raw: String) =>
-  Result.try(() => {
+  Result.try(() =>
     later = () => URL(raw)
     => later
-  })
+  )
 `;
     expect(() => Effect.runSync(compileString(nestedClosureResult))).toThrow(
       "'URL(...)' is unsafe because URL constructors throw on malformed input.",
@@ -694,10 +694,9 @@ export leak = (raw: String) =>
     const nestedClosureResultRecord = `
 export leak = (raw: String) =>
   Result.try({
-    "try": () => {
+    "try": () =>
       later = () => JSON.parse(raw)
       => later
-    },
     "catch": (e) => e
   })
 `;
@@ -707,10 +706,10 @@ export leak = (raw: String) =>
 
     const nestedClosureJs = `
 export leak = (raw: String) =>
-  js (() => {
+  js (() =>
     later = () => JSON.parse(raw)
     => later
-  })
+  )
 `;
     expect(() => Effect.runSync(compileString(nestedClosureJs))).toThrow(
       "'JSON.parse()' is unsafe because it throws on malformed input.",
@@ -718,10 +717,10 @@ export leak = (raw: String) =>
 
     const safeNestedTry = `
 export safe = (raw: String) =>
-  Option.try(() => {
+  Option.try(() =>
     safeLater = () => Option.try(() => JSON.parse(raw))
     => safeLater
-  })
+  )
 `;
     const res = Effect.runSync(compileString(safeNestedTry));
     expect(res.typescript).toContain("optionTry");

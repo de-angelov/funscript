@@ -64,7 +64,7 @@ describe("FunScript Code Formatter", () => {
 
   it("round-trips generic return annotations in fun and funx", () => {
     for (const filename of ["test.fun", "test.funx"]) {
-      const source = "export identity = <A>(value: A) => A { => value }";
+      const source = "export identity = <A>(value: A) => A\n  => value";
       const formatted = format(source, { filename });
       expect(format(formatted, { filename })).toBe(formatted);
     }
@@ -237,13 +237,6 @@ describe("FunScript Code Formatter", () => {
     const source = `export Message = () =>\n  <input type="text" />`;
     const formatted = format(source, { filename: "message.funx" });
     expect(formatted).toBe(`export Message = () =>\n  <input type="text" />\n`);
-    expect(format(formatted, { filename: "message.funx" })).toBe(formatted);
-  });
-
-  it("formats braced single JSX element in .funx into indented block preserving implicit return", () => {
-    const source = `export Message = () => {\n  <p>Done!</p>\n}`;
-    const formatted = format(source, { filename: "message.funx" });
-    expect(formatted).toBe(`export Message = () =>\n  <p>Done!</p>\n`);
     expect(format(formatted, { filename: "message.funx" })).toBe(formatted);
   });
 
@@ -816,10 +809,9 @@ export schema Config = {
       expect(format(formatted)).toBe(formatted);
 
       const blockSource =
-        "process = () => {\n" +
+        "process = () =>\n" +
         '  _ = keys |> map((k) => k) |> filter((k) => k #! "")\n' +
-        "  => keys |> take(5) |> reverse\n" +
-        "}\n";
+        "  => keys |> take(5) |> reverse\n";
       const formattedBlock = format(blockSource);
       expect(formattedBlock).toBe(
         "process = () =>\n" +
@@ -837,10 +829,9 @@ export schema Config = {
 
     it("formats records with 3 or more fields, spreads, and record types vertically", () => {
       const source =
-        "parse = () => {\n" +
+        "parse = () =>\n" +
         '  res = { ...state, id: afterColon, currentSection: "none" }\n' +
-        "  => res\n" +
-        "}\n";
+        "  => res\n";
       const formatted = format(source);
       expect(formatted).toBe(
         "parse = () =>\n" +

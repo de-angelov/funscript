@@ -49,6 +49,7 @@ export enum TokenType {
   ARROW = "=>",
   LARROW = "<-",
   PIPE = "|>",
+  THUNK_PIPE = "|>>",
   BAR = "|",
   AMP = "&",
   UNDERSCORE = "_",

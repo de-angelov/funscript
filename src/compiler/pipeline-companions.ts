@@ -560,6 +560,13 @@ export function inferPipelineCompanions(
   const pipelines = collectPipelines(ast);
   for (const pipeline of pipelines) {
     const stages = unrollPipeline(pipeline);
+    const deferredStages = new Set<number>();
+    let pipeNode: Expression = pipeline;
+    while (pipeNode.kind === "PipelineExpression") {
+      if (pipeNode.deferred)
+        deferredStages.add(pipeNode.right.span.start.offset);
+      pipeNode = pipeNode.left;
+    }
     const s0 = stages[0];
     const sourceNode = pipelineSourceNodes.get(s0.span.start.offset);
     if (!sourceNode) continue;
@@ -672,6 +679,31 @@ export function inferPipelineCompanions(
         explicitModule = stage.object.name;
         fnName = stage.property.name;
         isExplicit = true;
+      }
+
+      if (deferredStages.has(stage.span.start.offset)) {
+        currentCompanion = undefined;
+        if (
+          !isExplicit &&
+          fnName &&
+          stage.kind === "Identifier" &&
+          [
+            "sync",
+            "suspend",
+            "promise",
+            "try",
+            "tryPromise",
+            "failSync",
+          ].includes(fnName) &&
+          !isShadowed(stage.span.start.offset, fnName)
+        ) {
+          stageResolutions.set(stage.span.start.offset, {
+            module: "Effect",
+            method: fnName,
+          });
+          currentCompanion = "Effect";
+          continue;
+        }
       }
 
       if (

@@ -478,12 +478,24 @@ export class Parser {
 
     while (this.checkPipelinePipe()) {
       this.consumePipelinePipe();
+      const deferred = this.previous().type === TokenType.THUNK_PIPE;
       this.skipNewlines();
       const right = this.parsePipelineTarget();
+      if (
+        deferred &&
+        (right.kind === "MatchExpression" ||
+          right.kind === "MutBlockExpression")
+      ) {
+        throw new ParseError(
+          "'|>>' requires a thunk-taking function",
+          right.span,
+        );
+      }
       expr = {
         kind: "PipelineExpression",
         left: expr,
         right,
+        deferred: deferred || undefined,
         span: { start: expr.span.start, end: right.span.end },
       };
     }
@@ -492,19 +504,29 @@ export class Parser {
   }
 
   private checkPipelinePipe(): boolean {
-    if (this.check(TokenType.PIPE)) return true;
+    if (this.check(TokenType.PIPE) || this.check(TokenType.THUNK_PIPE))
+      return true;
     if (this.check(TokenType.NEWLINE)) {
       let offset = 1;
       while (this.peekAhead(offset).type === TokenType.NEWLINE) offset++;
-      if (this.peekAhead(offset).type === TokenType.PIPE) return true;
+      if (
+        this.peekAhead(offset).type === TokenType.PIPE ||
+        this.peekAhead(offset).type === TokenType.THUNK_PIPE
+      )
+        return true;
     }
     return false;
   }
 
   private consumePipelinePipe(): void {
-    if (this.match(TokenType.PIPE)) return;
+    if (this.match(TokenType.PIPE, TokenType.THUNK_PIPE)) return;
     this.skipNewlines();
-    this.consume(TokenType.PIPE, "Expected '|>' in pipeline");
+    if (!this.match(TokenType.PIPE, TokenType.THUNK_PIPE)) {
+      throw new ParseError(
+        "Expected '|>' or '|>>' in pipeline",
+        this.peek().span,
+      );
+    }
   }
 
   private parsePipelineTarget(): Expression {

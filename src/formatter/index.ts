@@ -847,19 +847,25 @@ export class Formatter {
     indent = 0,
   ): string {
     const chain = this.unrollPipeline(expr);
+    const operators: string[] = [];
+    let current: Expression = expr;
+    while (current.kind === "PipelineExpression") {
+      operators.unshift(current.deferred ? "|>>" : "|>");
+      current = current.left;
+    }
     const isMulti = this.shouldExpandPipeline(chain, indent);
 
     if (!isMulti) {
-      return `${this.formatExpression(chain[0], indent)} |> ${this.formatExpression(chain[1], indent)}`;
+      return `${this.formatExpression(chain[0], indent)} ${operators[0]} ${this.formatExpression(chain[1], indent)}`;
     }
 
     const head = this.formatExpression(chain[0], indent);
     const stepIndent = this.spaces(indent);
     const steps = chain
       .slice(1)
-      .map((step) => {
+      .map((step, index) => {
         const trailing = this.getTrailingComment(step.span.end.line);
-        return `${stepIndent}|> ${this.formatExpression(step, indent)}${trailing}`;
+        return `${stepIndent}${operators[index]} ${this.formatExpression(step, indent)}${trailing}`;
       })
       .join("\n");
 

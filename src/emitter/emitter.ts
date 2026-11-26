@@ -1934,9 +1934,15 @@ export class Emitter {
     // Flatten left-nested pipelines: a |> b |> c
     const stages: Expression[] = [];
     let curr: Expression = expr;
+    let deferredSource = false;
 
     while (curr.kind === "PipelineExpression") {
       stages.unshift(curr.right);
+      if (curr.deferred) {
+        deferredSource = true;
+        curr = curr.left;
+        break;
+      }
       curr = curr.left;
     }
     stages.unshift(curr);
@@ -1945,13 +1951,44 @@ export class Emitter {
     const emittedStages = stages.map((s, idx) => {
       if (idx === 0) {
         return this.withEmitContext({ inPipelineStage: false }, () => {
-          const emitted = this.emitExpression(s);
+          const value = this.emitExpression(s);
+          const emitted = deferredSource ? `() => (${value})` : value;
           return this.options.markPipelineSources
             ? `__funscriptPipelineSource(${s.span.start.offset}, ${emitted})`
             : emitted;
         });
       }
       return this.withEmitContext({ inPipelineStage: true }, () => {
+        if (
+          idx === 1 &&
+          deferredSource &&
+          s.kind === "Identifier" &&
+          [
+            "sync",
+            "suspend",
+            "promise",
+            "try",
+            "tryPromise",
+            "failSync",
+          ].includes(s.name) &&
+          !this.isUserBinding(s.name)
+        ) {
+          this.effectImports.add("Effect");
+          return s.name === "try" || s.name === "tryPromise"
+            ? `(__thunk) => Effect.${s.name}(__thunk)`
+            : `Effect.${s.name}`;
+        }
+        if (
+          idx === 1 &&
+          deferredSource &&
+          s.kind === "MemberExpression" &&
+          s.object.kind === "UpperIdentifier" &&
+          s.object.name === "Effect" &&
+          (s.property.name === "try" || s.property.name === "tryPromise")
+        ) {
+          this.effectImports.add("Effect");
+          return `(__thunk) => Effect.${s.property.name}(__thunk)`;
+        }
         if (s.kind === "MatchExpression" && s.isCatch) {
           this.effectImports.add("Effect");
           const cases = s.arms.map((arm) => {

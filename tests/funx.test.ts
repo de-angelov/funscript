@@ -184,15 +184,15 @@ export Button = () =>
       );
     });
 
-    it("compiles single JSX self-closing element in braced function block to TSX with implicit return", async () => {
+    it("compiles inline arrow function returning single JSX self-closing element to TSX", async () => {
       const code = `
-export Divider = () => {
-  <hr className="divider" />
-}
+export Divider = () => <hr className="divider" />
 `.trim();
 
       const res = await Effect.runPromise(compileString(code, "Divider.funx"));
-      expect(res.typescript).toContain('return <hr className="divider" />;');
+      expect(res.typescript).toContain(
+        'export const Divider = () => <hr className="divider" />;',
+      );
     });
 
     it("compiles single JSX fragment in function block to TSX with implicit return", async () => {

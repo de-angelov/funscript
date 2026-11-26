@@ -13,6 +13,17 @@ export recover = (value: Effect<String, Missing | Offline>) =>
   |> Effect.map((text) => text + "!")`;
 
 describe("catch pipeline", () => {
+  it("allows catch inside a match arm", async () => {
+    const nested = `import { Effect, Option } from "effect"
+error Missing(message: String)
+export recover = (opt: Option<Effect<String, Missing>>) =>
+  match opt
+    | None => Effect.succeed("none")
+    | Some(value) => value |> catch
+        | Missing => Effect.succeed("missing")`;
+    const checked = await typeCheck(nested, "catch-in-match.fun");
+    expect(checked.success, checked.formattedOutput).toBe(true);
+  });
   it("recovers a tag, preserves other failures, and composes with later stages", async () => {
     const checked = await typeCheck(source, "catch-pipeline.fun");
     expect(checked.success, checked.formattedOutput).toBe(true);

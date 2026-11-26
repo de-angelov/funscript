@@ -837,10 +837,9 @@ getUser = () =>
 
     it("reports diagnostic for rejected implicit returns in function block with actionable explanation and alternative syntax", () => {
       const invalidFunctionCode = `
-calculate = (x: Number) => {
+calculate = (x: Number) =>
   temp = x + 1
   temp
-}
 `.trim();
 
       const diagnostics = validateFunScript(

@@ -254,7 +254,7 @@ describe("VS Code Extension Package (TASK-018)", () => {
       );
       expect(controlKeywords).toBeDefined();
       const controlRegex = new RegExp(controlKeywords.match);
-      for (const kw of ["effect", "match", "mut", "schema", "service", "error", "export", "import", "from", "when", "default"]) {
+      for (const kw of ["effect", "match", "catch", "mut", "schema", "service", "error", "export", "import", "from", "when", "default"]) {
         expect(controlRegex.test(kw)).toBe(true);
       }
 
@@ -285,7 +285,7 @@ describe("VS Code Extension Package (TASK-018)", () => {
       );
       expect(illegalPattern).toBeDefined();
       const regex = new RegExp(illegalPattern.match);
-      for (const banned of ["fn", "let", "var", "const", "function", "class", "return", "try", "catch"]) {
+      for (const banned of ["fn", "let", "var", "const", "function", "class", "return", "try"]) {
         expect(regex.test(banned)).toBe(true);
       }
     });

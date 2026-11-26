@@ -418,19 +418,17 @@ describe("JSX Parser (.funx mode)", () => {
       expect(block.finalExpression?.kind).toBe("JSXElement");
     });
 
-    it("parses braced function block with single JSX element as implicit return", () => {
-      const code = `render = () => {
-  <div className="container">
-    <span>Hello</span>
-  </div>
-}`;
+    it("parses inline arrow function returning single JSX element as expression body", () => {
+      const code = `render = () => <div className="container">
+  <span>Hello</span>
+</div>`;
       const ast = parse(code);
       const decl = ast.body[0] as BindingDeclaration;
       const fn = decl.init as FunctionExpression;
-      expect(fn.body.kind).toBe("BlockStatement");
-      const block = fn.body as BlockStatement;
-      expect(block.statements.length).toBe(0);
-      expect(block.finalExpression?.kind).toBe("JSXElement");
+      expect(fn.body.kind).toBe("JSXElement");
+      const root = fn.body as JSXElement;
+      expect((root.openingElement.name as Identifier).name).toBe("div");
+      expect(root.children.length).toBe(1);
     });
 
     it("parses indented function block with single self-closing JSX element as implicit return", () => {
@@ -445,17 +443,12 @@ describe("JSX Parser (.funx mode)", () => {
       expect(block.finalExpression?.kind).toBe("JSXSelfClosingElement");
     });
 
-    it("parses braced function block with single self-closing JSX element as implicit return", () => {
-      const code = `render = () => {
-  <input type="text" placeholder="name" />
-}`;
+    it("parses inline arrow function returning single self-closing JSX element as expression body", () => {
+      const code = `render = () => <input type="text" placeholder="name" />`;
       const ast = parse(code);
       const decl = ast.body[0] as BindingDeclaration;
       const fn = decl.init as FunctionExpression;
-      expect(fn.body.kind).toBe("BlockStatement");
-      const block = fn.body as BlockStatement;
-      expect(block.statements.length).toBe(0);
-      expect(block.finalExpression?.kind).toBe("JSXSelfClosingElement");
+      expect(fn.body.kind).toBe("JSXSelfClosingElement");
     });
 
     it("parses indented function block with single fragment as implicit return", () => {
@@ -473,22 +466,19 @@ describe("JSX Parser (.funx mode)", () => {
       expect(block.finalExpression?.kind).toBe("JSXElement");
     });
 
-    it("parses braced function block with single fragment as implicit return", () => {
-      const code = `render = () => {
-  <>
-    <span>First</span>
-  </>
-}`;
+    it("parses inline arrow function returning single fragment as expression body", () => {
+      const code = `render = () => <>
+  <span>First</span>
+</>`;
       const ast = parse(code);
       const decl = ast.body[0] as BindingDeclaration;
       const fn = decl.init as FunctionExpression;
-      expect(fn.body.kind).toBe("BlockStatement");
-      const block = fn.body as BlockStatement;
-      expect(block.statements.length).toBe(0);
-      expect(block.finalExpression?.kind).toBe("JSXElement");
+      expect(fn.body.kind).toBe("JSXElement");
+      const fragment = fn.body as JSXElement;
+      expect(fragment.children[0].kind).toBe("JSXElement");
     });
 
-    it("parses arrow function declaration with implicit JSX return (both indented and braced)", () => {
+    it("parses arrow function declaration with implicit JSX return (indented and inline)", () => {
       const codeIndented = `render = () =>
   <div />`;
       const ast1 = parse(codeIndented);
@@ -498,15 +488,11 @@ describe("JSX Parser (.funx mode)", () => {
       expect(block1.statements.length).toBe(0);
       expect(block1.finalExpression?.kind).toBe("JSXSelfClosingElement");
 
-      const codeBraced = `render = () => {
-  <div />
-}`;
-      const ast2 = parse(codeBraced);
+      const codeInline = `render = () => <div />`;
+      const ast2 = parse(codeInline);
       const decl2 = ast2.body[0] as BindingDeclaration;
       const fn2 = decl2.init as FunctionExpression;
-      const block2 = fn2.body as BlockStatement;
-      expect(block2.statements.length).toBe(0);
-      expect(block2.finalExpression?.kind).toBe("JSXSelfClosingElement");
+      expect(fn2.body.kind).toBe("JSXSelfClosingElement");
     });
 
     it("rejects multi-statement .funx function blocks without explicit return", () => {
@@ -521,7 +507,9 @@ describe("JSX Parser (.funx mode)", () => {
   <div>{name}</div>
 }`;
       expect(() => parse(codeBraced)).toThrow(ParseError);
-      expect(() => parse(codeBraced)).toThrow("Function block must end with an explicit '=> returnValue'");
+      expect(() => parse(codeBraced)).toThrow(
+        "Braced function bodies are not supported; use indentation or an expression",
+      );
 
       const codeMultipleJsx = `render = () =>
   <div />
@@ -542,19 +530,17 @@ describe("JSX Parser (.funx mode)", () => {
       expect(block.statements[1].kind).toBe("ReturnStatement");
     });
 
-    it("accepts single-expression non-JSX function blocks in .funx without explicit return", () => {
+    it("accepts single-expression non-JSX function bodies in .funx without explicit return", () => {
       const codeIndented = `getValue = () =>
   42`;
       const astIndented = parse(codeIndented);
       const fnIndented = ((astIndented.body[0] as BindingDeclaration).init as FunctionExpression).body as BlockStatement;
       expect(fnIndented.finalExpression).toBeDefined();
 
-      const codeBraced = `getValue = () => {
-  "hello"
-}`;
-      const astBraced = parse(codeBraced);
-      const fnBraced = ((astBraced.body[0] as BindingDeclaration).init as FunctionExpression).body as BlockStatement;
-      expect(fnBraced.finalExpression).toBeDefined();
+      const codeInline = `getValue = () => "hello"`;
+      const astInline = parse(codeInline);
+      const fnInline = (astInline.body[0] as BindingDeclaration).init as FunctionExpression;
+      expect(fnInline.body.kind).toBe("StringLiteral");
     });
 
     it("accepts single-expression function blocks in .fun files without explicit return", () => {

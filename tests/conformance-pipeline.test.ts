@@ -139,10 +139,9 @@ export g = (map: (a: Number, b: Number) => Number, x: Number, y: Number) =>
     const source = `
 import { Option } from "effect"
 
-export f1 = () => {
+export f1 = () =>
   x = [1, 2] |> Array.map((n) => n + 1)
   => x
-}
 
 export f2 = (x: Option.Option<Number>) =>
   x |> getOrElse(() => 0)
@@ -150,6 +149,7 @@ export f2 = (x: Option.Option<Number>) =>
     const result = await Effect.runPromise(
       compileString(source, "src/scope-leak.fun"),
     );
+    expect(result.typescript).toContain("Array.map");
     expect(result.typescript).toContain("Option.getOrElse");
   }, 60000);
 });

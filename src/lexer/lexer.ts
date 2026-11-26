@@ -193,6 +193,10 @@ export class Lexer {
         this.emitToken(TokenType.LARROW, "<-", 2);
         continue;
       }
+      if (this.matchAhead("|>>")) {
+        this.emitToken(TokenType.THUNK_PIPE, "|>>", 3);
+        continue;
+      }
       if (this.matchAhead("|>")) {
         this.emitToken(TokenType.PIPE, "|>", 2);
         continue;
@@ -947,6 +951,19 @@ export class Lexer {
     // Check banned keywords
     if (BANNED_KEYWORDS[raw]) {
       const lastToken = this.tokens[this.tokens.length - 1];
+      let previousIndex = this.tokens.length - 1;
+      while (
+        previousIndex >= 0 &&
+        this.tokens[previousIndex].type === TokenType.NEWLINE
+      )
+        previousIndex--;
+      if (
+        raw === "try" &&
+        this.tokens[previousIndex]?.type === TokenType.THUNK_PIPE
+      ) {
+        this.tokens.push({ type: TokenType.IDENTIFIER, value: raw, span });
+        return;
+      }
       if (lastToken && lastToken.type === TokenType.DOT) {
         this.tokens.push({
           type: TokenType.IDENTIFIER,
