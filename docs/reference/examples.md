@@ -32,3 +32,4 @@ Every entry below is compiled by `npm run test:examples`.
 | [`examples/todo-http.fun`](../../examples/todo-http.fun) | `FunScript` |
 | [`examples/todo-service.fun`](../../examples/todo-service.fun) | `FunScript` |
 | [`examples/ts-schema-validation.fun`](../../examples/ts-schema-validation.fun) | `FunScript` |
+| [`examples/user-login-domain.fun`](../../examples/user-login-domain.fun) | `FunScript` |

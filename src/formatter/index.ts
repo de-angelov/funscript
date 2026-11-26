@@ -1129,6 +1129,7 @@ export class Formatter {
   }
 
   private formatMatchExpression(expr: MatchExpression, indent = 0): string {
+    const keyword = expr.isCatch ? "catch" : "match";
     const isSingleLine =
       expr.arms.length > 0 &&
       expr.arms[0].span.start.line === expr.span.start.line &&
@@ -1139,7 +1140,7 @@ export class Formatter {
         ? ` ${this.formatExpression(expr.scrutinee, indent)}`
         : "";
       const arms = expr.arms.map((a) => this.formatMatchArmInline(a)).join(" ");
-      return `match${scrutinee} ${arms}`;
+      return `${keyword}${scrutinee} ${arms}`;
     }
 
     const scrutinee = expr.scrutinee
@@ -1148,7 +1149,7 @@ export class Formatter {
     const arms = expr.arms
       .map((a) => this.formatMatchArm(a, indent + this.indentSize))
       .join("\n");
-    return `match${scrutinee}\n${arms}`;
+    return `${keyword}${scrutinee}\n${arms}`;
   }
 
   private formatMatchArm(arm: MatchArm, indent: number): string {

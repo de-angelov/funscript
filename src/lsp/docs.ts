@@ -68,6 +68,14 @@ export const DOC_MAP: Record<string, DocDef> = {
     'describe = (shape: Shape) =>\n  match shape\n    | Circle(r) when r <= 0 => "Degenerate circle"\n    | Circle(r) => "Circle with radius " + r\n    | Rect(w, h) => "Rectangle of " + w + "x" + h',
     ["variant", "when", "schema"],
   ],
+  catch: [
+    "keyword",
+    "effectValue |> catch\n  | ErrorTag(cause) => recoveryEffect",
+    "Recover selected tagged Effect failures in a pipeline.",
+    "Handles typed failures by tag. The optional binding is the whole error; unmatched failures propagate. Each arm returns an Effect. Defects and interruptions are not caught.",
+    "loadUser(id) |> catch\n  | NotFound(cause) => Effect.succeed(anonymous(cause.id))",
+    ["effect", "error", "match"],
+  ],
   mut: [
     "keyword",
     "mut draft = initialValue\n# or in pipeline:\nvalue |> mut (draft) => draft.field = newValue",

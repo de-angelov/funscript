@@ -15,7 +15,7 @@ matching, and immutable updates less ceremonial.
 - Package: `funscript` `0.2.3`
 - Runtime: Effect `^4.1.2`
 - Source extensions: `.fun`, `.funx`
-- Runnable checked examples: 26
+- Runnable checked examples: 27
 
 The exact command surface is generated from the implementation in the [CLI reference](docs/reference/cli.md). The language catalogue used by editor hover help is generated in the [language reference](docs/reference/language.md).
 <!-- /GENERATED: project-facts -->
@@ -113,6 +113,7 @@ For the current, verified contract and runnable source examples, read the
 | [`examples/todo-http.fun`](examples/todo-http.fun) | `FunScript` |
 | [`examples/todo-service.fun`](examples/todo-service.fun) | `FunScript` |
 | [`examples/ts-schema-validation.fun`](examples/ts-schema-validation.fun) | `FunScript` |
+| [`examples/user-login-domain.fun`](examples/user-login-domain.fun) | `FunScript` |
 <!-- /GENERATED: example-inventory -->
 
 ## Development

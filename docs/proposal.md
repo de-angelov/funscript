@@ -794,7 +794,7 @@ Rules:
   match arm bodies.
 - There is no `async`/`await`, no Promise chain, and no `setTimeout`. Promise interop is
   explicit through `Effect.tryPromise` or an Effect platform module.
-- A `try`/`catch` syntax is intentionally absent. Use `Effect.catch`,
+- Exception-style `try`/`catch` is intentionally absent. Use pipeline `catch`, `Effect.catch`,
   `Effect.catchTag`, `Effect.retry`, `Effect.timeout`, and the rest of the combinators.
   Errors are values in the `E` channel, not exceptions.
 

@@ -56,9 +56,8 @@ loginHandler =
     }))
     => response
   }
-  |> Effect.catchTag("ValidationError", (cause) =>
-    Effect.sync(() => HttpServerResponse.setStatus(html(page("Error: {cause.message}")), 400))
-  )
+  |> catch
+    | ValidationError(cause) => Effect.sync(() => HttpServerResponse.setStatus(html(page("Error: {cause.message}")), 400))
 
 protectedHandler =
   effect {

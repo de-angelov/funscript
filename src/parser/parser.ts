@@ -514,6 +514,9 @@ export class Parser {
     if (this.match(TokenType.MATCH)) {
       return this.parseMatchExpression(true);
     }
+    if (this.match(TokenType.CATCH)) {
+      return this.parseMatchExpression(true, true);
+    }
     return this.parseLogicalOr();
   }
 
@@ -1300,7 +1303,10 @@ export class Parser {
     };
   }
 
-  private parseMatchExpression(isPipeline = false): MatchExpression {
+  private parseMatchExpression(
+    isPipeline = false,
+    isCatch = false,
+  ): MatchExpression {
     const start = this.previous().span.start;
     let scrutinee: Expression | undefined;
 
@@ -1349,6 +1355,32 @@ export class Parser {
         guard = this.parseExpression();
       }
 
+      if (
+        isCatch &&
+        (pattern.kind !== "ConstructorPattern" ||
+          pattern.args.length > 1 ||
+          (pattern.args.length === 1 &&
+            (pattern.args[0].kind !== "VariablePattern" ||
+              pattern.args[0].name.kind !== "Identifier")) ||
+          guard)
+      ) {
+        throw new ParseError(
+          "Catch arms require a tag, optionally followed by a single error binding; guards are not supported",
+          pattern.span,
+        );
+      }
+      if (
+        isCatch &&
+        arms.some(
+          (arm) =>
+            arm.pattern.kind === "ConstructorPattern" &&
+            pattern.kind === "ConstructorPattern" &&
+            arm.pattern.constructorName.name === pattern.constructorName.name,
+        )
+      ) {
+        throw new ParseError("Duplicate tag in catch arms", pattern.span);
+      }
+
       if (!this.match(TokenType.ARROW)) {
         throw new ParseError("Expected '=>' in match arm", this.peek().span);
       }
@@ -1370,10 +1402,15 @@ export class Parser {
       this.consume(TokenType.DEDENT, "Expected unindent after match arms");
     }
 
+    if (isCatch && arms.length === 0) {
+      throw new ParseError("Expected at least one catch arm", this.peek().span);
+    }
+
     return {
       kind: "MatchExpression",
       scrutinee,
       isPipeline: isPipeline ? true : undefined,
+      isCatch: isCatch ? true : undefined,
       arms,
       span: { start, end: arms[arms.length - 1]?.span.end || start },
     };

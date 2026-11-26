@@ -75,7 +75,7 @@ form and rejects the other one.
 | Job                            | The only FunScript way                                                  | Lowers to / uses                                                                                 | Not in the surface                                   |
 | ------------------------------ | ----------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------ | ---------------------------------------------------- |
 | Sequence effects               | `effect` block + `<-`                                                   | `Effect.gen` + `yield*`                                                                          | `async`/`await`, `Promise` chains                    |
-| Recoverable error              | `error` + `Effect.catch*`                                               | `Schema.TaggedError` + combinators                                                               | `throw`, `try`/`catch`, `finally`                    |
+| Recoverable error              | `error` + pipeline `catch` or `Effect.catch*`                           | `Schema.TaggedError` + combinators                                                               | `throw`, `try`/`catch`, `finally`                    |
 | Dependency                     | `service` + `Layer` (`Layer.succeed` / `Layer.effect` / `Layer.scoped`) | `Context.Tag` + `Layer`                                                                          | globals, singletons, `process.env`                   |
 | Default data & bindings        | immutable `=` and deeply `readonly` values                              | `const` + `readonly`                                                                             | `let`, `var`, reassigning immutable bindings         |
 | Shallow & deep record update   | `{ ...value, a: 1, b.c: 2 }`                                            | `{ ... }` (shallow) / Mutative `create` (deep)                                                   | deeply nested manual object spreads                  |
@@ -111,7 +111,7 @@ generated output, but not in idiomatic FunScript:
 - **OOP and ad-hoc types:** `class`, class-style `extends`, `new`, `this`, `super`, `prototype`,
   `interface`, `enum`, `namespace`, `declare`, `type`, `data` (use `schema`). Generic
   constraints use `extends` in type-parameter lists; that is not class inheritance.
-- **Error handling:** `throw`, `try`, `catch`, `finally`.
+- **Exception handling:** `throw`, `try`, `finally`, and exception-style `try`/`catch`.
 - **Async:** `async`, `await`, `yield`, `Promise` as a FunScript-authored effect type.
 - **Null, undefined, and unsafe types:** `null`, `undefined` (in expressions), `any`,
   and `as` in all forms (`as const`, `x as T`, `as unknown as T`, `as any`). Narrowing
@@ -242,10 +242,10 @@ The compiler enforces the convention for declarations it generates. Imported Jav
 values may have any casing; they are only relevant in expression position.
 
 <!-- GENERATED: keywords -->
-### 1.5 Keywords (19 total)
+### 1.5 Keywords (20 total)
 
 ```text
-and default effect error export false from import js match mut not or par schema service true ts when
+and catch default effect error export false from import js match mut not or par schema service true ts when
 ```
 <!-- /GENERATED: keywords -->
 
@@ -258,7 +258,7 @@ JavaScript or TypeScript habits into FunScript:
 
 ```text
 arguments   as          async       await       break
-catch       class       continue    data        declare
+class       continue    data        declare
 delete      do          else        enum        eval
 finally     for         function    if          in
 instanceof  interface   let         module      namespace
@@ -2101,9 +2101,28 @@ An `Effect` value returned with `=>` is **not** automatically yielded. It is ret
 The compiler's post-typecheck pass warns when an `effect` block's return type is itself an
 `Effect`, because that is almost always a missing `_ <-`.
 
-### 9.5 No `try`, `catch`, or `throw`
+### 9.5 Typed error recovery
 
 Recoverable failures are typed values in the `E` channel:
+
+```funscript
+findUser = (id: String) =>
+  UserRepo.find(id)
+  |> catch
+    | NotFound(cause) => Effect.succeed({ id: cause.id, name: "anonymous" })
+    | DatabaseError => Effect.fail(ServiceUnavailable())
+```
+
+Pipeline `catch` handles tagged failures from the effect to its left and compiles to
+`Effect.catchTags`. Each arm names a tag and returns an Effect. The optional single
+lowercase binding names the **whole error**, not its first field. Tags must be unique;
+guards, wildcard arms, grouped tags, and field-destructuring patterns are not supported.
+Unmatched failures remain in the error channel, and failures and service requirements
+introduced by a handler are tracked. Defects and interruptions are not handled. Pipeline
+order determines scope: stages before `catch` are handled, stages after it are not.
+`catch` is only valid as a pipeline stage; it is not exception-style `try`/`catch`.
+
+The ordinary Effect combinators remain available:
 
 ```funscript
 export findUser = (id: String) =>
@@ -3117,7 +3136,7 @@ These are the choices that came out of checking the surface for ambiguity:
 | No bitwise operators                                                          | `\|` already has a language meaning; bitwise is rare and explicit via raw TS.                                                                                                                                                                            |
 | Capitalization is semantic                                                    | Pattern bindings vs. constructors need no guessing.                                                                                                                                                                                                      |
 | `_tag` reserved                                                               | The Effect/ts-pattern discriminant cannot be accidentally shadowed.                                                                                                                                                                                      |
-| No `throw`/`try`/`catch`                                                      | Errors are values in Effect's `E` channel.                                                                                                                                                                                                               |
+| No `throw` or exception-style `try`/`catch`                                    | Errors are values in Effect's `E` channel.                                                                                                                                                                                                               |
 | No `await`/`async`/`Promise`                                                  | One concurrency model: Effect. Promise is interop only.                                                                                                                                                                                                  |
 | No `let`, `var`, `:=`, or unannotated reassignment                            | `=` declares an immutable binding unless preceded by `mut` or targeting a `mut` binding / `mut (d) =>` draft; `Effect.Ref` handles concurrent state.                                                                                                     |
 | No loops or comprehensions                                                    | Pure iteration is Effect `Array`/`Record`; effectful iteration is `Effect.forEach`.                                                                                                                                                                      |

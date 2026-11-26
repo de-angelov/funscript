@@ -34,6 +34,7 @@ export enum TokenType {
   IMPORT = "import",
   JS = "js",
   MATCH = "match",
+  CATCH = "catch",
   MUT = "mut",
   NOT = "not",
   OR = "or",
@@ -107,6 +108,7 @@ export const KEYWORDS: Record<string, TokenType> = {
   import: TokenType.IMPORT,
   js: TokenType.JS,
   match: TokenType.MATCH,
+  catch: TokenType.CATCH,
   mut: TokenType.MUT,
   not: TokenType.NOT,
   or: TokenType.OR,
@@ -133,8 +135,6 @@ export const BANNED_KEYWORDS: Record<string, string> = {
   throw:
     "FunScript has no 'throw'; recoverable failures use Effect typed errors, and defects use 'Effect.die' or '|> orDie'.",
   try: "FunScript has no 'try/catch'; use typed errors in the E channel or 'Effect.tryPromise'.",
-  catch:
-    "FunScript has no 'try/catch'; handle errors with 'Effect.catchTag' or 'match'.",
   finally:
     "Use 'Effect.ensuring' or 'Effect.acquireRelease' for deterministic finalizers.",
   async: "FunScript has no 'async/await'; use 'effect' blocks with '<-'.",

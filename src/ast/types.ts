@@ -394,6 +394,7 @@ export interface MatchExpression extends NodeBase {
   kind: "MatchExpression";
   scrutinee?: Expression;
   isPipeline?: boolean;
+  isCatch?: boolean;
   arms: MatchArm[];
 }
 

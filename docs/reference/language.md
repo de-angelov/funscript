@@ -233,6 +233,21 @@ Attaches a nominal brand to a schema for type-safe distinct identifiers without 
 
 See also: `schema`, `Int`, `String`.
 
+## `catch`
+
+Recover selected tagged Effect failures in a pipeline.
+
+```funscript
+effectValue |> catch
+  | ErrorTag(cause) => recoveryEffect
+```
+
+Handles typed failures by tag. The optional binding is the whole error; unmatched failures propagate. Each arm returns an Effect. Defects and interruptions are not caught.
+
+
+
+See also: `effect`, `error`, `match`.
+
 ## `Chunk`
 
 High-performance, immutable indexed sequence from Effect.

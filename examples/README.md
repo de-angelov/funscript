@@ -73,6 +73,7 @@ examples/
 | `todo-dashboard.funx` | Interactive multi-component JSX dashboard featuring stat cards, filter buttons, item rows, and Mutative state draft updates |
 | `todo-http.fun` | Canonical showcase: Service simulation with `effect` blocks, runtime schema parsing, retry policies with backoff, layer provision |
 | `todo-service.fun` | Repository service pattern using Effect services, layers, and TypeScript helper escape hatches |
+| `http-forms-cookies.fun` | Form decoding, cookies, and typed HTTP error recovery with pipeline `catch` |
 | `ts-schema-validation.fun` | Importing external TypeScript type definitions using `from ts<Type>`, Schema decoding, validation error reporting |
 
 ## Running and Verifying Examples

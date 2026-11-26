@@ -339,9 +339,12 @@ export function emitSchemaDeclaration(
         return `${exp}const ${name} = ${baseSchema}.pipe(${emittedStages.join(", ")});\n${exp}type ${name} = ${typeDef};\n${exp}const ${name}FromUnknown = (input: unknown): ${name} => Schema.decodeUnknownSync(${name})(input);`;
       }
 
-      ctx.addEffectImport("pipe");
       ctx.addEffectImport("Schema");
-      return `${exp}const ${name} = pipe(${emitSchemaTypeField(ctx, decl.body.baseType)}, ${emitRefinementExpression(ctx, decl.body.refinement)});\n${exp}type ${name} = typeof ${name}.Type;\n${exp}const ${name}FromUnknown = (input: unknown): ${name} => Schema.decodeUnknownSync(${name})(input);`;
+      const baseSchema = emitSchemaTypeField(ctx, decl.body.baseType);
+      const refinementStages = flattenPipelineStages(decl.body.refinement).map((stage) =>
+        emitRefinementStage(ctx, stage),
+      );
+      return `${exp}const ${name} = ${baseSchema}.pipe(${refinementStages.join(", ")});\n${exp}type ${name} = typeof ${name}.Type;\n${exp}const ${name}FromUnknown = (input: unknown): ${name} => Schema.decodeUnknownSync(${name})(input);`;
     }
     case "TypeSignatureSchema": {
       return `${exp}type ${name}${ctx.emitTypeParameters(decl.typeParams)} = ${ctx.emitTypeNode(decl.body.signature)};`;

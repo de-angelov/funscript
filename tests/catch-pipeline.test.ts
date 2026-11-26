@@ -1,0 +1,95 @@
+import { describe, expect, it } from "vitest";
+import { Effect, Exit } from "effect";
+import { execute, typeCheck, expectCompileError } from "./helpers/index.js";
+import { format } from "../src/formatter/index.js";
+
+const source = `import { Effect } from "effect"
+error Missing(message: String)
+error Offline(message: String)
+export recover = (value: Effect<String, Missing | Offline>) =>
+  value
+  |> catch
+    | Missing(cause) => Effect.succeed(cause.message)
+  |> Effect.map((text) => text + "!")`;
+
+describe("catch pipeline", () => {
+  it("recovers a tag, preserves other failures, and composes with later stages", async () => {
+    const checked = await typeCheck(source, "catch-pipeline.fun");
+    expect(checked.success, checked.formattedOutput).toBe(true);
+    const { recover } = await execute(source);
+    expect(Effect.runSync(recover(Effect.succeed("ok")))).toBe("ok!");
+    expect(
+      Effect.runSync(
+        recover(Effect.fail({ _tag: "Missing", message: "found" })),
+      ),
+    ).toBe("found!");
+    const exit = Effect.runSyncExit(
+      recover(Effect.fail({ _tag: "Offline", message: "down" })),
+    );
+    expect(Exit.isFailure(exit)).toBe(true);
+  });
+
+  it("rejects invalid catch patterns and duplicate tags", async () => {
+    await expectCompileError(
+      "x = Effect.void |> catch\n  | _ => Effect.void",
+      /Catch arms require/,
+    );
+    await expectCompileError(
+      "x = Effect.void |> catch\n  | Missing => Effect.void\n  | Missing => Effect.void",
+      /Duplicate tag/,
+    );
+  });
+
+  it("checks tags, handler results, and the remaining error type", async () => {
+    const wrongTag = await typeCheck(
+      source.replace("Missing(cause) =>", "UnknownTag(cause) =>"),
+      "catch-unknown.fun",
+    );
+    expect(wrongTag.success).toBe(false);
+    const pureHandler = await typeCheck(
+      source.replace("Effect.succeed(cause.message)", "cause.message"),
+      "catch-pure.fun",
+    );
+    expect(pureHandler.success).toBe(false);
+    const wrongField = await typeCheck(
+      source.replace("cause.message", "cause.noSuchField"),
+      "catch-field.fun",
+    );
+    expect(wrongField.success).toBe(false);
+    const remaining = await typeCheck(
+      source +
+        `
+ts {
+  const remaining: Effect.Effect<string, Offline> = recover(Effect.fail(new Offline({ message: "down" })));
+  const impossible: Effect.Effect<string, never> = recover(Effect.fail(new Offline({ message: "down" })));
+}`,
+      "catch-remaining.fun",
+    );
+    expect(remaining.success).toBe(false);
+    expect(remaining.formattedOutput).toContain("impossible");
+  });
+
+  it("handles multiple tags and leaves defects untouched", async () => {
+    const multiple = source.replace(
+      '  |> Effect.map((text) => text + "!")',
+      '    | Offline => Effect.succeed("offline")\n  |> Effect.map((text) => text + "!")',
+    );
+    const checked = await typeCheck(multiple, "catch-multiple.fun");
+    expect(checked.success, checked.formattedOutput).toBe(true);
+    const { recover } = await execute(multiple);
+    expect(
+      Effect.runSync(
+        recover(Effect.fail({ _tag: "Offline", message: "down" })),
+      ),
+    ).toBe("offline!");
+    expect(
+      Exit.isFailure(Effect.runSyncExit(recover(Effect.die("defect")))),
+    ).toBe(true);
+  });
+
+  it("formats catch syntax idempotently", () => {
+    const formatted = format(source);
+    expect(formatted).toContain("|> catch");
+    expect(format(formatted)).toBe(formatted);
+  });
+});

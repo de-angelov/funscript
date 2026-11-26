@@ -151,7 +151,7 @@ export function findFillMatchArmsCodeActions(
       }
     }
 
-    if (n.kind === "MatchExpression") {
+    if (n.kind === "MatchExpression" && !n.isCatch) {
       matchExprs.push(node as MatchExpression);
     }
 
