@@ -36,14 +36,6 @@ export const DOC_MAP: Record<string, DocDef> = {
     'export service UserRepo\n  find: (id: String) => Effect<User, NotFound>\n  save: (user: User) => Effect<Void>\n\nexport UserRepoLive =\n  Layer.succeed(UserRepo, {\n    find: (id) => Effect.succeed({ id, name: "Ada" }),\n    save: (user) => Effect.void,\n  })',
     ["Layer", "Context", "effect", "Effect", "js"],
   ],
-  extern: [
-    "keyword",
-    "extern (Retired)",
-    "Retired language construct.",
-    "The 'extern' keyword has been retired under FunScript's Strict Zero-Alias Policy in favor of native 'service' declarations and explicit 'js' interop inside layer implementations.",
-    "# Retired construct: use service + js\nservice MyService\n  run: () => Effect<Void>",
-    ["service", "js", "Layer"],
-  ],
   record: [
     "keyword",
     "schema Name = { field: Type }\n# or expression:\n{ key: value, ...spread, path.nested: value }",
@@ -558,7 +550,7 @@ export const DOC_MAP: Record<string, DocDef> = {
   ],
   "Effect.all": [
     "effect",
-    "Effect.all(effects: Array<Effect<...>>, options?: { concurrency?: number }): Effect<Array<...>>",
+    "Effect.all(effects: Array<Effect<...>>, options: { concurrency: Option<Number> }): Effect<Array<...>>",
     "Executes multiple Effects concurrently or sequentially and combines results.",
     "Gathers multiple effects into a single Effect that collects all success values in an array or struct.",
     'combined <- Effect.all([\n  UserRepo.find("1"),\n  OrderRepo.find("100"),\n], { concurrency: "unbounded" })',
@@ -567,7 +559,7 @@ export const DOC_MAP: Record<string, DocDef> = {
   ],
   "Effect.forEach": [
     "effect",
-    "Effect.forEach(elements: Iterable<A>, f: (a: A) => Effect<B, E, R>, options?: { concurrency?: number }): Effect<Array<B>, E, R>",
+    "Effect.forEach(elements: Iterable<A>, f: (a: A) => Effect<B, E, R>, options: { concurrency: Option<Number> }): Effect<Array<B>, E, R>",
     "Iterates over an iterable, applying an effectful function to each element.",
     "Replaces imperative loops for effectful iteration. Can run sequentially or concurrently using the `concurrency` option.",
     "results <- Effect.forEach(userIds, (id) => UserRepo.find(id), {\n  concurrency: 5,\n})",
@@ -576,7 +568,7 @@ export const DOC_MAP: Record<string, DocDef> = {
   ],
   "Effect.die": [
     "effect",
-    "Effect.die(defect: unknown): Effect<never>",
+    "Effect.die(defect: Unknown): Effect<Never>",
     "Halts fiber execution immediately with an unrecoverable defect.",
     "Terminates the current fiber with an uncatchable defect (system bug or assertion failure).",
     'Effect.die(new Error("Fatal database corruption"))',

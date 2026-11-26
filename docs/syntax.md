@@ -554,45 +554,22 @@ const answer = () => 42;
 - Functions use `name = (params) => ...`. Neither `fn` nor `function` is supported; there is no second function keyword, no method
   shorthand, and no class method syntax. An object field that holds a function uses the
   same lambda: `{ greet: (name) => ... }`.
-- A typed optional parameter, such as `(name?: String)`, accepts an omitted or
-  `undefined` JavaScript argument. Inside the function it is a real Effect
-  `Option<String>`; handle `Some` and `None` explicitly. `null` is not treated as
-  absent. This conversion does not validate values supplied by JavaScript.
-  An `Option<T>` argument is forwarded to an optional `T` parameter when its
-  meaning is unambiguous. If it can also be the payload (for example `Unknown`
-  or `Option<T>`), the compiler rejects the call: use `Option.getOrUndefined(x)`
-  to forward explicitly or `Option.some(x)` to pass the Option as the value.
-  For `(value?: Option<String>)`, `Option.some(Option.none())` supplies `None`
-  as the value, so the function receives `Some(None)`.
+- Optionality in FunScript is modeled explicitly with `Option<T>` (for FunScript values and schemas) or `JSOptional<T>` (at foreign JS/TS boundaries). The `?` optional parameter/field syntax is disabled.
 - A defaulted parameter, such as `(count: Number = 5)`, accepts omission or
   `undefined` and is a plain `Number` inside the function. Its default is evaluated
   only when needed, and does not replace `false`, `0`, empty strings, or `null`.
-- Only optional parameters may follow an optional parameter. Optional and defaulted
-  parameters are not yet supported on `js` entry bindings or in function type
-  signatures.
 - Rest parameters are supported on the final parameter using `...name: Array<T>` or `...name`.
   Argument spread `f(...args)` in calls and array spread `[1, ...items, 3]` are also supported.
-  A rest parameter cannot be optional and cannot have a default value.
-- Inline record parameters can declare `field?: Type`, read as a real `Option<Type>`,
-  or `field: Type = default`, read as a plain `Type`. Defaulted fields are read once
+  A rest parameter cannot have a default value.
+- Inline record parameters can declare `field: Option<Type>`, read as a real `Option<Type>`,
+  or `field: Type = default` on direct function parameters, read as a plain `Type`. Defaulted fields are read once
   and their fallback evaluated once per call only when the value is `undefined`.
   They preserve `null` and falsey values. Record-field defaults cannot reference
   function parameters yet.
 - Record types and literals may use `error` as a field name, and it can be read with
   `.error`, including for JavaScript response and logger objects.
-- Optional fields are supported on direct, required record parameters, including inside
-  required nested records. An optional parent record containing optional fields can be
-  inspected by matching it with `Some(name)` and `None`; reads of its nested optional
-  fields are also `Option`s. Optional records inside callback or container types are not
-  supported yet. Defaulted fields must be directly on the
-  parameter record. Reads of optional fields produce real Effect `Option`s.
-- To keep raw JavaScript values from escaping into FunScript unconverted, passing,
-  returning, and indexing these records are restricted. A record without defaults may
-  have immutable aliases in the function body and may be passed to a statically known
-  local or verified imported FunScript function whose corresponding parameter
-  also declares optional record fields. An explicit `js` call may receive the original object. To pass an individual
-  optional field to JavaScript, explicitly convert its `Option`, for example with
-  `Option.getOrUndefined`.
+- `Option<T>` fields are first-class values anywhere in records, unions, callbacks, and schemas; they require no special forwarding restrictions.
+- An explicit `js` call lowers `Option<T>` arguments as needed, or you can convert an `Option` for JavaScript explicitly with `Option.getOrUndefined`.
 - `SchemaInput<Name>` is the encoded input type of a named schema. It is a static
   type only; using it does not decode or validate a value or apply schema defaults.
   Use the schema's decoder explicitly when decoded values are required.
@@ -600,8 +577,8 @@ const answer = () => 42;
 ```funscript
 export schema Profile = {
   name: String
-  nickname?: String
-  preferences?: { theme?: String }
+  nickname: Option<String>
+  preferences: Option<{ theme: Option<String> }>
 }
 
 # Decode at a boundary. The named Profile type contains real Options and can
@@ -651,8 +628,8 @@ callbacks](callback-boundaries.md) for details and explicit adapters.
 
 ```funscript
 export schema ButtonProps = {
-  label?: String
-  onClick?: (label: String) => Void
+  label: Option<String>
+  onClick: Option<(label: String) => Void>
 }
 
 export Button = (props: ButtonProps) =>
@@ -660,7 +637,7 @@ export Button = (props: ButtonProps) =>
   => <button onClick={() => Option.map(props.onClick, (click) => click(label))}>{label}</button>
 ```
 
-Contract fields marked `?` accept omitted or `undefined` JavaScript properties and
+Contract fields typed as `Option<T>` accept omitted, `null`, or `undefined` JavaScript properties and
 read as Effect `Option`s in FunScript. Type checking verifies callback signatures for
 typed callers; no runtime validation of JavaScript values or callback signatures is
 performed. A contract may currently be used as a direct, required function parameter;
@@ -1542,13 +1519,11 @@ Rules:
    `schema`/`error` declarations) compile to a runtime `Schema` value **and**
    `type Name = typeof Name.Type`.
 2. **Absence and default fields in record `schema` declarations:**
-   - `field?: Type` uses `Schema.OptionFromOptionalNullOr(Type, { onNoneEncoding: "omit" })`.
+   - `field: Option<Type>` uses `Schema.OptionFromOptionalNullOr(Type, { onNoneEncoding: "omit" })`.
      After explicit schema decoding, an omitted field, `undefined`, or `null` is decoded to `Option.none()`,
      and a present value is `Option.some(value)`. This provides a true Pit of Success for real-world REST
      and SQL APIs that serialize absent fields as `null`. Encoding `None` omits the field; encoding
      `Some(value)` produces the ordinary JavaScript value. This works inside nested schema records as well.
-   - A field declared `Option<Type>` contains an actual Effect `Option`; it does not
-     automatically decode missing, `undefined`, or `null` values.
    - `field: Type = defaultExpr` uses Effect's `Schema.withDecodingDefaultType`.
      Missing or `undefined` input gets the decoded default, evaluated lazily during
      decoding. The encoded field is optional; the decoded field is required. Defaults
@@ -1588,7 +1563,7 @@ decoded values:
 ```funscript
 export schema Page<A> = {
   items: Array<A>
-  next?: String
+  next: Option<String>
 }
 
 export schema Country = {
@@ -2505,9 +2480,6 @@ the remaining types. The `omit` helper exported from `funscript/record` uses a
 distributive `Omit` to preserve discriminated unions and copies enumerable own properties
 without mutating the input. TypeScript object types are open: omitting a known key does not
 close an index signature or guarantee that no other keys exist.
-
-> [!NOTE]
-> FunScript previously experimented with an `extern "pkg" service Name` keyword that generated zero-argument client constructors (`new pkg()`). This was retired under the **Strict Zero-Alias Policy** because real-world production SDKs require explicit options, credentials, and configuration (e.g. `createClient({ url })`, `new Stripe(apiKey)`), making zero-arg instantiation unusable.
 
 #### Declaring the domain service contract
 

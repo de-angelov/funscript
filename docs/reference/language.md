@@ -358,7 +358,7 @@ See also: `service`, `effect`, `Layer`, `Context`.
 Executes multiple Effects concurrently or sequentially and combines results.
 
 ```funscript
-Effect.all(effects: Array<Effect<...>>, options?: { concurrency?: number }): Effect<Array<...>>
+Effect.all(effects: Array<Effect<...>>, options: { concurrency: Option<Number> }): Effect<Array<...>>
 ```
 
 Gathers multiple effects into a single Effect that collects all success values in an array or struct.
@@ -414,7 +414,7 @@ See also: `error`, `Effect.catch`.
 Halts fiber execution immediately with an unrecoverable defect.
 
 ```funscript
-Effect.die(defect: unknown): Effect<never>
+Effect.die(defect: Unknown): Effect<Never>
 ```
 
 Terminates the current fiber with an uncatchable defect (system bug or assertion failure).
@@ -442,7 +442,7 @@ See also: `Effect.map`, `Effect.andThen`.
 Iterates over an iterable, applying an effectful function to each element.
 
 ```funscript
-Effect.forEach(elements: Iterable<A>, f: (a: A) => Effect<B, E, R>, options?: { concurrency?: number }): Effect<Array<B>, E, R>
+Effect.forEach(elements: Iterable<A>, f: (a: A) => Effect<B, E, R>, options: { concurrency: Option<Number> }): Effect<Array<B>, E, R>
 ```
 
 Replaces imperative loops for effectful iteration. Can run sequentially or concurrently using the `concurrency` option.
@@ -665,20 +665,6 @@ Exposes module members to other files. Supports both named exports (`export name
 
 
 See also: `import`, `default`.
-
-## `extern`
-
-Retired language construct.
-
-```funscript
-extern (Retired)
-```
-
-The 'extern' keyword has been retired under FunScript's Strict Zero-Alias Policy in favor of native 'service' declarations and explicit 'js' interop inside layer implementations.
-
-
-
-See also: `service`, `js`, `Layer`.
 
 ## `fail`
 
