@@ -300,7 +300,6 @@ export const DOC_MAP: Record<string, DocDef> = {
     'Represents immutable textual data. FunScript strings support string interpolation via curly brace syntax `"{status}: {message}"` and multiline string literals.',
     'greeting: String = "Hello, FunScript!"',
     ["NonEmptyString", "Number", "Boolean"],
-    ["string"],
   ],
   Number: [
     "primitive",
@@ -309,7 +308,6 @@ export const DOC_MAP: Record<string, DocDef> = {
     "Represents all numbers in FunScript, including floating-point values and integers. Can be refined to integers via `Int` schema.",
     "count: Number = 42\nratio: Number = 3.14159",
     ["Int", "String", "Boolean"],
-    ["number"],
   ],
   Boolean: [
     "primitive",
@@ -318,7 +316,6 @@ export const DOC_MAP: Record<string, DocDef> = {
     "Represents logical truth values (`true` or `false`).",
     "ready: Boolean = true",
     ["true", "false", "and", "or", "not"],
-    ["boolean"],
   ],
   Void: [
     "primitive",
@@ -327,7 +324,6 @@ export const DOC_MAP: Record<string, DocDef> = {
     "Used as the canonical void type and discard return value in FunScript (e.g. '=> Void' or 'Effect<Void>'). Compiles cleanly to TypeScript void.",
     "logInfo = (msg: String): Effect<Void> => effect {\n  _ <- Console.log(msg)\n  => Void\n}",
     ["Unknown", "Never", "effect"],
-    ["void"],
   ],
   Unknown: [
     "primitive",
@@ -336,7 +332,6 @@ export const DOC_MAP: Record<string, DocDef> = {
     "Top type representing values whose type is not statically known (e.g. from external API payloads). Must be narrowed via `raw |> decode(TargetSchema)` or `match` before access.",
     "parsePayload = (raw: Unknown) =>\n  => raw |> decode(User)",
     ["Never", "schema"],
-    ["unknown"],
   ],
   Never: [
     "primitive",
@@ -345,7 +340,6 @@ export const DOC_MAP: Record<string, DocDef> = {
     "Uninhabited type used for functions that never return, effects that cannot fail (`Effect<A, Never>`), or unreachable branches in exhaustive pattern matching.",
     "unreachable = (x: Never): Never => x",
     ["Unknown", "Void"],
-    ["never"],
   ],
   Array: [
     "primitive",
