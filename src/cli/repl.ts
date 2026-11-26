@@ -17,6 +17,7 @@ import {
   loadProjectConfig,
 } from "../compiler/project-config.js";
 import { FUNSCRIPT_VERSION } from "../version.js";
+import { FunScriptError, isFileNotFoundError } from "../errors.js";
 
 const replProjectRoot = process.cwd();
 const replProjectConfig = loadProjectConfig(replProjectRoot);
@@ -83,7 +84,9 @@ export function extractErrorMessage(err: unknown): string {
         try {
           const parsed = JSON.parse(errObj.message);
           if (parsed.message) return parsed.message;
-        } catch {}
+        } catch (error) {
+          if (!(error instanceof SyntaxError)) throw error;
+        }
       }
       return errObj.message;
     }
@@ -179,7 +182,8 @@ export async function compileReplCode(
         compiled = res;
         tsCode = res.typescript;
         isExpression = true;
-      } catch {
+      } catch (error) {
+        if (!(error instanceof FunScriptError)) throw error;
         throw declErr;
       }
     }
@@ -197,7 +201,8 @@ export async function compileReplCode(
         compiled = res;
         tsCode = res.typescript;
         isExpression = false;
-      } catch {
+      } catch (error) {
+        if (!(error instanceof FunScriptError)) throw error;
         throw exprErr;
       }
     }
@@ -316,7 +321,8 @@ export function setupReplContext(context: vm.Context): void {
     context.require = createRequire(
       path.resolve(process.cwd(), "package.json"),
     );
-  } catch {
+  } catch (error) {
+    if (!isFileNotFoundError(error)) throw error;
     context.require = createRequire(import.meta.url);
   }
 

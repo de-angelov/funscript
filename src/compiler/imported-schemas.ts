@@ -48,8 +48,11 @@ export class ImportedSchemaError extends FunScriptError {
         endLine: end.line,
         endColumn: end.character,
       };
-    } catch {
+    } catch (error) {
       // Synthetic TypeScript declarations may not have a source location.
+      if (!(error instanceof RangeError || error instanceof TypeError)) {
+        throw error;
+      }
     }
   }
 }

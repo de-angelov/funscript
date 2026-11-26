@@ -2,6 +2,7 @@ import * as Effect from "effect/Effect";
 import { spawn } from "node:child_process";
 import { existsSync, mkdirSync, unlinkSync, writeFileSync } from "node:fs";
 import * as path from "node:path";
+import { FunScriptError, isFileNotFoundError } from "../errors.js";
 import { findFunFiles } from "./io.js";
 
 export const testCommand = (args: string[]) =>
@@ -66,8 +67,9 @@ export const testCommand = (args: string[]) =>
             bridges.push(bridgeFile);
           }
         }
-      } catch {
+      } catch (error) {
         // Fall back to direct execution
+        if (!(error instanceof FunScriptError)) throw error;
       }
 
       const bunArgs = [
@@ -82,8 +84,9 @@ export const testCommand = (args: string[]) =>
         for (const b of bridges) {
           try {
             unlinkSync(b);
-          } catch {
+          } catch (error) {
             // Bridge already removed
+            if (!isFileNotFoundError(error)) throw error;
           }
         }
       };

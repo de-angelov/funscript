@@ -5,7 +5,7 @@ import * as fs from "node:fs/promises";
 import { createRequire } from "node:module";
 import * as path from "node:path";
 import { loadProjectConfig } from "../compiler/project-config.js";
-import { toErrorMessage } from "../errors.js";
+import { isModuleNotFoundError, toErrorMessage } from "../errors.js";
 import { findFunFiles } from "./io.js";
 
 export const doctorCommand = (args: string[]) =>
@@ -62,7 +62,8 @@ export const doctorCommand = (args: string[]) =>
         try {
           const resolved = require.resolve(dependency);
           add(dependency, "pass", `Resolved ${resolved}`);
-        } catch {
+        } catch (error) {
+          if (!isModuleNotFoundError(error)) throw error;
           add(dependency, "fail", `Install ${dependency} in this project`);
         }
       }

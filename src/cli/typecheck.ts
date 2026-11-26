@@ -3,6 +3,7 @@ import * as Effect from "effect/Effect";
 import * as fs from "node:fs/promises";
 import * as path from "node:path";
 import { typeCheckFiles } from "../compiler/check.js";
+import { FunScriptError } from "../errors.js";
 import { Lexer } from "../lexer/lexer.js";
 import { Parser } from "../parser/parser.js";
 
@@ -26,7 +27,8 @@ export const collectCliFiles = (
           file,
           source,
         ).parse().body;
-      } catch {
+      } catch (error) {
+        if (!(error instanceof FunScriptError)) throw error;
         continue;
       } // The type checker reports the source's syntax diagnostics.
       for (const declaration of declarations) {

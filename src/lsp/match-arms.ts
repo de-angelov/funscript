@@ -11,6 +11,7 @@ import type {
   Pattern,
   Program,
 } from "../ast/types.js";
+import { isExpectedSyntaxError } from "../errors.js";
 import { Lexer } from "../lexer/lexer.js";
 import { Parser } from "../parser/parser.js";
 
@@ -71,7 +72,8 @@ export function findFillMatchArmsCodeActions(
     const lexer = new Lexer(source, uri);
     const tokens = lexer.tokenize();
     program = new Parser(tokens, uri, source).parse();
-  } catch {
+  } catch (error) {
+    if (!isExpectedSyntaxError(error)) throw error;
     return [];
   }
 

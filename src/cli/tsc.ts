@@ -7,6 +7,7 @@ import * as path from "node:path";
 import ts from "typescript";
 import { compileString } from "../compiler.js";
 import { mapDiagnosticLocation } from "../compiler/check.js";
+import { FunScriptError, isFileNotFoundError } from "../errors.js";
 import { rewriteRelativeImports } from "../plugins/type-view.js";
 
 /** Run the project's TypeScript compiler, mapping verified type-view diagnostics. */
@@ -48,7 +49,8 @@ export async function runTsc(
       (text) => {
         try {
           return JSON.parse(text);
-        } catch {
+        } catch (error) {
+          if (!(error instanceof SyntaxError)) throw error;
           return [];
         }
       },
@@ -125,7 +127,13 @@ export async function runTsc(
               true,
             ),
           };
-        } catch {
+        } catch (error) {
+          if (
+            !isFileNotFoundError(error) &&
+            !(error instanceof FunScriptError)
+          ) {
+            throw error;
+          }
           return undefined;
         }
       })();

@@ -4,6 +4,7 @@ import type {
   Position,
   Range,
 } from "vscode-languageserver/node";
+import { isExpectedSyntaxError } from "../errors.js";
 import type {
   BindingTarget,
   BlockStatement,
@@ -1127,7 +1128,8 @@ export function findDefinition(
     const tokens = lexer.tokenize();
     const parser = new Parser(tokens, uri);
     program = parser.parse();
-  } catch {
+  } catch (error) {
+    if (!isExpectedSyntaxError(error)) throw error;
     return null;
   }
 

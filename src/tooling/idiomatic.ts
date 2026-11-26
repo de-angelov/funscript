@@ -1,5 +1,6 @@
 import ts from "typescript";
 import type { Program } from "../ast/types.js";
+import { FunScriptError } from "../errors.js";
 import { Lexer } from "../lexer/lexer.js";
 import { Parser } from "../parser/parser.js";
 
@@ -174,8 +175,9 @@ export function auditIdiomaticFunScript(
     const tokens = lexer.tokenize();
     const parser = new Parser(tokens);
     program = parser.parse();
-  } catch {
+  } catch (error) {
     // If syntax parsing fails, let the compiler/checker report syntax errors
+    if (!(error instanceof FunScriptError)) throw error;
     return { file: filePath, success: true, diagnostics: [] };
   }
 

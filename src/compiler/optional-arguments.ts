@@ -58,7 +58,8 @@ export function resolveOptionalArguments(
           currentFile,
           src,
         ).parse();
-      } catch {
+      } catch (error) {
+        if (!(error instanceof FunScriptError)) throw error;
         continue;
       }
     }
@@ -102,8 +103,9 @@ export function resolveOptionalArguments(
           isJsx: file.endsWith(".funx"),
         }).emit(),
       );
-    } catch {
+    } catch (error) {
       /* Unresolvable imports are handled by the regular compiler diagnostics. */
+      if (!(error instanceof FunScriptError)) throw error;
     }
   }
   const marked = new Emitter(ast, undefined, {

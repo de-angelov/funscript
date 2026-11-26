@@ -4,6 +4,7 @@ import { spawnSync } from "node:child_process";
 import * as fs from "node:fs/promises";
 import * as path from "node:path";
 import { fileURLToPath } from "node:url";
+import { isFileNotFoundError } from "../errors.js";
 import { funscriptEsbuildPlugin } from "../plugins/esbuild.js";
 import { collectCliFiles } from "./typecheck.js";
 
@@ -36,7 +37,8 @@ export function isBunAvailable(): boolean {
   try {
     const res = spawnSync("bun", ["--version"], { stdio: "ignore" });
     return res.status === 0;
-  } catch {
+  } catch (error) {
+    if (!isFileNotFoundError(error)) throw error;
     return false;
   }
 }

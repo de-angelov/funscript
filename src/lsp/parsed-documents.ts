@@ -1,4 +1,5 @@
 import type { Program } from "../ast/types.js";
+import { isExpectedSyntaxError } from "../errors.js";
 import { Lexer } from "../lexer/lexer.js";
 import { TokenType } from "../lexer/tokens.js";
 import { Parser } from "../parser/parser.js";
@@ -42,8 +43,9 @@ export class ParsedDocumentCache {
           character: token.span.start.column - 1,
         }));
       ast = new Parser(tokens, doc.uri, doc.text).parse();
-    } catch {
+    } catch (error) {
       /* Invalid documents are cached as invalid until their contents change. */
+      if (!isExpectedSyntaxError(error)) throw error;
     }
     const parsed = { doc: { uri: doc.uri, text: doc.text }, ast, occurrences };
     this.entries.set(doc.uri, parsed);

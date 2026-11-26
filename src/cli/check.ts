@@ -4,7 +4,7 @@ import * as fs from "node:fs/promises";
 import * as path from "node:path";
 import { pathToFileURL } from "node:url";
 import { typeCheckFiles, type TypeCheckDiagnostic } from "../compiler/check.js";
-import { toErrorMessage } from "../errors.js";
+import { FunScriptError, toErrorMessage } from "../errors.js";
 import {
   loadFormatConfigForFile,
   type FunScriptProjectConfig,
@@ -152,8 +152,9 @@ export const checkCommand = (
               yield* Console.log(`✓ Fixed ${target}`);
             }
           }
-        } catch {
+        } catch (error) {
           /* Skip unfixable files */
+          if (!(error instanceof FunScriptError)) throw error;
         }
       }
       if (fixedCount > 0 && !jsonOutput && !sarifOutput) {

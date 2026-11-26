@@ -13,6 +13,7 @@ import type {
   Program,
 } from "../ast/types.js";
 import { compileString } from "../compiler.js";
+import { isExpectedSyntaxError } from "../errors.js";
 import { TypeScriptCompilationContext } from "../compiler/typescript-context.js";
 import { Lexer } from "../lexer/lexer.js";
 import { Parser } from "../parser/parser.js";
@@ -64,7 +65,8 @@ export function findInlayHints(
     const lexer = new Lexer(source, uri);
     const tokens = lexer.tokenize();
     program = new Parser(tokens, uri, source).parse();
-  } catch {
+  } catch (error) {
+    if (!isExpectedSyntaxError(error)) throw error;
     return [];
   }
 
@@ -78,7 +80,8 @@ export function findInlayHints(
       compileString(source, filename, { context, sourcemap: false }),
     );
     checked = context.check(result.typescript);
-  } catch {
+  } catch (error) {
+    if (!isExpectedSyntaxError(error)) throw error;
     return [];
   }
 

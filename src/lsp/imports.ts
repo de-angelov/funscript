@@ -5,6 +5,7 @@ import {
   type TextEdit,
 } from "vscode-languageserver/node";
 import type { ImportDeclaration, Program } from "../ast/types.js";
+import { isExpectedSyntaxError } from "../errors.js";
 import { Lexer } from "../lexer/lexer.js";
 import { TokenType, type Token } from "../lexer/tokens.js";
 import { Parser } from "../parser/parser.js";
@@ -77,7 +78,8 @@ export function findAutoImportCodeActions(
   try {
     tokens = new Lexer(source, uri).tokenize();
     program = new Parser(tokens, uri, source).parse();
-  } catch {
+  } catch (error) {
+    if (!isExpectedSyntaxError(error)) throw error;
     return [];
   }
 
@@ -230,7 +232,8 @@ export function findRemoveUnusedImportsCodeActions(
   try {
     tokens = new Lexer(source, uri).tokenize();
     program = new Parser(tokens, uri, source).parse();
-  } catch {
+  } catch (error) {
+    if (!isExpectedSyntaxError(error)) throw error;
     return [];
   }
 

@@ -7,6 +7,7 @@ import {
   type TextDocumentItem,
 } from "vscode-languageserver/node";
 import type { TypeCheckCache, TypeCheckResult } from "../compiler/check.js";
+import { isExpectedUriError } from "../errors.js";
 import { loadProjectConfigForFile } from "../compiler/project-config.js";
 import { validateFunScript } from "./validation.js";
 
@@ -47,8 +48,9 @@ parentPort?.on("message", async (request: Request) => {
         group.files[filename] = doc.text;
         groups.set(policy.root, group);
         filenames.set(doc.uri, filename);
-      } catch {
+      } catch (error) {
         /* Non-file documents still receive semantic diagnostics. */
+        if (!isExpectedUriError(error)) throw error;
       }
     }
     const currentFiles = new Set(

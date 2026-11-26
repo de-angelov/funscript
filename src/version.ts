@@ -1,5 +1,6 @@
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
+import { isFileNotFoundError } from "./errors.js";
 
 /**
  * The version reported by the CLI, REPL and language server. Read from the
@@ -15,7 +16,10 @@ const readPackageVersion = (): string => {
       version?: unknown;
     };
     return typeof parsed.version === "string" ? parsed.version : "0.0.0";
-  } catch {
+  } catch (error) {
+    if (!isFileNotFoundError(error) && !(error instanceof SyntaxError)) {
+      throw error;
+    }
     return "0.0.0";
   }
 };

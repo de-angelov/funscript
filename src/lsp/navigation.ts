@@ -11,6 +11,7 @@ import type {
   WorkspaceEdit,
 } from "vscode-languageserver/node";
 import type { Program } from "../ast/types.js";
+import { isExpectedSyntaxError, isExpectedUriError } from "../errors.js";
 import { Lexer } from "../lexer/lexer.js";
 import { Parser } from "../parser/parser.js";
 import { DefinitionFinder, findDefinition, spanToRange } from "./definition.js";
@@ -26,7 +27,8 @@ type AnalyzedDocument = ParsedDocument;
 function parse(source: string, uri: string): Program | null {
   try {
     return new Parser(new Lexer(source, uri).tokenize(), uri, source).parse();
-  } catch {
+  } catch (error) {
+    if (!isExpectedSyntaxError(error)) throw error;
     return null;
   }
 }
@@ -81,10 +83,12 @@ class NavigationAnalysis {
       .map((part) => (part.kind === "StringRawPart" ? part.value : ""))
       .join("");
     if (!modulePath.startsWith(".")) return undefined;
+    if (!doc.uri.startsWith("file:")) return undefined;
     let base: string;
     try {
       base = resolve(dirname(fileURLToPath(doc.uri)), modulePath);
-    } catch {
+    } catch (error) {
+      if (!isExpectedUriError(error)) throw error;
       return undefined;
     }
     const stem = base.endsWith(".js") ? base.slice(0, -3) : base;
@@ -96,9 +100,11 @@ class NavigationAnalysis {
       ),
     ]);
     const matches = this.documents.filter((candidate) => {
+      if (!candidate.uri.startsWith("file:")) return false;
       try {
         return candidates.has(fileURLToPath(candidate.uri));
-      } catch {
+      } catch (error) {
+        if (!isExpectedUriError(error)) throw error;
         return false;
       }
     });

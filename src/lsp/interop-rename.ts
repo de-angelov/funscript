@@ -7,6 +7,7 @@ import type {
   TextEdit,
   WorkspaceEdit,
 } from "vscode-languageserver/node";
+import { isExpectedSyntaxError, isExpectedUriError } from "../errors.js";
 import { type ParsedDocumentCache } from "./parsed-documents.js";
 
 type Doc = Pick<TextDocumentItem, "uri" | "text">;
@@ -129,7 +130,8 @@ function exportsOf(
         for (const spec of item.specifiers) add(spec.local);
     }
     return result;
-  } catch {
+  } catch (error) {
+    if (!isExpectedSyntaxError(error)) throw error;
     return undefined;
   }
 }
@@ -151,10 +153,12 @@ export function renameInterop(
   const targets: Array<{ file: string; offset: number }> = [];
   const originalPaths = new Map<string, string>();
   for (const doc of fun) {
+    if (!doc.uri.startsWith("file:")) continue;
     let file: string;
     try {
       file = resolve(fileURLToPath(doc.uri));
-    } catch {
+    } catch (error) {
+      if (!isExpectedUriError(error)) throw error;
       continue;
     }
     const exported = exportsOf(doc, cache);
@@ -188,7 +192,8 @@ export function renameInterop(
       const file = resolve(fileURLToPath(doc.uri));
       texts.set(file, doc.text);
       originalPaths.set(file, doc.uri);
-    } catch {
+    } catch (error) {
+      if (!isExpectedUriError(error)) throw error;
       return null;
     }
   }

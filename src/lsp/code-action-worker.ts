@@ -23,7 +23,8 @@ parentPort?.on(
         id,
         result: server.onCodeActionHandler(params),
       });
-    } catch {
+    } catch (error) {
+      console.error("code-action-worker failed:", error);
       parentPort?.postMessage({ id, result: [] });
     }
   },

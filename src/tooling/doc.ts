@@ -2,6 +2,7 @@ import { spawn } from "node:child_process";
 import * as fs from "node:fs/promises";
 import * as path from "node:path";
 import type { Program } from "../ast/types.js";
+import { FunScriptError, isFileNotFoundError } from "../errors.js";
 import { Lexer } from "../lexer/lexer.js";
 import { Parser } from "../parser/parser.js";
 
@@ -144,7 +145,8 @@ export function extractModuleDoc(
     const lexer = new Lexer(source, filePath);
     const tokens = lexer.tokenize();
     program = new Parser(tokens, filePath, source).parse();
-  } catch {
+  } catch (error) {
+    if (!(error instanceof FunScriptError)) throw error;
     return {
       filePath: relPath,
       moduleName,
@@ -718,8 +720,11 @@ export async function generateDocs(
     const pkg = JSON.parse(pkgRaw);
     if (pkg.name) title = pkg.name;
     if (pkg.version) version = pkg.version;
-  } catch {
+  } catch (error) {
     /* Package json is optional */
+    if (!isFileNotFoundError(error) && !(error instanceof SyntaxError)) {
+      throw error;
+    }
   }
 
   const modules: DocModule[] = [];
@@ -737,8 +742,11 @@ export async function generateDocs(
       ) {
         modules.push(mod);
       }
-    } catch {
+    } catch (error) {
       /* Skip unreadable files */
+      if (!isFileNotFoundError(error) && !(error instanceof FunScriptError)) {
+        throw error;
+      }
     }
   }
 

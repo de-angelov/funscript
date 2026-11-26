@@ -5,6 +5,11 @@ import * as path from "node:path";
 import { Lexer } from "../lexer/lexer.js";
 import { Parser } from "../parser/parser.js";
 import { walkAst } from "../ast/walk.js";
+import {
+  FunScriptError,
+  isFileNotFoundError,
+  isModuleNotFoundError,
+} from "../errors.js";
 import { packageFingerprint } from "./package-fingerprint.js";
 
 /**
@@ -51,7 +56,8 @@ export function incrementalDependencyKeys(
       const key = hash.digest("hex");
       environments.set(directory, key);
       return key;
-    } catch {
+    } catch (error) {
+      if (!isFileNotFoundError(error)) throw error;
       environments.set(directory, undefined);
       return undefined;
     }
@@ -107,7 +113,8 @@ export function incrementalDependencyKeys(
           const fingerprint = packageKeys.get(key);
           if (!fingerprint) safe = false;
           else packages.push(fingerprint);
-        } catch {
+        } catch (error) {
+          if (!isModuleNotFoundError(error)) throw error;
           safe = false;
         }
       }
@@ -129,7 +136,8 @@ export function incrementalDependencyKeys(
           let key: string;
           try {
             key = `${specifier}\0${createRequire(filename).resolve(specifier)}`;
-          } catch {
+          } catch (error) {
+            if (!isModuleNotFoundError(error)) throw error;
             safe = false;
             continue;
           }
@@ -167,7 +175,8 @@ export function incrementalDependencyKeys(
         }
         dependencies.push(candidates[0]);
       }
-    } catch {
+    } catch (error) {
+      if (!(error instanceof FunScriptError)) throw error;
       safe = false;
     }
     if (environment) packages.push(environment);

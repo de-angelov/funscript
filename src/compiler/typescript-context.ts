@@ -1,6 +1,7 @@
 import * as fs from "node:fs";
 import path from "node:path";
 import ts from "typescript";
+import { isFileNotFoundError } from "../errors.js";
 
 // Declaration files are immutable for the lifetime of a process in the common
 // case. Share parsed ASTs between compilation contexts, while checking file
@@ -128,7 +129,8 @@ export class TypeScriptCompilationContext {
         try {
           const stat = fs.statSync(name, { bigint: true });
           stamp = `${stat.dev}:${stat.ino}:${stat.size}:${stat.mtimeNs}:${stat.ctimeNs}`;
-        } catch {
+        } catch (error) {
+          if (!isFileNotFoundError(error)) throw error;
           stamp = "missing";
         }
         const cached = declarationFiles.get(norm);

@@ -74,6 +74,36 @@ export function isFileNotFoundError(error: unknown): boolean {
 }
 
 /**
+ * Returns true for expected URI conversion errors on non-file URIs.
+ */
+export function isExpectedUriError(error: unknown): boolean {
+  return error instanceof URIError || error instanceof TypeError;
+}
+
+/**
+ * Returns true for expected FunScript syntax/compiler errors or URI errors on incomplete buffers.
+ */
+export function isExpectedSyntaxError(error: unknown): boolean {
+  return error instanceof FunScriptError || isExpectedUriError(error);
+}
+
+/**
+ * Returns true for Node module resolution errors (`MODULE_NOT_FOUND`, `ERR_PACKAGE_PATH_NOT_EXPORTED`, `ENOENT`, `ENOTDIR`).
+ */
+export function isModuleNotFoundError(error: unknown): boolean {
+  if (isFileNotFoundError(error)) return true;
+  if (typeof error !== "object" || error === null || !("code" in error)) {
+    return false;
+  }
+  const code = (error as { code?: unknown }).code;
+  return (
+    code === "MODULE_NOT_FOUND" ||
+    code === "ERR_MODULE_NOT_FOUND" ||
+    code === "ERR_PACKAGE_PATH_NOT_EXPORTED"
+  );
+}
+
+/**
  * Safely extracts an error message from an unknown thrown value.
  */
 export function toErrorMessage(error: unknown, source?: string): string {

@@ -9,6 +9,7 @@ import type {
   RecordTypeNode,
   TypeNode,
 } from "../ast/types.js";
+import { FunScriptError, isFileNotFoundError } from "../errors.js";
 import { Lexer } from "../lexer/lexer.js";
 import { Parser } from "../parser/parser.js";
 import { isRecordContract, recordContractType } from "./record-contracts.js";
@@ -30,7 +31,8 @@ export function resolveImportedRecordFunctions(
     if (virtualSources?.has(normalized)) return virtualSources.get(normalized);
     try {
       return fs.readFileSync(normalized, "utf8");
-    } catch {
+    } catch (error) {
+      if (!isFileNotFoundError(error)) throw error;
       return undefined;
     }
   };
@@ -79,8 +81,9 @@ export function resolveImportedRecordFunctions(
           file,
           source,
         ).parse();
-      } catch {
+      } catch (error) {
         /* Reject invalid dependencies. */
+        if (!(error instanceof FunScriptError)) throw error;
       }
     }
     programs.set(file, program);

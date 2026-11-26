@@ -3,6 +3,7 @@ import * as fs from "node:fs";
 import { builtinModules, createRequire } from "node:module";
 import * as path from "node:path";
 import ts from "typescript";
+import { isModuleNotFoundError } from "../errors.js";
 
 const fileHashes = new Map<
   string,
@@ -200,7 +201,10 @@ export function packageFingerprint(
     )
       return undefined;
     return hash.digest("hex");
-  } catch {
+  } catch (error) {
+    if (!isModuleNotFoundError(error) && !(error instanceof SyntaxError)) {
+      throw error;
+    }
     return undefined;
   }
 }

@@ -33,7 +33,8 @@ parentPort?.on("message", (request: Request) => {
         ? server.onPrepareRenameHandler(request.params)
         : server.onRenameHandler(request.params as RenameParams);
     parentPort?.postMessage({ id: request.id, result });
-  } catch {
+  } catch (error) {
+    console.error("rename-worker failed:", error);
     parentPort?.postMessage({ id: request.id, result: null });
   }
 });
