@@ -31,8 +31,8 @@ export interface SchemaEmitterContext {
   checkedTaggedSchemas: Map<string, TaggedUnionSchema>;
   genericDataSchemas: Map<string, number>;
   genericSchemaDeclarations: Map<string, SchemaDeclaration>;
-  activeSchemaParameters?: Set<string>;
-  unsafeSchemaBinding: boolean;
+  readonly activeSchemaParameters?: ReadonlySet<string>;
+  readonly unsafeSchemaBinding: boolean;
   needsCheckedRecordDecoder: boolean;
   checkedCallbackKinds: Set<string>;
   options: {
@@ -41,6 +41,7 @@ export interface SchemaEmitterContext {
     importedDataSchemas?: ReadonlySet<string>;
     importedGenericDataSchemas?: ReadonlyMap<string, number>;
   };
+  withSchemaParameters<T>(names: ReadonlySet<string>, fn: () => T): T;
   addEffectImport(name: string): void;
   emitExpression(expr: Expression): string;
   emitBindingTarget(target: BindingTarget | Pattern): string;
@@ -494,9 +495,8 @@ export function emitGenericDataSchema(
   }
   ctx.addEffectImport("Schema");
   ctx.addEffectImport("SchemaAST as $funscriptSchemaAST");
-  const previous = ctx.activeSchemaParameters;
-  ctx.activeSchemaParameters = names;
-  try {
+  const body = decl.body;
+  return ctx.withSchemaParameters(names, () => {
     const args = parameters
       .map(
         (param) =>
@@ -511,14 +511,14 @@ export function emitGenericDataSchema(
       )
       .join("\n");
 
-    if (decl.body.kind === "RecordSchema") {
-      const fields = decl.body.fields
+    if (body.kind === "RecordSchema") {
+      const fields = body.fields
         .map((field) => {
           const schema = emitSchemaTypeField(ctx, field.typeAnnotation);
           return `  ${emitPropertyKey(field.name.name)}: ${field.optional ? `Schema.OptionFromOptionalNullOr(${schema}, { onNoneEncoding: "omit" })` : schema}`;
         })
         .join(",\n");
-      const dataType = `{ ${decl.body.fields
+      const dataType = `{ ${body.fields
         .map((field) => {
           const type = ctx.emitTypeNode(field.typeAnnotation);
           return `readonly ${emitPropertyKey(field.name.name)}: ${field.optional ? `import("effect").Option.Option<${type}>` : type}`;
@@ -526,17 +526,15 @@ export function emitGenericDataSchema(
         .join("; ")} }`;
       return `${exp}const ${decl.id.name} = <${args}>(${values}) => {\n${checks}\n  return Schema.Struct({\n${fields}\n  });\n};\n${exp}type ${decl.id.name}<${parameters.join(", ")}> = ${dataType};`;
     } else {
-      const members = decl.body.members
+      const members = body.members
         .map((member) => emitSchemaTypeField(ctx, member))
         .join(", ");
-      const dataType = decl.body.members
+      const dataType = body.members
         .map((member) => ctx.emitTypeNode(member))
         .join(" | ");
       return `${exp}const ${decl.id.name} = <${args}>(${values}) => {\n${checks}\n  return Schema.Union([${members}]);\n};\n${exp}type ${decl.id.name}<${parameters.join(", ")}> = ${dataType};`;
     }
-  } finally {
-    ctx.activeSchemaParameters = previous;
-  }
+  });
 }
 
 export function emitCheckedRecordDecoder(

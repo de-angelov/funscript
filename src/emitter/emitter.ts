@@ -588,6 +588,7 @@ interface EmitContext {
   readonly inTryContext: boolean;
   readonly pendingTryThunk: boolean;
   readonly pendingTryRecord: boolean;
+  readonly activeSchemaParameters?: ReadonlySet<string>;
 }
 
 export class Emitter {
@@ -636,8 +637,15 @@ export class Emitter {
   public runtimeSchemaNames = new Set<string>();
   public genericDataSchemas = new Map<string, number>();
   public genericSchemaDeclarations = new Map<string, SchemaDeclaration>();
-  public activeSchemaParameters?: Set<string>;
-  public unsafeSchemaBinding = false;
+  public get activeSchemaParameters(): ReadonlySet<string> | undefined {
+    return this.emitCtx.activeSchemaParameters;
+  }
+
+  public withSchemaParameters<T>(names: ReadonlySet<string>, fn: () => T): T {
+    return this.withEmitContext({ activeSchemaParameters: names }, fn);
+  }
+
+  public readonly unsafeSchemaBinding: boolean;
   public recordContracts = new Map<
     string,
     import("../ast/types.js").RecordTypeNode
@@ -669,6 +677,7 @@ export class Emitter {
       this.recordContracts.set(name, contract);
     // Source-map emission renders declarations individually, but resolution
     // still needs the bindings from the complete source program.
+    let unsafeSchemaBinding = false;
     const allItems = (contextProgram ?? program)?.body ?? [];
     for (const item of allItems) {
       const decl = item.kind === "ExportDeclaration" ? item.declaration : item;
@@ -681,13 +690,13 @@ export class Emitter {
               item.source.raw !== '"effect"' ||
               spec.imported.name !== "Schema")
           )
-            this.unsafeSchemaBinding = true;
+            unsafeSchemaBinding = true;
         }
         if (
           item.namespaceBinding?.name === "Schema" &&
           (item.isTypeOnly || item.source.raw !== '"effect/Schema"')
         )
-          this.unsafeSchemaBinding = true;
+          unsafeSchemaBinding = true;
         if (!item.isTypeOnly) {
           for (const spec of item.specifiers) {
             if (!spec.isTypeOnly) this.userImportBindings.add(spec.local.name);
@@ -730,6 +739,7 @@ export class Emitter {
       if (decl.kind === "BindingDeclaration" && "name" in decl.id)
         this.bindings.set(decl.id.name, decl);
     }
+    this.unsafeSchemaBinding = unsafeSchemaBinding;
 
     const staticTypeNames = new Set<string>();
     for (const [name] of this.recordContracts) staticTypeNames.add(name);
