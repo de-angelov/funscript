@@ -37,6 +37,7 @@
     "fmt:ts:check": "prettier --check 'src/**/*.ts'",
     "lint": "eslint src --max-warnings=0",
     "lint:fix": "eslint src --fix",
+    "knip": "npx --yes knip --reporter compact",
     "prettier:check": "prettier --plugin ./dist/formatter/prettier.js --check examples/hello.fun tests/fixtures/formatter/*.funx docs/ci-release.md",
     "docs:generate": "npm run build && node scripts/generate-reference-docs.mjs",
     "docs:check": "npm run build && node scripts/generate-reference-docs.mjs --check",

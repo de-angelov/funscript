@@ -77,6 +77,9 @@ jobs:
       - name: Lint TypeScript source (ESLint + Effect rules)
         run: npm run lint
 
+      - name: Check unused files, exports, and dependencies (Knip)
+        run: npm run knip
+
       - name: Check Markdown formatting
         run: npm run prettier:check
 
