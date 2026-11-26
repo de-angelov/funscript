@@ -40,22 +40,27 @@ export function updateStatusBar(status: ServerStatus, tooltip?: string): void {
   switch (status) {
     case ServerStatus.Starting:
       statusBarItem.text = "$(sync~spin) FunScript";
-      statusBarItem.tooltip = tooltip ?? "FunScript Language Server is initializing...";
+      statusBarItem.tooltip =
+        tooltip ?? "FunScript Language Server is initializing...";
       statusBarItem.command = "funscript.restartServer";
       break;
     case ServerStatus.Ready:
       statusBarItem.text = "$(check) FunScript";
-      statusBarItem.tooltip = tooltip ?? "FunScript Language Server is active (click to restart)";
+      statusBarItem.tooltip =
+        tooltip ?? "FunScript Language Server is active (click to restart)";
       statusBarItem.command = "funscript.restartServer";
       break;
     case ServerStatus.Stopped:
       statusBarItem.text = "$(circle-slash) FunScript";
-      statusBarItem.tooltip = tooltip ?? "FunScript Language Server is stopped (click to restart)";
+      statusBarItem.tooltip =
+        tooltip ?? "FunScript Language Server is stopped (click to restart)";
       statusBarItem.command = "funscript.restartServer";
       break;
     case ServerStatus.Error:
       statusBarItem.text = "$(error) FunScript";
-      statusBarItem.tooltip = tooltip ?? "FunScript Language Server encountered an error (click to restart)";
+      statusBarItem.tooltip =
+        tooltip ??
+        "FunScript Language Server encountered an error (click to restart)";
       statusBarItem.command = "funscript.restartServer";
       break;
   }
@@ -71,7 +76,7 @@ export function buildServerOptions(serverPath = "funscript"): ServerOptions {
 
 export function buildClientOptions(
   outChannel?: vscode.LogOutputChannel,
-  traceChannel?: vscode.LogOutputChannel
+  traceChannel?: vscode.LogOutputChannel,
 ): LanguageClientOptions {
   return {
     documentSelector: [
@@ -88,7 +93,9 @@ export function buildClientOptions(
   };
 }
 
-export async function checkCliAvailability(serverPath: string): Promise<boolean> {
+export async function checkCliAvailability(
+  serverPath: string,
+): Promise<boolean> {
   return new Promise<boolean>((resolve) => {
     try {
       const proc = cp.spawn(serverPath, ["version"], { stdio: "ignore" });
@@ -108,26 +115,47 @@ function isFunScriptDocument(doc: vscode.TextDocument): boolean {
 }
 
 function isInteropDocument(doc: vscode.TextDocument): boolean {
-  return doc.uri.scheme === "file" && /\.[cm]?[jt]sx?$/.test(doc.fileName) &&
-    !/(?:^|[\\/])(?:node_modules|\.git|\.funscript|dist|build|coverage)(?:[\\/]|$)/.test(doc.fileName) &&
-    Boolean(vscode.workspace.getWorkspaceFolder(doc.uri));
+  return (
+    doc.uri.scheme === "file" &&
+    /\.[cm]?[jt]sx?$/.test(doc.fileName) &&
+    !/(?:^|[\\/])(?:node_modules|\.git|\.funscript|dist|build|coverage)(?:[\\/]|$)/.test(
+      doc.fileName,
+    ) &&
+    Boolean(vscode.workspace.getWorkspaceFolder(doc.uri))
+  );
 }
 
-function syncInteropDocument(target: LanguageClient, doc: vscode.TextDocument): void {
+function syncInteropDocument(
+  target: LanguageClient,
+  doc: vscode.TextDocument,
+): void {
   if (!isInteropDocument(doc)) return;
-  void target.sendNotification("funscript/interopDocument", {
-    kind: "upsert",
-    textDocument: { uri: doc.uri.toString(), languageId: doc.languageId, version: doc.version, text: doc.getText() },
-  }).catch(() => { /* A restart will send the latest open buffers. */ });
+  void target
+    .sendNotification("funscript/interopDocument", {
+      kind: "upsert",
+      textDocument: {
+        uri: doc.uri.toString(),
+        languageId: doc.languageId,
+        version: doc.version,
+        text: doc.getText(),
+      },
+    })
+    .catch(() => {
+      /* A restart will send the latest open buffers. */
+    });
 }
 
 function syncOpenInteropDocuments(target: LanguageClient): void {
-  for (const doc of vscode.workspace.textDocuments) syncInteropDocument(target, doc);
+  for (const doc of vscode.workspace.textDocuments)
+    syncInteropDocument(target, doc);
 }
 
 function handleOpenSettings(selection: string | undefined): void {
   if (selection === "Open Settings") {
-    vscode.commands.executeCommand("workbench.action.openSettings", "funscript");
+    vscode.commands.executeCommand(
+      "workbench.action.openSettings",
+      "funscript",
+    );
   }
 }
 
@@ -135,16 +163,24 @@ export async function restartServer(): Promise<void> {
   const config = vscode.workspace.getConfiguration("funscript");
   const serverPath = config.get<string>("serverPath") || "funscript";
 
-  updateStatusBar(ServerStatus.Starting, `Restarting FunScript server using '${serverPath}'...`);
+  updateStatusBar(
+    ServerStatus.Starting,
+    `Restarting FunScript server using '${serverPath}'...`,
+  );
 
   const available = await checkCliAvailability(serverPath);
   if (!available) {
-    updateStatusBar(ServerStatus.Error, `FunScript CLI not found at '${serverPath}'`);
-    outputChannel?.appendLine(`[Error] FunScript CLI is unavailable at '${serverPath}'.`);
+    updateStatusBar(
+      ServerStatus.Error,
+      `FunScript CLI not found at '${serverPath}'`,
+    );
+    outputChannel?.appendLine(
+      `[Error] FunScript CLI is unavailable at '${serverPath}'.`,
+    );
     void vscode.window
       .showErrorMessage(
         `FunScript CLI is unavailable at '${serverPath}'. Please check your 'funscript.serverPath' setting or ensure 'funscript' is in PATH.`,
-        "Open Settings"
+        "Open Settings",
       )
       .then(handleOpenSettings);
     return;
@@ -153,8 +189,11 @@ export async function restartServer(): Promise<void> {
   if (client) {
     try {
       await client.stop();
-    } catch (err: any) {
-      outputChannel?.appendLine(`[Warn] Error stopping existing server: ${err?.message || err}`);
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      outputChannel?.appendLine(
+        `[Warn] Error stopping existing server: ${msg}`,
+      );
     }
     client = undefined;
   }
@@ -162,7 +201,12 @@ export async function restartServer(): Promise<void> {
   const serverOptions = buildServerOptions(serverPath);
   const clientOptions = buildClientOptions(outputChannel, traceOutputChannel);
 
-  client = new LanguageClient("funscriptLsp", "FunScript Language Server", serverOptions, clientOptions);
+  client = new LanguageClient(
+    "funscriptLsp",
+    "FunScript Language Server",
+    serverOptions,
+    clientOptions,
+  );
 
   client.onDidChangeState((e) => {
     if (e.newState === State.Running) {
@@ -184,14 +228,19 @@ export async function restartServer(): Promise<void> {
     await client.start();
     syncOpenInteropDocuments(client);
     updateStatusBar(ServerStatus.Ready);
-    vscode.window.showInformationMessage("FunScript Language Server restarted successfully.");
-  } catch (error: any) {
+    vscode.window.showInformationMessage(
+      "FunScript Language Server restarted successfully.",
+    );
+  } catch (error: unknown) {
+    const msg = error instanceof Error ? error.message : String(error);
     updateStatusBar(ServerStatus.Error, "Failed to start language server");
-    outputChannel?.appendLine(`[Error] Failed to start FunScript language server: ${error?.message || error}`);
+    outputChannel?.appendLine(
+      `[Error] Failed to start FunScript language server: ${msg}`,
+    );
     void vscode.window
       .showErrorMessage(
         `Failed to start FunScript language server with command '${serverPath}'. Check 'funscript.serverPath' in settings.`,
-        "Open Settings"
+        "Open Settings",
       )
       .then(handleOpenSettings);
   }
@@ -205,7 +254,9 @@ export async function checkCurrentFile(): Promise<void> {
   }
 
   if (editor.document.isUntitled) {
-    vscode.window.showWarningMessage("Please save the FunScript file to disk before checking.");
+    vscode.window.showWarningMessage(
+      "Please save the FunScript file to disk before checking.",
+    );
     return;
   }
 
@@ -221,7 +272,7 @@ export async function checkCurrentFile(): Promise<void> {
     void vscode.window
       .showErrorMessage(
         `FunScript CLI is unavailable at '${serverPath}'. Cannot check file. Please ensure 'funscript' is installed or configure 'funscript.serverPath'.`,
-        "Open Settings"
+        "Open Settings",
       )
       .then(handleOpenSettings);
     return;
@@ -234,10 +285,12 @@ export async function checkCurrentFile(): Promise<void> {
       outputChannel?.appendLine(`[Check Failed] ${filePath}\n${output}`);
       outputChannel?.show(true);
       vscode.window.showErrorMessage(
-        `FunScript check found errors in ${path.basename(filePath)}. See FunScript output channel for details.`
+        `FunScript check found errors in ${path.basename(filePath)}. See FunScript output channel for details.`,
       );
     } else {
-      vscode.window.showInformationMessage(`✓ ${path.basename(filePath)} checked successfully (0 errors).`);
+      vscode.window.showInformationMessage(
+        `✓ ${path.basename(filePath)} checked successfully (0 errors).`,
+      );
     }
   });
 }
@@ -257,7 +310,7 @@ export async function formatCurrentFile(): Promise<void> {
     void vscode.window
       .showErrorMessage(
         `FunScript CLI is unavailable at '${serverPath}'. Cannot format file. Please ensure 'funscript' is installed or configure 'funscript.serverPath'.`,
-        "Open Settings"
+        "Open Settings",
       )
       .then(handleOpenSettings);
     return;
@@ -269,12 +322,16 @@ export async function formatCurrentFile(): Promise<void> {
 export async function openGeneratedTypeScript(): Promise<void> {
   const editor = vscode.window.activeTextEditor;
   if (!editor || !isFunScriptDocument(editor.document)) {
-    vscode.window.showWarningMessage("No active FunScript document to emit TypeScript.");
+    vscode.window.showWarningMessage(
+      "No active FunScript document to emit TypeScript.",
+    );
     return;
   }
 
   if (editor.document.isUntitled) {
-    vscode.window.showWarningMessage("Please save the FunScript file to disk before viewing generated TypeScript.");
+    vscode.window.showWarningMessage(
+      "Please save the FunScript file to disk before viewing generated TypeScript.",
+    );
     return;
   }
 
@@ -290,7 +347,7 @@ export async function openGeneratedTypeScript(): Promise<void> {
     void vscode.window
       .showErrorMessage(
         `FunScript CLI is unavailable at '${serverPath}'. Cannot generate TypeScript. Please ensure 'funscript' is installed or configure 'funscript.serverPath'.`,
-        "Open Settings"
+        "Open Settings",
       )
       .then(handleOpenSettings);
     return;
@@ -303,7 +360,7 @@ export async function openGeneratedTypeScript(): Promise<void> {
       outputChannel?.appendLine(`[Emit Failed] ${filePath}\n${output}`);
       outputChannel?.show(true);
       vscode.window.showErrorMessage(
-        `Failed to generate TypeScript for ${path.basename(filePath)}. See FunScript output channel.`
+        `Failed to generate TypeScript for ${path.basename(filePath)}. See FunScript output channel.`,
       );
       return;
     }
@@ -313,16 +370,24 @@ export async function openGeneratedTypeScript(): Promise<void> {
       language: isFunx ? "typescriptreact" : "typescript",
       content: stdout,
     });
-    await vscode.window.showTextDocument(doc, { viewColumn: vscode.ViewColumn.Beside });
+    await vscode.window.showTextDocument(doc, {
+      viewColumn: vscode.ViewColumn.Beside,
+    });
   });
 }
 
 export function activate(context: vscode.ExtensionContext): void {
   outputChannel = vscode.window.createOutputChannel("FunScript", { log: true });
-  traceOutputChannel = vscode.window.createOutputChannel("FunScript Language Server Trace", { log: true });
+  traceOutputChannel = vscode.window.createOutputChannel(
+    "FunScript Language Server Trace",
+    { log: true },
+  );
   context.subscriptions.push(outputChannel, traceOutputChannel);
 
-  statusBarItem = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Right, 100);
+  statusBarItem = vscode.window.createStatusBarItem(
+    vscode.StatusBarAlignment.Right,
+    100,
+  );
   statusBarItem.name = "FunScript Language Server";
   context.subscriptions.push(statusBarItem);
 
@@ -330,15 +395,28 @@ export function activate(context: vscode.ExtensionContext): void {
     vscode.commands.registerCommand("funscript.checkFile", checkCurrentFile),
     vscode.commands.registerCommand("funscript.formatFile", formatCurrentFile),
     vscode.commands.registerCommand("funscript.restartServer", restartServer),
-    vscode.commands.registerCommand("funscript.openGeneratedTs", openGeneratedTypeScript)
+    vscode.commands.registerCommand(
+      "funscript.openGeneratedTs",
+      openGeneratedTypeScript,
+    ),
   );
 
   context.subscriptions.push(
-    vscode.workspace.onDidOpenTextDocument(doc => { if (client?.state === State.Running) syncInteropDocument(client, doc); }),
-    vscode.workspace.onDidChangeTextDocument(event => { if (client?.state === State.Running) syncInteropDocument(client, event.document); }),
-    vscode.workspace.onDidCloseTextDocument(doc => {
+    vscode.workspace.onDidOpenTextDocument((doc) => {
+      if (client?.state === State.Running) syncInteropDocument(client, doc);
+    }),
+    vscode.workspace.onDidChangeTextDocument((event) => {
+      if (client?.state === State.Running)
+        syncInteropDocument(client, event.document);
+    }),
+    vscode.workspace.onDidCloseTextDocument((doc) => {
       if (client?.state === State.Running && isInteropDocument(doc)) {
-        void client.sendNotification("funscript/interopDocument", { kind: "close", uri: doc.uri.toString() }).catch(() => {});
+        void client
+          .sendNotification("funscript/interopDocument", {
+            kind: "close",
+            uri: doc.uri.toString(),
+          })
+          .catch(() => {});
       }
     }),
     vscode.workspace.onDidChangeConfiguration(async (event) => {
@@ -346,7 +424,7 @@ export function activate(context: vscode.ExtensionContext): void {
         const answer = await vscode.window.showInformationMessage(
           "FunScript server path setting changed. Restart language server?",
           "Restart",
-          "Later"
+          "Later",
         );
         if (answer === "Restart") {
           await restartServer();
@@ -362,7 +440,7 @@ export function activate(context: vscode.ExtensionContext): void {
           }
         }
       }
-    })
+    }),
   );
 
   const config = vscode.workspace.getConfiguration("funscript");
@@ -373,7 +451,12 @@ export function activate(context: vscode.ExtensionContext): void {
   const serverOptions = buildServerOptions(serverPath);
   const clientOptions = buildClientOptions(outputChannel, traceOutputChannel);
 
-  client = new LanguageClient("funscriptLsp", "FunScript Language Server", serverOptions, clientOptions);
+  client = new LanguageClient(
+    "funscriptLsp",
+    "FunScript Language Server",
+    serverOptions,
+    clientOptions,
+  );
 
   client.onDidChangeState((e) => {
     if (e.newState === State.Running) {
@@ -396,16 +479,19 @@ export function activate(context: vscode.ExtensionContext): void {
       if (client) syncOpenInteropDocuments(client);
       updateStatusBar(ServerStatus.Ready);
     },
-    (error: any) => {
+    (error: unknown) => {
+      const msg = error instanceof Error ? error.message : String(error);
       updateStatusBar(ServerStatus.Error, "Language server failed to start");
-      outputChannel?.appendLine(`[Error] Failed to start FunScript language server: ${error?.message || error}`);
+      outputChannel?.appendLine(
+        `[Error] Failed to start FunScript language server: ${msg}`,
+      );
       void vscode.window
         .showErrorMessage(
           `Failed to start FunScript language server with command '${serverPath}'. Check 'funscript.serverPath' in settings.`,
-          "Open Settings"
+          "Open Settings",
         )
         .then(handleOpenSettings);
-    }
+    },
   );
 }
 

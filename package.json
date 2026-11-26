@@ -35,7 +35,7 @@
     "fmt:check": "node ./dist/cli/index.js fmt --check src examples tests/fixtures/formatter",
     "fmt:ts": "prettier --write 'src/**/*.ts'",
     "fmt:ts:check": "prettier --check 'src/**/*.ts'",
-    "lint": "eslint src --max-warnings=0",
+    "lint": "eslint src editors/vscode/src --max-warnings=0",
     "lint:fix": "eslint src --fix",
     "knip": "npx --yes knip --reporter compact",
     "prettier:check": "prettier --plugin ./dist/formatter/prettier.js --check examples/hello.fun tests/fixtures/formatter/*.funx docs/ci-release.md",
