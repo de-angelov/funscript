@@ -138,6 +138,59 @@ export function resolveOptionalArguments(
     const nullArguments = new Set<number>();
     const properties = new Set<number>();
     const nullProperties = new Set<number>();
+
+    const hasTypeFlag = (t: ts.Type | undefined, flag: ts.TypeFlags): boolean =>
+      Boolean(
+        t?.isUnion()
+          ? t.types.some((m) => Boolean(m.flags & flag))
+          : t && t.flags & flag,
+      );
+
+    const isExplicitOptionSome = (value: ts.Expression): boolean =>
+      ts.isCallExpression(value) &&
+      ts.isPropertyAccessExpression(value.expression) &&
+      ts.isIdentifier(value.expression.expression) &&
+      value.expression.expression.text === "Option" &&
+      value.expression.name.text === "some";
+
+    const classifyOptionForwarding = (
+      target: ts.Type | undefined,
+      value: ts.Expression,
+      offsetNode: ts.NumericLiteral,
+      declaredOptional: boolean,
+      ambiguousMessage: string,
+      allowUndefinedPayload: boolean,
+    ): "none" | "null" | "optional" => {
+      if (!target) return "none";
+      const includesUndefined =
+        declaredOptional || hasTypeFlag(target, ts.TypeFlags.Undefined);
+      const includesNull = hasTypeFlag(target, ts.TypeFlags.Null);
+      if (!includesUndefined && !includesNull) return "none";
+      const type = checker.getTypeAtLocation(value);
+      if (!checker.getPropertyOfType(type, "~effect/Option")) return "none";
+      const offset = Number(offsetNode.text);
+      if (
+        checker.isTypeAssignableTo(type, target) &&
+        !isExplicitOptionSome(value)
+      ) {
+        throw new FunScriptError(ambiguousMessage, spans.get(offset));
+      }
+      if (!allowUndefinedPayload) {
+        const payload = type.aliasTypeArguments?.[0];
+        const mayContainUndefined = (t: ts.Type): boolean =>
+          t.isUnion()
+            ? t.types.some(mayContainUndefined)
+            : Boolean(t.flags & ts.TypeFlags.Undefined);
+        if (!payload || mayContainUndefined(payload)) {
+          throw new FunScriptError(
+            "Cannot automatically forward an Option that may contain undefined: normalize it explicitly or use a presence-preserving boundary",
+            spans.get(offset),
+          );
+        }
+      }
+      return includesNull && !includesUndefined ? "null" : "optional";
+    };
+
     const visit = (node: ts.Node): void => {
       if (
         ts.isCallExpression(node) &&
@@ -202,40 +255,19 @@ export function resolveOptionalArguments(
             }
           }
         }
-        const value = node.arguments[1];
-        const type = checker.getTypeAtLocation(value);
-        const optional =
-          declaredOptional ||
-          (target?.isUnion()
-            ? target.types.some((t) =>
-                Boolean(t.flags & ts.TypeFlags.Undefined),
-              )
-            : Boolean(target && target.flags & ts.TypeFlags.Undefined));
-        const includesNull = target?.isUnion()
-          ? target.types.some((t) => Boolean(t.flags & ts.TypeFlags.Null))
-          : Boolean(target && target.flags & ts.TypeFlags.Null);
-        if (
-          target &&
-          (optional || includesNull) &&
-          checker.getPropertyOfType(type, "~effect/Option")
-        ) {
-          const explicitSome =
-            ts.isCallExpression(value) &&
-            ts.isPropertyAccessExpression(value.expression) &&
-            ts.isIdentifier(value.expression.expression) &&
-            value.expression.expression.text === "Option" &&
-            value.expression.name.text === "some";
-          const offset = Number(node.arguments[0].text);
-          if (checker.isTypeAssignableTo(type, target) && !explicitSome)
-            throw new FunScriptError(
-              "Ambiguous optional property: use Option.some(value) to pass the Option as a value, or an explicit boundary adapter to forward it",
-              spans.get(offset),
-            );
-          if (includesNull && !optional) {
-            nullProperties.add(offset);
-          } else {
-            properties.add(offset);
-          }
+        const offset = Number(node.arguments[0].text);
+        const kind = classifyOptionForwarding(
+          target,
+          node.arguments[1],
+          node.arguments[0],
+          declaredOptional,
+          "Ambiguous optional property: use Option.some(value) to pass the Option as a value, or an explicit boundary adapter to forward it",
+          true,
+        );
+        if (kind === "null") {
+          nullProperties.add(offset);
+        } else if (kind === "optional") {
+          properties.add(offset);
         }
       }
       if (ts.isCallExpression(node)) {
@@ -253,6 +285,7 @@ export function resolveOptionalArguments(
           const isFunscriptOptional =
             parameter.name.startsWith("$funscriptOptional");
           const declaredOptional =
+            isFunscriptOptional ||
             Boolean(parameter.flags & ts.SymbolFlags.Optional) ||
             Boolean(
               (
@@ -261,58 +294,24 @@ export function resolveOptionalArguments(
               )?.questionToken,
             );
           const target = checker.getTypeOfSymbolAtLocation(parameter, node);
-          const includesUndefined = target.isUnion()
-            ? target.types.some((t) =>
-                Boolean(t.flags & ts.TypeFlags.Undefined),
-              )
-            : Boolean(target.flags & ts.TypeFlags.Undefined);
-          const includesNull = target.isUnion()
-            ? target.types.some((t) => Boolean(t.flags & ts.TypeFlags.Null))
-            : Boolean(target.flags & ts.TypeFlags.Null);
-          const isOptional =
-            isFunscriptOptional || declaredOptional || includesUndefined;
-          if (!isOptional && !includesNull) return;
           const targetAcceptsOption = target.isUnion()
             ? target.types.some((t) =>
                 Boolean(checker.getPropertyOfType(t, "~effect/Option")),
               )
             : Boolean(checker.getPropertyOfType(target, "~effect/Option"));
           if (targetAcceptsOption) return;
-          const value = argument.arguments[1];
-          const type = checker.getTypeAtLocation(value);
-          if (!checker.getPropertyOfType(type, "~effect/Option")) return;
-          const explicitSome =
-            ts.isCallExpression(value) &&
-            ts.isPropertyAccessExpression(value.expression) &&
-            ts.isIdentifier(value.expression.expression) &&
-            value.expression.expression.text === "Option" &&
-            value.expression.name.text === "some";
           const offset = Number(argument.arguments[0].text);
-          if (checker.isTypeAssignableTo(type, target) && !explicitSome) {
-            throw new FunScriptError(
-              "Ambiguous optional argument: use Option.getOrUndefined(value) to forward it, or Option.some(value) to pass it as a value",
-              spans.get(offset),
-            );
-          }
-          const payload = type.aliasTypeArguments?.[0];
-          const mayContainUndefined = (t: ts.Type): boolean =>
-            t.isUnion()
-              ? t.types.some(mayContainUndefined)
-              : Boolean(
-                  t.flags &
-                  (ts.TypeFlags.Undefined |
-                    ts.TypeFlags.Any |
-                    ts.TypeFlags.Unknown),
-                );
-          if (!payload || mayContainUndefined(payload)) {
-            throw new FunScriptError(
-              "Cannot automatically forward an Option that may contain undefined: normalize it explicitly or use a presence-preserving boundary",
-              spans.get(offset),
-            );
-          }
-          if (includesNull && !isOptional) {
+          const kind = classifyOptionForwarding(
+            target,
+            argument.arguments[1],
+            argument.arguments[0],
+            declaredOptional,
+            "Ambiguous optional argument: use Option.getOrUndefined(value) to forward it, or Option.some(value) to pass it as a value",
+            false,
+          );
+          if (kind === "null") {
             nullArguments.add(offset);
-          } else {
+          } else if (kind === "optional") {
             result.add(offset);
           }
         });

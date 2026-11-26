@@ -784,9 +784,7 @@ export class Emitter {
         if (
           decl.body.fields.every(
             (field) =>
-              !field.optional &&
-              !field.defaultValue &&
-              identityType(field.typeAnnotation),
+              !field.defaultValue && identityType(field.typeAnnotation),
           )
         ) {
           this.identityRecordSchemas.add(decl.id.name);
@@ -999,18 +997,6 @@ export class Emitter {
     isExport: boolean,
   ): string {
     return emitServiceDeclaration(this, decl, isExport);
-  }
-
-  private isAsyncOrPromiseType(type?: TypeNode): boolean {
-    if (!type) return false;
-    if (type.kind === "TypeReferenceNode") {
-      const name = type.name.name;
-      return name === "Promise" || name === "Async";
-    }
-    if (type.kind === "EffectTypeNode") {
-      return this.isAsyncOrPromiseType(type.success);
-    }
-    return false;
   }
 
   public isPrimitiveType(type?: TypeNode): boolean {
@@ -1271,19 +1257,6 @@ export class Emitter {
     if (type.kind === "IntersectionTypeNode") {
       return type.types.some((t) => this.isHtmlPropsType(t));
     }
-    return false;
-  }
-
-  private isDomOrExternalJsxTarget(target: unknown): boolean {
-    if (!target || typeof target !== "object") return true;
-    const node = target as Record<string, unknown>;
-    if (node.kind === "Identifier" && typeof node.name === "string") {
-      return /^[a-z]/.test(node.name);
-    }
-    if (node.kind === "UpperIdentifier" && typeof node.name === "string") {
-      return node.name === "Slot" || node.name === "Comp";
-    }
-    if (node.kind === "MemberExpression") return true;
     return false;
   }
 
@@ -2463,14 +2436,13 @@ export class Emitter {
             const defaultValue = p.defaultValue
               ? ` = ${this.emitExpression(p.defaultValue)}`
               : "";
-            return `${rest}${name}${p.optional ? "?" : ""}${typeAnn}${defaultValue}`;
+            return `${rest}${name}${typeAnn}${defaultValue}`;
           })
           .join(", ");
         const typeParams = this.emitTypeParameters(expr.typeParams, true);
         const retType = expr.returnType
           ? `: ${this.emitTypeNode(expr.returnType)}`
           : "";
-        const optionalBindings: string[] = [];
 
         const records = new Map<
           string,
@@ -2569,7 +2541,7 @@ export class Emitter {
             declared?.kind === "TypeReferenceNode"
               ? this.getRecordTypeNode(declared.name.name)
               : declared;
-          if (param.optional || recordType?.kind !== "RecordTypeNode") {
+          if (recordType?.kind !== "RecordTypeNode") {
             records.set(paramName, undefined);
             return;
           }
@@ -2776,13 +2748,9 @@ export class Emitter {
           for (const name of records.keys())
             if (records.get(name))
               this.validateRecordParameterUse(expr, name, aliases);
-          if (
-            expr.body.kind === "BlockStatement" ||
-            optionalBindings.length ||
-            recordDefaults.length
-          ) {
+          if (expr.body.kind === "BlockStatement" || recordDefaults.length) {
             const body = this.emitFunctionBody(expr.body);
-            return `${typeParams}(${params})${retType} => {\n${[...optionalBindings, ...recordDefaults, body].filter(Boolean).join("\n")}\n}`;
+            return `${typeParams}(${params})${retType} => {\n${[...recordDefaults, body].filter(Boolean).join("\n")}\n}`;
           }
           return `${typeParams}(${params})${retType} => ${this.emitArrowExpression(expr.body)}`;
         } finally {

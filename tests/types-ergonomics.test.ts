@@ -54,13 +54,13 @@ export schema DebugParams = Parameters<PinoLogger["debug"]>
   it("compiles generic record contracts with qualified types without throwing", () => {
     const src = `
 export schema RedisClientProviderOptions<Client> = {
-  env?: NodeJS.ProcessEnv
+  env: Option<NodeJS.ProcessEnv>
   clientFactory: (config: RedisConfig) => Client
 }
 `;
     const res = Effect.runSync(compileString(src));
     expect(res.typescript).toContain(
-      "export type RedisClientProviderOptions<Client> = { readonly env?: NodeJS.ProcessEnv; readonly clientFactory: (config: RedisConfig) => Client }",
+      "export type RedisClientProviderOptions<Client> = { readonly env: Option.Option<NodeJS.ProcessEnv>; readonly clientFactory: (config: RedisConfig) => Client }",
     );
   });
 
@@ -106,16 +106,19 @@ export testFn = (raw: Unknown, opt: Option<String>) =>
     expect(res.typescript).toContain('fromNullishOrElse(opt, "fallback")');
   });
 
-  it("emits optional parameters directly without hidden Option wrapping", () => {
+  it("rejects optional '?' parameter syntax and emits Option<T> directly", () => {
+    expect(() =>
+      Effect.runSync(compileString("export f = (x?: String) => x")),
+    ).toThrow(/Optional '\?' parameter syntax is disabled/);
     const src = `
-export f = (x?: String) =>
+export f = (x: Option<String>) =>
   => x
 
-export g = (x?: String) =>
+export g = (x: Option<String>) =>
   => f(x)
 `;
     const res = Effect.runSync(compileString(src));
-    expect(res.typescript).toContain("(x?: string)");
+    expect(res.typescript).toContain("(x: Option.Option<string>)");
     expect(res.typescript).not.toContain("$funscriptOptional0");
     expect(res.typescript).not.toContain("Option.fromUndefinedOr");
   });
@@ -840,23 +843,21 @@ export manageCollections = (map: Object, set: Object) =>
     expect(res.typescript).toContain("HashSet.add");
   });
 
-  it("supports optional parameters on export js entry bindings", async () => {
+  it("supports JSOptional parameters on export js entry bindings", async () => {
     const src = `
-export js greet = (name?: String) => effect {
+export js greet = (name: JSOptional<String>) => effect {
   => match (fromNullishOr(name))
     | Some(n) => "Hello, " + n
     | None => "Hello, stranger"
 }
 `;
     const res = Effect.runSync(compileString(src));
-    expect(res.typescript).toContain("(name?: string)");
-    expect(res.typescript).not.toContain("$funscriptOptional0");
     expect(res.typescript).toContain("fromNullishOr(name)");
 
     const greet = evaluateTsFunction(res.typescript, "greet");
     expect(await greet("Ada")).toBe("Hello, Ada");
-    expect(await greet()).toBe("Hello, stranger");
     expect(await greet(undefined)).toBe("Hello, stranger");
+    expect(await greet(null)).toBe("Hello, stranger");
   });
 
   it("supports defaulted parameters on export js entry bindings", async () => {
@@ -873,16 +874,16 @@ export js repeat = (n: Number = 3) => effect {
     expect(await repeat(5)).toBe(10);
   });
 
-  it("supports optional record fields on export js entry bindings", async () => {
+  it("supports Option record fields on export js entry bindings", async () => {
     const src = `
-export js greet = (props: { label?: String }) => effect {
+export js greet = (props: { label: Option<String> }) => effect {
   => match props.label
     | Some(n) => "Hello, " + n
     | None => "Hello, stranger"
 }
 `;
     const res = Effect.runSync(compileString(src));
-    expect(res.typescript).toContain("readonly label?: string");
+    expect(res.typescript).toContain("Schema.OptionFromOptionalNullOr");
     expect(res.typescript).toContain("Schema.decodeUnknownSync");
 
     const greet = evaluateTsFunction(res.typescript, "greet");
@@ -894,7 +895,7 @@ export js greet = (props: { label?: String }) => effect {
 
   it("supports named record contracts on export js entry bindings", async () => {
     const src = `
-schema Props = { label?: String, onClick: () => Void }
+schema Props = { label: Option<String>, onClick: () => Void }
 export js render = (props: Props) => effect {
   _ <- js props.onClick()
   => match props.label
@@ -904,7 +905,6 @@ export js render = (props: Props) => effect {
 `;
     const res = Effect.runSync(compileString(src));
     expect(res.typescript).toContain("PropsDecodeChecked(props)");
-    expect(res.typescript).toContain("Option.fromNullishOr(props.label)");
 
     let clicked = false;
     const render = evaluateTsFunction(res.typescript, "render");
@@ -1015,35 +1015,34 @@ export arrowHelper = ts { (x: number) => x * 3 }
     expect(arrowHelper(4)).toBe(12);
   });
 
-  it("wraps destructured optional record fields in Option instead of leaking naked undefined", () => {
+  it("preserves destructured Option record fields without leaking naked undefined", () => {
     const src = `
-export getUserName = (u: { name?: String, id: Number }) =>
+export getUserName = (u: { name: Option<String>, id: Number }) =>
   { name, id } = u
   => [id, name]
 
-export getUserNameRenamed = (u: { name?: String, id: Number }) =>
+export getUserNameRenamed = (u: { name: Option<String>, id: Number }) =>
   { name: myName, id } = u
   => [id, myName]
 
-export getUserNameAndRest = (u: { name?: String, id: Number }) =>
+export getUserNameAndRest = (u: { name: Option<String>, id: Number }) =>
   { name, ...rest } = u
   => [name, rest]
 
-export greetUser = ({ name, id }: { name?: String, id: Number }) =>
+export greetUser = ({ name, id }: { name: Option<String>, id: Number }) =>
   [id, name]
 
-export greetInline = ({ title, count }: { title?: String, count: Number }) =>
+export greetInline = ({ title, count }: { title: Option<String>, count: Number }) =>
   [count, title]
 `;
     const res = Effect.runSync(compileString(src));
-    expect(res.typescript).toContain("Option.fromNullishOr(");
 
     const getUserName = evaluateTsFunction(res.typescript, "getUserName");
-    const [id1, name1] = getUserName({ id: 101 });
+    const [id1, name1] = getUserName({ id: 101, name: Option.none() });
     expect(id1).toBe(101);
     expect(Option.isNone(name1)).toBe(true);
 
-    const [id2, name2] = getUserName({ id: 102, name: "Alice" });
+    const [id2, name2] = getUserName({ id: 102, name: Option.some("Alice") });
     expect(id2).toBe(102);
     expect(Option.isSome(name2)).toBe(true);
     expect(Option.getOrThrow(name2)).toBe("Alice");
@@ -1052,7 +1051,7 @@ export greetInline = ({ title, count }: { title?: String, count: Number }) =>
       res.typescript,
       "getUserNameRenamed",
     );
-    const [id3, name3] = getUserNameRenamed({ id: 103 });
+    const [id3, name3] = getUserNameRenamed({ id: 103, name: Option.none() });
     expect(id3).toBe(103);
     expect(Option.isNone(name3)).toBe(true);
 
@@ -1060,51 +1059,55 @@ export greetInline = ({ title, count }: { title?: String, count: Number }) =>
       res.typescript,
       "getUserNameAndRest",
     );
-    const [name4, rest4] = getUserNameAndRest({ id: 104, name: "Bob" });
+    const [name4, rest4] = getUserNameAndRest({
+      id: 104,
+      name: Option.some("Bob"),
+    });
     expect(Option.isSome(name4)).toBe(true);
     expect(Option.getOrThrow(name4)).toBe("Bob");
     expect(rest4).toEqual({ id: 104 });
 
     const greetUser = evaluateTsFunction(res.typescript, "greetUser");
-    const [id5, name5] = greetUser({ id: 105 });
+    const [id5, name5] = greetUser({ id: 105, name: Option.none() });
     expect(id5).toBe(105);
     expect(Option.isNone(name5)).toBe(true);
 
-    const [id6, name6] = greetUser({ id: 106, name: "Charlie" });
+    const [id6, name6] = greetUser({ id: 106, name: Option.some("Charlie") });
     expect(id6).toBe(106);
     expect(Option.isSome(name6)).toBe(true);
     expect(Option.getOrThrow(name6)).toBe("Charlie");
 
     const greetInline = evaluateTsFunction(res.typescript, "greetInline");
-    const [count7, title7] = greetInline({ count: 42 });
+    const [count7, title7] = greetInline({ count: 42, title: Option.none() });
     expect(count7).toBe(42);
     expect(Option.isNone(title7)).toBe(true);
 
-    const [count8, title8] = greetInline({ count: 43, title: "Dr." });
+    const [count8, title8] = greetInline({
+      count: 43,
+      title: Option.some("Dr."),
+    });
     expect(count8).toBe(43);
     expect(Option.isSome(title8)).toBe(true);
     expect(Option.getOrThrow(title8)).toBe("Dr.");
   });
 
-  it("supports top-level export and export js destructuring with optional record fields", async () => {
+  it("supports top-level export and export js destructuring with Option record fields", async () => {
     const src = `
+import { Option } from "effect"
 schema ServerConfig = {
-  host?: String,
+  host: Option<String>,
   port: Number,
   ping: () => Void,
 }
 
-cfg: ServerConfig = { port: 8080, ping: () => Void }
+cfg: ServerConfig = { host: Option.none(), port: 8080, ping: () => Void }
 export { host, port } = cfg
 
 export js handleServer = ({ host, port }: ServerConfig) =>
   Effect.succeed(port)
 `;
     const res = Effect.runSync(compileString(src));
-    expect(res.typescript).toContain(
-      "export const host = Option.fromNullishOr(",
-    );
-    expect(res.typescript).toContain("export const port = ");
+    expect(res.typescript).toContain("export const { host, port } = cfg;");
     expect(res.typescript).toContain(
       "export const handleServer = ($funscriptParam0: ServerConfig) =>",
     );

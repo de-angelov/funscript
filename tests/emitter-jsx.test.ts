@@ -107,9 +107,9 @@ describe("TSX Emitter for JSX AST Nodes", () => {
       ).toBe('<div id="before" {...props} className="after" />');
     });
 
-    it("forwards optional records only to verified FunScript components", async () => {
+    it("forwards Option records only to verified FunScript components", async () => {
       const source =
-        "export Target = (props: { label?: String }) => <div />\nexport Wrapper = (props: { label?: String }) => <Target {...props} />";
+        "export Target = (props: { label: Option<String> }) => <div />\nexport Wrapper = (props: { label: Option<String> }) => <Target {...props} />";
       expect(await compileFunx(source)).toContain("<Target {...props} />");
       const checked = await Effect.runPromise(
         typeCheckSource(source, "spread.funx"),
@@ -118,8 +118,8 @@ describe("TSX Emitter for JSX AST Nodes", () => {
       const bad = await Effect.runPromise(
         typeCheckSource(
           source.replace(
-            "export Wrapper = (props: { label?: String })",
-            "export Wrapper = (props: { label?: Number })",
+            "export Wrapper = (props: { label: Option<String> })",
+            "export Wrapper = (props: { label: Option<Number> })",
           ),
           "spread.funx",
         ),
@@ -127,12 +127,12 @@ describe("TSX Emitter for JSX AST Nodes", () => {
       expect(bad.success).toBe(false);
       expect(
         await compileFunx(
-          "export Wrapper = (props: { label?: String }) => <Unknown {...props} />",
+          "export Wrapper = (props: { label: Option<String> }) => <Unknown {...props} />",
         ),
       ).toContain("<Unknown {...props} />");
       expect(
         await compileFunx(
-          'export Target = (props: { label?: String }) => <div />\nexport Wrapper = (props: { label: String = "x" }) => <Target {...props} />',
+          'export Target = (props: { label: String }) => <div />\nexport Wrapper = (props: { label: String = "x" }) => <Target {...props} />',
         ),
       ).toContain("<Target {...({ ...props, label: $funscriptField0_0 })} />");
     });
@@ -142,9 +142,9 @@ describe("TSX Emitter for JSX AST Nodes", () => {
         typeCheckVirtualFiles(
           {
             "target.funx":
-              "export Target = (props: { label?: String }) => <div />",
+              "export Target = (props: { label: Option<String> }) => <div />",
             "wrapper.funx":
-              'import { Target } from "./target.js"\nexport Wrapper = (props: { label?: String }) => <Target {...props} />',
+              'import { Target } from "./target.js"\nexport Wrapper = (props: { label: Option<String> }) => <Target {...props} />',
           },
           { compilerOptions: { rootDir: process.cwd() } },
         ),

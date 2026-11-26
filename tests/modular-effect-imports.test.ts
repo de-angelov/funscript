@@ -36,7 +36,7 @@ export main =
   it("emits compiler-generated header imports as modular subpaths", async () => {
     // Declaring a schema triggers compiler Schema emission
     const source = `
-schema User = { name?: String }
+schema User = { name: Option<String> }
 export getName = (u: User) => u.name
 `.trim();
 

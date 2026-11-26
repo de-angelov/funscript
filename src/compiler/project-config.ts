@@ -8,7 +8,6 @@ export interface FunScriptProjectConfig {
   format?: { indentSize?: number; lineWidth?: number };
   noTs?: boolean | string[];
   noGlobalThis?: boolean | string[];
-  noOptional?: boolean | string[];
   barePipelines?: boolean | string[];
   noDeepDestructure?: boolean | string[];
   maxDestructureDepth?: number;
@@ -53,7 +52,6 @@ export function loadProjectConfig(cwd: string): FunScriptProjectConfig {
         ![
           "noTs",
           "noGlobalThis",
-          "noOptional",
           "barePipelines",
           "effectOnly",
           "format",
@@ -65,7 +63,7 @@ export function loadProjectConfig(cwd: string): FunScriptProjectConfig {
         ].includes(entry.key.name)
       ) {
         throw new Error(
-          "config accepts only 'noTs', 'noGlobalThis', 'noOptional', 'barePipelines', 'effectOnly', 'format', 'modularEffectImports', 'noDeepDestructure', 'maxDestructureDepth', 'allowHoles', and 'allowEarlyReturns'",
+          "config accepts only 'noTs', 'noGlobalThis', 'barePipelines', 'effectOnly', 'format', 'modularEffectImports', 'noDeepDestructure', 'maxDestructureDepth', 'allowHoles', and 'allowEarlyReturns'",
         );
       }
       const name = entry.key.name;
@@ -134,7 +132,6 @@ export function loadProjectConfig(cwd: string): FunScriptProjectConfig {
             name as
               | "noTs"
               | "noGlobalThis"
-              | "noOptional"
               | "barePipelines"
               | "noDeepDestructure"
               | "allowHoles"
@@ -149,7 +146,6 @@ export function loadProjectConfig(cwd: string): FunScriptProjectConfig {
           name as
             | "noTs"
             | "noGlobalThis"
-            | "noOptional"
             | "barePipelines"
             | "modularEffectImports"
             | "noDeepDestructure"

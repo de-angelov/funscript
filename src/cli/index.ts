@@ -103,11 +103,6 @@ const program = Effect.gen(function* () {
       )
         commandArgs.push("--no-global-this");
       if (
-        projectPolicy.noOptional === true &&
-        !commandArgs.includes("--no-optional")
-      )
-        commandArgs.push("--no-optional");
-      if (
         projectPolicy.barePipelines === true &&
         !commandArgs.includes("--bare-pipelines")
       )
@@ -143,9 +138,6 @@ const program = Effect.gen(function* () {
         projectPolicy.noGlobalThis === true ||
         (Array.isArray(projectPolicy.noGlobalThis) &&
           projectPolicy.noGlobalThis.length > 0) ||
-        projectPolicy.noOptional === true ||
-        (Array.isArray(projectPolicy.noOptional) &&
-          projectPolicy.noOptional.length > 0) ||
         projectPolicy.barePipelines === true ||
         (Array.isArray(projectPolicy.barePipelines) &&
           projectPolicy.barePipelines.length > 0) ||
@@ -172,7 +164,6 @@ const program = Effect.gen(function* () {
           !(yield* checkCliFiles(files, {
             noTs: projectPolicy.noTs === true,
             noGlobalThis: projectPolicy.noGlobalThis === true,
-            noOptional: projectPolicy.noOptional === true,
             barePipelines: projectPolicy.barePipelines === true,
             noDeepDestructure: projectPolicy.noDeepDestructure === true,
             maxDestructureDepth: projectPolicy.maxDestructureDepth,
@@ -182,9 +173,6 @@ const program = Effect.gen(function* () {
               : undefined,
             noGlobalThisPaths: Array.isArray(projectPolicy.noGlobalThis)
               ? projectPolicy.noGlobalThis
-              : undefined,
-            noOptionalPaths: Array.isArray(projectPolicy.noOptional)
-              ? projectPolicy.noOptional
               : undefined,
             barePipelinesPaths: Array.isArray(projectPolicy.barePipelines)
               ? projectPolicy.barePipelines

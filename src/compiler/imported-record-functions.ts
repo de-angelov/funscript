@@ -121,10 +121,7 @@ export function resolveImportedRecordFunctions(
       );
     };
     return declaration.body.fields.every(
-      (field) =>
-        !field.optional &&
-        !field.defaultValue &&
-        identity(field.typeAnnotation),
+      (field) => !field.defaultValue && identity(field.typeAnnotation),
     );
   };
   const resolveIdentityExport = (
@@ -239,7 +236,7 @@ export function resolveImportedRecordFunctions(
       const name = type.name.name;
       if (["String", "Number", "Boolean"].includes(name))
         return !type.typeArgs?.length && !shadowed.has(name);
-      if (name === "Array")
+      if (name === "Array" || name === "Option")
         return type.typeArgs?.length === 1 && supports(type.typeArgs[0]);
       return (
         !type.typeArgs?.length &&
@@ -445,7 +442,7 @@ export function resolveImportedRecordFunctions(
       if (names.has(name)) return !type.typeArgs?.length;
       if (["String", "Number", "Boolean"].includes(name))
         return !type.typeArgs?.length && !shadowed.has(name);
-      if (name === "Array")
+      if (name === "Array" || name === "Option")
         return (
           type.typeArgs?.length === 1 && supportsArgument(type.typeArgs[0])
         );
@@ -476,7 +473,7 @@ export function resolveImportedRecordFunctions(
       if (names.has(name)) return !type.typeArgs?.length;
       if (["String", "Number", "Boolean"].includes(name))
         return !type.typeArgs?.length && !shadowed.has(name);
-      if (name === "Array")
+      if (name === "Array" || name === "Option")
         return type.typeArgs?.length === 1 && supports(type.typeArgs[0]);
       if (!type.typeArgs?.length)
         return resolveDataLocal(program, file, name, seen);

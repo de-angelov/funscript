@@ -39,8 +39,6 @@ export interface CompileOptions {
   noTs?: boolean;
   /** Reject authored references to globalThis. */
   noGlobalThis?: boolean;
-  /** Reject authored optional parameters and fields ('?'). */
-  noOptional?: boolean;
   /** Enforce bare pipeline stages for known companions instead of redundant Module.method prefixes. */
   barePipelines?: boolean;
   /** Reject deeply nested destructuring patterns exceeding maxDestructureDepth (defaults to 2). */
@@ -236,30 +234,6 @@ function validateNoGlobalThis(ast: Program): void {
     ) {
       throw new FunScriptError(
         "globalThis is disabled by project policy; use explicit FunScript imports and interop",
-        node.span as Span | undefined,
-      );
-    }
-  });
-}
-
-/** Block optional parameters and fields ('?') in authored AST when noOptional policy is active. */
-function validateNoOptional(ast: Program): void {
-  walkAst(ast, (node) => {
-    if (node.kind === "Parameter" && node.optional) {
-      throw new FunScriptError(
-        "Optional parameters ('?') are disabled by project policy; use Option<T> or handle optionality at the TS interop edge",
-        node.span as Span | undefined,
-      );
-    }
-    if (node.kind === "RecordTypeField" && node.optional) {
-      throw new FunScriptError(
-        "Optional record fields ('?') are disabled by project policy; use Option<T> or handle optionality at the TS interop edge",
-        node.span as Span | undefined,
-      );
-    }
-    if (node.kind === "RecordFieldSchema" && node.optional) {
-      throw new FunScriptError(
-        "Optional schema fields ('?') are disabled by project policy; use Option<T> or handle optionality at the TS interop edge",
         node.span as Span | undefined,
       );
     }
@@ -631,7 +605,6 @@ export const compileString = (
           if (options?.effectOnly) validateEffectOnly(ast, options, filename);
           else if (options?.noTs) validateNoTs(ast);
           if (options?.noGlobalThis) validateNoGlobalThis(ast);
-          if (options?.noOptional) validateNoOptional(ast);
           if (options?.barePipelines) validateBarePipelines(ast);
           const isDeepDestructureRestricted =
             options?.noDeepDestructure ||
@@ -793,7 +766,6 @@ export const checkString = (
     CompileOptions,
     | "noTs"
     | "noGlobalThis"
-    | "noOptional"
     | "barePipelines"
     | "noDeepDestructure"
     | "noDeepDestructurePaths"
@@ -824,7 +796,6 @@ export const checkString = (
       if (options?.effectOnly) validateEffectOnly(ast, options, filename);
       else if (options?.noTs) validateNoTs(ast);
       if (options?.noGlobalThis) validateNoGlobalThis(ast);
-      if (options?.noOptional) validateNoOptional(ast);
       if (options?.barePipelines) validateBarePipelines(ast);
       const isDeepDestructureRestricted =
         options?.noDeepDestructure ||

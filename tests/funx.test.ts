@@ -15,7 +15,11 @@ describe(".funx & TSX Component Support (Compiler & CLI)", () => {
 
   beforeAll(async () => {
     tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), "funscript-funx-test-"));
-    await fs.symlink(path.resolve("node_modules"), path.join(tmpDir, "node_modules"), "dir");
+    await fs.symlink(
+      path.resolve("node_modules"),
+      path.join(tmpDir, "node_modules"),
+      "dir",
+    );
   });
 
   afterAll(async () => {
@@ -29,7 +33,9 @@ describe(".funx & TSX Component Support (Compiler & CLI)", () => {
       const code = `
 export Button = (props: Props) => <button className="btn">{props.label}</button>
 `.trim();
-      const res = await Effect.runPromise(compileString(code, "src/components/Button.funx"));
+      const res = await Effect.runPromise(
+        compileString(code, "src/components/Button.funx"),
+      );
       expect(res.targetExtension).toBe(".tsx");
       expect(res.typescript).toContain(
         'export const Button = (props: Props) => <button className="btn">{props.label}</button>;',
@@ -42,7 +48,9 @@ export add = (a: Number, b: Number) => a + b
 `.trim();
       const res = await Effect.runPromise(compileString(code, "src/math.fun"));
       expect(res.targetExtension).toBe(".ts");
-      expect(res.typescript).toContain("export const add = (a: number, b: number) => (a + b);");
+      expect(res.typescript).toContain(
+        "export const add = (a: number, b: number) => (a + b);",
+      );
     });
   });
 
@@ -68,13 +76,23 @@ export TaskList = (tasks: Array<TaskItem>) =>
 
       const res = await Effect.runPromise(compileString(code, "TaskList.funx"));
       expect(res.typescript).toBeDefined();
-      expect(res.typescript).toContain('import { Array, Schema, pipe } from "effect";');
-      expect(res.typescript).toContain("export const TaskList = (tasks: ReadonlyArray<TaskItem>) => {");
-      expect(res.typescript).toContain('return (<div className="task-container">');
-      expect(res.typescript).toContain('<header className="header"><h1>Task Tracker</h1></header>');
+      expect(res.typescript).toContain(
+        'import { Array, Schema, pipe } from "effect";',
+      );
+      expect(res.typescript).toContain(
+        "export const TaskList = (tasks: ReadonlyArray<TaskItem>) => {",
+      );
+      expect(res.typescript).toContain(
+        'return (<div className="task-container">',
+      );
+      expect(res.typescript).toContain(
+        '<header className="header"><h1>Task Tracker</h1></header>',
+      );
       expect(res.typescript).toContain('<ul className="tasks">');
       expect(res.typescript).toContain("pipe(");
-      expect(res.typescript).toContain("Array.map((task) => <li key={task.id}>{task.title}</li>)");
+      expect(res.typescript).toContain(
+        "Array.map((task) => <li key={task.id}>{task.title}</li>)",
+      );
     });
 
     it("compiles pattern matching inside component body to ts-pattern match with JSX output", async () => {
@@ -92,12 +110,20 @@ export View = (state: ViewState) =>
 `.trim();
 
       const res = await Effect.runPromise(compileString(code, "View.funx"));
-      expect(res.typescript).toContain('import { match, P } from "ts-pattern";');
-      expect(res.typescript).toContain('.with({ _tag: "Loading" }, () => <div className="spinner"><span /></div>)');
+      expect(res.typescript).toContain(
+        'import { match, P } from "ts-pattern";',
+      );
+      expect(res.typescript).toContain(
+        '.with({ _tag: "Loading" }, () => <div className="spinner"><span /></div>)',
+      );
       expect(res.typescript).toContain('.with({ _tag: "Failed" }');
-      expect(res.typescript).toContain('return <div className="error-banner">{err.msg}</div>;');
+      expect(res.typescript).toContain(
+        'return <div className="error-banner">{err.msg}</div>;',
+      );
       expect(res.typescript).toContain('.with({ _tag: "Ready" }');
-      expect(res.typescript).toContain('return <div className="content"><p>{info.content}</p></div>;');
+      expect(res.typescript).toContain(
+        'return <div className="content"><p>{info.content}</p></div>;',
+      );
     });
 
     it("compiles attributes with string template interpolation correctly", async () => {
@@ -109,8 +135,8 @@ export Card = (variant: String, size: String) =>
 `.trim();
 
       const res = await Effect.runPromise(compileString(code, "Card.funx"));
-      expect(res.typescript).toContain('className={`card-${variant}`}');
-      expect(res.typescript).toContain('data-size={`size-${size}`}');
+      expect(res.typescript).toContain("className={`card-${variant}`}");
+      expect(res.typescript).toContain("data-size={`size-${size}`}");
     });
 
     it("compiles attributes with dollar-prefixed template interpolation correctly", async () => {
@@ -122,7 +148,7 @@ export Badge = (badgeKind: String) =>
 `.trim();
 
       const res = await Effect.runPromise(compileString(code, "Badge.funx"));
-      expect(res.typescript).toContain('className={`badge-${badgeKind}`}');
+      expect(res.typescript).toContain("className={`badge-${badgeKind}`}");
     });
 
     it("compiles nested fragments with sibling children to TSX", async () => {
@@ -138,7 +164,9 @@ export FragmentView = () =>
   </>
 `.trim();
 
-      const res = await Effect.runPromise(compileString(code, "FragmentView.funx"));
+      const res = await Effect.runPromise(
+        compileString(code, "FragmentView.funx"),
+      );
       expect(res.typescript).toContain(
         "return (<><span>First</span><><strong>Nested</strong><em>Sibling</em></><span>Last</span></>);",
       );
@@ -151,7 +179,9 @@ export Button = () =>
 `.trim();
 
       const res = await Effect.runPromise(compileString(code, "Button.funx"));
-      expect(res.typescript).toContain('return <button className="primary">Click</button>;');
+      expect(res.typescript).toContain(
+        'return <button className="primary">Click</button>;',
+      );
     });
 
     it("compiles single JSX self-closing element in braced function block to TSX with implicit return", async () => {
@@ -174,8 +204,12 @@ export FragmentView = () =>
   </>
 `.trim();
 
-      const res = await Effect.runPromise(compileString(code, "FragmentView.funx"));
-      expect(res.typescript).toContain("return <><span>First</span><span>Second</span></>;");
+      const res = await Effect.runPromise(
+        compileString(code, "FragmentView.funx"),
+      );
+      expect(res.typescript).toContain(
+        "return <><span>First</span><span>Second</span></>;",
+      );
     });
 
     it("rejects multi-statement .funx function block without explicit return during compilation", async () => {
@@ -185,7 +219,9 @@ export View = () =>
   <h1>{title}</h1>
 `.trim();
 
-      await expect(Effect.runPromise(compileString(code, "View.funx"))).rejects.toThrow(
+      await expect(
+        Effect.runPromise(compileString(code, "View.funx")),
+      ).rejects.toThrow(
         "Function block must end with an explicit '=> returnValue'",
       );
     });
@@ -226,7 +262,9 @@ export Button = (props: HtmlProps<"button">) =>
 `.trim();
 
       const res = await Effect.runPromise(compileString(code, "Button.funx"));
-      expect(res.typescript).toContain('export const Button = (props: React.ComponentPropsWithoutRef<"button">)');
+      expect(res.typescript).toContain(
+        'export const Button = (props: React.ComponentPropsWithoutRef<"button">)',
+      );
       expect(res.typescript).toContain("return <button {...props} />;");
     });
 
@@ -234,12 +272,14 @@ export Button = (props: HtmlProps<"button">) =>
       const code = `
 import { Slot } from "@radix-ui/react-slot"
 
-export Card = (props: HtmlProps<"div"> & { asChild?: Boolean }) =>
+export Card = (props: HtmlProps<"div"> & { asChild: Option<Boolean> }) =>
   <Slot {...props} />
 `.trim();
 
       const res = await Effect.runPromise(compileString(code, "Card.funx"));
-      expect(res.typescript).toContain('export const Card = (props: React.ComponentPropsWithoutRef<"div"> & { readonly asChild?: boolean })');
+      expect(res.typescript).toContain(
+        'export const Card = (props: React.ComponentPropsWithoutRef<"div"> & { readonly asChild: Option.Option<boolean> })',
+      );
       expect(res.typescript).toContain("return <Slot {...props} />;");
     });
 
@@ -256,15 +296,19 @@ export variants = {
     variant: "default"
   }
 }
-export Config = (props: { default?: String, "data-slot"?: String }) =>
+export Config = (props: { default: Option<String>, "data-slot": Option<String> }) =>
   <div>{props.default}</div>
 `.trim();
 
       const res = await Effect.runPromise(compileString(code, "Config.funx"));
       expect(res.typescript).toContain('default: "base"');
       expect(res.typescript).toContain('"data-active": "active"');
-      expect(res.typescript).toContain('readonly default?: string');
-      expect(res.typescript).toContain('readonly "data-slot"?: string');
+      expect(res.typescript).toContain(
+        "readonly default: Option.Option<string>",
+      );
+      expect(res.typescript).toContain(
+        'readonly "data-slot": Option.Option<string>',
+      );
     });
   });
 
@@ -284,11 +328,19 @@ export Widget = (props: Props) => <div className="widget"><h3>{props.name}</h3><
         "utf-8",
       );
 
-      const { stdout } = await execFileAsync("node", [cliPath, "build", funxFile, "--out", expectedTsxFile]);
+      const { stdout } = await execFileAsync("node", [
+        cliPath,
+        "build",
+        funxFile,
+        "--out",
+        expectedTsxFile,
+      ]);
       expect(stdout).toContain(`✓ Built ${expectedTsxFile}`);
 
       const tsxContent = await fs.readFile(expectedTsxFile, "utf-8");
-      expect(tsxContent).toContain('export const Widget = (props: Props) => <div className="widget"><h3>{props.name}</h3></div>;');
+      expect(tsxContent).toContain(
+        'export const Widget = (props: Props) => <div className="widget"><h3>{props.name}</h3></div>;',
+      );
     });
 
     it("builds a .fun file to .ts adjacent to source", async () => {
@@ -303,11 +355,19 @@ export multiply = (a: Number, b: Number) => a * b
         "utf-8",
       );
 
-      const { stdout } = await execFileAsync("node", [cliPath, "build", funFile, "--out", expectedTsFile]);
+      const { stdout } = await execFileAsync("node", [
+        cliPath,
+        "build",
+        funFile,
+        "--out",
+        expectedTsFile,
+      ]);
       expect(stdout).toContain(`✓ Built ${expectedTsFile}`);
 
       const tsContent = await fs.readFile(expectedTsFile, "utf-8");
-      expect(tsContent).toContain("export const multiply = (a: number, b: number) => (a * b);");
+      expect(tsContent).toContain(
+        "export const multiply = (a: number, b: number) => (a * b);",
+      );
     });
 
     it("builds a .funx file to an explicit output path using --out", async () => {
@@ -322,11 +382,19 @@ export Header = () => <header><h1>FunScript</h1></header>
         "utf-8",
       );
 
-      const { stdout } = await execFileAsync("node", [cliPath, "build", funxFile, "--out", outTsxFile]);
+      const { stdout } = await execFileAsync("node", [
+        cliPath,
+        "build",
+        funxFile,
+        "--out",
+        outTsxFile,
+      ]);
       expect(stdout).toContain(`✓ Built ${outTsxFile}`);
 
       const tsxContent = await fs.readFile(outTsxFile, "utf-8");
-      expect(tsxContent).toContain("export const Header = () => <header><h1>FunScript</h1></header>;");
+      expect(tsxContent).toContain(
+        "export const Header = () => <header><h1>FunScript</h1></header>;",
+      );
     });
 
     it("builds multiple .fun and .funx files into a directory using --outDir", async () => {
@@ -352,11 +420,21 @@ export Header = () => <header><h1>FunScript</h1></header>
       expect(stdout).toContain(`✓ Built ${path.join(distDir, "App.tsx")}`);
       expect(stdout).toContain(`✓ Built ${path.join(distDir, "utils.ts")}`);
 
-      const appContent = await fs.readFile(path.join(distDir, "App.tsx"), "utf-8");
-      expect(appContent).toContain("export const App = () => <main>Hello</main>;");
+      const appContent = await fs.readFile(
+        path.join(distDir, "App.tsx"),
+        "utf-8",
+      );
+      expect(appContent).toContain(
+        "export const App = () => <main>Hello</main>;",
+      );
 
-      const utilsContent = await fs.readFile(path.join(distDir, "utils.ts"), "utf-8");
-      expect(utilsContent).toContain("export const double = (x: number) => (x * 2);");
+      const utilsContent = await fs.readFile(
+        path.join(distDir, "utils.ts"),
+        "utf-8",
+      );
+      expect(utilsContent).toContain(
+        "export const double = (x: number) => (x * 2);",
+      );
     });
   });
 
@@ -374,21 +452,26 @@ export Header = () => <header><h1>FunScript</h1></header>
       expect(res.typescript).toContain("export const TodoItemRow");
       expect(res.typescript).toContain("export const TodoDashboard");
       expect(res.typescript).toContain('import { create } from "mutative";');
-      expect(res.typescript).toContain("<main className=\"todo-dashboard\">");
+      expect(res.typescript).toContain('<main className="todo-dashboard">');
     });
 
     it("checks, runs, and production-builds the .funx applications", async () => {
-      const funxFiles = [
-        widgetPath,
-        dashboardPath,
-      ];
+      const funxFiles = [widgetPath, dashboardPath];
 
       for (const funxFile of funxFiles) {
-        const { stdout } = await execFileAsync("node", [cliPath, "check", funxFile]);
+        const { stdout } = await execFileAsync("node", [
+          cliPath,
+          "check",
+          funxFile,
+        ]);
         expect(stdout).toContain("checked successfully (0 errors");
       }
 
-      const dashboardRun = await execFileAsync("node", [cliPath, "run", dashboardPath]);
+      const dashboardRun = await execFileAsync("node", [
+        cliPath,
+        "run",
+        dashboardPath,
+      ]);
       expect(dashboardRun.stdout).toContain("[Todo] Root tag: <main>");
       expect(dashboardRun.stdout).toContain("[Todo] Dashboard view rendered");
       expect(dashboardRun.stdout).toContain("[Todo] Visible rows: 2");
@@ -398,7 +481,9 @@ export Header = () => <header><h1>FunScript</h1></header>
         "run",
         widgetPath,
       ]);
-      expect(widgetRun.stdout).toContain("[Badge] Rendered Active badge: <span>");
+      expect(widgetRun.stdout).toContain(
+        "[Badge] Rendered Active badge: <span>",
+      );
 
       const distDir = path.join(tmpDir, "showcase-dist");
       const { stdout: buildOutput } = await execFileAsync("node", [
@@ -409,9 +494,16 @@ export Header = () => <header><h1>FunScript</h1></header>
         "--outDir",
         distDir,
       ]);
-      expect(buildOutput).toContain(`✓ Built ${path.join(distDir, "reactive-widget.tsx")}`);
-      expect(buildOutput).toContain(`✓ Built ${path.join(distDir, "todo-dashboard.tsx")}`);
-      const builtDashboard = await fs.readFile(path.join(distDir, "todo-dashboard.tsx"), "utf-8");
+      expect(buildOutput).toContain(
+        `✓ Built ${path.join(distDir, "reactive-widget.tsx")}`,
+      );
+      expect(buildOutput).toContain(
+        `✓ Built ${path.join(distDir, "todo-dashboard.tsx")}`,
+      );
+      const builtDashboard = await fs.readFile(
+        path.join(distDir, "todo-dashboard.tsx"),
+        "utf-8",
+      );
       expect(builtDashboard).toContain("export const TodoDashboard");
     }, 120_000);
   });

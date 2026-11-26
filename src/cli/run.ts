@@ -37,7 +37,6 @@ export const runCommand = (
         arg !== "--no-check" &&
         arg !== "--no-ts" &&
         arg !== "--no-global-this" &&
-        arg !== "--no-optional" &&
         arg !== "--bare-pipelines" &&
         arg !== "--fast" &&
         arg !== "--engine" &&
@@ -66,7 +65,6 @@ export const runCommand = (
       !(yield* checkCliFiles([filePath], {
         noTs: commandArgs.includes("--no-ts"),
         noGlobalThis: commandArgs.includes("--no-global-this"),
-        noOptional: commandArgs.includes("--no-optional"),
         barePipelines: commandArgs.includes("--bare-pipelines"),
         noDeepDestructure:
           commandArgs.includes("--no-deep-destructure") ||
@@ -78,9 +76,6 @@ export const runCommand = (
           : undefined,
         noGlobalThisPaths: Array.isArray(projectPolicy.noGlobalThis)
           ? projectPolicy.noGlobalThis
-          : undefined,
-        noOptionalPaths: Array.isArray(projectPolicy.noOptional)
-          ? projectPolicy.noOptional
           : undefined,
         barePipelinesPaths: Array.isArray(projectPolicy.barePipelines)
           ? projectPolicy.barePipelines
@@ -122,7 +117,6 @@ export const runCommand = (
             funscriptBunPlugin({
               noTs: commandArgs.includes("--no-ts"),
               noGlobalThis: commandArgs.includes("--no-global-this"),
-              noOptional: commandArgs.includes("--no-optional"),
               barePipelines: commandArgs.includes("--bare-pipelines"),
               noDeepDestructure: commandArgs.includes("--no-deep-destructure"),
               maxDestructureDepth: projectPolicy.maxDestructureDepth,
@@ -167,7 +161,6 @@ import * as Effect from "effect/Effect";
 plugin(funscriptBunPlugin({
   noTs: ${Boolean(commandArgs.includes("--no-ts"))},
   noGlobalThis: ${Boolean(commandArgs.includes("--no-global-this"))},
-  noOptional: ${Boolean(commandArgs.includes("--no-optional"))},
   barePipelines: ${Boolean(commandArgs.includes("--bare-pipelines"))},
   noDeepDestructure: ${Boolean(commandArgs.includes("--no-deep-destructure"))},
   maxDestructureDepth: ${typeof projectPolicy.maxDestructureDepth === "number" ? projectPolicy.maxDestructureDepth : "undefined"},
@@ -207,7 +200,6 @@ if (mod && mod.main) {
         buildRunBundle(filePath, targetFile, {
           noTs: commandArgs.includes("--no-ts"),
           noGlobalThis: commandArgs.includes("--no-global-this"),
-          noOptional: commandArgs.includes("--no-optional"),
           barePipelines: commandArgs.includes("--bare-pipelines"),
           noDeepDestructure: commandArgs.includes("--no-deep-destructure"),
           maxDestructureDepth: projectPolicy.maxDestructureDepth,

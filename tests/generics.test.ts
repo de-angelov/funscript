@@ -287,8 +287,8 @@ export countryEnvelope = Envelope(Country)
 
   it("preserves optional data decoding and encoding in generic schemas", async () => {
     const source = `
-export schema Page<A> = { items: Array<A>, next?: String }
-export schema OptionalBox<A> = { value?: A }
+export schema Page<A> = { items: Array<A>, next: Option<String> }
+export schema OptionalBox<A> = { value: Option<A> }
 export schema Country = { name: String }
 export countryPage = Page(Country)
 export optionalNumber = OptionalBox(Schema.NumberFromString)
@@ -335,7 +335,8 @@ export names = (page: Page<Country>) => page.items |> Array.map((country) => cou
   }, 60000);
 
   it("composes a verified imported factory through renamed re-exports", async () => {
-    const page = "export schema Page<A> = { items: Array<A>, next?: String }";
+    const page =
+      "export schema Page<A> = { items: Array<A>, next: Option<String> }";
     const app =
       'import { Listing as Page } from "./barrel.js"\nexport schema Country = { name: String }\nexport schema Response = { page: Page<Country> }';
     const files = {
@@ -373,7 +374,8 @@ export names = (page: Page<Country>) => page.items |> Array.map((country) => cou
 
   it("composes generic factories locally and across modules", async () => {
     const files = {
-      "page.fun": "export schema Page<A> = { items: Array<A>, next?: String }",
+      "page.fun":
+        "export schema Page<A> = { items: Array<A>, next: Option<String> }",
       "result.fun":
         'import { Page } from "./page.js"\nexport schema Result<A> = { data: Page<A>, requestId: String }',
       "country-app.fun":
@@ -444,7 +446,7 @@ export names = (page: Page<Country>) => page.items |> Array.map((country) => cou
   it("verifies named data dependencies across generic factories and imports", async () => {
     const files = {
       "metadata.fun":
-        "export schema Metadata = { requestId: String, cursor?: String }",
+        "export schema Metadata = { requestId: String, cursor: Option<String> }",
       "metadata-barrel.fun": 'export { Metadata as Info } from "./metadata.js"',
       "named-page.fun":
         'import { Info as Metadata } from "./metadata-barrel.js"\nschema Trace = { info: Metadata }\nexport schema Page<A> = { items: Array<A>, trace: Trace }',

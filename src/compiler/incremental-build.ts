@@ -91,13 +91,6 @@ export class IncrementalBuildSession {
                       cwd,
                       absolute,
                     ),
-                  noOptional:
-                    !!this.options.noOptional ||
-                    isPathPolicyEnabled(
-                      this.options.noOptionalPaths,
-                      cwd,
-                      absolute,
-                    ),
                   barePipelines:
                     !!this.options.barePipelines ||
                     isPathPolicyEnabled(

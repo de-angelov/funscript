@@ -21,12 +21,11 @@ describe("FunScript project policy", () => {
     const file = path.join(dir, "funscript.config.fun");
     writeFileSync(
       file,
-      'export config = { noTs: true, noGlobalThis: true, noOptional: true, barePipelines: true, noDeepDestructure: true, maxDestructureDepth: 2, effectOnly: ["src/domain"], allowHoles: true }',
+      'export config = { noTs: true, noGlobalThis: true, barePipelines: true, noDeepDestructure: true, maxDestructureDepth: 2, effectOnly: ["src/domain"], allowHoles: true }',
     );
     expect(loadProjectConfig(dir)).toEqual({
       noTs: true,
       noGlobalThis: true,
-      noOptional: true,
       barePipelines: true,
       noDeepDestructure: true,
       maxDestructureDepth: 2,
@@ -76,40 +75,6 @@ describe("FunScript project policy", () => {
     await expect(
       Effect.runPromise(
         compileString(source, "test.fun", { noGlobalThis: true }),
-      ),
-    ).resolves.toBeDefined();
-  });
-
-  it.each([
-    ["parameter", "export f = (name?: String) => name"],
-    ["record type field", "export f = (user: { name?: String }) => user"],
-    ["schema field", "export schema User = { name?: String }"],
-  ])(
-    "rejects optional values when noOptional is enabled: %s",
-    async (_, source) => {
-      await expect(
-        Effect.runPromise(
-          compileString(source, "test.fun", { noOptional: true }),
-        ),
-      ).rejects.toThrow("Optional");
-    },
-  );
-
-  it("allows Option<T> and defaulted parameters when noOptional is enabled", async () => {
-    const source =
-      'import { Option } from "effect"\nexport f = (opt: Option<String>, port: Number = 8080) => port';
-    await expect(
-      Effect.runPromise(
-        compileString(source, "test.fun", { noOptional: true }),
-      ),
-    ).resolves.toBeDefined();
-  });
-
-  it("allows optional values inside ts escape hatches when noOptional is enabled", async () => {
-    const source = "export f = ts { (x?: string) => x }";
-    await expect(
-      Effect.runPromise(
-        compileString(source, "test.fun", { noOptional: true }),
       ),
     ).resolves.toBeDefined();
   });

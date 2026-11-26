@@ -868,8 +868,11 @@ export function inferPipelineCompanions(
         const candidates = pipelineCompanionCandidates(fnName);
         if (candidates.length > 1) {
           if (tolerateUnresolvedStages) continue;
+          const optionHint = candidates.includes("Option")
+            ? " (or lift nullable JS values with fromNullishOr(...) first)"
+            : "";
           throw new PipelineResolutionError(
-            `${fnName} is ambiguous for this pipeline; write ${candidates.map((m) => `${m}.${fnName}(...)`).join(" or ")}`,
+            `${fnName} is ambiguous for this pipeline; write ${candidates.map((m) => `${m}.${fnName}(...)`).join(" or ")}${optionHint}`,
             stage.span,
           );
         } else if (candidates.length === 1) {

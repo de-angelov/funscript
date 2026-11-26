@@ -1,4 +1,5 @@
 import * as Effect from "effect/Effect";
+import { createHash } from "node:crypto";
 import * as fs from "node:fs";
 import * as path from "node:path";
 import { compileString } from "../compiler.js";
@@ -8,6 +9,8 @@ import {
   loadProjectConfig,
 } from "../compiler/project-config.js";
 import { TypeScriptCompilationContext } from "../compiler/typescript-context.js";
+import { isFileNotFoundError } from "../errors.js";
+import { FUNSCRIPT_VERSION } from "../version.js";
 import { TypeView, type TypeViewOptions } from "./type-view.js";
 
 export { TypeView, type TypeViewOptions };
@@ -35,7 +38,6 @@ export interface BunPluginOptions {
   /** Reject raw TypeScript escapes in compiled FunScript modules. */
   noTs?: boolean;
   noGlobalThis?: boolean;
-  noOptional?: boolean;
   barePipelines?: boolean;
   noDeepDestructure?: boolean;
   maxDestructureDepth?: number;
@@ -278,59 +280,111 @@ export function funscriptBunPlugin(options: BunPluginOptions = {}): BunPlugin {
         const isFunx = args.path.endsWith(".funx");
         const loader = isFunx ? "tsx" : "ts";
 
-        const res = await Effect.runPromise(
-          compileString(text, args.path, {
-            noTs:
-              options.noTs ||
-              isPathPolicyEnabled(projectPolicy.noTs, process.cwd(), args.path),
-            noGlobalThis:
-              options.noGlobalThis ||
-              isPathPolicyEnabled(
-                projectPolicy.noGlobalThis,
-                process.cwd(),
-                args.path,
-              ),
-            noOptional:
-              options.noOptional ||
-              isPathPolicyEnabled(
-                projectPolicy.noOptional,
-                process.cwd(),
-                args.path,
-              ),
-            barePipelines:
-              options.barePipelines ||
-              isPathPolicyEnabled(
-                projectPolicy.barePipelines,
-                process.cwd(),
-                args.path,
-              ),
-            noDeepDestructure:
-              options.noDeepDestructure ||
-              isPathPolicyEnabled(
-                projectPolicy.noDeepDestructure,
-                process.cwd(),
-                args.path,
-              ),
-            maxDestructureDepth:
-              options.maxDestructureDepth ?? projectPolicy.maxDestructureDepth,
-            allowEarlyReturns:
-              options.allowEarlyReturns ||
-              isPathPolicyEnabled(
-                projectPolicy.allowEarlyReturns,
-                process.cwd(),
-                args.path,
-              ),
-            effectOnly: isEffectOnlyFile(
-              projectPolicy,
+        const compileOptions = {
+          noTs:
+            options.noTs ||
+            isPathPolicyEnabled(projectPolicy.noTs, process.cwd(), args.path),
+          noGlobalThis:
+            options.noGlobalThis ||
+            isPathPolicyEnabled(
+              projectPolicy.noGlobalThis,
               process.cwd(),
               args.path,
             ),
-            effectOnlyDirectories: projectPolicy.effectOnly,
-            policyRoot: process.cwd(),
-            sourcemap: options.sourcemap ?? true,
-            context,
-          }),
-        );
+          barePipelines:
+            options.barePipelines ||
+            isPathPolicyEnabled(
+              projectPolicy.barePipelines,
+              process.cwd(),
+              args.path,
+            ),
+          noDeepDestructure:
+            options.noDeepDestructure ||
+            isPathPolicyEnabled(
+              projectPolicy.noDeepDestructure,
+              process.cwd(),
+              args.path,
+            ),
+          maxDestructureDepth:
+            options.maxDestructureDepth ?? projectPolicy.maxDestructureDepth,
+          allowEarlyReturns:
+            options.allowEarlyReturns ||
+            isPathPolicyEnabled(
+              projectPolicy.allowEarlyReturns,
+              process.cwd(),
+              args.path,
+            ),
+          effectOnly: isEffectOnlyFile(projectPolicy, process.cwd(), args.path),
+          effectOnlyDirectories: projectPolicy.effectOnly,
+          policyRoot: process.cwd(),
+          sourcemap: options.sourcemap ?? true,
+        };
+
+        const cacheEnabled =
+          !options.types && process.env.FUNSCRIPT_NO_CACHE !== "1";
+        let cachePath: string | undefined;
+        let cachedTypescript: string | undefined;
+        if (cacheEnabled) {
+          const cacheKey = createHash("sha256")
+            .update(FUNSCRIPT_VERSION)
+            .update("\0")
+            .update(args.path)
+            .update("\0")
+            .update(JSON.stringify(compileOptions))
+            .update("\0")
+            .update(text)
+            .digest("hex");
+          cachePath = path.join(
+            process.cwd(),
+            ".funscript",
+            "bun-cache",
+            `${cacheKey}.json`,
+          );
+          try {
+            const raw = await fs.promises.readFile(cachePath, "utf8");
+            const parsed = JSON.parse(raw) as { typescript?: unknown };
+            if (typeof parsed.typescript === "string") {
+              cachedTypescript = parsed.typescript;
+            }
+          } catch (error) {
+            if (
+              !isFileNotFoundError(error) &&
+              !(error instanceof SyntaxError)
+            ) {
+              throw error;
+            }
+          }
+        }
+
+        let contents: string;
+        if (cachedTypescript !== undefined) {
+          contents = cachedTypescript;
+        } else {
+          const res = await Effect.runPromise(
+            compileString(text, args.path, {
+              ...compileOptions,
+              context,
+            }),
+          );
+          contents = res.typescript;
+          if (cachePath) {
+            try {
+              await fs.promises.mkdir(path.dirname(cachePath), {
+                recursive: true,
+              });
+              await fs.promises.writeFile(
+                cachePath,
+                JSON.stringify({ typescript: contents }),
+                "utf8",
+              );
+            } catch (error) {
+              const code = (error as NodeJS.ErrnoException | undefined)?.code;
+              if (code !== "EROFS" && code !== "EACCES" && code !== "EPERM") {
+                throw error;
+              }
+            }
+          }
+        }
 
         if (options.types) {
           await ensureTypeView();
@@ -338,8 +392,6 @@ export function funscriptBunPlugin(options: BunPluginOptions = {}): BunPlugin {
             await typeView.update(args.path);
           }
         }
-
-        let contents = res.typescript;
         const isEntry = options.entryFile
           ? path.resolve(args.path) === path.resolve(options.entryFile)
           : typeof process !== "undefined" && process.argv?.[1]

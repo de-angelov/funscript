@@ -496,24 +496,24 @@ export function parseRecordSchema(ctx: DeclarationParserContext): RecordSchema {
     if (ctx.check(TokenType.RBRACE) || ctx.check(TokenType.DEDENT)) break;
 
     const fieldName: Identifier = ctx.parseRecordKeyIdentifier();
-    const optional = ctx.match(TokenType.QUESTION);
+    if (ctx.match(TokenType.QUESTION)) {
+      throw new ParseError(
+        "Optional '?' schema field syntax is disabled in FunScript; use 'Option<T>' or a default value '= default'",
+        ctx.previous().span,
+      );
+    }
     ctx.consume(TokenType.COLON, "Expected ':' after field name");
-    const previous = ctx.allowOptionalRecordFields;
-    ctx.allowOptionalRecordFields = true;
+    const previous = ctx.allowDefaultedRecordFields;
+    ctx.allowDefaultedRecordFields = true;
     let fieldType: TypeNode;
     try {
       fieldType = ctx.parseTypeNode();
     } finally {
-      ctx.allowOptionalRecordFields = previous;
+      ctx.allowDefaultedRecordFields = previous;
     }
     let defaultValue: Expression | undefined;
 
     if (ctx.match(TokenType.EQ)) {
-      if (optional)
-        throw new ParseError(
-          "A schema field cannot be both optional and defaulted",
-          fieldName.span,
-        );
       defaultValue = ctx.parseExpression();
     }
 
@@ -521,7 +521,6 @@ export function parseRecordSchema(ctx: DeclarationParserContext): RecordSchema {
       kind: "RecordFieldSchema",
       name: fieldName,
       typeAnnotation: fieldType,
-      optional,
       defaultValue,
       span: {
         start: fieldName.span.start,
@@ -554,12 +553,12 @@ export function parseStructuralUnionSchema(
   const hasIndent = ctx.match(TokenType.INDENT);
   const members: TypeNode[] = [];
   while (ctx.match(TokenType.BAR)) {
-    const previous = ctx.allowOptionalRecordFields;
-    ctx.allowOptionalRecordFields = true;
+    const previous = ctx.allowDefaultedRecordFields;
+    ctx.allowDefaultedRecordFields = true;
     try {
       members.push(ctx.parsePrimaryType());
     } finally {
-      ctx.allowOptionalRecordFields = previous;
+      ctx.allowDefaultedRecordFields = previous;
     }
     ctx.skipNewlines();
   }

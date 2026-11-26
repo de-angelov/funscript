@@ -234,10 +234,9 @@ export function emitTypeNode(ctx: TypeEmitterContext, node: TypeNode): string {
         .map((p) => {
           const rest = p.isRest ? "..." : "";
           const name = p.name ? ctx.emitBindingTarget(p.name) : "_";
-          const opt = p.optional ? "?" : "";
           return p.typeAnnotation
-            ? `${rest}${name}${opt}: ${ctx.emitTypeNode(p.typeAnnotation)}`
-            : `${rest}${name}${opt}`;
+            ? `${rest}${name}: ${ctx.emitTypeNode(p.typeAnnotation)}`
+            : `${rest}${name}`;
         })
         .join(", ");
       return `${ctx.emitTypeParameters(node.typeParams)}(${params}) => ${ctx.emitTypeNode(node.returnType)}`;

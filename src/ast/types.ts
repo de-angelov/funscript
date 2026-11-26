@@ -130,7 +130,6 @@ export interface RecordFieldSchema extends NodeBase {
   kind: "RecordFieldSchema";
   name: Identifier;
   typeAnnotation: TypeNode;
-  optional?: boolean;
   defaultValue?: Expression;
 }
 
@@ -173,8 +172,6 @@ export interface ImportedTsSchema extends NodeBase {
   typeArgs: TypeNode[];
   typeArguments: TypeNode[];
 }
-
-export type FromTsSchema = ImportedTsSchema;
 
 export interface ErrorDeclaration extends NodeBase {
   kind: "ErrorDeclaration";
@@ -625,7 +622,6 @@ export interface Parameter extends NodeBase {
   kind: "Parameter";
   name: BindingTarget;
   typeAnnotation?: TypeNode;
-  optional?: boolean;
   defaultValue?: Expression;
   isRest?: boolean;
 }

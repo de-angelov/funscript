@@ -97,16 +97,12 @@ parentPort?.on("message", (request: Request) => {
           cache,
           noTs: policy.noTs === true,
           noGlobalThis: policy.noGlobalThis === true,
-          noOptional: policy.noOptional === true,
           barePipelines: policy.barePipelines === true,
           noDeepDestructure: policy.noDeepDestructure === true,
           maxDestructureDepth: policy.maxDestructureDepth,
           noTsPaths: Array.isArray(policy.noTs) ? policy.noTs : undefined,
           noGlobalThisPaths: Array.isArray(policy.noGlobalThis)
             ? policy.noGlobalThis
-            : undefined,
-          noOptionalPaths: Array.isArray(policy.noOptional)
-            ? policy.noOptional
             : undefined,
           barePipelinesPaths: Array.isArray(policy.barePipelines)
             ? policy.barePipelines

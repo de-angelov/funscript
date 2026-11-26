@@ -17,11 +17,8 @@ import {
   type ImportDeclaration,
   type ImportedTsSchema,
   type IndexExpression,
-  type JSXAttribute,
   type JSXElement,
-  type JSXExpressionContainer,
   type JSXSelfClosingElement,
-  type JSXTagName,
   type MatchArm,
   type MatchExpression,
   type MutBlockExpression,
@@ -71,14 +68,7 @@ import {
   parseTopLevelDeclaration as parseTopLevelDeclarationImpl,
   parseTsDerivedSchema as parseTsDerivedSchemaImpl,
 } from "./declarations.js";
-import {
-  areTagNamesEqual,
-  formatTagName,
-  parseJsxAttribute,
-  parseJsxElement,
-  parseJsxExpressionContainer,
-  parseJsxTagName,
-} from "./jsx.js";
+import { parseJsxElement } from "./jsx.js";
 import {
   collectPatternVariables as collectPatternVariablesImpl,
   isDestructuringBindingStart as isDestructuringBindingStartImpl,
@@ -164,19 +154,17 @@ export class Parser {
 
   public parsingBraceEffect = false;
   public hasDefaultExport = false;
-  public allowOptionalRecordFields = false;
+  public allowDefaultedRecordFields = false;
   public recordTypeDepth = 0;
   private options: ParserOptions;
-  private isFunx: boolean;
 
   constructor(
     public tokens: Token[],
-    private filename: string = "<anonymous>",
-    private source: string = "",
+    _filename: string = "<anonymous>",
+    _source: string = "",
     options?: ParserOptions,
   ) {
     this.options = { ...options };
-    this.isFunx = options?.isFunx ?? this.filename.endsWith(".funx");
   }
 
   public getDiagnostics(): ParseError[] {
@@ -201,9 +189,6 @@ export class Parser {
         ? { throwOnError: optionsOrThrowOnError }
         : (optionsOrThrowOnError ?? {});
     const throwOnError = opts.throwOnError ?? this.options.throwOnError ?? true;
-    if (opts.isFunx !== undefined) {
-      this.isFunx = opts.isFunx;
-    }
     this.hasDefaultExport = false;
     this.scopeStack.reset();
 
@@ -425,35 +410,29 @@ export class Parser {
     nameOnlySpan = false,
     isRest = false,
   ): Parameter {
-    const optional = this.match(TokenType.QUESTION);
+    if (this.match(TokenType.QUESTION)) {
+      throw new ParseError(
+        "Optional '?' parameter syntax is disabled in FunScript; use 'Option<T>' or a default value '= default'",
+        this.previous().span,
+      );
+    }
     let typeAnnotation: TypeNode | undefined;
     if (this.match(TokenType.COLON)) {
-      const previous = this.allowOptionalRecordFields;
-      this.allowOptionalRecordFields = this.check(TokenType.LBRACE);
+      const previous = this.allowDefaultedRecordFields;
+      this.allowDefaultedRecordFields = this.check(TokenType.LBRACE);
       try {
         typeAnnotation = this.parseTypeNode();
       } finally {
-        this.allowOptionalRecordFields = previous;
+        this.allowDefaultedRecordFields = previous;
       }
     }
-    if (optional && !typeAnnotation)
-      throw new ParseError(
-        "Optional parameters require a type annotation",
-        name.span,
-      );
     const defaultValue = this.match(TokenType.EQ)
       ? this.parseExpression()
       : undefined;
-    if (optional && defaultValue)
-      throw new ParseError(
-        "A parameter cannot be both optional and defaulted",
-        name.span,
-      );
     return {
       kind: "Parameter",
       name,
       typeAnnotation,
-      optional,
       defaultValue,
       isRest: isRest ? true : undefined,
       span: nameOnlySpan
@@ -467,25 +446,10 @@ export class Parser {
 
   public validateValueParameters(params: Parameter[]): void {
     for (let i = 0; i < params.length; i++) {
-      if (
-        params[i].optional &&
-        params.slice(i + 1).some((p) => !p.optional && !p.isRest)
-      ) {
-        throw new ParseError(
-          "Only optional parameters may follow an optional parameter",
-          params[i].span,
-        );
-      }
       if (params[i].isRest) {
         if (i !== params.length - 1) {
           throw new ParseError(
             "A rest parameter must be the last parameter in a parameter list",
-            params[i].span,
-          );
-        }
-        if (params[i].optional) {
-          throw new ParseError(
-            "A rest parameter cannot be optional",
             params[i].span,
           );
         }
@@ -1509,26 +1473,6 @@ export class Parser {
 
   public parseJsxElement(): JSXElement | JSXSelfClosingElement {
     return parseJsxElement(this);
-  }
-
-  private parseJsxTagName(): JSXTagName {
-    return parseJsxTagName(this);
-  }
-
-  private parseJsxAttribute(): JSXAttribute {
-    return parseJsxAttribute(this);
-  }
-
-  private parseJsxExpressionContainer(): JSXExpressionContainer {
-    return parseJsxExpressionContainer(this);
-  }
-
-  private formatTagName(name: JSXTagName): string {
-    return formatTagName(name);
-  }
-
-  private areTagNamesEqual(a: JSXTagName, b: JSXTagName): boolean {
-    return areTagNamesEqual(a, b);
   }
 
   // --- Helpers ---

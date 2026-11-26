@@ -61,7 +61,6 @@ export const buildCommand = (
         arg === "--no-check" ||
         arg === "--no-ts" ||
         arg === "--no-global-this" ||
-        arg === "--no-optional" ||
         arg === "--bare-pipelines" ||
         arg === "--bin" ||
         arg === "--watch" ||
@@ -188,7 +187,6 @@ export const buildCommand = (
                 flags: {
                   noTs: args.includes("--no-ts"),
                   noGlobalThis: args.includes("--no-global-this"),
-                  noOptional: args.includes("--no-optional"),
                   barePipelines: args.includes("--bare-pipelines"),
                   noDeepDestructure: args.includes("--no-deep-destructure"),
                 },
@@ -257,7 +255,6 @@ export const buildCommand = (
         !(yield* checkCliFiles([entryFile], {
           noTs: args.includes("--no-ts"),
           noGlobalThis: args.includes("--no-global-this"),
-          noOptional: args.includes("--no-optional"),
           barePipelines: args.includes("--bare-pipelines"),
           noDeepDestructure:
             args.includes("--no-deep-destructure") ||
@@ -269,9 +266,6 @@ export const buildCommand = (
             : undefined,
           noGlobalThisPaths: Array.isArray(projectPolicy.noGlobalThis)
             ? projectPolicy.noGlobalThis
-            : undefined,
-          noOptionalPaths: Array.isArray(projectPolicy.noOptional)
-            ? projectPolicy.noOptional
             : undefined,
           barePipelinesPaths: Array.isArray(projectPolicy.barePipelines)
             ? projectPolicy.barePipelines
@@ -288,7 +282,6 @@ export const buildCommand = (
             sourcemap: isSourcemap,
             noTs: args.includes("--no-ts"),
             noGlobalThis: args.includes("--no-global-this"),
-            noOptional: args.includes("--no-optional"),
             barePipelines: args.includes("--bare-pipelines"),
             engine: isFast ? "bun" : engine,
           }),
@@ -366,7 +359,6 @@ export const buildCommand = (
       !(yield* checkCliFiles(filesToBuild, {
         noTs: args.includes("--no-ts"),
         noGlobalThis: args.includes("--no-global-this"),
-        noOptional: args.includes("--no-optional"),
         barePipelines: args.includes("--bare-pipelines"),
         noDeepDestructure:
           args.includes("--no-deep-destructure") ||
@@ -378,9 +370,6 @@ export const buildCommand = (
           : undefined,
         noGlobalThisPaths: Array.isArray(projectPolicy.noGlobalThis)
           ? projectPolicy.noGlobalThis
-          : undefined,
-        noOptionalPaths: Array.isArray(projectPolicy.noOptional)
-          ? projectPolicy.noOptional
           : undefined,
         barePipelinesPaths: Array.isArray(projectPolicy.barePipelines)
           ? projectPolicy.barePipelines
@@ -422,13 +411,6 @@ export const buildCommand = (
           args.includes("--no-global-this") ||
           isPathPolicyEnabled(
             projectPolicy.noGlobalThis,
-            process.cwd(),
-            filePath,
-          ),
-        noOptional:
-          args.includes("--no-optional") ||
-          isPathPolicyEnabled(
-            projectPolicy.noOptional,
             process.cwd(),
             filePath,
           ),

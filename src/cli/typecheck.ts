@@ -91,14 +91,12 @@ export const checkCliFiles = (
     cwd?: string;
     noTs?: boolean;
     noGlobalThis?: boolean;
-    noOptional?: boolean;
     barePipelines?: boolean;
     noDeepDestructure?: boolean;
     maxDestructureDepth?: number;
     effectOnly?: string[];
     noTsPaths?: string[];
     noGlobalThisPaths?: string[];
-    noOptionalPaths?: string[];
     barePipelinesPaths?: string[];
     noDeepDestructurePaths?: string[];
     allowHoles?: boolean;
@@ -113,7 +111,6 @@ export const checkCliFiles = (
       cwd: options?.cwd,
       noTs: options?.noTs,
       noGlobalThis: options?.noGlobalThis,
-      noOptional: options?.noOptional,
       barePipelines: options?.barePipelines,
       noDeepDestructure: options?.noDeepDestructure,
       maxDestructureDepth: options?.maxDestructureDepth,
@@ -124,7 +121,6 @@ export const checkCliFiles = (
       allowEarlyReturnsPaths: options?.allowEarlyReturnsPaths,
       noTsPaths: options?.noTsPaths,
       noGlobalThisPaths: options?.noGlobalThisPaths,
-      noOptionalPaths: options?.noOptionalPaths,
       barePipelinesPaths: options?.barePipelinesPaths,
       noDeepDestructurePaths: options?.noDeepDestructurePaths,
     });

@@ -20,27 +20,35 @@ import ts from "typescript";
 
 describe("named compile-time record contracts", () => {
   const declaration =
-    "schema Props = { label?: String, onChange?: (value: String) => Void }";
+    "schema Props = { label: Option<String>, onChange: Option<(value: String) => Void> }";
 
-  it("keeps ordinary JavaScript props while requiring Options inside", async () => {
+  it("keeps Option props inside record contracts", async () => {
     const source =
+      'import { Option } from "effect"\n' +
       declaration +
       "\nexport read = (props: Props) => props.label\nexport callback = (props: Props) => props.onChange";
     const checked = await typeCheck(
       source +
-        '\nexport missing = read({})\nexport present = read({ label: "Ada" })',
+        '\nexport missing = read({ label: Option.none(), onChange: Option.none() })\nexport present = read({ label: Option.some("Ada"), onChange: Option.none() })',
       "contract.fun",
     );
     expect(checked.success, checked.formattedOutput).toBe(true);
     const { read, callback } = await execute(source);
-    expect(read({})).toEqual(Option.none());
-    expect(read({ label: "Ada" })).toEqual(Option.some("Ada"));
+    expect(read({ label: Option.none(), onChange: Option.none() })).toEqual(
+      Option.none(),
+    );
+    expect(
+      read({ label: Option.some("Ada"), onChange: Option.none() }),
+    ).toEqual(Option.some("Ada"));
     const fn = () => {};
-    expect(callback({ onChange: fn })).toEqual(Option.some(fn));
+    expect(
+      callback({ label: Option.none(), onChange: Option.some(fn) }),
+    ).toEqual(Option.some(fn));
     expect(
       (
         await typeCheck(
-          source + "\nexport wrong = read({ label: 1 })",
+          source +
+            "\nexport wrong = read({ label: 1, onChange: Option.none() })",
           "contract.fun",
         )
       ).success,
@@ -90,7 +98,7 @@ describe("named compile-time record contracts", () => {
 
   it("decodes optional React-style callbacks without changing omission or requiring a void return", async () => {
     const source =
-      "export schema Props = { label?: String, onClick?: () => Void, onVote?: (country: String) => Void }\nexport decode = (input: Unknown) => PropsDecodeChecked(input)";
+      "export schema Props = { label: Option<String>, onClick: () => Void, onVote: (country: String) => Void }\nexport decode = (input: Unknown) => PropsDecodeChecked(input)";
     const checked = await typeCheck(source, "props.funx");
     expect(checked.success, checked.formattedOutput).toBe(true);
     const { decode } = await execute(source, {
@@ -102,15 +110,18 @@ describe("named compile-time record contracts", () => {
         $funscriptDecodeCheckedRecord: decodeCheckedRecord,
       },
     });
-    const missing = decode({});
-    expect(Object.hasOwn(missing, "label")).toBe(false);
-    expect(Object.hasOwn(missing, "onClick")).toBe(false);
-    const explicit = decode({ label: undefined, onClick: undefined });
-    expect(Object.hasOwn(explicit, "onClick")).toBe(true);
-    expect(explicit.onClick).toBeUndefined();
-    expect(Object.hasOwn(explicit, "label")).toBe(true);
+    const missing = decode({ onClick: () => {}, onVote: () => {} });
+    expect(missing.label).toEqual(Option.none());
+    const explicit = decode({
+      label: undefined,
+      onClick: () => {},
+      onVote: () => {},
+    });
+    expect(explicit.label).toEqual(Option.none());
     expect(() => decode({ onVote: null })).toThrow();
-    expect(() => decode({ label: 1 })).toThrow();
+    expect(() =>
+      decode({ label: 1, onClick: () => {}, onVote: () => {} }),
+    ).toThrow();
     let count = 0;
     const props = decode({
       onClick: () => {
@@ -138,9 +149,9 @@ describe("named compile-time record contracts", () => {
   | HighestFirst
   | LowestFirst
 export schema RankingOrderControlsProps = {
-  order?: RankingOrder
-  currentOrder?: RankingOrder
-  onOrderChange?: (order: RankingOrder) => Void
+  order: Option<RankingOrder>
+  currentOrder: Option<RankingOrder>
+  onOrderChange: (order: RankingOrder) => Void
 }
 export decode = (input: Unknown) => RankingOrderControlsPropsDecodeChecked(input)`;
     const checked = await typeCheck(source, "ranking.funx");
@@ -171,7 +182,7 @@ export decode = (input: Unknown) => RankingOrderControlsPropsDecodeChecked(input
         seen = value;
       },
     });
-    expect(props.order).toBe(LowestFirst);
+    expect(props.order).toEqual(Option.some(LowestFirst));
     props.onOrderChange(LowestFirst);
     expect(seen).toBe(LowestFirst);
     expect(() => decode({ order: { _tag: "Invalid" } })).toThrow();
@@ -184,7 +195,7 @@ export decode = (input: Unknown) => RankingOrderControlsPropsDecodeChecked(input
   | Select(code: String)
   | Resize(size: Number, active: Boolean)
   | Clear
-export schema Props = { event?: VoteEvent, onEvent?: (event: VoteEvent) => Void }
+export schema Props = { event: Option<VoteEvent>, onEvent: (event: VoteEvent) => Void }
 export decode = (input: Unknown) => PropsDecodeChecked(input)`;
     const checked = await typeCheck(source, "payload.fun");
     expect(checked.success, checked.formattedOutput).toBe(true);
@@ -203,12 +214,16 @@ export decode = (input: Unknown) => PropsDecodeChecked(input)`;
         received = value;
       },
     });
-    expect(props.event).toBe(event);
+    expect(props.event).toEqual(Option.some(event));
     props.onEvent(event);
     expect(received).toBe(event);
-    expect(decode({ event: Clear }).event).toBe(Clear);
+    expect(decode({ event: Clear, onEvent: () => {} }).event).toEqual(
+      Option.some(Clear),
+    );
     const sized = Resize(2, true);
-    expect(decode({ event: sized }).event).toBe(sized);
+    expect(decode({ event: sized, onEvent: () => {} }).event).toEqual(
+      Option.some(sized),
+    );
     expect(() => decode({ event: { _tag: "Select", code: 42 } })).toThrow();
     expect(() => decode({ event: { _tag: "Resize", size: 2 } })).toThrow();
     expect(() =>
@@ -216,7 +231,7 @@ export decode = (input: Unknown) => PropsDecodeChecked(input)`;
     ).toThrow();
     expect(() => props.onEvent({ _tag: "Unknown" })).toThrow();
     const unsupported = await compile(
-      "schema Payload = { x?: String }\nschema Event = | Selected(value: Payload)\nschema Props = { onEvent: (value: Event) => Void }",
+      "schema Payload = { x: Option<String> }\nschema Event = | Selected(value: Payload)\nschema Props = { onEvent: (value: Event) => Void }",
       "unsupported.fun",
     );
     expect(unsupported.typescript).not.toContain("PropsDecodeChecked");
@@ -227,7 +242,7 @@ export decode = (input: Unknown) => PropsDecodeChecked(input)`;
   | Selected(country: Country)
   | Cleared
 export schema Country = { code: String, likes: Number }
-export schema Props = { event?: VoteEvent, onEvent?: (event: VoteEvent) => Void }
+export schema Props = { event: Option<VoteEvent>, onEvent: (event: VoteEvent) => Void }
 export decode = (input: Unknown) => PropsDecodeChecked(input)`;
     const checked = await typeCheck(source, "nested.fun");
     expect(checked.success, checked.formattedOutput).toBe(true);
@@ -247,8 +262,8 @@ export decode = (input: Unknown) => PropsDecodeChecked(input)`;
         seen = value;
       },
     });
-    expect(props.event).toBe(event);
-    expect(props.event.country).toBe(country);
+    expect(props.event).toEqual(Option.some(event));
+    expect(Option.getOrThrow(props.event).country).toBe(country);
     props.onEvent(event);
     expect(seen).toBe(event);
     expect(() =>
@@ -413,7 +428,7 @@ export decode = (input: Handler) => HandlerDecodeChecked(input)`;
 export schema VoteEvent =
   | Selected(country: Nation)
   | Cleared
-export schema Props = { event?: VoteEvent, onEvent?: (event: VoteEvent) => Void }
+export schema Props = { event: Option<VoteEvent>, onEvent: (event: VoteEvent) => Void }
 export decode = (input: Unknown) => PropsDecodeChecked(input)`;
       const checked = await Effect.runPromise(
         typeCheckVirtualFiles(
@@ -440,8 +455,8 @@ export decode = (input: Unknown) => PropsDecodeChecked(input)`;
         },
       });
       props.onEvent(event);
-      expect(props.event).toBe(event);
-      expect(props.event.country).toBe(data);
+      expect(props.event).toEqual(Option.some(event));
+      expect(Option.getOrThrow(props.event).country).toBe(data);
       expect(seen).toBe(event);
       expect(() =>
         props.onEvent({
@@ -478,12 +493,12 @@ export decode = (input: Unknown) => PropsDecodeChecked(input)`;
     );
     expect(owned.typescript).not.toContain("$funscriptDecodeCheckedRecord");
     const unsupported = await compile(
-      "schema Service = { run?: (value: String) => Effect<String, String> }",
+      "schema Service = { run: Option<(value: String) => Effect<String, String>> }",
       "service.fun",
     );
     expect(unsupported.typescript).not.toContain("ServiceDecodeChecked");
     const failure = await typeCheck(
-      "schema Service = { run?: (value: String) => Effect<String, String> }\nexport decode = (input: Unknown) => ServiceDecodeChecked(input)",
+      "schema Service = { run: Option<(value: String) => Effect<String, String>> }\nexport decode = (input: Unknown) => ServiceDecodeChecked(input)",
       "service.fun",
     );
     expect(failure.formattedOutput).toContain(
@@ -573,14 +588,16 @@ export decode = (input: Handler) => HandlerDecodeChecked(input)`;
 
   it("checks callback signatures for TypeScript callers", async () => {
     const good = await typeCheck(
-      declaration +
-        "\nts { const props: Props = { onChange: (value: string) => {} }; }",
+      'import { Option } from "effect"\n' +
+        declaration +
+        "\nts { const props: Props = { label: Option.none(), onChange: Option.some((value: string) => {}) }; }",
       "contract.fun",
     );
     expect(good.success, good.formattedOutput).toBe(true);
     const bad = await typeCheck(
-      declaration +
-        "\nts { const props: Props = { onChange: (value: number) => {} }; }",
+      'import { Option } from "effect"\n' +
+        declaration +
+        "\nts { const props: Props = { label: Option.none(), onChange: Option.some((value: number) => {}) }; }",
       "contract.fun",
     );
     expect(bad.success).toBe(false);
@@ -630,8 +647,12 @@ export decode = (input: Handler) => HandlerDecodeChecked(input)`;
       const { read } = await execute(source, {
         filename: path.join(root, "caller.fun"),
       });
-      expect(read({})).toEqual(Option.none());
-      expect(read({ label: "Ada" })).toEqual(Option.some("Ada"));
+      expect(read({ label: Option.none(), onChange: Option.none() })).toEqual(
+        Option.none(),
+      );
+      expect(
+        read({ label: Option.some("Ada"), onChange: Option.none() }),
+      ).toEqual(Option.some("Ada"));
       const checked = await Effect.runPromise(
         typeCheckVirtualFiles(
           { "caller.fun": source },
@@ -654,14 +675,12 @@ export decode = (input: Handler) => HandlerDecodeChecked(input)`;
   it("supports contracts with optional records inside containers, unions, and callbacks", async () => {
     // 1. Inline parameter record with array of optional records and optional callback
     const inlineSource = `
-export renderTable = (props: { columns: Array<{ width?: Number }>, title?: String, onSelect: (row?: { id?: String }) => Void }) => props.title
+export renderTable = (props: { columns: Array<{ width: Option<Number> }>, title: Option<String>, onSelect: (row: Option<{ id: Option<String> }>) => Void }) => props.title
 `;
     const inlineCompiled = await compile(inlineSource, "table.fun");
-    expect(inlineCompiled.typescript).toContain(
-      "Option.fromNullishOr(props.title)",
-    );
+    expect(inlineCompiled.typescript).toContain("props.title");
 
-    // 2. Package contract with array of optional records and union with optional records
+    // 2. Package contract with array of Option records and union with Option records
     const root = await mkdtemp(path.join(tmpdir(), "fun-complex-contract-"));
     try {
       const modules = path.join(root, "node_modules");
@@ -673,7 +692,7 @@ export renderTable = (props: { columns: Array<{ width?: Number }>, title?: Strin
       );
 
       const contractSource =
-        'export schema ComplexProps = { title?: String, columns: Array<{ width?: Number }>, branch: { kind: "a", opt?: String } | { kind: "b" }, onSelect?: (row?: { id?: String }) => Void }';
+        'export schema ComplexProps = { title: Option<String>, columns: Array<{ width: Option<Number> }>, branch: { kind: "a", opt: Option<String> } | { kind: "b" }, onSelect: (row: Option<{ id: Option<String> }>) => Void }';
       const compiled = await compile(contractSource, "complex.fun");
       const emitted = ts.transpileDeclaration(compiled.typescript, {
         compilerOptions: { declaration: true, emitDeclarationOnly: true },
@@ -694,14 +713,20 @@ export renderTable = (props: { columns: Array<{ width?: Number }>, title?: Strin
       const { readTitle, readColumns } = await execute(source, {
         filename: path.join(root, "caller.fun"),
       });
-      expect(readTitle({ columns: [], branch: { kind: "b" } })).toEqual(
-        Option.none(),
-      );
       expect(
         readTitle({
-          title: "My Table",
-          columns: [{ width: 100 }],
+          title: Option.none(),
+          columns: [],
           branch: { kind: "b" },
+          onSelect: () => {},
+        }),
+      ).toEqual(Option.none());
+      expect(
+        readTitle({
+          title: Option.some("My Table"),
+          columns: [{ width: Option.some(100) }],
+          branch: { kind: "b" },
+          onSelect: () => {},
         }),
       ).toEqual(Option.some("My Table"));
       expect(
@@ -753,7 +778,7 @@ export renderTable = (props: { columns: Array<{ width?: Number }>, title?: Strin
 
   it("automatically derives runtime schema fields from compile-time record contracts", async () => {
     const source = `
-schema Address = { street: String, suite?: String }
+schema Address = { street: String, suite: Option<String> }
 export ts schema User = { name: String, address: Address }
 export readStreet = (user: User) => user.address.street
 `;
@@ -772,7 +797,7 @@ export readStreet = (user: User) => user.address.street
 
   it("supports record contracts and structural types as generic schema arguments", async () => {
     const source = `
-schema Address = { street: String, suite?: String }
+schema Address = { street: String, suite: Option<String> }
 export schema Box<T> = { value: T }
 export schema AddressEnvelope = { box: Box<Address> }
 export schema PointEnvelope = { box: Box<{ x: Number, y: Number }> }
@@ -800,7 +825,7 @@ export readPointX = (env: PointEnvelope) => env.box.value.x
 
   it("derives runtime schema when aliasing record contracts via export ts schema", async () => {
     const source = `
-schema Address = { street: String, zip?: String }
+schema Address = { street: String, zip: Option<String> }
 export ts schema AddressSchema = Address
 export readZip = (addr: AddressSchema) => addr.zip
 `;

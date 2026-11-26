@@ -85,14 +85,18 @@ export function parseFunctionTypeNode(ctx: TypesParserContext): TypeNode {
           } else {
             pTarget = ctx.parseIdentifier();
           }
-          const optional = ctx.match(TokenType.QUESTION);
+          if (ctx.match(TokenType.QUESTION)) {
+            throw new ParseError(
+              "Optional '?' parameter syntax is disabled in FunScript; use 'Option<T>' instead",
+              ctx.previous().span,
+            );
+          }
           ctx.consume(TokenType.COLON, "Expected ':' after param name");
           const pType = parseTypeNode(ctx);
           params.push({
             kind: "Parameter",
             name: pTarget,
             typeAnnotation: pType,
-            optional: optional ? true : undefined,
             isRest: isRest ? true : undefined,
             span: {
               start: dotSpan ? dotSpan.start : pTarget.span.start,
@@ -184,7 +188,12 @@ export function parsePrimaryType(ctx: TypesParserContext): TypeNode {
           break;
         }
         const fName: Identifier = ctx.parseRecordKeyIdentifier();
-        const optional = ctx.match(TokenType.QUESTION);
+        if (ctx.match(TokenType.QUESTION)) {
+          throw new ParseError(
+            "Optional '?' field syntax is disabled in FunScript; use 'Option<T>' or a default value '= default'",
+            ctx.previous().span,
+          );
+        }
         ctx.consume(TokenType.COLON, "Expected ':' after field name");
         const fType = parseTypeNode(ctx);
         const defaultValue = ctx.match(TokenType.EQ)
@@ -192,16 +201,10 @@ export function parsePrimaryType(ctx: TypesParserContext): TypeNode {
           : undefined;
         if (
           defaultValue &&
-          (!ctx.allowOptionalRecordFields || ctx.recordTypeDepth !== 1)
+          (!ctx.allowDefaultedRecordFields || ctx.recordTypeDepth !== 1)
         ) {
           throw new ParseError(
             "Defaulted record fields are supported only on direct function parameters",
-            fName.span,
-          );
-        }
-        if (optional && defaultValue) {
-          throw new ParseError(
-            "A record field cannot be both optional and defaulted",
             fName.span,
           );
         }
@@ -209,7 +212,7 @@ export function parsePrimaryType(ctx: TypesParserContext): TypeNode {
           kind: "RecordTypeField",
           name: fName,
           typeAnnotation: fType,
-          optional,
+          optional: false,
           defaultValue,
           span: {
             start: fName.span.start,

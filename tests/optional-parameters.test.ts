@@ -22,62 +22,59 @@ describe("optional and defaulted parameters", () => {
     expect(choose(false)).toEqual({ value: 2 });
   });
 
-  it("emits optional parameters as T | undefined and converts via fromNullishOr", async () => {
-    const { inspect, toOpt } = await execute(
-      "export inspect = (value?: String) => value\nexport toOpt = (value?: String) => value |> fromNullishOr",
+  it("rejects '?' optional parameter syntax and supports Option<T> / JSOptional<T>", async () => {
+    await expectCompileError(
+      "export inspect = (value?: String) => value",
+      /Optional '\?' parameter syntax is disabled/,
     );
-    expect(inspect()).toBeUndefined();
+    const { inspect, toOpt } = await execute(
+      "export inspect = (value: JSOptional<String>) => value\nexport toOpt = (value: JSOptional<String>) => value |> fromNullishOr",
+    );
     expect(inspect(undefined)).toBeUndefined();
     expect(inspect("hello")).toBe("hello");
     expect(inspect(null)).toBeNull();
-    expect(Option.isNone(toOpt())).toBe(true);
     expect(Option.isNone(toOpt(undefined))).toBe(true);
     expect(Option.isNone(toOpt(null))).toBe(true);
     expect(toOpt("hello")).toEqual(Option.some("hello"));
   });
 
-  it("preserves optional Option<T> parameters as Option<T> | undefined without double-wrapping", async () => {
+  it("preserves Option<T> parameters across module boundaries", async () => {
     const source = `import { Option } from "effect"
-export inspect = (value?: Option<String>) => value
-export forward = (value?: Option<String>) => inspect(value)
-export absent = inspect()
+export inspect = (value: Option<String>) => value
+export forward = (value: Option<String>) => inspect(value)
 export suppliedNone = inspect(Option.none())
 export suppliedSome = inspect(Option.some("Ada"))
 export forwardedNone = forward(Option.none())`;
     const checked = await typeCheck(source, "optional-option.fun");
     expect(checked.success, checked.formattedOutput).toBe(true);
-    const {
-      inspect,
-      forward,
-      absent,
-      suppliedNone,
-      suppliedSome,
-      forwardedNone,
-    } = await execute(source);
-    expect(absent).toBeUndefined();
+    const { inspect, suppliedNone, suppliedSome, forwardedNone, forward } =
+      await execute(source);
     expect(suppliedNone).toEqual(Option.none());
     expect(suppliedSome).toEqual(Option.some("Ada"));
     expect(forwardedNone).toEqual(Option.none());
-    expect(inspect(undefined)).toBeUndefined();
+    expect(inspect(Option.none())).toEqual(Option.none());
     expect(forward(Option.some("Ada"))).toEqual(Option.some("Ada"));
   });
 
-  it("forwards an optional parameter directly", async () => {
-    const source =
-      "read = (value?: String) => value\nexport forward = (value?: String) => read(value)";
+  it("forwards Option<String> to foreign optional TS parameters", async () => {
+    const source = `import { Option } from "effect"
+ts { declare function read(value?: string): string | undefined }
+export forward = (value: Option<String>) => read(value)`;
     const checked = await typeCheck(source, "optional-forward.fun");
     expect(checked.success, checked.formattedOutput).toBe(true);
-    const { forward } = await execute(source);
-    expect(forward()).toBeUndefined();
-    expect(forward("Ada")).toBe("Ada");
+    const { forward } = await execute(source, {
+      scope: { read: (v?: string) => v },
+    });
+    expect(forward(Option.none())).toBeUndefined();
+    expect(forward(Option.some("Ada"))).toBe("Ada");
   });
 
-  it("checks JavaScript-facing TypeScript calls against the value type", async () => {
+  it("checks JavaScript-facing TypeScript calls against Option<T>", async () => {
     const base =
-      'import { Option } from "effect"\nexport read = (value?: Option<String>) => value';
+      'import { Option } from "effect"\nexport read = (value: Option<String>) => value';
     const valid = await typeCheck(
       base +
-        '\nts { const a = read(); const b = read(Option.none<string>()); const c = read(Option.some("Ada")); }',
+        '\nts { const b = read(Option.none<string>()); const c = read(Option.some("Ada")); }',
       "optional-typescript.fun",
     );
     expect(valid.success, valid.formattedOutput).toBe(true);
@@ -88,11 +85,11 @@ export forwardedNone = forward(Option.none())`;
     expect(invalid.success).toBe(false);
   });
 
-  it("preserves optional Option values across module boundaries", async () => {
+  it("preserves Option values across FunScript module boundaries", async () => {
     const files = {
-      "optional-reader.fun": "export read = (value?: Option<String>) => value",
+      "optional-reader.fun": "export read = (value: Option<String>) => value",
       "optional-caller.fun":
-        'import { Option } from "effect"\nimport { read } from "./optional-reader.js"\nexport forward = (value?: Option<String>) => read(value)\nexport result = read(Option.some("Ada"))',
+        'import { Option } from "effect"\nimport { read } from "./optional-reader.js"\nexport forward = (value: Option<String>) => read(value)\nexport result = read(Option.some("Ada"))',
     };
     const checked = await Effect.runPromise(
       typeCheckVirtualFiles(files, {
@@ -104,7 +101,7 @@ export forwardedNone = forward(Option.none())`;
 
   it("rejects ambiguous Options and supports explicit choices", async () => {
     const prefix =
-      'import { Option } from "effect"\nread = (value?: Unknown) => value\n';
+      'import { Option } from "effect"\nts { declare function read(value?: unknown): unknown }\n';
     await expectCompileError(
       prefix + "export f = (value: Option<String>) => read(value)",
       /Ambiguous optional argument/,
@@ -121,29 +118,17 @@ export forwardedNone = forward(Option.none())`;
       "export pass = (value: Option<String>) => read(Option.some(value))\nexport forward = (value: Option<String>) => read(Option.getOrUndefined(value))";
     const checked = await typeCheck(source, "optional-choices.fun");
     expect(checked.success, checked.formattedOutput).toBe(true);
-    const { pass, forward } = await execute(source);
+    const { pass, forward } = await execute(source, {
+      scope: { read: (v?: unknown) => v },
+    });
     expect(pass(Option.none())).toEqual(Option.none());
     expect(forward(Option.none())).toBeUndefined();
     expect(forward(Option.some("Ada"))).toBe("Ada");
   });
 
-  it("forwards optional values across FunScript modules", async () => {
-    const files = {
-      "reader.fun": "export read = (value?: String) => value",
-      "caller.fun":
-        'import { read } from "./reader.js"\nexport forward = (value?: String) => read(value)',
-    };
-    const checked = await Effect.runPromise(
-      typeCheckVirtualFiles(files, {
-        compilerOptions: { rootDir: process.cwd() },
-      }),
-    );
-    expect(checked.success, checked.formattedOutput).toBe(true);
-  });
-
   it("does not silently erase a present undefined when forwarding", async () => {
     const source =
-      "ts { type MaybeText = string | undefined }\nread = (value?: String) => value\nexport forward = (value: Option<MaybeText>) => read(value)";
+      "ts { type MaybeText = string | undefined; declare function read(value?: string): string | undefined }\nexport forward = (value: Option<MaybeText>) => read(value)";
     await expectCompileError(source, /may contain undefined/);
     const normalized =
       'import { Option } from "effect"\n' +
@@ -157,41 +142,41 @@ export forwardedNone = forward(Option.none())`;
 
   it("treats an Option supplied as Unknown as a value", async () => {
     const { inspect } = await execute(
-      "export inspect = (value?: Unknown) => value",
+      "export inspect = (value: Unknown) => value",
     );
-    expect(inspect()).toBeUndefined();
+    expect(inspect(undefined)).toBeUndefined();
     expect(inspect(Option.none())).toEqual(Option.none());
     expect(inspect(Option.some("Ada"))).toEqual(Option.some("Ada"));
   });
 
   it("requires explicit handling via fromNullishOr / fromNullishOrElse and retains the contained type", async () => {
     const unsafe = await typeCheck(
-      "export use = (name?: String) => name.toUpperCase()",
+      "export use = (name: JSOptional<String>) => name.toUpperCase()",
       "optional-unsafe.fun",
     );
     expect(unsafe.success).toBe(false);
     const invalid = await typeCheck(
-      'export use = (name?: String) =>\n  match (fromNullishOr(name))\n    | Some(value) => value.notAStringMethod()\n    | None => "none"',
+      'export use = (name: JSOptional<String>) =>\n  match (fromNullishOr(name))\n    | Some(value) => value.notAStringMethod()\n    | None => "none"',
       "optional-match.fun",
     );
     expect(invalid.success).toBe(false);
     const valid = await typeCheck(
-      'export use = (name?: String) =>\n  match (fromNullishOr(name))\n    | Some(value) => value + "!"\n    | None => "none"',
+      'export use = (name: JSOptional<String>) =>\n  match (fromNullishOr(name))\n    | Some(value) => value + "!"\n    | None => "none"',
       "optional-match.fun",
     );
     expect(valid.success, valid.formattedOutput).toBe(true);
     const { use, fallback } = await execute(
-      'export use = (name?: String) =>\n  match (fromNullishOr(name))\n    | Some(value) => value + "!"\n    | None => "none"\nexport fallback = (name?: String) => name |> fromNullishOrElse("stranger")',
+      'export use = (name: JSOptional<String>) =>\n  match (fromNullishOr(name))\n    | Some(value) => value + "!"\n    | None => "none"\nexport fallback = (name: JSOptional<String>) => name |> fromNullishOrElse("stranger")',
     );
-    expect(use()).toBe("none");
+    expect(use(undefined)).toBe("none");
     expect(use("ada")).toBe("ada!");
-    expect(fallback()).toBe("stranger");
+    expect(fallback(undefined)).toBe("stranger");
     expect(fallback("ada")).toBe("ada");
   });
 
   it("safely handles an optional JavaScript callback and checks its argument type", async () => {
     const source =
-      'export invoke = (callback?: (name: String) => String) =>\n  match (fromNullishOr(callback))\n    | Some(cb) => cb("Ada")\n    | None => "missing"';
+      'export invoke = (callback: Option<(name: String) => String>) =>\n  match callback\n    | Some(cb) => cb("Ada")\n    | None => "missing"';
     const checked = await typeCheck(source, "optional-callback.fun");
     expect(checked.success, checked.formattedOutput).toBe(true);
     const invalid = await typeCheck(
@@ -200,35 +185,29 @@ export forwardedNone = forward(Option.none())`;
     );
     expect(invalid.success).toBe(false);
     const { invoke } = await execute(source);
-    expect(invoke()).toBe("missing");
-    expect(invoke((value: string) => value.toUpperCase())).toBe("ADA");
-  });
-
-  it("supports an undefined placeholder before a later optional argument", async () => {
-    const { second } = await execute(
-      "export second = (first?: String, next?: Number) => next",
+    expect(invoke(Option.none())).toBe("missing");
+    expect(invoke(Option.some((value: string) => value.toUpperCase()))).toBe(
+      "ADA",
     );
-    expect(second(undefined, 5)).toBe(5);
-    expect(second(undefined, undefined)).toBeUndefined();
   });
 
   it("retains Option payload types when an optional result crosses a function boundary", async () => {
     const source =
-      'read = (name?: String) => name\nexport use = () =>\n  match read("ada")\n    | Some(value) => value.notAStringMethod()\n    | None => "none"';
+      'read = (name: Option<String>) => name\nexport use = () =>\n  match read(Option.some("ada"))\n    | Some(value) => value.notAStringMethod()\n    | None => "none"';
     const result = await typeCheck(source, "optional-return.fun");
     expect(result.success).toBe(false);
   });
 
   it("type-checks Some payloads in pattern guards", async () => {
     const source =
-      'export use = (name?: String) =>\n  match name\n    | Some(value) when value.notAStringMethod() => "bad"\n    | _ => "none"';
+      'export use = (name: Option<String>) =>\n  match name\n    | Some(value) when value.notAStringMethod() => "bad"\n    | _ => "none"';
     const result = await typeCheck(source, "optional-guard.fun");
     expect(result.success).toBe(false);
   });
 
   it("retains the Option payload type through local aliases", async () => {
     const source =
-      'export use = (name?: String) =>\n  saved = name\n  => match saved\n    | Some(value) => value.notAStringMethod()\n    | None => "none"';
+      'export use = (name: Option<String>) =>\n  saved = name\n  => match saved\n    | Some(value) => value.notAStringMethod()\n    | None => "none"';
     const result = await typeCheck(source, "optional-alias.fun");
     expect(result.success).toBe(false);
   });
@@ -269,10 +248,10 @@ export forwardedNone = forward(Option.none())`;
 
   it("formats the syntax idempotently and preserves it through compilation", async () => {
     const source =
-      "export f = (name?: String) => name\nexport g = (n: Number = 5) => n\n";
+      "export f = (name: Option<String>) => name\nexport g = (n: Number = 5) => n\n";
     expect(format(format(source))).toBe(format(source));
     const { typescript } = await compile(source);
-    expect(typescript).toContain("name?: string");
+    expect(typescript).toContain("name: Option.Option<string>");
     expect(typescript).not.toContain("Option.fromUndefinedOr");
     expect(typescript).toContain("n: number = 5");
   });
@@ -289,15 +268,15 @@ export forwardedNone = forward(Option.none())`;
   it("rejects ambiguous and unsupported parameter forms", async () => {
     await expectCompileError(
       "export f = (x?) => x",
-      /require a type annotation/,
+      /Optional '\?' parameter syntax is disabled/,
     );
     await expectCompileError(
       "export f = (x?: Number = 5) => x",
-      /both optional and defaulted/,
+      /Optional '\?' parameter syntax is disabled/,
     );
     await expectCompileError(
       "export f = (x?: Number, y: Number) => y",
-      /Only optional parameters/,
+      /Optional '\?' parameter syntax is disabled/,
     );
   });
 });

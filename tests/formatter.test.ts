@@ -49,11 +49,11 @@ function operatorTree(source: string): unknown {
 }
 
 describe("FunScript Code Formatter", () => {
-  it("preserves optional and defaulted parameters in binding functions", () => {
+  it("preserves Option and defaulted parameters in binding functions", () => {
     for (const source of [
-      "export read = (value?: String) => value",
+      "export read = (value: Option<String>) => value",
       "export read = (value: Number = 5) => value",
-      "export read = <A>(value?: A) => value",
+      "export read = <A>(value: Option<A>) => value",
     ]) {
       const formatted = format(source);
       expect(operatorTree(formatted)).toEqual(operatorTree(source));

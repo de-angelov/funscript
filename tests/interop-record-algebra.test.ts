@@ -67,7 +67,7 @@ describe("TypeScript interop and record algebra", () => {
   it("can explicitly adapt an Option into a JavaScript-shaped JSX prop", async () => {
     const source = `import { optionalProperty } from "funscript/record"
 ts { declare const Target: (props: { label?: string }) => any }
-export View = (label?: String) => <Target {...optionalProperty("label", label |> fromNullishOr)} />`;
+export View = (label: Option<String>) => <Target {...optionalProperty("label", label)} />`;
     const checked = await typeCheck(source, "optional-prop.funx", {
       compilerOptions: { rootDir: process.cwd() },
     });
@@ -183,40 +183,40 @@ ts {
     expect(wrong.formattedOutput).toMatch(/not assignable to type 'string'/);
   });
 
-  it("supports optional properties and parameters in type emission for consumer interop", async () => {
+  it("supports Option and defaulted properties/parameters for consumer interop", async () => {
     const source = `
+import { Option } from "effect"
 import type { ReactNode } from "react"
-export Header = (props: { className?: String, children?: ReactNode }) =>
+export Header = (props: { className: Option<String>, children: Option<ReactNode> }) =>
   => <div className="header" />
 
 ts {
   type RankingOrder = "asc" | "desc";
 }
-export sortCountries = (order?: RankingOrder) =>
-  order |> fromNullishOrElse("asc")
+export sortCountries = (order: Option<RankingOrder>) =>
+  order |> Option.getOrElse(() => "asc")
 
-export customSorter: (order?: RankingOrder) => String = sortCountries
-export config: { className?: String } = { className: "custom" }
-export View = (config?: { className?: String }) =>
-  match (fromNullishOr(config))
+export customSorter: (order: Option<RankingOrder>) => String = sortCountries
+export config: { className: Option<String> } = { className: Option.some("custom") }
+export View = (config: Option<{ className: Option<String> }>) =>
+  match config
     | Some(c) => c.className
-    | None => "default"
+    | None => Option.some("default")
 
-export Button = (props: { label: String, className?: String, onClick?: () => Void }) =>
+export Button = (props: { label: String, className: Option<String>, onClick: Option<() => Void> }) =>
   => <button className="btn">{props.label}</button>
 
 ts {
   import React from "react";
-  const el1 = React.createElement(Header);
-  const el2 = React.createElement(Header, {});
-  const el3 = React.createElement(Header, { className: "custom" });
-  const btn1 = React.createElement(Button, { label: "Submit" });
-  const btn2 = React.createElement(Button, { label: "Submit", className: "primary" });
-  const s1: string = sortCountries();
-  const s2: string = sortCountries("desc");
-  const s3: string = customSorter();
-  const v1: string | undefined = View();
-  const v2: string | undefined = View({ className: "light" });
+  const el1 = React.createElement(Header, { className: Option.none(), children: Option.none() });
+  const el2 = React.createElement(Header, { className: Option.some("custom"), children: Option.none() });
+  const btn1 = React.createElement(Button, { label: "Submit", className: Option.none(), onClick: Option.none() });
+  const btn2 = React.createElement(Button, { label: "Submit", className: Option.some("primary"), onClick: Option.none() });
+  const s1: string = sortCountries(Option.none());
+  const s2: string = sortCountries(Option.some("desc"));
+  const s3: string = customSorter(Option.none());
+  const v1 = View(Option.none());
+  const v2 = View(Option.some({ className: Option.some("light") }));
 }
 `;
     const checked = await typeCheck(source, "header.funx", {
@@ -230,11 +230,11 @@ ts {
     expect(checked.success, checked.formattedOutput).toBe(true);
 
     const compiled = await compile(source, "header.funx");
-    expect(compiled.typescript).toContain("className?:");
-    expect(compiled.typescript).toContain("children?:");
-    expect(compiled.typescript).toContain("onClick?:");
+    expect(compiled.typescript).toContain("className:");
+    expect(compiled.typescript).toContain("children:");
+    expect(compiled.typescript).toContain("onClick:");
     expect(compiled.typescript).toContain(
-      "customSorter: (order?: RankingOrder) => string",
+      "customSorter: (order: Option.Option<RankingOrder>) => string",
     );
   });
 });

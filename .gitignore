@@ -1,6 +1,7 @@
 node_modules/
 dist/
 .funscript-cache/
+.funscript/bun-cache/
 *.tsbuildinfo
 .DS_Store
 slopboss/workspaces/

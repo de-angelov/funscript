@@ -200,7 +200,6 @@ export const checkCommand = (
     const result = yield* typeCheckFiles(allFiles, {
       noTs: args.includes("--no-ts"),
       noGlobalThis: args.includes("--no-global-this"),
-      noOptional: args.includes("--no-optional"),
       barePipelines: args.includes("--bare-pipelines"),
       noDeepDestructure:
         args.includes("--no-deep-destructure") ||
@@ -212,9 +211,6 @@ export const checkCommand = (
         : undefined,
       noGlobalThisPaths: Array.isArray(projectPolicy.noGlobalThis)
         ? projectPolicy.noGlobalThis
-        : undefined,
-      noOptionalPaths: Array.isArray(projectPolicy.noOptional)
-        ? projectPolicy.noOptional
         : undefined,
       barePipelinesPaths: Array.isArray(projectPolicy.barePipelines)
         ? projectPolicy.barePipelines

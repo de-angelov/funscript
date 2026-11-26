@@ -13,7 +13,6 @@ export interface BunExecutableOptions {
   sourcemap?: boolean;
   noTs?: boolean;
   noGlobalThis?: boolean;
-  noOptional?: boolean;
   barePipelines?: boolean;
   noDeepDestructure?: boolean;
   maxDestructureDepth?: number;
@@ -66,7 +65,6 @@ async function buildWithNativeBun(
         funscriptBunPlugin({
           noTs: options.noTs,
           noGlobalThis: options.noGlobalThis,
-          noOptional: options.noOptional,
           barePipelines: options.barePipelines,
           noDeepDestructure: options.noDeepDestructure,
           maxDestructureDepth: options.maxDestructureDepth,
@@ -106,7 +104,6 @@ const result = await Bun.build({
     funscriptBunPlugin({
       noTs: ${Boolean(options.noTs)},
       noGlobalThis: ${Boolean(options.noGlobalThis)},
-      noOptional: ${Boolean(options.noOptional)},
       barePipelines: ${Boolean(options.barePipelines)},
       noDeepDestructure: ${Boolean(options.noDeepDestructure)},
       maxDestructureDepth: ${typeof options.maxDestructureDepth === "number" ? options.maxDestructureDepth : "undefined"},
@@ -174,7 +171,6 @@ async function buildWithEsbuild(
         sourcemap: options.sourcemap,
         noTs: options.noTs,
         noGlobalThis: options.noGlobalThis,
-        noOptional: options.noOptional,
         barePipelines: options.barePipelines,
         noDeepDestructure: options.noDeepDestructure,
         maxDestructureDepth: options.maxDestructureDepth,

@@ -11,10 +11,10 @@ describe("cross-module optional record forwarding", () => {
       const reader = path.join(root, "reader.fun");
       const caller = path.join(root, "caller.fun");
       const source =
-        'import { read } from "./reader.js"\nexport forward = (props: { label?: String }) => read(props)';
+        'import { read } from "./reader.js"\nexport forward = (props: { label: Option<String> }) => read(props)';
       await writeFile(
         reader,
-        "export read = (props: { label?: String }) => props.label",
+        "export read = (props: { label: Option<String> }) => props.label",
       );
       expect((await compile(source, caller)).typescript).toContain(
         "read(props)",

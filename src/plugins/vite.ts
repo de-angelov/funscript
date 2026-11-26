@@ -34,7 +34,6 @@ export interface FunscriptPluginOptions {
   /** Reject raw TypeScript escapes in compiled FunScript modules. */
   noTs?: boolean;
   noGlobalThis?: boolean;
-  noOptional?: boolean;
   barePipelines?: boolean;
   noDeepDestructure?: boolean;
   maxDestructureDepth?: number;
@@ -233,9 +232,6 @@ export function funscriptPlugin(options: FunscriptPluginOptions = {}): Plugin {
               policyRoot,
               cleanId,
             ),
-          noOptional:
-            options.noOptional ||
-            isPathPolicyEnabled(projectPolicy.noOptional, policyRoot, cleanId),
           barePipelines:
             options.barePipelines ||
             isPathPolicyEnabled(

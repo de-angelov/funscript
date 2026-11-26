@@ -467,9 +467,9 @@ describe("FunScript LSP Server", () => {
             version: 1,
             text: [
               'ts { type RankingOrder = "asc" | "desc"; }',
-              "export sort = (order?: RankingOrder) => order",
-              "export sorter: (order?: RankingOrder) => Option<RankingOrder> = sort",
-              "export Header = (props: { className?: String }) => props.className",
+              "export sort = (order: Option<RankingOrder>) => order",
+              "export sorter: (order: Option<RankingOrder>) => Option<RankingOrder> = sort",
+              "export Header = (props: { className: Option<String> }) => props.className",
             ].join("\n"),
           },
         },

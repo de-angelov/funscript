@@ -5,15 +5,25 @@ import { validateNumericComparisons } from "../src/compiler/numeric-comparisons.
 import type { TypeScriptCompilationContext } from "../src/compiler/typescript-context.js";
 
 function validate(source: string, check: ReturnType<typeof vi.fn>): void {
-  const ast = new Parser(new Lexer(source, "test.fun").tokenize(), "test.fun", source).parse();
-  validateNumericComparisons(ast, source, { check } as unknown as TypeScriptCompilationContext);
+  const ast = new Parser(
+    new Lexer(source, "test.fun").tokenize(),
+    "test.fun",
+    source,
+  ).parse();
+  validateNumericComparisons(ast, source, {
+    check,
+  } as unknown as TypeScriptCompilationContext);
 }
 
 describe("numeric comparison fast path", () => {
   it("checks direct primitive parameters without constructing a TypeScript program", () => {
     const check = vi.fn();
-    expect(() => validate("export compare = (a: Number, b: Number) => a < b", check)).not.toThrow();
-    expect(() => validate("export compare = (a: String, b: String) => a < b", check)).toThrow("< is only available for numbers; this operand has type string.");
+    expect(() =>
+      validate("export compare = (a: Number, b: Number) => a < b", check),
+    ).not.toThrow();
+    expect(() =>
+      validate("export compare = (a: String, b: String) => a < b", check),
+    ).toThrow("< is only available for numbers; this operand has type string.");
     expect(check).not.toHaveBeenCalled();
   });
 
@@ -34,7 +44,7 @@ describe("numeric comparison fast path", () => {
     for (const source of [
       "export compare = (a: Number, b: Number) => a + 1 < b",
       "export compare = <A>(a: A, b: A) => a < b",
-      "export compare = (a?: Number, b?: Number) => a < b",
+      "export compare = (a: Option<Number>, b: Option<Number>) => a < b",
       "export compare = (a: String, b: Number) => a < (b + 1)",
     ]) {
       const check = vi.fn().mockReturnValue(undefined);

@@ -49,10 +49,10 @@ export action = { type: "click", kind: "primary", status: 200 }
     });
   });
 
-  describe("Feature 2: Lifting Optional Record Parameter Restriction for Record Spreads", () => {
-    it("permits spreading a record parameter with optional fields into a new record", async () => {
+  describe("Feature 2: Record Parameter Spreads with Option and Defaulted Fields", () => {
+    it("permits spreading a record parameter with defaulted fields into a new record", async () => {
       const source = `
-export withDefaults = (opts: { order?: String, limit?: Number } = {}) => {
+export withDefaults = (opts: { order: String = "asc", limit: Number = 20 } = {}) => {
   base = { ...opts, fallback: true }
   => base
 }
@@ -72,19 +72,19 @@ export testProvided = withDefaults({ order: "desc", limit: 10 })
       expect(testProvided.fallback).toBe(true);
     });
 
-    it("safely accesses optional fields from spread records as Options without undefined leaks", async () => {
+    it("safely accesses Option fields from spread records without undefined leaks", async () => {
       const source = `
-export readOrder = (opts: { order?: String, limit?: Number } = {}) => {
+import { Option } from "effect"
+export readOrder = (opts: { order: Option<String>, limit: Option<Number> }) => {
   base = { ...opts, fallback: true }
   => base.order
 }
-export readOverridden = (opts: { order?: String } = {}) => {
+export readOverridden = (opts: { order: Option<String> }) => {
   base = { ...opts, order: "asc" }
   => base.order
 }
 `;
       const compiled = await compile(source);
-      expect(compiled.typescript).toContain("Option.fromNullishOr(base.order)");
       expect(compiled.typescript).toContain("base.order");
 
       const checked = await typeCheck(
@@ -94,9 +94,13 @@ export readOverridden = (opts: { order?: String } = {}) => {
       expect(checked.success, checked.formattedOutput).toBe(true);
 
       const { readOrder, readOverridden } = await execute(source);
-      expect(readOrder({})).toEqual(Option.none());
-      expect(readOrder({ order: "desc" })).toEqual(Option.some("desc"));
-      expect(readOverridden({})).toBe("asc");
+      expect(readOrder({ order: Option.none(), limit: Option.none() })).toEqual(
+        Option.none(),
+      );
+      expect(
+        readOrder({ order: Option.some("desc"), limit: Option.none() }),
+      ).toEqual(Option.some("desc"));
+      expect(readOverridden({ order: Option.none() })).toBe("asc");
     });
   });
 

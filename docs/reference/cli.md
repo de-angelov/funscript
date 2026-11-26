@@ -9,7 +9,7 @@ FunScript 0.2.3. This page is generated from [the CLI command catalogue](../../s
 ### `funscript build`
 
 ```text
-funscript build <file.fun|file.funx...> [--target bun] [--out <file>] [--outDir <dir>] [--sourcemap] [--no-check] [--no-ts] [--no-global-this] [--no-optional] [--bare-pipelines] [--bin] [--watch]
+funscript build <file.fun|file.funx...> [--target bun] [--out <file>] [--outDir <dir>] [--sourcemap] [--no-check] [--no-ts] [--no-global-this] [--bare-pipelines] [--bin] [--watch]
 ```
 
 Build FunScript files to TypeScript or TSX in dist/ by default, or bundle one entry and its local modules as a Bun executable.
@@ -25,7 +25,7 @@ funscript build src/cli/bin.fun --target bun --out dist/cli/bin.js
 ### `funscript emit`
 
 ```text
-funscript emit <file.fun|file.funx> [--out <file.ts|file.tsx>] [--sourcemap] [--no-ts] [--no-global-this] [--no-optional] [--bare-pipelines] [--bin]
+funscript emit <file.fun|file.funx> [--out <file.ts|file.tsx>] [--sourcemap] [--no-ts] [--no-global-this] [--bare-pipelines] [--bin]
 ```
 
 Compile one FunScript file to TypeScript or TSX.
@@ -37,7 +37,7 @@ funscript emit src/main.fun --out src/main.ts --sourcemap
 ### `funscript check`
 
 ```text
-funscript check [file.fun|file.funx...] [--fix] [--idiomatic] [--json|--sarif] [--warnings-as-errors] [--no-ts] [--no-global-this] [--no-optional] [--bare-pipelines]
+funscript check [file.fun|file.funx...] [--fix] [--idiomatic] [--json|--sarif] [--warnings-as-errors] [--no-ts] [--no-global-this] [--bare-pipelines]
 ```
 
 Statically type-check files with the TypeScript API, optionally fix formatting and pipeline styles, and emit machine-readable diagnostics.
@@ -69,7 +69,7 @@ funscript tsc --noEmit
 ### `funscript run`
 
 ```text
-funscript run <file.fun|file.funx> [--no-check] [--no-ts] [--no-global-this] [--no-optional] [--bare-pipelines] [-- arg... ]
+funscript run <file.fun|file.funx> [--no-check] [--no-ts] [--no-global-this] [--bare-pipelines] [-- arg... ]
 ```
 
 Bundle and run a FunScript program and its local imports with Node.js.

@@ -1813,12 +1813,12 @@ export calculateTax = (amount: Number): Number => ???
       expect(resultGood.errorCount).toBe(0);
     });
 
-    it("supports bare fromNullishOrElse in pipelines and direct calls with optional params", async () => {
+    it("supports bare fromNullishOrElse in pipelines and direct calls with JSOptional params", async () => {
       const code = `
-export greetWithFallback = (name?: String): String =>
+export greetWithFallback = (name: JSOptional<String>): String =>
   name |> fromNullishOrElse("stranger")
 
-export greetDirect = (name?: String): String =>
+export greetDirect = (name: JSOptional<String>): String =>
   fromNullishOrElse(name, "stranger")
 `.trim();
 
@@ -1827,6 +1827,72 @@ export greetDirect = (name?: String): String =>
       );
       expect(result.success).toBe(true);
       expect(result.errorCount).toBe(0);
+    });
+
+    it("enforces UNHANDLED_NULLISH when binding nullable JS/TS values without lifting", async () => {
+      const badCode = `
+ts {
+  declare function lookup(key: string): string | null;
+}
+
+export run = () =>
+  val = lookup("a")
+  => val
+`.trim();
+
+      const badResult = await Effect.runPromise(
+        typeCheckSource(badCode, "src/nullish-edge.fun"),
+      );
+      expect(badResult.success).toBe(false);
+      expect(
+        badResult.diagnostics.some((d) => d.code === "UNHANDLED_NULLISH"),
+      ).toBe(true);
+
+      const goodCode = `
+ts {
+  declare function lookup(key: string): string | null;
+}
+
+export run = () =>
+  val = lookup("a") |> fromNullishOr
+  => val
+`.trim();
+
+      const goodResult = await Effect.runPromise(
+        typeCheckSource(goodCode, "src/nullish-edge.fun"),
+      );
+      expect(goodResult.success).toBe(true);
+      expect(goodResult.errorCount).toBe(0);
+    });
+
+    it("rejects raw null and undefined literals in FunScript expressions while allowing ts escapes", async () => {
+      const nullRes = await Effect.runPromise(
+        typeCheckSource("export x = null", "src/null-lit.fun"),
+      );
+      expect(nullRes.success).toBe(false);
+      expect(
+        nullRes.diagnostics.some((d) =>
+          d.message.includes("FunScript has no 'null'"),
+        ),
+      ).toBe(true);
+
+      const undefRes = await Effect.runPromise(
+        typeCheckSource("export x = undefined", "src/undef-lit.fun"),
+      );
+      expect(undefRes.success).toBe(false);
+      expect(
+        undefRes.diagnostics.some((d) =>
+          d.message.includes("FunScript has no 'undefined'"),
+        ),
+      ).toBe(true);
+
+      const tsEscapeRes = await Effect.runPromise(
+        typeCheckSource(
+          "export x = ts { null as unknown }",
+          "src/ts-escape-null.fun",
+        ),
+      );
+      expect(tsEscapeRes.success).toBe(true);
     });
   });
 });

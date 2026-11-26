@@ -564,7 +564,7 @@ export class Formatter {
         const def = f.defaultValue
           ? ` = ${this.formatExpression(f.defaultValue, indent + this.indentSize)}`
           : "";
-        return `${leading}${fieldIndent}${f.name.name}${f.optional ? "?" : ""}: ${this.formatType(f.typeAnnotation, indent + this.indentSize)}${def}${trailing}`;
+        return `${leading}${fieldIndent}${f.name.name}: ${this.formatType(f.typeAnnotation, indent + this.indentSize)}${def}${trailing}`;
       })
       .join("\n");
     return `{\n${fields}\n${closingIndent}}`;
@@ -656,7 +656,7 @@ export class Formatter {
           const defaultValue = p.defaultValue
             ? ` = ${this.formatExpression(p.defaultValue, indent)}`
             : "";
-          return `${rest}${this.formatBindingTarget(p.name)}${p.optional ? "?" : ""}${type}${defaultValue}`;
+          return `${rest}${this.formatBindingTarget(p.name)}${type}${defaultValue}`;
         })
         .join(", ");
       const ret = init.returnType
@@ -1480,7 +1480,7 @@ export class Formatter {
         const defaultValue = p.defaultValue
           ? ` = ${this.formatExpression(p.defaultValue, indent)}`
           : "";
-        return `${rest}${this.formatBindingTarget(p.name)}${p.optional ? "?" : ""}${type}${defaultValue}`;
+        return `${rest}${this.formatBindingTarget(p.name)}${type}${defaultValue}`;
       })
       .join(", ");
     const ret = expr.returnType ? `: ${this.formatType(expr.returnType)}` : "";
@@ -1571,7 +1571,7 @@ export class Formatter {
               ? this.formatType(p.typeAnnotation, indent)
               : "Unknown";
             return p.name
-              ? `${rest}${this.formatBindingTarget(p.name)}${p.optional ? "?" : ""}: ${typeStr}`
+              ? `${rest}${this.formatBindingTarget(p.name)}: ${typeStr}`
               : `${rest}${typeStr}`;
           })
           .join(", ");
@@ -1597,7 +1597,7 @@ export class Formatter {
             const key = RESERVED_IDENTIFIERS.has(f.name.name)
               ? `"${f.name.name}"`
               : f.name.name;
-            return `${key}${f.optional ? "?" : ""}: ${this.formatType(f.typeAnnotation, indent)}${f.defaultValue ? ` = ${this.formatExpression(f.defaultValue, indent)}` : ""}`;
+            return `${key}: ${this.formatType(f.typeAnnotation, indent)}${f.defaultValue ? ` = ${this.formatExpression(f.defaultValue, indent)}` : ""}`;
           })
           .join(", ");
         const maxInline = Math.min(60, this.lineWidth);
@@ -1615,7 +1615,7 @@ export class Formatter {
             const key = RESERVED_IDENTIFIERS.has(f.name.name)
               ? `"${f.name.name}"`
               : f.name.name;
-            return `${fieldIndent}${key}${f.optional ? "?" : ""}: ${this.formatType(f.typeAnnotation, indent + this.indentSize)}${f.defaultValue ? ` = ${this.formatExpression(f.defaultValue, indent + this.indentSize)}` : ""}`;
+            return `${fieldIndent}${key}: ${this.formatType(f.typeAnnotation, indent + this.indentSize)}${f.defaultValue ? ` = ${this.formatExpression(f.defaultValue, indent + this.indentSize)}` : ""}`;
           })
           .join("\n");
         return `{\n${fields}\n${closingIndent}}`;

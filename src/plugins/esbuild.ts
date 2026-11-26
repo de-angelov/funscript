@@ -17,7 +17,6 @@ export interface EsbuildPluginOptions {
   /** Reject raw TypeScript escapes in compiled FunScript modules. */
   noTs?: boolean;
   noGlobalThis?: boolean;
-  noOptional?: boolean;
   barePipelines?: boolean;
   noDeepDestructure?: boolean;
   maxDestructureDepth?: number;
@@ -223,9 +222,6 @@ export function funscriptEsbuildPlugin(
             noGlobalThis:
               options.noGlobalThis ||
               isPathPolicyEnabled(projectPolicy.noGlobalThis, cwd, filename),
-            noOptional:
-              options.noOptional ||
-              isPathPolicyEnabled(projectPolicy.noOptional, cwd, filename),
             barePipelines:
               options.barePipelines ||
               isPathPolicyEnabled(projectPolicy.barePipelines, cwd, filename),

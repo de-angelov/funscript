@@ -29,11 +29,6 @@ const replPolicyOptions = {
     replProjectRoot,
     replFile,
   ),
-  noOptional: isPathPolicyEnabled(
-    replProjectConfig.noOptional,
-    replProjectRoot,
-    replFile,
-  ),
   barePipelines: isPathPolicyEnabled(
     replProjectConfig.barePipelines,
     replProjectRoot,
@@ -241,7 +236,6 @@ export async function compileReplCode(
       replFile,
       {
         noGlobalThis: replPolicyOptions.noGlobalThis,
-        noOptional: replPolicyOptions.noOptional,
         barePipelines: replPolicyOptions.barePipelines,
         noDeepDestructure: replPolicyOptions.noDeepDestructure,
         maxDestructureDepth: replPolicyOptions.maxDestructureDepth,

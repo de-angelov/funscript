@@ -93,7 +93,7 @@ invalid = (...rest?: Array<Int>) => 0
 `.trim();
 
     await expect(compile(code)).rejects.toThrow(
-      "A rest parameter cannot be optional",
+      "Optional '?' parameter syntax is disabled in FunScript",
     );
   });
 

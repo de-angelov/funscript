@@ -9,9 +9,9 @@ import {
 import { format } from "../src/formatter/index.js";
 import { typeCheckVirtualFiles } from "../src/compiler/check.js";
 
-describe("named schemas with optional fields", () => {
+describe("named schemas with Option fields", () => {
   const source =
-    "export schema Props = { label?: String, nested?: { enabled?: Boolean } }";
+    "export schema Props = { label: Option<String>, nested: Option<{ enabled: Option<Boolean> }> }";
 
   it("decodes and encodes ordinary JavaScript optional properties explicitly", async () => {
     const { Props, PropsFromUnknown } = await execute(source);
@@ -72,7 +72,7 @@ describe("named schemas with optional fields", () => {
 
   it("allows explicit normalization of a present undefined field", async () => {
     const code =
-      'import { Option } from "effect"\nexport schema Props = { label?: String }\nexport normalize = (props: Props) => Option.flatMap(props.label, Option.fromUndefinedOr)';
+      'import { Option } from "effect"\nexport schema Props = { label: Option<String> }\nexport normalize = (props: Props) => Option.flatMap(props.label, Option.fromUndefinedOr)';
     const checked = await typeCheck(code, "normalize-optional.fun");
     expect(checked.success, checked.formattedOutput).toBe(true);
     const { PropsFromUnknown, normalize } = await execute(code);
@@ -87,7 +87,7 @@ describe("named schemas with optional fields", () => {
 
   it("decodes optional fields within arrays of records", async () => {
     const { HistoryFromUnknown } = await execute(
-      "export schema History = { entries: Array<{ note?: String }> }",
+      "export schema History = { entries: Array<{ note: Option<String> }> }",
     );
     expect(HistoryFromUnknown({ entries: [{}, { note: "hello" }] })).toEqual({
       entries: [{ note: Option.none() }, { note: Option.some("hello") }],
@@ -124,10 +124,10 @@ describe("named schemas with optional fields", () => {
     ).toBe(true);
   });
 
-  it("rejects an optional field with a default", async () => {
+  it("rejects '?' syntax in schema fields", async () => {
     await expectCompileError(
       'schema Bad = { label?: String = "x" }',
-      /both optional and defaulted/,
+      /Optional '\?' schema field syntax is disabled/,
     );
   });
 
@@ -149,11 +149,11 @@ export schema Config = {
     });
   });
 
-  it("safely decodes Country schema with rank?: Number from real-world JSON/SQL null payloads", async () => {
+  it("safely decodes Country schema with rank: Option<Number> from real-world JSON/SQL null payloads", async () => {
     const code = `
 export schema Country = {
   name: String
-  rank?: Number
+  rank: Option<Number>
 }
 `;
     const { Country, CountryFromUnknown } = await execute(code);

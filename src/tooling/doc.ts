@@ -197,7 +197,9 @@ export function extractModuleDoc(
               f.typeAnnotation.span.end.offset,
             )
             .trim(),
-          optional: f.optional,
+          optional:
+            f.typeAnnotation.kind === "TypeReferenceNode" &&
+            f.typeAnnotation.name.name === "Option",
         }));
       } else if (sdecl.body.kind === "TaggedUnionSchema") {
         kind = "tagged-union";

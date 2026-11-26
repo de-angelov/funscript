@@ -97,14 +97,12 @@ export interface CheckOptions {
   /** Reject raw TypeScript escapes in all checked FunScript files. */
   noTs?: boolean;
   noGlobalThis?: boolean;
-  noOptional?: boolean;
   barePipelines?: boolean;
   noDeepDestructure?: boolean;
   maxDestructureDepth?: number;
   effectOnly?: string[];
   noTsPaths?: string[];
   noGlobalThisPaths?: string[];
-  noOptionalPaths?: string[];
   barePipelinesPaths?: string[];
   noDeepDestructurePaths?: string[];
   /** Allow unfinished typed holes ('???') during type-checking (defaults to false; holes fail check by default). */
@@ -979,9 +977,6 @@ export const typeCheckVirtualFiles = (
         const noGlobalThis =
           !!options?.noGlobalThis ||
           isPathPolicyEnabled(options?.noGlobalThisPaths, cwd, fullFunPath);
-        const noOptional =
-          !!options?.noOptional ||
-          isPathPolicyEnabled(options?.noOptionalPaths, cwd, fullFunPath);
         const barePipelines =
           !!options?.barePipelines ||
           isPathPolicyEnabled(options?.barePipelinesPaths, cwd, fullFunPath);
@@ -1010,7 +1005,6 @@ export const typeCheckVirtualFiles = (
             graphKey,
             noTs,
             noGlobalThis,
-            noOptional,
             barePipelines,
             effectOnly,
             options?.effectOnly ?? [],
@@ -1048,7 +1042,6 @@ export const typeCheckVirtualFiles = (
                 virtualSources,
                 noTs,
                 noGlobalThis,
-                noOptional,
                 barePipelines,
                 noDeepDestructure,
                 maxDestructureDepth,
@@ -2828,8 +2821,14 @@ export const typeCheckVirtualFiles = (
                 calleeText === "Option.fromUndefinedOr"
               ) {
                 const argType = checker.getTypeAtLocation(node.arguments[0]);
+                const hasOptionProperty = (t: ts.Type): boolean =>
+                  Boolean(checker.getPropertyOfType(t, "~effect/Option"));
+                const isOptionValue = argType.isUnion()
+                  ? argType.types.some(hasOptionProperty)
+                  : hasOptionProperty(argType);
                 const argTypeStr = checker.typeToString(argType);
                 if (
+                  isOptionValue ||
                   /^Option</.test(argTypeStr) ||
                   /^Option\.Option</.test(argTypeStr)
                 ) {
@@ -2908,6 +2907,46 @@ export const typeCheckVirtualFiles = (
                     "ANY_BINDING",
                     `Cannot infer untyped 'any' for binding '${node.name.text}'. Values from untyped foreign JavaScript or TypeScript must be explicitly typed as 'Unknown' (e.g. '${node.name.text}: Unknown = ...') or validated with a schema.`,
                   );
+                } else if (node.initializer) {
+                  const isOptionType = (t: ts.Type): boolean =>
+                    t.isUnion()
+                      ? t.types.some((m) =>
+                          Boolean(
+                            checker.getPropertyOfType(m, "~effect/Option"),
+                          ),
+                        )
+                      : Boolean(checker.getPropertyOfType(t, "~effect/Option"));
+                  const hasNullishMember = (t: ts.Type): boolean => {
+                    if (t.isUnion()) {
+                      return t.types.some(
+                        (m) =>
+                          Boolean(
+                            m.flags &
+                            (ts.TypeFlags.Null | ts.TypeFlags.Undefined),
+                          ) && !isOptionType(t),
+                      );
+                    }
+                    const awaited = checker.getAwaitedType(t);
+                    if (awaited && awaited !== t && awaited.isUnion()) {
+                      return awaited.types.some(
+                        (m) =>
+                          Boolean(
+                            m.flags &
+                            (ts.TypeFlags.Null | ts.TypeFlags.Undefined),
+                          ) && !isOptionType(awaited),
+                      );
+                    }
+                    return false;
+                  };
+                  if (hasNullishMember(type)) {
+                    addCustomDiag(
+                      node.name,
+                      "UNHANDLED_NULLISH",
+                      `Binding '${node.name.text}' has nullable/optional type '${checker.typeToString(type)}' from JS/TS interop.`,
+                      "Raw 'null' and 'undefined' values cannot flow into FunScript bindings; absence must be lifted to Option<T> at the interop edge.",
+                      `Wrap the value at the edge with 'fromNullishOr(...)' or 'fromNullishOrElse(..., fallback)' (or '<- js ...' for Promises).`,
+                    );
+                  }
                 }
               }
             } else if (ts.isPropertyAccessExpression(node)) {

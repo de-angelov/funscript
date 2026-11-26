@@ -15,7 +15,6 @@ const commandOptions: Record<string, ReadonlySet<string>> = {
     "--no-check",
     "--no-ts",
     "--no-global-this",
-    "--no-optional",
     "--bare-pipelines",
     "--bin",
     "--watch",
@@ -27,7 +26,6 @@ const commandOptions: Record<string, ReadonlySet<string>> = {
     "--sourcemap",
     "--no-ts",
     "--no-global-this",
-    "--no-optional",
     "--bare-pipelines",
     "--bin",
   ]),
@@ -39,14 +37,12 @@ const commandOptions: Record<string, ReadonlySet<string>> = {
     "--fix",
     "--no-ts",
     "--no-global-this",
-    "--no-optional",
     "--bare-pipelines",
   ]),
   run: new Set([
     "--no-check",
     "--no-ts",
     "--no-global-this",
-    "--no-optional",
     "--bare-pipelines",
     "--engine",
     "--fast",
@@ -106,7 +102,7 @@ export const CLI_COMMANDS: readonly CliCommand[] = [
   {
     name: "build",
     usage:
-      "build <file.fun|file.funx...> [--target bun] [--out <file>] [--outDir <dir>] [--sourcemap] [--no-check] [--no-ts] [--no-global-this] [--no-optional] [--bare-pipelines] [--bin] [--watch]",
+      "build <file.fun|file.funx...> [--target bun] [--out <file>] [--outDir <dir>] [--sourcemap] [--no-check] [--no-ts] [--no-global-this] [--bare-pipelines] [--bin] [--watch]",
     description:
       "Build FunScript files to TypeScript or TSX in dist/ by default, or bundle one entry and its local modules as a Bun executable.",
     examples: [
@@ -117,14 +113,14 @@ export const CLI_COMMANDS: readonly CliCommand[] = [
   {
     name: "emit",
     usage:
-      "emit <file.fun|file.funx> [--out <file.ts|file.tsx>] [--sourcemap] [--no-ts] [--no-global-this] [--no-optional] [--bare-pipelines] [--bin]",
+      "emit <file.fun|file.funx> [--out <file.ts|file.tsx>] [--sourcemap] [--no-ts] [--no-global-this] [--bare-pipelines] [--bin]",
     description: "Compile one FunScript file to TypeScript or TSX.",
     examples: ["funscript emit src/main.fun --out src/main.ts --sourcemap"],
   },
   {
     name: "check",
     usage:
-      "check [file.fun|file.funx...] [--fix] [--idiomatic] [--json|--sarif] [--warnings-as-errors] [--no-ts] [--no-global-this] [--no-optional] [--bare-pipelines]",
+      "check [file.fun|file.funx...] [--fix] [--idiomatic] [--json|--sarif] [--warnings-as-errors] [--no-ts] [--no-global-this] [--bare-pipelines]",
     description:
       "Statically type-check files with the TypeScript API, optionally fix formatting and pipeline styles, and emit machine-readable diagnostics.",
     examples: [
@@ -143,7 +139,7 @@ export const CLI_COMMANDS: readonly CliCommand[] = [
   {
     name: "run",
     usage:
-      "run <file.fun|file.funx> [--no-check] [--no-ts] [--no-global-this] [--no-optional] [--bare-pipelines] [-- arg... ]",
+      "run <file.fun|file.funx> [--no-check] [--no-ts] [--no-global-this] [--bare-pipelines] [-- arg... ]",
     description:
       "Bundle and run a FunScript program and its local imports with Node.js.",
     examples: [

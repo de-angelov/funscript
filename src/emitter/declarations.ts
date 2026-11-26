@@ -374,7 +374,6 @@ export function emitBindingDeclaration(
       const fn = decl.init;
       const validations = fn.params
         .flatMap((p, index) => {
-          if (p.optional) return [];
           if (p.name.kind === "Identifier") {
             if (!p.typeAnnotation) return [];
             const paramName = p.name.name;
@@ -431,86 +430,83 @@ export function emitBindingDeclaration(
         })
         .join("\n");
       const optionalBindings = fn.params.flatMap((p, index) => {
-        if (!p.optional) {
-          if (p.name.kind === "RecordPattern") {
-            const lookup = (name: string): RecordTypeNode | undefined => {
-              const res =
-                ctx.getRecordTypeNode?.(name) ?? ctx.recordContracts.get(name);
-              return res?.kind === "RecordTypeNode" ? res : undefined;
-            };
-            let recType: TypeNode | undefined = p.typeAnnotation;
-            if (recType?.kind === "TypeReferenceNode") {
-              recType = lookup(recType.name.name);
-            }
-            const recFields =
-              recType?.kind === "RecordTypeNode"
-                ? extractRecordFields(recType, lookup)
-                : undefined;
-            if (patternHasOptionalField(p.name, recFields)) {
-              ctx.addEffectImport("Option");
-              const bindings: string[] = [];
-              let syntheticDestructureId = 0;
-              const unpackPatternFields = (
-                pat: RecordPattern,
-                basePath: string,
-                fieldsMap?: Map<string, RecordFieldInfo>,
-              ) => {
-                const restField = pat.fields.find((f) => f.isRest);
-                if (restField) {
-                  const nonRest = pat.fields.filter((f) => !f.isRest);
-                  const restTemp = `$funscriptRest${index}_${syntheticDestructureId++}`;
-                  bindings.push(
-                    `  const { ${nonRest.map((f) => `${f.key.name}: _${f.key.name}`).join(", ")}, ...${restTemp} } = ${basePath};`,
-                  );
-                  bindings.push(`  const ${restField.key.name} = ${restTemp};`);
-                }
-                for (const f of pat.fields) {
-                  if (f.isRest) continue;
-                  if (f.pattern?.kind === "WildcardPattern") continue;
-                  const info = fieldsMap?.get(f.key.name);
-                  const isOpt = info?.optional === true;
-                  const fieldPath = `${basePath}.${f.key.name}`;
-                  if (f.pattern?.kind === "RecordPattern") {
-                    if (isOpt) {
-                      const varName = ctx.emitBindingTarget(f.pattern);
-                      bindings.push(
-                        `  const ${varName} = Option.fromNullishOr(${fieldPath});`,
-                      );
-                    } else {
-                      unpackPatternFields(f.pattern, fieldPath, info?.fields);
-                    }
-                  } else if (f.pattern?.kind === "ArrayPattern") {
+        if (p.name.kind === "RecordPattern") {
+          const lookup = (name: string): RecordTypeNode | undefined => {
+            const res =
+              ctx.getRecordTypeNode?.(name) ?? ctx.recordContracts.get(name);
+            return res?.kind === "RecordTypeNode" ? res : undefined;
+          };
+          let recType: TypeNode | undefined = p.typeAnnotation;
+          if (recType?.kind === "TypeReferenceNode") {
+            recType = lookup(recType.name.name);
+          }
+          const recFields =
+            recType?.kind === "RecordTypeNode"
+              ? extractRecordFields(recType, lookup)
+              : undefined;
+          if (patternHasOptionalField(p.name, recFields)) {
+            ctx.addEffectImport("Option");
+            const bindings: string[] = [];
+            let syntheticDestructureId = 0;
+            const unpackPatternFields = (
+              pat: RecordPattern,
+              basePath: string,
+              fieldsMap?: Map<string, RecordFieldInfo>,
+            ) => {
+              const restField = pat.fields.find((f) => f.isRest);
+              if (restField) {
+                const nonRest = pat.fields.filter((f) => !f.isRest);
+                const restTemp = `$funscriptRest${index}_${syntheticDestructureId++}`;
+                bindings.push(
+                  `  const { ${nonRest.map((f) => `${f.key.name}: _${f.key.name}`).join(", ")}, ...${restTemp} } = ${basePath};`,
+                );
+                bindings.push(`  const ${restField.key.name} = ${restTemp};`);
+              }
+              for (const f of pat.fields) {
+                if (f.isRest) continue;
+                if (f.pattern?.kind === "WildcardPattern") continue;
+                const info = fieldsMap?.get(f.key.name);
+                const isOpt = info?.optional === true;
+                const fieldPath = `${basePath}.${f.key.name}`;
+                if (f.pattern?.kind === "RecordPattern") {
+                  if (isOpt) {
                     const varName = ctx.emitBindingTarget(f.pattern);
-                    if (isOpt) {
-                      bindings.push(
-                        `  const ${varName} = Option.fromNullishOr(${fieldPath});`,
-                      );
-                    } else {
-                      bindings.push(`  const ${varName} = ${fieldPath};`);
-                    }
+                    bindings.push(
+                      `  const ${varName} = Option.fromNullishOr(${fieldPath});`,
+                    );
                   } else {
-                    const varName = f.pattern
-                      ? ctx.emitBindingTarget(f.pattern)
-                      : f.key.name;
-                    if (isOpt) {
-                      bindings.push(
-                        `  const ${varName} = Option.fromNullishOr(${fieldPath});`,
-                      );
-                    } else {
-                      bindings.push(`  const ${varName} = ${fieldPath};`);
-                    }
+                    unpackPatternFields(f.pattern, fieldPath, info?.fields);
+                  }
+                } else if (f.pattern?.kind === "ArrayPattern") {
+                  const varName = ctx.emitBindingTarget(f.pattern);
+                  if (isOpt) {
+                    bindings.push(
+                      `  const ${varName} = Option.fromNullishOr(${fieldPath});`,
+                    );
+                  } else {
+                    bindings.push(`  const ${varName} = ${fieldPath};`);
+                  }
+                } else {
+                  const varName = f.pattern
+                    ? ctx.emitBindingTarget(f.pattern)
+                    : f.key.name;
+                  if (isOpt) {
+                    bindings.push(
+                      `  const ${varName} = Option.fromNullishOr(${fieldPath});`,
+                    );
+                  } else {
+                    bindings.push(`  const ${varName} = ${fieldPath};`);
                   }
                 }
-              };
-              const sourceRef =
-                decl.isJs && p.typeAnnotation
-                  ? `$funscriptDecoded${index}`
-                  : `$funscriptParam${index}`;
-              unpackPatternFields(p.name, sourceRef, recFields);
-              return bindings;
-            }
+              }
+            };
+            const sourceRef =
+              decl.isJs && p.typeAnnotation
+                ? `$funscriptDecoded${index}`
+                : `$funscriptParam${index}`;
+            unpackPatternFields(p.name, sourceRef, recFields);
+            return bindings;
           }
-          return [];
         }
         return [];
       });
@@ -551,7 +547,7 @@ export function emitBindingDeclaration(
           const def = p.defaultValue
             ? ` = ${ctx.emitExpression(p.defaultValue)}`
             : "";
-          return `${rest}${name}${p.optional ? "?" : ""}${t}${def}`;
+          return `${rest}${name}${t}${def}`;
         })
         .join(", ");
       const paramScopeEntries: [string, boolean][] = [];
@@ -565,7 +561,7 @@ export function emitBindingDeclaration(
         const p = fn.params[paramIndex];
         if (p.name.kind === "Identifier") {
           const paramName = p.name.name;
-          paramScopeEntries.push([paramName, Boolean(p.optional)]);
+          paramScopeEntries.push([paramName, false]);
           if (p.typeAnnotation?.kind === "RecordTypeNode") {
             const mapped = new Map<string, RecordFieldInfo>();
             p.typeAnnotation.fields.forEach((field, fieldIndex) => {

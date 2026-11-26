@@ -142,9 +142,14 @@ export function emitSchemaDeclaration(
       const schemaFields = decl.body.fields
         .map((f) => {
           const fieldKey = emitPropertyKey(f.name.name);
+          const optionInner = !f.defaultValue
+            ? extractOptionInnerType(f.typeAnnotation)
+            : undefined;
+          if (optionInner) {
+            const innerSchema = emitSchemaTypeField(ctx, optionInner);
+            return `  ${fieldKey}: Schema.OptionFromOptionalNullOr(${innerSchema}, { onNoneEncoding: "omit" })`;
+          }
           const schema = emitSchemaTypeField(ctx, f.typeAnnotation);
-          if (f.optional)
-            return `  ${fieldKey}: Schema.OptionFromOptionalNullOr(${schema}, { onNoneEncoding: "omit" })`;
           if (!f.defaultValue) return `  ${fieldKey}: ${schema}`;
           ctx.addEffectImport("Effect");
           return `  ${fieldKey}: ${schema}.pipe(Schema.withDecodingDefaultType(Effect.sync(() => ${ctx.emitExpression(f.defaultValue)})))`;
@@ -420,7 +425,7 @@ export function emitGenericDataSchema(
     if (names.has(name)) return !type.typeArgs?.length;
     if (["String", "Number", "Boolean"].includes(name))
       return !type.typeArgs?.length && !ctx.declaredTypeNames.has(name);
-    if (name === "Array")
+    if (name === "Array" || name === "Option")
       return type.typeArgs?.length === 1 && supportsArgument(type.typeArgs[0]);
     const arity =
       ctx.genericDataSchemas.get(name) ??
@@ -445,7 +450,6 @@ export function emitGenericDataSchema(
       return type.fields.every(
         (field) =>
           field.name.name !== "__proto__" &&
-          !field.optional &&
           !field.defaultValue &&
           supports(field.typeAnnotation),
       );
@@ -454,7 +458,7 @@ export function emitGenericDataSchema(
     if (names.has(name)) return !type.typeArgs?.length;
     if (["String", "Number", "Boolean"].includes(name))
       return !type.typeArgs?.length && !ctx.declaredTypeNames.has(name);
-    if (name === "Array")
+    if (name === "Array" || name === "Option")
       return type.typeArgs?.length === 1 && supports(type.typeArgs[0]);
     const arity =
       ctx.genericDataSchemas.get(name) ??
@@ -514,14 +518,21 @@ export function emitGenericDataSchema(
     if (body.kind === "RecordSchema") {
       const fields = body.fields
         .map((field) => {
+          const optionInner = !field.defaultValue
+            ? extractOptionInnerType(field.typeAnnotation)
+            : undefined;
+          if (optionInner) {
+            const innerSchema = emitSchemaTypeField(ctx, optionInner);
+            return `  ${emitPropertyKey(field.name.name)}: Schema.OptionFromOptionalNullOr(${innerSchema}, { onNoneEncoding: "omit" })`;
+          }
           const schema = emitSchemaTypeField(ctx, field.typeAnnotation);
-          return `  ${emitPropertyKey(field.name.name)}: ${field.optional ? `Schema.OptionFromOptionalNullOr(${schema}, { onNoneEncoding: "omit" })` : schema}`;
+          return `  ${emitPropertyKey(field.name.name)}: ${schema}`;
         })
         .join(",\n");
       const dataType = `{ ${body.fields
         .map((field) => {
           const type = ctx.emitTypeNode(field.typeAnnotation);
-          return `readonly ${emitPropertyKey(field.name.name)}: ${field.optional ? `import("effect").Option.Option<${type}>` : type}`;
+          return `readonly ${emitPropertyKey(field.name.name)}: ${type}`;
         })
         .join("; ")} }`;
       return `${exp}const ${decl.id.name} = <${args}>(${values}) => {\n${checks}\n  return Schema.Struct({\n${fields}\n  });\n};\n${exp}type ${decl.id.name}<${parameters.join(", ")}> = ${dataType};`;
@@ -551,11 +562,14 @@ export function emitCheckedRecordDecoder(
   const codec = (type: TypeNode | undefined): type is TypeReferenceNode =>
     !!type &&
     type.kind === "TypeReferenceNode" &&
-    !type.typeArgs?.length &&
-    (primitive(type) ||
-      ctx.identityRecordSchemas.has(type.name.name) ||
-      ctx.checkedTaggedSchemas.has(type.name.name) ||
-      ctx.options.importedIdentitySchemas?.has(type.name.name) === true);
+    ((!type.typeArgs?.length &&
+      (primitive(type) ||
+        ctx.identityRecordSchemas.has(type.name.name) ||
+        ctx.checkedTaggedSchemas.has(type.name.name) ||
+        ctx.options.importedIdentitySchemas?.has(type.name.name) === true)) ||
+      (type.name.name === "Option" &&
+        type.typeArgs?.length === 1 &&
+        codec(type.typeArgs[0])));
   const fields = decl.body.fields;
   const hasEffect = fields.some(
     (field) =>
@@ -565,19 +579,13 @@ export function emitCheckedRecordDecoder(
   if (!fields.some((field) => field.typeAnnotation.kind === "FunctionTypeNode"))
     return "";
   for (const field of fields) {
-    if (
-      (hasEffect && field.optional) ||
-      field.defaultValue ||
-      field.name.name === "__proto__"
-    )
-      return "";
+    if (field.defaultValue || field.name.name === "__proto__") return "";
     const type = field.typeAnnotation;
     if (type.kind === "FunctionTypeNode") {
       if (
         type.typeParams?.length ||
         type.params.some(
-          (param) =>
-            param.optional || param.isRest || !codec(param.typeAnnotation),
+          (param) => param.isRest || !codec(param.typeAnnotation),
         )
       )
         return "";
@@ -651,10 +659,13 @@ export function emitCheckedRecordDecoder(
   };
   const data = fields
     .filter((field) => field.typeAnnotation.kind !== "FunctionTypeNode")
-    .map(
-      (field) =>
-        `${emitPropertyKey(field.name.name)}: ${field.optional ? `Schema.optional(${checkedCodec(field.typeAnnotation)})` : checkedCodec(field.typeAnnotation)}`,
-    )
+    .map((field) => {
+      const optionInner = extractOptionInnerType(field.typeAnnotation);
+      if (optionInner) {
+        return `${emitPropertyKey(field.name.name)}: Schema.OptionFromOptionalNullOr(${checkedCodec(optionInner)}, { onNoneEncoding: "omit" })`;
+      }
+      return `${emitPropertyKey(field.name.name)}: ${checkedCodec(field.typeAnnotation)}`;
+    })
     .join(", ");
   const callbacks = fields
     .filter((field) => field.typeAnnotation.kind === "FunctionTypeNode")
@@ -707,14 +718,18 @@ export function emitCheckedRecordDecoder(
     const checkedName = `${decl.id.name}Checked`;
     return `\n${exp}type ${checkedName} = Omit<${decl.id.name}, ${keys}> & { ${checkedFields} };\n${exp}const ${name} = ($input: ${decl.id.name}): ${checkedName} => $funscriptDecodeCheckedRecord($input, Schema.Struct({ ${data} }), { ${callbacks} });`;
   }
-  const optionalCallbacks = fields
-    .filter(
-      (field) =>
-        field.optional && field.typeAnnotation.kind === "FunctionTypeNode",
-    )
-    .map((field) => JSON.stringify(field.name.name))
-    .join(", ");
-  return `\n${exp}const ${name} = ($input: unknown): ${decl.id.name} => $funscriptDecodeCheckedRecord($input, Schema.Struct({ ${data} }), { ${callbacks} }, [${optionalCallbacks}] as const);`;
+  return `\n${exp}const ${name} = ($input: unknown): ${decl.id.name} => $funscriptDecodeCheckedRecord($input, Schema.Struct({ ${data} }), { ${callbacks} }, [] as const);`;
+}
+
+function extractOptionInnerType(typeNode: TypeNode): TypeNode | undefined {
+  if (
+    typeNode.kind === "TypeReferenceNode" &&
+    typeNode.name.name === "Option" &&
+    typeNode.typeArgs?.length === 1
+  ) {
+    return typeNode.typeArgs[0];
+  }
+  return undefined;
 }
 
 export function emitSchemaTypeField(
@@ -749,6 +764,17 @@ export function emitSchemaTypeField(
     const inner = typeNode.fields
       .map((f) => {
         const fieldKey = emitPropertyKey(f.name.name);
+        const optionInner = !f.defaultValue
+          ? extractOptionInnerType(f.typeAnnotation)
+          : undefined;
+        if (optionInner) {
+          const innerSchema = emitSchemaTypeField(
+            ctx,
+            optionInner,
+            rawRecordFields,
+          );
+          return `  ${fieldKey}: Schema.OptionFromOptionalNullOr(${innerSchema}, { onNoneEncoding: "omit" })`;
+        }
         const schema = emitSchemaTypeField(
           ctx,
           f.typeAnnotation,
@@ -758,11 +784,7 @@ export function emitSchemaTypeField(
           ctx.addEffectImport("Effect");
           return `  ${fieldKey}: ${schema}.pipe(Schema.withDecodingDefaultType(Effect.sync(() => ${ctx.emitExpression(f.defaultValue)})))`;
         }
-        if (rawRecordFields) {
-          ctx.addEffectImport("Schema");
-          return `  ${fieldKey}: ${f.optional ? `Schema.optional(Schema.NullOr(${schema}))` : schema}`;
-        }
-        return `  ${fieldKey}: ${f.optional ? `Schema.OptionFromOptionalNullOr(${schema}, { onNoneEncoding: "omit" })` : schema}`;
+        return `  ${fieldKey}: ${schema}`;
       })
       .join(",\n");
     return `Schema.Struct({\n${inner}\n})`;
@@ -787,6 +809,9 @@ export function emitSchemaTypeField(
     if (tName === "Int") return "Schema.Int";
     if (tName === "Option" && typeNode.typeArgs) {
       return `Schema.Option(${emitSchemaTypeField(ctx, typeNode.typeArgs[0])})`;
+    }
+    if (tName === "JSOptional" && typeNode.typeArgs?.length === 1) {
+      return `Schema.NullishOr(${emitSchemaTypeField(ctx, typeNode.typeArgs[0])})`;
     }
     if (tName === "Array" && typeNode.typeArgs?.length === 1) {
       return `Schema.Array(${emitSchemaTypeField(ctx, typeNode.typeArgs[0])})`;

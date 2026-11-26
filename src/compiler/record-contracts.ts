@@ -38,7 +38,6 @@ export function recordContractType(schema: RecordSchema): RecordTypeNode {
       kind: "RecordTypeField",
       name: field.name,
       typeAnnotation: field.typeAnnotation,
-      optional: field.optional,
       defaultValue: field.defaultValue,
       span: field.span,
     })),

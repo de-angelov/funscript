@@ -20,7 +20,6 @@ export interface WatchBuildOptions {
   flags: {
     noTs: boolean;
     noGlobalThis: boolean;
-    noOptional: boolean;
     barePipelines: boolean;
     noDeepDestructure?: boolean;
   };
@@ -162,7 +161,6 @@ export async function watchBuild(
             noTs: options.flags.noTs || policy.noTs === true,
             noGlobalThis:
               options.flags.noGlobalThis || policy.noGlobalThis === true,
-            noOptional: options.flags.noOptional || policy.noOptional === true,
             barePipelines:
               options.flags.barePipelines || policy.barePipelines === true,
             noDeepDestructure:
@@ -172,9 +170,6 @@ export async function watchBuild(
             noTsPaths: Array.isArray(policy.noTs) ? policy.noTs : undefined,
             noGlobalThisPaths: Array.isArray(policy.noGlobalThis)
               ? policy.noGlobalThis
-              : undefined,
-            noOptionalPaths: Array.isArray(policy.noOptional)
-              ? policy.noOptional
               : undefined,
             barePipelinesPaths: Array.isArray(policy.barePipelines)
               ? policy.barePipelines

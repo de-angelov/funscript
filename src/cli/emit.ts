@@ -25,7 +25,6 @@ export const emitCommand = (
         a === "--sourcemap" ||
         a === "--no-ts" ||
         a === "--no-global-this" ||
-        a === "--no-optional" ||
         a === "--bare-pipelines" ||
         a === "--no-deep-destructure" ||
         a === "--bin" ||
@@ -72,9 +71,6 @@ export const emitCommand = (
           process.cwd(),
           filePath,
         ),
-      noOptional:
-        args.includes("--no-optional") ||
-        isPathPolicyEnabled(projectPolicy.noOptional, process.cwd(), filePath),
       barePipelines:
         args.includes("--bare-pipelines") ||
         isPathPolicyEnabled(

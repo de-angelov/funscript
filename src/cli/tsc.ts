@@ -6,7 +6,11 @@ import { createRequire } from "node:module";
 import * as path from "node:path";
 import ts from "typescript";
 import { compileString } from "../compiler.js";
-import { mapDiagnosticLocation } from "../compiler/check.js";
+import {
+  formatDiagnostics,
+  mapDiagnosticLocation,
+  typeCheckFiles,
+} from "../compiler/check.js";
 import { FunScriptError, isFileNotFoundError } from "../errors.js";
 import { rewriteRelativeImports } from "../plugins/type-view.js";
 
@@ -190,5 +194,14 @@ export async function runTsc(
   };
   process.stdout.write(await remap(output.stdout));
   process.stderr.write(await remap(output.stderr));
+  if (output.code === 0 && views.size > 0) {
+    const checkResult = await Effect.runPromise(
+      typeCheckFiles(Array.from(new Set(views.values()))),
+    );
+    if (!checkResult.success) {
+      process.stderr.write(`${formatDiagnostics(checkResult.diagnostics)}\n`);
+      return 1;
+    }
+  }
   return output.code;
 }

@@ -1,7 +1,7 @@
 // Program 06: Markdown Task Manager CLI & State Engine
 // Demonstrates:
 // 1. Mutative 'draft' state recipes for immutable task list updates
-// 2. 'when' early returns: 'when (cond) => expr'
+// 2. 'match' conditional branching and block 'when' guards
 // 3. 'when' conditional execution blocks: 'when (cond) { ... }'
 // 4. Explicit return statements: '=> expr'
 // 5. Effect file system I/O via 'js' Promise interop
@@ -41,77 +41,75 @@ export emptyManager: TaskManager = {
   nextId: 1
 }
 
-// 1. addTask with 'when' early return, Mutative draft array update, and explicit return '=>'
+// 1. addTask with 'match' guard, Mutative draft array update, and explicit return '=>'
 export addTask = (manager: TaskManager, title: String, tag: String) =>
-  // Early return guard for invalid/empty title
-  when (title #= "") => manager
-
-  newId = manager.nextId
-  newTask: Task = {
-    id: newId
-    title
-    completed: false
-    tag
-  }
-
-  // Mutative draft scope updating task collection
-  updatedTasks =
-    manager.tasks
-    |> mut (draft) =>
-      draft.push(newTask)
-      draft
-
-  updated = {
-    ...manager
-    tasks: updatedTasks
-    nextId: newId + 1
-  }
-
-  // Explicit return statement
-  => updated
-
-// 2. completeTask with 'when' early return and block 'when' condition
-export completeTask = (manager: TaskManager, targetId: Number) =>
-  // Early return when collection is empty
-  when (manager.tasks.length #= 0) => manager
-
-  updatedTasks =
-    manager.tasks
-    |> mut (draft) =>
-      idx = draft.findIndex((t) => t.id #= targetId)
-
-      when (idx #! -1) {
-        existing = Option.getOrElse(draft[idx], () => {
-          id: 0
-          title: ""
-          tag: ""
+  match title #= ""
+    | true => manager
+    | false =>
+        newId = manager.nextId
+        newTask: Task = {
+          id: newId
+          title
           completed: false
-        })
-        updatedItem = { ...existing, completed: true }
-        draft.splice(idx, 1, updatedItem)
-      }
-      draft
+          tag
+        }
 
-  // Conditional block execution form
+        // Mutative draft scope updating task collection
+        updatedTasks =
+          manager.tasks
+          |> mut (draft) =>
+            draft.push(newTask)
+            draft
 
-  updated = { ...manager, tasks: updatedTasks }
-  => updated
+        updated = {
+          ...manager
+          tasks: updatedTasks
+          nextId: newId + 1
+        }
+
+        => updated
+
+// 2. completeTask with 'match' guard and block 'when' condition
+export completeTask = (manager: TaskManager, targetId: Number) =>
+  match manager.tasks.length #= 0
+    | true => manager
+    | false =>
+        updatedTasks =
+          manager.tasks
+          |> mut (draft) =>
+            idx = draft.findIndex((t) => t.id #= targetId)
+
+            when (idx #! -1) {
+              existing = Option.getOrElse(draft[idx], () => {
+                id: 0
+                title: ""
+                tag: ""
+                completed: false
+              })
+              updatedItem = { ...existing, completed: true }
+              draft.splice(idx, 1, updatedItem)
+            }
+            draft
+
+        updated = { ...manager, tasks: updatedTasks }
+        => updated
 
 // 3. removeTask with block 'when'
 export removeTask = (manager: TaskManager, targetId: Number) =>
-  when (manager.tasks.length #= 0) => manager
+  match manager.tasks.length #= 0
+    | true => manager
+    | false =>
+        updatedTasks =
+          manager.tasks
+          |> mut (draft) =>
+            idx = draft.findIndex((t) => t.id #= targetId)
+            when (idx #! -1) {
+              draft.splice(idx, 1)
+            }
+            draft
 
-  updatedTasks =
-    manager.tasks
-    |> mut (draft) =>
-      idx = draft.findIndex((t) => t.id #= targetId)
-      when (idx #! -1) {
-        draft.splice(idx, 1)
-      }
-      draft
-
-  updated = { ...manager, tasks: updatedTasks }
-  => updated
+        updated = { ...manager, tasks: updatedTasks }
+        => updated
 
 // 4. Markdown Formatter and Serializer
 export formatTaskLine = (task: Task) =>
@@ -122,14 +120,14 @@ export formatTaskLine = (task: Task) =>
   => "- " + marker + " #" + task.id + ": " + task.title + " (tag: #" + task.tag + ")"
 
 export serializeToMarkdown = (manager: TaskManager) =>
-  // Early return for empty task manager
-  when (manager.tasks.length #= 0) => "# Task List\n\nNo active tasks.\n"
-
-  lines =
-    manager.tasks
-    |> map(formatTaskLine)
-    |> join("\n")
-  => "# Task List\n\n" + lines + "\n"
+  match manager.tasks.length #= 0
+    | true => "# Task List\n\nNo active tasks.\n"
+    | false =>
+        lines =
+          manager.tasks
+          |> map(formatTaskLine)
+          |> join("\n")
+        => "# Task List\n\n" + lines + "\n"
 
 // --- Effect File System I/O Workflows ---
 
