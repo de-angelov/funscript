@@ -4,12 +4,19 @@ import { format } from "../src/formatter/index.js";
 
 describe("Effect Brand schemas (TASK-079)", () => {
   it("compiles string branded schema and emits Schema.brand and Brand.Brand declarations", async () => {
-    const source = 'export schema UserId = String |> Brand("UserId")\nexport read = (id: UserId) => id\nexport test = read(UserIdFromUnknown("usr_123"))';
+    const source =
+      'export schema UserId = String |> Brand("UserId")\nexport read = (id: UserId) => id\nexport test = read(UserIdFromUnknown("usr_123"))';
     const compiled = await compile(source);
 
-    expect(compiled.typescript).toContain('import { Brand, Schema } from "effect";');
-    expect(compiled.typescript).toContain('export const UserId = Schema.String.pipe(Schema.brand("UserId"));');
-    expect(compiled.typescript).toContain('export type UserId = string & Brand.Brand<"UserId">;');
+    expect(compiled.typescript).toContain(
+      'import { Brand, Schema } from "effect";',
+    );
+    expect(compiled.typescript).toContain(
+      'export const UserId = Schema.String.pipe(Schema.brand("UserId"));',
+    );
+    expect(compiled.typescript).toContain(
+      'export type UserId = string & Brand.Brand<"UserId">;',
+    );
     expect(compiled.typescript).toContain(
       "export const UserIdFromUnknown = (input: unknown): UserId => Schema.decodeUnknownSync(UserId)(input);",
     );
@@ -27,12 +34,19 @@ describe("Effect Brand schemas (TASK-079)", () => {
   });
 
   it("compiles integer branded schema and emits Schema.brand and Brand.Brand declarations", async () => {
-    const source = 'export schema PositiveInt = Int |> Brand("Positive")\nexport read = (n: PositiveInt) => n\nexport test = read(PositiveIntFromUnknown(42))';
+    const source =
+      'export schema PositiveInt = Int |> Brand("Positive")\nexport read = (n: PositiveInt) => n\nexport test = read(PositiveIntFromUnknown(42))';
     const compiled = await compile(source);
 
-    expect(compiled.typescript).toContain('import { Brand, Schema } from "effect";');
-    expect(compiled.typescript).toContain('export const PositiveInt = Schema.Int.pipe(Schema.brand("Positive"));');
-    expect(compiled.typescript).toContain('export type PositiveInt = number & Brand.Brand<"Positive">;');
+    expect(compiled.typescript).toContain(
+      'import { Brand, Schema } from "effect";',
+    );
+    expect(compiled.typescript).toContain(
+      'export const PositiveInt = Schema.Int.pipe(Schema.brand("Positive"));',
+    );
+    expect(compiled.typescript).toContain(
+      'export type PositiveInt = number & Brand.Brand<"Positive">;',
+    );
     expect(compiled.typescript).toContain(
       "export const PositiveIntFromUnknown = (input: unknown): PositiveInt => Schema.decodeUnknownSync(PositiveInt)(input);",
     );
@@ -102,27 +116,71 @@ export test = getUserId(ProfileFromUnknown({ id: "u_1", accountId: "a_1" }))
     const checked = await typeCheck(source, "record-brands.fun");
     expect(checked.success, checked.formattedOutput).toBe(true);
 
-    const { ProfileFromUnknown, getUserId, getAccountId } = await execute(source);
+    const { ProfileFromUnknown, getUserId, getAccountId } =
+      await execute(source);
     const profile = ProfileFromUnknown({ id: "usr_99", accountId: "acc_99" });
     expect(getUserId(profile)).toBe("usr_99");
     expect(getAccountId(profile)).toBe("acc_99");
-    expect(() => ProfileFromUnknown({ id: 123, accountId: "acc_99" })).toThrow();
+    expect(() =>
+      ProfileFromUnknown({ id: 123, accountId: "acc_99" }),
+    ).toThrow();
 
     // Mismatched record field type checking
-    const badSource = source + `\nexport wrong = (p: Profile) => {\n  acc: AccountId = p.id\n  => acc\n}`;
+    const badSource =
+      source +
+      `\nexport wrong = (p: Profile) =>\n  acc: AccountId = p.id\n  => acc`;
     const badChecked = await typeCheck(badSource, "bad-record-brand.fun");
     expect(badChecked.success).toBe(false);
     expect(badChecked.formattedOutput).toContain("is not assignable to type");
   });
 
+  it("compiles inline refinements on schema record fields", async () => {
+    const source = `
+import { Schema } from "effect"
+
+export schema Credentials = {
+  username: String |> Schema.check(Schema.isMinLength(3)) |> Schema.brand("Username")
+  age: Int |> Schema.check(Schema.isGreaterThanOrEqualTo(0))
+}
+export decode = (input: Unknown) => Schema.decodeUnknownSync(Credentials)(input)
+`;
+    const compiled = await compile(source);
+    expect(compiled.typescript).toContain(
+      'username: Schema.String.pipe(Schema.check(Schema.isMinLength(3)), Schema.brand("Username"))',
+    );
+    expect(compiled.typescript).toContain(
+      "age: Schema.Int.pipe(Schema.check(Schema.isGreaterThanOrEqualTo(0)))",
+    );
+
+    const checked = await typeCheck(source, "record-field-refinement.fun");
+    expect(checked.success, checked.formattedOutput).toBe(true);
+
+    const { CredentialsFromUnknown } = await execute(source);
+    expect(CredentialsFromUnknown({ username: "Ada", age: 36 })).toEqual({
+      username: "Ada",
+      age: 36,
+    });
+    expect(() => CredentialsFromUnknown({ username: "x", age: -1 })).toThrow();
+
+    expect(format(format(source))).toBe(format(source));
+  });
+
   it("supports multiple chained brands on a single schema", async () => {
-    const source = 'export schema TaggedEntity = String |> Brand("Entity") |> Brand("Tagged")\nexport read = (e: TaggedEntity) => e';
+    const source =
+      'export schema TaggedEntity = String |> Brand("Entity") |> Brand("Tagged")\nexport read = (e: TaggedEntity) => e';
     const compiled = await compile(source);
 
-    expect(compiled.typescript).toContain('export const TaggedEntity = Schema.String.pipe(Schema.brand("Entity"), Schema.brand("Tagged"));');
-    expect(compiled.typescript).toContain('export type TaggedEntity = string & Brand.Brand<"Entity"> & Brand.Brand<"Tagged">;');
+    expect(compiled.typescript).toContain(
+      'export const TaggedEntity = Schema.String.pipe(Schema.brand("Entity"), Schema.brand("Tagged"));',
+    );
+    expect(compiled.typescript).toContain(
+      'export type TaggedEntity = string & Brand.Brand<"Entity"> & Brand.Brand<"Tagged">;',
+    );
 
-    const checked = await typeCheck(source + '\nexport test = read(TaggedEntityFromUnknown("item_1"))', "chained-brands.fun");
+    const checked = await typeCheck(
+      source + '\nexport test = read(TaggedEntityFromUnknown("item_1"))',
+      "chained-brands.fun",
+    );
     expect(checked.success, checked.formattedOutput).toBe(true);
 
     const { TaggedEntityFromUnknown } = await execute(source);
@@ -130,18 +188,27 @@ export test = getUserId(ProfileFromUnknown({ id: "u_1", accountId: "a_1" }))
   });
 
   it("supports alternative Schema.brand qualification syntax", async () => {
-    const source = 'export schema OrderId = String |> Schema.brand("OrderId")\nexport read = (id: OrderId) => id';
+    const source =
+      'export schema OrderId = String |> Schema.brand("OrderId")\nexport read = (id: OrderId) => id';
     const compiled = await compile(source);
 
-    expect(compiled.typescript).toContain('export const OrderId = Schema.String.pipe(Schema.brand("OrderId"));');
-    expect(compiled.typescript).toContain('export type OrderId = string & Brand.Brand<"OrderId">;');
+    expect(compiled.typescript).toContain(
+      'export const OrderId = Schema.String.pipe(Schema.brand("OrderId"));',
+    );
+    expect(compiled.typescript).toContain(
+      'export type OrderId = string & Brand.Brand<"OrderId">;',
+    );
 
-    const checked = await typeCheck(source + '\nexport test = read(OrderIdFromUnknown("ord_1"))', "schema-brand-qualified.fun");
+    const checked = await typeCheck(
+      source + '\nexport test = read(OrderIdFromUnknown("ord_1"))',
+      "schema-brand-qualified.fun",
+    );
     expect(checked.success, checked.formattedOutput).toBe(true);
   });
 
   it("composes imported schemas in record schemas without widening to Schema.Unknown", async () => {
-    const source = 'import { Country } from "./country.js"\nexport schema CardProps = {\n  country: Country\n  active: Boolean\n}';
+    const source =
+      'import { Country } from "./country.js"\nexport schema CardProps = {\n  country: Country\n  active: Boolean\n}';
     const compiled = await compile(source);
     expect(compiled.typescript).toContain("country: Country");
     expect(compiled.typescript).not.toContain("Schema.Unknown as unknown");

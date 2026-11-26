@@ -506,8 +506,12 @@ export function parseRecordSchema(ctx: DeclarationParserContext): RecordSchema {
     const previous = ctx.allowDefaultedRecordFields;
     ctx.allowDefaultedRecordFields = true;
     let fieldType: TypeNode;
+    let refinement: Expression | undefined;
     try {
       fieldType = ctx.parseTypeNode();
+      if (ctx.match(TokenType.PIPE)) {
+        refinement = ctx.parseExpression();
+      }
     } finally {
       ctx.allowDefaultedRecordFields = previous;
     }
@@ -521,10 +525,11 @@ export function parseRecordSchema(ctx: DeclarationParserContext): RecordSchema {
       kind: "RecordFieldSchema",
       name: fieldName,
       typeAnnotation: fieldType,
+      refinement,
       defaultValue,
       span: {
         start: fieldName.span.start,
-        end: (defaultValue || fieldType).span.end,
+        end: (defaultValue || refinement || fieldType).span.end,
       },
     });
 

@@ -128,6 +128,8 @@ export interface RecordFieldSchema extends NodeBase {
   kind: "RecordFieldSchema";
   name: Identifier;
   typeAnnotation: TypeNode;
+  /** Inline `|>` refinement stages, e.g. `field: String |> Schema.isMinLength(1)`. */
+  refinement?: Expression;
   defaultValue?: Expression;
 }
 

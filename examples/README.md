@@ -13,15 +13,20 @@ examples/
 │
 ├── [Standalone Examples]
 │   ├── bank-account.fun          # Tagged unions, pattern matching, immutable updates
+│   ├── crypto-password.fun       # Effect Kdf/SecureRandom password hashing and verification
 │   ├── fibonacci.fun             # Recursive pipelines and numeric comparison guards
 │   ├── github-api-client.fun     # REST client, Promise interop, runtime Schema decoding, tagged errors
 │   ├── greeter-service.fun       # Effect services, context tags, and layer composition
 │   ├── hello.fun                 # Basic bindings, string interpolation, pipelines, Effect entrypoint
+│   ├── http-forms-cookies.fun    # Form decoding, validation, cookies, redirects, HTML error responses
 │   ├── js-ts-interop.fun         # TypeScript type escapes, foreign Promise interop, fibers
 │   ├── markdown-task-manager.fun # Mutative draft updates, `when` early returns, file I/O
 │   ├── order-fulfillment.fun     # Full e-commerce workflow: concurrency, retry, fibers, ts-pattern
 │   ├── pipeline-helpers.fun      # es-toolkit helpers: string slug/casing, math clamp/round, timing
+│   ├── raw-strings.fun           # Verbatim backtick strings, `\{`/`\}` brace escapes, interpolation
+│   ├── service-shape.fun         # Service key vs shape, helper parameters, nested-callback calls
 │   ├── shapes.fun                # Tagged-union `schema`, guards, exhaustive `match`
+│   ├── sql-tagged-templates.fun  # Native Effect SQL tagged templates, row decoding, SQLite in memory
 │   ├── sqlite-repository.fun     # CRUD repository using Node built-in SQLite (Node.js 22+)
 │   ├── todo-http.fun             # HTTP service simulation, effect blocks, retry, layers
 │   ├── todo-service.fun          # In-memory todo repository service and layer injection
@@ -102,7 +107,12 @@ node ./dist/cli/index.js run examples/fibonacci.fun
 node ./dist/cli/index.js run examples/order-fulfillment.fun
 node ./dist/cli/index.js run examples/github-api-client.fun
 node ./dist/cli/index.js run examples/todo-dashboard.funx
+node ./dist/cli/index.js run examples/raw-strings.fun
+node ./dist/cli/index.js run examples/crypto-password.fun
+node ./dist/cli/index.js run examples/service-shape.fun
+node ./dist/cli/index.js run examples/sql-tagged-templates.fun # requires Node.js 22+
 PORT=4317 node ./dist/cli/index.js run examples/rest-api-server.fun  # starts HTTP server on port 4317 (default 3000)
+PORT=3101 node ./dist/cli/index.js run examples/http-forms-cookies.fun # starts form-login server on port 3101 (default 3100)
 node ./dist/cli/index.js run examples/sqlite-repository.fun # requires Node.js 22+
 ```
 
@@ -123,4 +133,4 @@ node ./dist/cli/index.js build examples/reactive-widget.funx examples/todo-dashb
 
 ### Runtime prerequisites
 
-`rest-api-server.fun` uses Effect HTTP with `@effect/platform-node`, whose package engine requirement is **Node.js 22.19 or newer**. Its sole direct Node HTTP interop is `createServer` passed to `NodeHttpServer.layer`, the adapter's documented platform boundary; the adapter owns routing, request decoding, responses, and scoped server lifecycle. The example defaults to port **3000** and accepts `PORT` to select another port. It cannot run on Node 20, while the project build and non-HTTP examples continue to support Node 20. `sqlite-repository.fun` uses `node:sqlite` and requires Node.js 22 or newer for runtime CRUD coverage.
+`rest-api-server.fun` uses Effect HTTP with `@effect/platform-node`, whose package engine requirement is **Node.js 22.19 or newer**. Its sole direct Node HTTP interop is `createServer` passed to `NodeHttpServer.layer`, the adapter's documented platform boundary; the adapter owns routing, request decoding, responses, and scoped server lifecycle. The example defaults to port **3000** and accepts `PORT` to select another port. It cannot run on Node 20, while the project build and non-HTTP examples continue to support Node 20. `sqlite-repository.fun` uses `node:sqlite` and requires Node.js 22 or newer for runtime CRUD coverage. `sql-tagged-templates.fun` uses `@effect/sql-sqlite-node` and also needs Node.js 22+. `http-forms-cookies.fun` uses `@effect/platform-node` like `rest-api-server.fun` and needs Node.js 22.19+; it defaults to port **3100** and accepts `PORT`. `crypto-password.fun` uses `NodeCrypto.layer` and needs a Node.js build with WebCrypto (Node 22+). The other new examples (`raw-strings.fun`, `service-shape.fun`) run on Node 20+.

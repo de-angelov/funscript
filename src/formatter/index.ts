@@ -647,10 +647,13 @@ export class Formatter {
       .map((f) => {
         const leading = this.formatLeadingComments(f, fieldIndent);
         const trailing = this.getTrailingComment(f.span.end.line);
+        const refinement = f.refinement
+          ? ` |> ${this.formatExpression(f.refinement, indent + this.indentSize)}`
+          : "";
         const def = f.defaultValue
           ? ` = ${this.formatExpression(f.defaultValue, indent + this.indentSize)}`
           : "";
-        return `${leading}${fieldIndent}${f.name.name}: ${this.formatType(f.typeAnnotation, indent + this.indentSize)}${def}${trailing}`;
+        return `${leading}${fieldIndent}${f.name.name}: ${this.formatType(f.typeAnnotation, indent + this.indentSize)}${refinement}${def}${trailing}`;
       })
       .join("\n");
     return `{\n${fields}\n${closingIndent}}`;

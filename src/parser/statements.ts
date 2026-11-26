@@ -278,8 +278,10 @@ export function parseFunctionBody(
   ctx.functionDepth++;
   try {
     if (ctx.isBraceBlock()) {
-      ctx.consume(TokenType.LBRACE, "Expected '{'");
-      return parseBraceBlock(ctx, requireExplicitReturn);
+      throw new ParseError(
+        "Braced function bodies are not supported; use indentation or an expression",
+        ctx.peek().span,
+      );
     }
     if (ctx.match(TokenType.NEWLINE)) {
       // A multiline `match` or `effect` is still one expression-bodied

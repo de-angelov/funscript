@@ -918,7 +918,6 @@ export class Parser {
           this.check(TokenType.ARROW) &&
           this.peekAhead(1).type === TokenType.UPPER_IDENTIFIER &&
           (this.peekAhead(2).type === TokenType.ARROW ||
-            this.peekAhead(2).type === TokenType.LBRACE ||
             this.peekAhead(2).type === TokenType.NEWLINE)
         ) {
           this.advance();
@@ -1010,7 +1009,6 @@ export class Parser {
           this.check(TokenType.ARROW) &&
           this.peekAhead(1).type === TokenType.UPPER_IDENTIFIER &&
           (this.peekAhead(2).type === TokenType.ARROW ||
-            this.peekAhead(2).type === TokenType.LBRACE ||
             this.peekAhead(2).type === TokenType.NEWLINE)
         ) {
           this.advance(); // consume the arrow before the return type
@@ -1044,7 +1042,6 @@ export class Parser {
         this.check(TokenType.ARROW) &&
         this.peekAhead(1).type === TokenType.UPPER_IDENTIFIER &&
         (this.peekAhead(2).type === TokenType.ARROW ||
-          this.peekAhead(2).type === TokenType.LBRACE ||
           this.peekAhead(2).type === TokenType.NEWLINE)
       ) {
         this.advance(); // consume the arrow before the return type

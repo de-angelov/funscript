@@ -242,13 +242,11 @@ The compiler enforces the convention for declarations it generates. Imported Jav
 values may have any casing; they are only relevant in expression position.
 
 <!-- GENERATED: keywords -->
-
 ### 1.5 Keywords (19 total)
 
 ```text
 and default effect error export false from import js match mut not or par schema service true ts when
 ```
-
 <!-- /GENERATED: keywords -->
 
 `_` is a special token (wildcard in patterns, discard in `_ <-`, and call-argument
@@ -1535,9 +1533,11 @@ Rules:
    §6.2).
 4. **Refinement pipelines in schemas:** Any data type or record field type can pipe into
    `Schema` combinators using `|>` (`Int |> Schema.between(0, 150)`,
-   `string |> Schema.pattern(/^[a-z]+$/)`). Zero-argument Schema combinators in a schema
-   pipeline (`Schema.trimmed`, `Schema.nonEmptyString`) may be written with or without
-   `()`.
+   `string |> Schema.pattern(/^[a-z]+$/)`). Schema combinators may also be written as
+   unqualified calls in these pipelines (`Int |> between(0, 150)`, `String |> trimmed`);
+   they resolve to `Schema` like other native data-type companions. Zero-argument Schema
+   combinators in a schema pipeline (`Schema.trimmed`, `Schema.nonEmptyString`) may be
+   written with or without `()`.
 5. **Compile-time-only `schema` declarations:** When a `schema` contains non-serializable
    constructs — function arrows `=>`,
    `Effect<...>`, `Layer<...>`, `Stream<...>`, services, or `unknown` — the compiler emits
@@ -2996,7 +2996,7 @@ dotPath        = identifier { "." identifier } ;
 
 holeExpr       = "???" [ string ] ;
 
-function       = [ "<" typeParams ">" ] params "=>" ( expression | block | type bracedBlock ) ;
+function       = [ "<" typeParams ">" ] params "=>" ( expression | block | type block ) ;
 params         = "(" [ param { "," param } ] ")" ;
 bracedBlock    = "{" { statement } "}" ;
 param          = ( identifier | recordPattern | arrayPattern ) [ ":" type ] ;

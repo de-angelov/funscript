@@ -4,6 +4,7 @@ import type {
   Expression,
   FunctionTypeNode,
   Pattern,
+  RecordFieldSchema,
   RecordTypeNode,
   SchemaDeclaration,
   TaggedUnionSchema,
@@ -96,6 +97,48 @@ function getBrandNameFromStage(stage: Expression): string | null {
   return null;
 }
 
+function emitRefinementExpression(
+  ctx: SchemaEmitterContext,
+  expr: Expression,
+): string {
+  if (expr.kind === "Identifier" || expr.kind === "UpperIdentifier") {
+    const name = expr.name;
+    if (!ctx.bindings.has(name) && !ctx.userImportBindings.has(name)) {
+      ctx.addEffectImport("Schema");
+      return `Schema.${name}`;
+    }
+    return name;
+  }
+  if (expr.kind === "CallExpression") {
+    const args = expr.args
+      .map((arg) => emitRefinementExpression(ctx, arg))
+      .join(", ");
+    if (
+      expr.callee.kind === "Identifier" ||
+      expr.callee.kind === "UpperIdentifier"
+    ) {
+      const name = expr.callee.name;
+      if (!ctx.bindings.has(name) && !ctx.userImportBindings.has(name)) {
+        ctx.addEffectImport("Schema");
+        return `Schema.${name}(${args})`;
+      }
+      return `${name}(${args})`;
+    }
+    if (expr.callee.kind === "MemberExpression") {
+      return `${ctx.emitExpression(expr.callee)}(${args})`;
+    }
+    return ctx.emitExpression(expr);
+  }
+  if (expr.kind === "PipelineExpression") {
+    ctx.addEffectImport("pipe");
+    const stages = flattenPipelineStages(expr);
+    return `pipe(${stages
+      .map((stage) => emitRefinementStage(ctx, stage))
+      .join(", ")})`;
+  }
+  return ctx.emitExpression(expr);
+}
+
 function emitRefinementStage(
   ctx: SchemaEmitterContext,
   stage: Expression,
@@ -105,7 +148,22 @@ function emitRefinementStage(
     ctx.addEffectImport("Schema");
     return `Schema.brand(${JSON.stringify(brandName)})`;
   }
-  return ctx.emitExpression(stage);
+  return emitRefinementExpression(ctx, stage);
+}
+
+/** Emits a record field schema, including an inline `|>` refinement when present. */
+function emitRecordFieldSchema(
+  ctx: SchemaEmitterContext,
+  field: RecordFieldSchema,
+): string {
+  const base = emitSchemaTypeField(ctx, field.typeAnnotation);
+  if (!field.refinement) return base;
+  // Use the schema's `.pipe()` method rather than the generic `pipe` helper:
+  // it preserves the precise schema type through each refinement stage.
+  const stages = flattenPipelineStages(field.refinement).map((stage) =>
+    emitRefinementStage(ctx, stage),
+  );
+  return `${base}.pipe(${stages.join(", ")})`;
 }
 
 export function emitSchemaDeclaration(
@@ -149,7 +207,7 @@ export function emitSchemaDeclaration(
             const innerSchema = emitSchemaTypeField(ctx, optionInner);
             return `  ${fieldKey}: Schema.OptionFromOptionalNullOr(${innerSchema}, { onNoneEncoding: "omit" })`;
           }
-          const schema = emitSchemaTypeField(ctx, f.typeAnnotation);
+          const schema = emitRecordFieldSchema(ctx, f);
           if (!f.defaultValue) return `  ${fieldKey}: ${schema}`;
           ctx.addEffectImport("Effect");
           return `  ${fieldKey}: ${schema}.pipe(Schema.withDecodingDefaultType(Effect.sync(() => ${ctx.emitExpression(f.defaultValue)})))`;
@@ -283,7 +341,7 @@ export function emitSchemaDeclaration(
 
       ctx.addEffectImport("pipe");
       ctx.addEffectImport("Schema");
-      return `${exp}const ${name} = pipe(${emitSchemaTypeField(ctx, decl.body.baseType)}, ${ctx.emitExpression(decl.body.refinement)});\n${exp}type ${name} = typeof ${name}.Type;\n${exp}const ${name}FromUnknown = (input: unknown): ${name} => Schema.decodeUnknownSync(${name})(input);`;
+      return `${exp}const ${name} = pipe(${emitSchemaTypeField(ctx, decl.body.baseType)}, ${emitRefinementExpression(ctx, decl.body.refinement)});\n${exp}type ${name} = typeof ${name}.Type;\n${exp}const ${name}FromUnknown = (input: unknown): ${name} => Schema.decodeUnknownSync(${name})(input);`;
     }
     case "TypeSignatureSchema": {
       return `${exp}type ${name}${ctx.emitTypeParameters(decl.typeParams)} = ${ctx.emitTypeNode(decl.body.signature)};`;
@@ -525,7 +583,7 @@ function emitGenericDataSchema(
             const innerSchema = emitSchemaTypeField(ctx, optionInner);
             return `  ${emitPropertyKey(field.name.name)}: Schema.OptionFromOptionalNullOr(${innerSchema}, { onNoneEncoding: "omit" })`;
           }
-          const schema = emitSchemaTypeField(ctx, field.typeAnnotation);
+          const schema = emitRecordFieldSchema(ctx, field);
           return `  ${emitPropertyKey(field.name.name)}: ${schema}`;
         })
         .join(",\n");

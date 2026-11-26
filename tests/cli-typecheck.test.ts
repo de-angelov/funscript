@@ -17,7 +17,7 @@ beforeAll(async () => {
   directory = await fs.mkdtemp(path.resolve(".cli-typecheck-"));
   invalid = path.join(directory, "invalid.fun");
   valid = path.join(directory, "valid.fun");
-  await fs.writeFile(invalid, 'greet = (name: String) => { => name }\nresult = greet(42)\nmain = () => console.log("EXECUTED")\n');
+  await fs.writeFile(invalid, 'greet = (name: String) => name\nresult = greet(42)\nmain = () => console.log("EXECUTED")\n');
   await fs.writeFile(valid, 'main = () => console.log("VALID EXECUTION")\n');
 });
 afterAll(async () => {
@@ -112,7 +112,7 @@ describe("REPL static checking", () => {
   it("retains function types, rejects invalid input, and accepts subsequent valid input", async () => {
     const context = vm.createContext({});
     setupReplContext(context);
-    await evaluateReplLine('greet = (name: String) => { => name }', context);
+    await evaluateReplLine('greet = (name: String) => name', context);
     await expect(evaluateReplLine("greet(42)", context)).rejects.toThrow("TS2345");
     expect(await evaluateReplLine('greet("Ada")', context)).toBe("Ada");
     await expect(evaluateReplLine('count: Number = "wrong"', context)).rejects.toThrow("TS2322");

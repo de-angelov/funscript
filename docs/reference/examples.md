@@ -9,19 +9,24 @@ Every entry below is compiled by `npm run test:examples`.
 | [`examples/assemblyscript-numeric.fun`](../../examples/assemblyscript-numeric.fun) | `FunScript` |
 | [`examples/assemblyscript-primes.fun`](../../examples/assemblyscript-primes.fun) | `FunScript` |
 | [`examples/bank-account.fun`](../../examples/bank-account.fun) | `FunScript` |
+| [`examples/crypto-password.fun`](../../examples/crypto-password.fun) | `FunScript` |
 | [`examples/fibonacci.fun`](../../examples/fibonacci.fun) | `FunScript` |
 | [`examples/github-api-client.fun`](../../examples/github-api-client.fun) | `FunScript` |
 | [`examples/greeter-service.fun`](../../examples/greeter-service.fun) | `FunScript` |
 | [`examples/hello.fun`](../../examples/hello.fun) | `FunScript` |
+| [`examples/http-forms-cookies.fun`](../../examples/http-forms-cookies.fun) | `FunScript` |
 | [`examples/js-ts-interop.fun`](../../examples/js-ts-interop.fun) | `FunScript` |
 | [`examples/markdown-task-manager.fun`](../../examples/markdown-task-manager.fun) | `FunScript` |
 | [`examples/order-fulfillment.fun`](../../examples/order-fulfillment.fun) | `FunScript` |
 | [`examples/pipeline-helpers.fun`](../../examples/pipeline-helpers.fun) | `FunScript` |
+| [`examples/raw-strings.fun`](../../examples/raw-strings.fun) | `FunScript` |
 | [`examples/reactive-widget.funx`](../../examples/reactive-widget.funx) | `FunScript JSX` |
 | [`examples/rest-api-server.fun`](../../examples/rest-api-server.fun) | `FunScript` |
+| [`examples/service-shape.fun`](../../examples/service-shape.fun) | `FunScript` |
 | [`examples/shapes.fun`](../../examples/shapes.fun) | `FunScript` |
 | [`examples/solid-demo/domain.fun`](../../examples/solid-demo/domain.fun) | `FunScript` |
 | [`examples/solid-demo/solid-in-funscript.fun`](../../examples/solid-demo/solid-in-funscript.fun) | `FunScript` |
+| [`examples/sql-tagged-templates.fun`](../../examples/sql-tagged-templates.fun) | `FunScript` |
 | [`examples/sqlite-repository.fun`](../../examples/sqlite-repository.fun) | `FunScript` |
 | [`examples/todo-dashboard.funx`](../../examples/todo-dashboard.funx) | `FunScript JSX` |
 | [`examples/todo-http.fun`](../../examples/todo-http.fun) | `FunScript` |

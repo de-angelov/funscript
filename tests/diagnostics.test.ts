@@ -36,20 +36,11 @@ export calculate = (x: Number) => {
 
       expect(err).toBeDefined();
       expect(err.message).toContain(
-        "Function block must end with an explicit '=> returnValue'",
-      );
-      expect(err.message).toContain(
-        "Multi-statement functions require an explicit return arrow to distinguish returned values from side effects.",
-      );
-      expect(err.message).toContain(
-        "Use '=> value' or rewrite as an inline single-expression lambda '(args) => expr'.",
-      );
-      expect(err.message).toContain(
-        "docs/syntax.md#311-explicit-returns-and-conditional-execution",
+        "Braced function bodies are not supported; use indentation or an expression",
       );
       expect(err.span).toBeDefined();
-      expect(err.span.start.line).toBe(3);
-      expect(err.span.start.column).toBe(3);
+      expect(err.span.start.line).toBe(1);
+      expect(err.span.start.column).toBe(35);
     });
 
     it("rejects indented function block missing explicit '=>' with actionable diagnostic", () => {
@@ -86,16 +77,15 @@ export bad = () => {
 
       expect(() => parseCode(source)).toThrow(ParseError);
       expect(() => parseCode(source)).toThrow(
-        "Function block must end with an explicit '=> returnValue'. Multi-statement functions require an explicit return arrow to distinguish returned values from side effects. Use '=> value' or rewrite as an inline single-expression lambda '(args) => expr'. See docs/syntax.md#311-explicit-returns-and-conditional-execution.",
+        "Braced function bodies are not supported; use indentation or an expression",
       );
     });
 
     it("accepts valid explicit returns and expression-bodied functions without diagnostics", async () => {
       const source = `
-export calculate = (x: Number) => {
+export calculate = (x: Number) =>
   temp = x + 1
   => temp
-}
 export inlineCalc = (x: Number) => x + 1
 `.trim();
 
@@ -256,9 +246,8 @@ export inRange = (n: Number) => n >= 0 and n <= 100
   describe("Banned keyword alternatives", () => {
     it("rejects 'return' keyword with actionable replacement suggestion and doc link", () => {
       const source = `
-export bad = (x: Number) => {
+export bad = (x: Number) =>
   return x
-}
 `.trim();
 
       let err: any;
@@ -288,10 +277,9 @@ export bad = (x: Number) => {
   describe("LSP Diagnostic Output Surfacing", () => {
     it("surfaces enhanced diagnostic for implicit function return in validateFunScript", () => {
       const code = `
-calculate = (x: Number) => {
+calculate = (x: Number) =>
   temp = x + 1
   temp
-}
 `.trim();
 
       const diagnostics = validateFunScript(code, "file:///calc.fun");
@@ -416,10 +404,9 @@ export ts schema UserSchema = User
       server.on("diagnostics", (p) => diagEvents.push(p));
 
       const invalidCode = `
-calculate = (x: Number) => {
+calculate = (x: Number) =>
   temp = x + 1
   temp
-}
 `.trim();
 
       await server.handleMessage({
@@ -449,10 +436,9 @@ calculate = (x: Number) => {
       );
 
       const fixedCode = `
-calculate = (x: Number) => {
+calculate = (x: Number) =>
   temp = x + 1
   => temp
-}
 `.trim();
 
       await server.handleMessage({
