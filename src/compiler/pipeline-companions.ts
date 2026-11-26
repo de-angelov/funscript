@@ -358,37 +358,68 @@ export function inferPipelineCompanions(
   // applied (for example, `Array.filter(predicate)(array)`). Preserve the
   // companion we already know from the pipeline initializer for later uses of
   // that local binding instead of losing it to the checker’s intermediate type.
-  const pipelineBindingNames = new Map<number, string>();
-  walkAst(ast, (n) => {
-    if (
-      n.kind === "BindingDeclaration" &&
-      (n.id as { kind?: string; name?: string })?.kind === "Identifier" &&
-      (n.init as { kind?: string; span?: Span })?.kind === "PipelineExpression"
-    ) {
-      pipelineBindingNames.set(
-        (n.init as { span: Span }).span.start.offset,
-        (n.id as { name: string }).name,
-      );
-    } else if (
-      n.kind === "AssignmentStatement" &&
-      (n.target as { kind?: string; name?: string })?.kind === "Identifier" &&
-      (n.value as { kind?: string; span?: Span })?.kind === "PipelineExpression"
-    ) {
-      pipelineBindingNames.set(
-        (n.value as { span: Span }).span.start.offset,
-        (n.target as { name: string }).name,
-      );
-    }
-  });
-  const bindingCompanions = new Map<string, PipelineCompanionModule>();
+  const pipelineBindingNames = new Map<
+    number,
+    { name: string; scopeId: number; isAssignment: boolean }
+  >();
+  const scopeParent = new Map<number, number>();
+  const scopeDeclaredNames = new Map<number, Set<string>>();
+  const pipelineScopeIds = new Map<number, number>();
+  const bindingCompanions = new Map<
+    number,
+    Map<string, PipelineCompanionModule>
+  >();
   const pipelineScopeBindings = new Map<number, Set<string>>();
+  let nextScopeId = 1;
+
+  const isShadowed = (offset: number, name: string): boolean =>
+    localBindings.has(name) ||
+    Boolean(pipelineScopeBindings.get(offset)?.has(name));
+
+  const immediateBlockBindings = (
+    node: Record<string, unknown>,
+  ): Set<string> => {
+    const names = new Set<string>();
+    const visit = (cur: unknown): void => {
+      if (!cur || typeof cur !== "object") return;
+      if (Array.isArray(cur)) {
+        cur.forEach(visit);
+        return;
+      }
+      const c = cur as Record<string, unknown>;
+      if (
+        c !== node &&
+        (c.kind === "FunctionExpression" ||
+          c.kind === "BlockStatement" ||
+          c.kind === "EffectBlockExpression" ||
+          c.kind === "MatchArm")
+      ) {
+        return;
+      }
+      if (c.kind === "BindingDeclaration") {
+        addBindingNames(c.id as BindingTarget, names);
+      }
+      for (const [k, v] of Object.entries(c)) {
+        if (k !== "span") visit(v);
+      }
+    };
+    if (node.kind === "MatchArm" && node.pattern) {
+      addPatternNames(node.pattern as Pattern, names);
+    }
+    visit(node);
+    return names;
+  };
+
   const functionBindings = (fn: FunctionExpression): Set<string> => {
     const names = new Set<string>();
     for (const param of fn.params ?? []) addBindingNames(param.name, names);
     walkAst(fn.body, (node) => {
       if (
         node !== (fn.body as unknown as Record<string, unknown>) &&
-        node.kind === "FunctionExpression"
+        (node.kind === "FunctionExpression" ||
+          node.kind === "BlockStatement" ||
+          node.kind === "EffectBlockExpression" ||
+          node.kind === "MatchArm")
       ) {
         return false;
       }
@@ -398,24 +429,68 @@ export function inferPipelineCompanions(
     });
     return names;
   };
+  scopeDeclaredNames.set(0, new Set(localBindings));
+
   const collectPipelineScopes = (
     node: unknown,
     inherited: ReadonlySet<string> = new Set(),
+    currentScopeId = 0,
   ): void => {
     if (!node || typeof node !== "object") return;
     if (Array.isArray(node)) {
-      node.forEach((child) => collectPipelineScopes(child, inherited));
+      node.forEach((child) =>
+        collectPipelineScopes(child, inherited, currentScopeId),
+      );
       return;
     }
     const n = node as Record<string, unknown>;
     let scope = inherited;
+    let nextScope = currentScopeId;
     if (n.kind === "FunctionExpression") {
-      scope = new Set([
-        ...inherited,
-        ...functionBindings(n as unknown as FunctionExpression),
-      ]);
+      nextScope = nextScopeId++;
+      scopeParent.set(nextScope, currentScopeId);
+      const declared = functionBindings(n as unknown as FunctionExpression);
+      scopeDeclaredNames.set(nextScope, declared);
+      scope = new Set([...inherited, ...declared]);
+    } else if (
+      n.kind === "BlockStatement" ||
+      n.kind === "EffectBlockExpression" ||
+      n.kind === "MatchArm"
+    ) {
+      nextScope = nextScopeId++;
+      scopeParent.set(nextScope, currentScopeId);
+      const declared = immediateBlockBindings(n);
+      scopeDeclaredNames.set(nextScope, declared);
+      scope = new Set([...inherited, ...declared]);
     }
+
+    if (
+      n.kind === "BindingDeclaration" &&
+      (n.id as { kind?: string; name?: string })?.kind === "Identifier" &&
+      (n.init as { kind?: string; span?: Span })?.kind === "PipelineExpression"
+    ) {
+      pipelineBindingNames.set((n.init as { span: Span }).span.start.offset, {
+        name: (n.id as { name: string }).name,
+        scopeId: nextScope,
+        isAssignment: false,
+      });
+    } else if (
+      n.kind === "AssignmentStatement" &&
+      (n.target as { kind?: string; name?: string })?.kind === "Identifier" &&
+      (n.value as { kind?: string; span?: Span })?.kind === "PipelineExpression"
+    ) {
+      pipelineBindingNames.set((n.value as { span: Span }).span.start.offset, {
+        name: (n.target as { name: string }).name,
+        scopeId: nextScope,
+        isAssignment: true,
+      });
+    }
+
     if (n.kind === "PipelineExpression") {
+      pipelineScopeIds.set(
+        (n as unknown as PipelineExpression).span.start.offset,
+        nextScope,
+      );
       for (const stage of unrollPipeline(
         n as unknown as PipelineExpression,
       ).slice(1)) {
@@ -425,16 +500,35 @@ export function inferPipelineCompanions(
         for (const name of scope) names.add(name);
         pipelineScopeBindings.set(stage.span.start.offset, names);
       }
+    } else if (n.kind === "CallExpression") {
+      const offset = (n as unknown as CallExpression).span.start.offset;
+      const names = pipelineScopeBindings.get(offset) ?? new Set<string>();
+      for (const name of scope) names.add(name);
+      pipelineScopeBindings.set(offset, names);
     }
     for (const [key, child] of Object.entries(n)) {
       if (key === "span") continue;
       if (Array.isArray(child))
-        child.forEach((item) => collectPipelineScopes(item, scope));
+        child.forEach((item) => collectPipelineScopes(item, scope, nextScope));
       else if (child && typeof child === "object")
-        collectPipelineScopes(child, scope);
+        collectPipelineScopes(child, scope, nextScope);
     }
   };
-  collectPipelineScopes(ast, new Set(localBindings));
+  collectPipelineScopes(ast, new Set(localBindings), 0);
+
+  const lookupBindingCompanion = (
+    startScopeId: number,
+    name: string,
+  ): PipelineCompanionModule | undefined => {
+    let sid: number | undefined = startScopeId;
+    while (sid !== undefined) {
+      const map = bindingCompanions.get(sid);
+      if (map?.has(name)) return map.get(name);
+      if (scopeDeclaredNames.get(sid)?.has(name)) return undefined;
+      sid = scopeParent.get(sid);
+    }
+    return undefined;
+  };
 
   const visitNodes = (node: ts.Node): void => {
     if (ts.isCallExpression(node) && ts.isIdentifier(node.expression)) {
@@ -479,7 +573,8 @@ export function inferPipelineCompanions(
         (ts.TypeFlags.Any | ts.TypeFlags.Unknown | ts.TypeFlags.Never)) !==
         0
     ) {
-      currentCompanion = bindingCompanions.get(s0.name);
+      const pipeScopeId = pipelineScopeIds.get(pipeline.span.start.offset) ?? 0;
+      currentCompanion = lookupBindingCompanion(pipeScopeId, s0.name);
     }
 
     // Schema constructors such as Schema.String are values whose inferred
@@ -583,7 +678,7 @@ export function inferPipelineCompanions(
         !isExplicit &&
         currentCompanion === "Effect" &&
         fnName &&
-        !pipelineScopeBindings.get(stage.span.start.offset)?.has(fnName) &&
+        !isShadowed(stage.span.start.offset, fnName) &&
         (fnName === "catchAll" || fnName === "fork")
       ) {
         const replacement = fnName === "catchAll" ? "catch" : "forkChild";
@@ -600,7 +695,7 @@ export function inferPipelineCompanions(
         });
         if (
           fnName &&
-          !pipelineScopeBindings.get(stage.span.start.offset)?.has(fnName) &&
+          !isShadowed(stage.span.start.offset, fnName) &&
           currentCompanion === explicitModule &&
           PIPELINE_COMPANION_CATALOG[
             currentCompanion as PipelineCompanionModule
@@ -658,7 +753,7 @@ export function inferPipelineCompanions(
 
       // User scope wins: local bindings and explicit imports take precedence
       // over type-directed companion dispatch.
-      if (localBindings.has(fnName)) continue;
+      if (isShadowed(stage.span.start.offset, fnName)) continue;
 
       // 0. Universal 'dbg' stage: inspects value in place without altering companion or type
       if (fnName === "dbg") continue;
@@ -757,32 +852,128 @@ export function inferPipelineCompanions(
               fnName === "head" ||
               fnName === "last" ||
               fnName === "findFirst" ||
-              fnName === "findLast"
+              fnName === "findLast" ||
+              fnName === "findFirstIndex" ||
+              fnName === "findLastIndex" ||
+              fnName === "get" ||
+              fnName === "min" ||
+              fnName === "max"
             ) {
               currentCompanion = "Option";
+              currentType = checker.getAnyType();
             } else if (fnName === "length" || fnName === "countBy") {
               currentCompanion = "Number";
+              currentType = checker.getNumberType();
+            } else if (fnName === "join") {
+              currentCompanion = "String";
+              currentType = checker.getStringType();
+            } else if (
+              fnName === "some" ||
+              fnName === "every" ||
+              fnName === "contains" ||
+              fnName === "containsWith" ||
+              fnName === "isEmptyArray" ||
+              fnName === "isNonEmptyArray"
+            ) {
+              currentCompanion = "Boolean";
+              currentType = checker.getBooleanType();
+            } else if (
+              fnName === "headNonEmpty" ||
+              fnName === "lastNonEmpty" ||
+              fnName === "getUnsafe" ||
+              fnName === "reduce" ||
+              fnName === "reduceRight" ||
+              fnName === "match" ||
+              fnName === "matchLeft" ||
+              fnName === "matchRight"
+            ) {
+              currentCompanion = undefined;
+              currentType = checker.getAnyType();
             }
           } else if (currentCompanion === "Option") {
-            if (fnName === "toArray") currentCompanion = "Array";
-            else if (
+            if (fnName === "toArray") {
+              currentCompanion = "Array";
+              currentType = checker.getAnyType();
+            } else if (fnName === "orElseResult") {
+              currentCompanion = "Result";
+              currentType = checker.getAnyType();
+            } else if (
+              fnName === "isSome" ||
+              fnName === "isNone" ||
+              fnName === "contains" ||
+              fnName === "exists"
+            ) {
+              currentCompanion = "Boolean";
+              currentType = checker.getBooleanType();
+            } else if (
               fnName === "getOrElse" ||
               fnName === "getOrNull" ||
-              fnName === "getOrUndefined"
-            )
+              fnName === "getOrUndefined" ||
+              fnName === "getOrThrow" ||
+              fnName === "getOrThrowWith" ||
+              fnName === "match" ||
+              fnName === "reduceCompact"
+            ) {
               currentCompanion = undefined;
-          } else if (currentCompanion === "Chunk") {
-            if (fnName === "head" || fnName === "last")
+              currentType = checker.getAnyType();
+            }
+          } else if (currentCompanion === "Result") {
+            if (fnName === "getSuccess" || fnName === "getFailure") {
               currentCompanion = "Option";
-            else if (fnName === "toArray" || fnName === "toReadonlyArray")
+              currentType = checker.getAnyType();
+            } else if (
+              fnName === "getOrElse" ||
+              fnName === "getOrNull" ||
+              fnName === "getOrUndefined" ||
+              fnName === "getOrThrow" ||
+              fnName === "getOrThrowWith" ||
+              fnName === "merge" ||
+              fnName === "match"
+            ) {
+              currentCompanion = undefined;
+              currentType = checker.getAnyType();
+            }
+          } else if (currentCompanion === "Chunk") {
+            if (
+              fnName === "head" ||
+              fnName === "last" ||
+              fnName === "get" ||
+              fnName === "findFirst" ||
+              fnName === "findLast" ||
+              fnName === "findFirstIndex" ||
+              fnName === "findLastIndex"
+            ) {
+              currentCompanion = "Option";
+              currentType = checker.getAnyType();
+            } else if (fnName === "toArray" || fnName === "toReadonlyArray") {
               currentCompanion = "Array";
+              currentType = checker.getAnyType();
+            } else if (fnName === "size") {
+              currentCompanion = "Number";
+              currentType = checker.getNumberType();
+            } else if (fnName === "containsWith") {
+              currentCompanion = "Boolean";
+              currentType = checker.getBooleanType();
+            } else if (
+              fnName === "headNonEmpty" ||
+              fnName === "lastNonEmpty" ||
+              fnName === "headUnsafe" ||
+              fnName === "lastUnsafe" ||
+              fnName === "getUnsafe"
+            ) {
+              currentCompanion = undefined;
+              currentType = checker.getAnyType();
+            }
           }
           continue;
         }
       }
 
       // 4b. es-toolkit operations (pure string, math data-last, timing)
-      if (ES_TOOLKIT_METHODS.has(fnName) && !localBindings.has(fnName)) {
+      if (
+        ES_TOOLKIT_METHODS.has(fnName) &&
+        !isShadowed(stage.span.start.offset, fnName)
+      ) {
         if (ES_TOOLKIT_STRING_METHODS.has(fnName)) {
           currentCompanion = "String";
           currentType = checker.getStringType();
@@ -843,7 +1034,7 @@ export function inferPipelineCompanions(
             continue;
           }
         }
-        if (!localBindings.has(fnName)) {
+        if (!isShadowed(stage.span.start.offset, fnName)) {
           if (tolerateUnresolvedStages) {
             currentCompanion = undefined;
             continue;
@@ -891,14 +1082,30 @@ export function inferPipelineCompanions(
       }
     }
 
-    const bindingName = pipelineBindingNames.get(pipeline.span.start.offset);
+    const bindingInfo = pipelineBindingNames.get(pipeline.span.start.offset);
     if (
-      bindingName &&
+      bindingInfo &&
       currentCompanion &&
       currentCompanion in PIPELINE_COMPANION_CATALOG
     ) {
-      bindingCompanions.set(
-        bindingName,
+      let targetScopeId = bindingInfo.scopeId;
+      if (bindingInfo.isAssignment) {
+        let sid: number | undefined = bindingInfo.scopeId;
+        while (sid !== undefined) {
+          if (scopeDeclaredNames.get(sid)?.has(bindingInfo.name)) {
+            targetScopeId = sid;
+            break;
+          }
+          sid = scopeParent.get(sid);
+        }
+      }
+      let scopeMap = bindingCompanions.get(targetScopeId);
+      if (!scopeMap) {
+        scopeMap = new Map();
+        bindingCompanions.set(targetScopeId, scopeMap);
+      }
+      scopeMap.set(
+        bindingInfo.name,
         currentCompanion as PipelineCompanionModule,
       );
     }
@@ -938,7 +1145,7 @@ export function inferPipelineCompanions(
       );
     }
 
-    if (!localBindings.has(name)) {
+    if (!isShadowed(call.span.start.offset, name)) {
       const comp = companionForType(argType);
       if (comp) {
         const sym = checker.resolveName(

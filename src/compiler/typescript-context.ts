@@ -97,9 +97,24 @@ export class TypeScriptCompilationContext {
       return undefined;
     };
 
+    const getFileStamp = (name: string): string => {
+      // ctime also changes when a file is replaced or edited and its mtime
+      // is restored; mtime and size alone can reuse stale files.
+      try {
+        const stat = fs.statSync(name, { bigint: true });
+        return `${stat.dev}:${stat.ino}:${stat.size}:${stat.mtimeNs}:${stat.ctimeNs}`;
+      } catch (error) {
+        if (!isFileNotFoundError(error)) throw error;
+        return "missing";
+      }
+    };
+
     const host = ts.createCompilerHost(this.options, true);
     const getSourceFile = host.getSourceFile.bind(host);
-    const sourceFiles = new Map<string, ts.SourceFile>();
+    const sourceFiles = new Map<
+      string,
+      { stamp: string; sourceFile: ts.SourceFile }
+    >();
     const readFile = host.readFile.bind(host);
     const fileExists = host.fileExists.bind(host);
     host.getSourceFile = (
@@ -117,22 +132,13 @@ export class TypeScriptCompilationContext {
       const content = resolveVirtualContent(name);
       if (content !== undefined) {
         const cached = sourceFiles.get(norm);
-        if (cached && !shouldCreateNewSourceFile) return cached;
+        if (cached && !shouldCreateNewSourceFile) return cached.sourceFile;
         const sf = ts.createSourceFile(name, content, version, true);
-        sourceFiles.set(norm, sf);
+        sourceFiles.set(norm, { stamp: "virtual", sourceFile: sf });
         return sf;
       }
       if (/\.d\.(?:ts|mts|cts)$/.test(name)) {
-        // ctime also changes when a file is replaced or edited and its mtime
-        // is restored; mtime and size alone can reuse stale declarations.
-        let stamp: string;
-        try {
-          const stat = fs.statSync(name, { bigint: true });
-          stamp = `${stat.dev}:${stat.ino}:${stat.size}:${stat.mtimeNs}:${stat.ctimeNs}`;
-        } catch (error) {
-          if (!isFileNotFoundError(error)) throw error;
-          stamp = "missing";
-        }
+        const stamp = getFileStamp(name);
         const cached = declarationFiles.get(norm);
         if (cached?.stamp === stamp && !shouldCreateNewSourceFile)
           return cached.sourceFile;
@@ -145,15 +151,17 @@ export class TypeScriptCompilationContext {
         if (sf) declarationFiles.set(norm, { stamp, sourceFile: sf });
         return sf;
       }
+      const stamp = getFileStamp(name);
       const cached = sourceFiles.get(norm);
-      if (cached && !shouldCreateNewSourceFile) return cached;
+      if (cached?.stamp === stamp && !shouldCreateNewSourceFile)
+        return cached.sourceFile;
       const file = getSourceFile(
         name,
         version,
         onError,
         shouldCreateNewSourceFile,
       );
-      if (file) sourceFiles.set(norm, file);
+      if (file) sourceFiles.set(norm, { stamp, sourceFile: file });
       return file;
     };
     host.readFile = (name) => {

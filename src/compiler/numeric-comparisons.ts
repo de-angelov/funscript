@@ -38,8 +38,12 @@ function comparisonError(
         : operator === ">"
           ? "isGreaterThan"
           : "isLessThan";
+  const suggestion =
+    received === "string" || received.startsWith('"')
+      ? `Order.${helper}(String.Order)(...)`
+      : `Order.${helper}(...)(...)`;
   return new NumericComparisonError(
-    `${operator} is only available for numbers; this operand has type ${received}. Use Order.${helper}(String.Order)(...) or an explicit domain Order. See docs/syntax.md#42-equality-and-comparisons.`,
+    `${operator} is only available for numbers; this operand has type ${received}. Use ${suggestion} or an explicit domain Order. See docs/syntax.md#42-equality-and-comparisons.`,
     spanAtOffset(source, offset),
   );
 }

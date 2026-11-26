@@ -1,5 +1,5 @@
 import * as Effect from "effect/Effect";
-import type { Plugin, PluginBuild } from "esbuild";
+import type { BuildOptions, Plugin, PluginBuild } from "esbuild";
 import * as fs from "node:fs/promises";
 import * as path from "node:path";
 import { compileString } from "../compiler.js";
@@ -58,6 +58,24 @@ function matchesAnyPattern(
   patterns: (string | RegExp)[],
 ): boolean {
   return patterns.some((p) => matchesPattern(value, p));
+}
+
+function isEsbuildEntry(
+  filename: string,
+  cwd: string,
+  entryFile: string | undefined,
+  entryPoints: BuildOptions["entryPoints"] | undefined,
+): boolean {
+  if (entryFile) {
+    return filename === path.resolve(cwd, entryFile);
+  }
+  if (!entryPoints) {
+    return false;
+  }
+  const entries = Array.isArray(entryPoints)
+    ? entryPoints.map((entry) => (typeof entry === "string" ? entry : entry.in))
+    : Object.values(entryPoints);
+  return entries.some((entry) => filename === path.resolve(cwd, entry));
 }
 
 /**
@@ -258,11 +276,22 @@ export function funscriptEsbuildPlugin(
         }
 
         let contents = result.typescript;
-        const isEntry = options.entryFile
-          ? filename === path.resolve(cwd, options.entryFile)
-          : true;
+        const isEntry = isEsbuildEntry(
+          filename,
+          cwd,
+          options.entryFile,
+          build.initialOptions.entryPoints,
+        );
         if ((options.runMain || options.executable) && isEntry) {
           contents = `${contents}\nimport * as __funscript_effect from "effect";\nif (typeof main !== "undefined") {\n  if (__funscript_effect.Effect.isEffect(main)) await __funscript_effect.Effect.runPromise(main);\n  else if (typeof main === "function") await main();\n}\n`;
+        }
+        const rawMap = result.sourcemap ?? result.map;
+        if (sourcemap && rawMap) {
+          const encodedMap = Buffer.from(
+            JSON.stringify(rawMap),
+            "utf8",
+          ).toString("base64");
+          contents = `${contents}\n//# sourceMappingURL=data:application/json;base64,${encodedMap}\n`;
         }
 
         return {

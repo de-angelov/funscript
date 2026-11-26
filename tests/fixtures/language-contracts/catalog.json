@@ -5,11 +5,7 @@
       "title": "Effect binding and return",
       "description": "Execute an effect, bind its result, and return a computed value.",
       "file": "effect-return.fun",
-      "tokens": [
-        "effect",
-        "<-",
-        "=>"
-      ],
+      "tokens": ["effect", "<-", "=>"],
       "behavior": {
         "export": "program",
         "effect": true,
@@ -21,30 +17,20 @@
       "title": "Numeric comparison",
       "description": "Combine numeric comparisons with short-circuit conjunction.",
       "file": "numeric-comparison.fun",
-      "tokens": [
-        ">=",
-        "<",
-        "and"
-      ],
+      "tokens": [">=", "<", "and"],
       "behavior": {
         "export": "inRange",
         "cases": [
           {
-            "args": [
-              5
-            ],
+            "args": [5],
             "expected": true
           },
           {
-            "args": [
-              10
-            ],
+            "args": [10],
             "expected": false
           },
           {
-            "args": [
-              -1
-            ],
+            "args": [-1],
             "expected": false
           }
         ]
@@ -55,23 +41,16 @@
       "title": "Numeric AssemblyScript kernels",
       "description": "Call an embedded numeric WebAssembly kernel from FunScript.",
       "file": "assemblyscript.fun",
-      "tokens": [
-        "as",
-        "AS_CODE"
-      ],
+      "tokens": ["as", "AS_CODE"],
       "behavior": {
         "export": "squareNumber",
         "cases": [
           {
-            "args": [
-              3
-            ],
+            "args": [3],
             "expected": 9
           },
           {
-            "args": [
-              -2
-            ],
+            "args": [-2],
             "expected": 4
           }
         ]
@@ -111,7 +90,6 @@
     "JSX_CLOSING_TAG_OPEN",
     "JSX_SLASH_CLOSE",
     "JSX_TAG_CLOSE",
-    "JSX_TAG_NAME",
     "JSX_TAG_OPEN",
     "JSX_TEXT",
     "NEWLINE",

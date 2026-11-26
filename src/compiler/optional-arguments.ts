@@ -26,7 +26,10 @@ export function resolveOptionalArguments(
   walkAst(ast, (node) => {
     const span = node.span as Span | undefined;
     if (span?.start) spans.set(span.start.offset, span);
-    if (node.kind === "CallExpression" && Array.isArray(node.args)) {
+    if (
+      (node.kind === "CallExpression" || node.kind === "NewExpression") &&
+      Array.isArray(node.args)
+    ) {
       for (const arg of node.args as Array<{ span: Span }>) {
         spans.set(arg.span.start.offset, arg.span);
       }
@@ -153,6 +156,16 @@ export function resolveOptionalArguments(
       value.expression.expression.text === "Option" &&
       value.expression.name.text === "some";
 
+    const targetAcceptsOption = (target: ts.Type | undefined): boolean =>
+      Boolean(
+        target &&
+        (target.isUnion()
+          ? target.types.some((t) =>
+              Boolean(checker.getPropertyOfType(t, "~effect/Option")),
+            )
+          : Boolean(checker.getPropertyOfType(target, "~effect/Option"))),
+      );
+
     const classifyOptionForwarding = (
       target: ts.Type | undefined,
       value: ts.Expression,
@@ -161,7 +174,7 @@ export function resolveOptionalArguments(
       ambiguousMessage: string,
       allowUndefinedPayload: boolean,
     ): "none" | "null" | "optional" => {
-      if (!target) return "none";
+      if (!target || targetAcceptsOption(target)) return "none";
       const includesUndefined =
         declaredOptional || hasTypeFlag(target, ts.TypeFlags.Undefined);
       const includesNull = hasTypeFlag(target, ts.TypeFlags.Null);
@@ -210,7 +223,10 @@ export function resolveOptionalArguments(
         ) {
           const object = node.parent.parent;
           const wrapper = object.parent;
-          if (ts.isIdentifier(node.parent.name)) {
+          if (
+            ts.isIdentifier(node.parent.name) ||
+            ts.isStringLiteral(node.parent.name)
+          ) {
             const objectTarget =
               ts.isCallExpression(wrapper) &&
               ts.isIdentifier(wrapper.expression) &&
@@ -270,9 +286,9 @@ export function resolveOptionalArguments(
           properties.add(offset);
         }
       }
-      if (ts.isCallExpression(node)) {
+      if (ts.isCallExpression(node) || ts.isNewExpression(node)) {
         const signature = checker.getResolvedSignature(node);
-        node.arguments.forEach((argument, index) => {
+        node.arguments?.forEach((argument, index) => {
           if (
             !ts.isCallExpression(argument) ||
             !ts.isIdentifier(argument.expression) ||
@@ -294,12 +310,6 @@ export function resolveOptionalArguments(
               )?.questionToken,
             );
           const target = checker.getTypeOfSymbolAtLocation(parameter, node);
-          const targetAcceptsOption = target.isUnion()
-            ? target.types.some((t) =>
-                Boolean(checker.getPropertyOfType(t, "~effect/Option")),
-              )
-            : Boolean(checker.getPropertyOfType(target, "~effect/Option"));
-          if (targetAcceptsOption) return;
           const offset = Number(argument.arguments[0].text);
           const kind = classifyOptionForwarding(
             target,

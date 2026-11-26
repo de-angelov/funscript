@@ -37,8 +37,15 @@ export const emitCommand = (
 
     const filePath = fileArgs[0];
     if (!filePath) {
+      process.exitCode = 1;
       return yield* Console.error(
         "Usage: funscript emit <file.fun|file.funx> [--out <file.ts|file.tsx>] [--sourcemap] [--no-ts] [--bin]",
+      );
+    }
+    if (isSourcemap && !outPath) {
+      process.exitCode = 1;
+      return yield* Console.error(
+        "funscript emit --sourcemap requires --out <file.ts|file.tsx>.",
       );
     }
 
@@ -126,10 +133,6 @@ export const emitCommand = (
       }
       yield* Console.log(`✓ Emitted ${outPath}`);
     } else {
-      if (isSourcemap && result.map) {
-        yield* Console.log(result.map.toString());
-      } else {
-        yield* Console.log(tsCode);
-      }
+      yield* Console.log(tsCode);
     }
   });

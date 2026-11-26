@@ -43,24 +43,36 @@ export program = effect {
         const effectBlock = binding.init as EffectBlockExpression;
         expect(effectBlock.body).toHaveLength(3);
         expect(effectBlock.body[0].kind).toBe("EffectBindStatement");
-        expect((effectBlock.body[0] as EffectBindStatement).id.name).toBe("user");
+        expect((effectBlock.body[0] as EffectBindStatement).id.name).toBe(
+          "user",
+        );
         expect(effectBlock.body[1].kind).toBe("EffectDiscardStatement");
         expect(effectBlock.body[2].kind).toBe("BindingDeclaration");
-        expect(((effectBlock.body[2] as BindingDeclaration).id as Identifier).name).toBe("summary");
+        expect(
+          ((effectBlock.body[2] as BindingDeclaration).id as Identifier).name,
+        ).toBe("summary");
 
         expect(effectBlock.finalExpression.kind).toBe("Identifier");
-        expect((effectBlock.finalExpression as Identifier).name).toBe("summary");
+        expect((effectBlock.finalExpression as Identifier).name).toBe(
+          "summary",
+        );
       });
 
-      it.each(["", " (unscoped)"])("rejects brace-less effect%s blocks", (option) => {
-        const source = `export program = effect${option}\n  user <- fetchUser()\n  => user`;
-        expect(() => parse(source)).toThrow("effect blocks require braces");
-      });
+      it.each(["", " (unscoped)"])(
+        "rejects brace-less effect%s blocks",
+        (option) => {
+          const source = `export program = effect${option}\n  user <- fetchUser()\n  => user`;
+          expect(() => parse(source)).toThrow("effect blocks require braces");
+        },
+      );
 
-      it.each(["", " (unscoped)"])("accepts braced effect%s blocks", (option) => {
-        const source = `export program = effect${option} {\n  => 1\n}`;
-        expect(() => parse(source)).not.toThrow();
-      });
+      it.each(["", " (unscoped)"])(
+        "accepts braced effect%s blocks",
+        (option) => {
+          const source = `export program = effect${option} {\n  => 1\n}`;
+          expect(() => parse(source)).not.toThrow();
+        },
+      );
 
       it("rejects braced effect block missing explicit '=>' on the final return expression", () => {
         const source = `
@@ -72,7 +84,7 @@ export program = effect {
 
         expect(() => parse(source)).toThrow(ParseError);
         expect(() => parse(source)).toThrow(
-          "Effect block must end with an explicit '=> returnValue'"
+          "Effect block must end with an explicit '=> returnValue'",
         );
       });
 
@@ -85,7 +97,7 @@ export program = effect {
 
         expect(() => parse(source)).toThrow(ParseError);
         expect(() => parse(source)).toThrow(
-          "Effect block must end with an explicit '=> returnValue'"
+          "Effect block must end with an explicit '=> returnValue'",
         );
       });
 
@@ -100,7 +112,7 @@ export program = effect {
 
         expect(() => parse(source)).toThrow(ParseError);
         expect(() => parse(source)).toThrow(
-          "Non-final bare expression in effect block is not executed. Use '<-' to run an effect or '_ <-' to discard its value."
+          "Non-final bare expression in effect block is not executed. Use '<-' to run an effect or '_ <-' to discard its value.",
         );
       });
 
@@ -115,7 +127,7 @@ export program = effect {
 
         expect(() => parse(source)).toThrow(ParseError);
         expect(() => parse(source)).toThrow(
-          "Effect block return must be the final statement"
+          "Effect block return must be the final statement",
         );
       });
 
@@ -127,7 +139,7 @@ export program = effect {
 
         expect(() => parse(source)).toThrow(ParseError);
         expect(() => parse(source)).toThrow(
-          "Effect block must end with an explicit '=> returnValue'"
+          "Effect block must end with an explicit '=> returnValue'",
         );
       });
     });
@@ -143,9 +155,13 @@ export runTask = effect {
 }
 `.trim();
 
-        const result = await Effect.runPromise(compileString(source, "runTask.fun"));
+        const result = await Effect.runPromise(
+          compileString(source, "runTask.fun"),
+        );
         expect(result.typescript).toContain('import { Effect } from "effect";');
-        expect(result.typescript).toContain("export const runTask = Effect.scoped(Effect.gen(function* () {");
+        expect(result.typescript).toContain(
+          "export const runTask = Effect.scoped(Effect.gen(function* () {",
+        );
         expect(result.typescript).toContain("const step1 = yield* init();");
         expect(result.typescript).toContain("yield* notify(step1);");
         expect(result.typescript).toContain("const total = (step1 + 42);");
@@ -161,9 +177,13 @@ export findUser = (id: String) =>
   }
 `.trim();
 
-        const result = await Effect.runPromise(compileString(source, "findUser.fun"));
+        const result = await Effect.runPromise(
+          compileString(source, "findUser.fun"),
+        );
         expect(result.typescript).toContain("Effect.gen(function* () {");
-        expect(result.typescript).toContain("const user = yield* fetchUser(id);");
+        expect(result.typescript).toContain(
+          "const user = yield* fetchUser(id);",
+        );
         expect(result.typescript).toContain("return user;");
       });
     });
@@ -181,7 +201,7 @@ y = x + 1
 
         const formatted = format(unformatted);
         expect(formatted).toBe(
-          `export program =\n  effect {\n    x <- fetchNumber()\n    _ <- Console.log(x)\n    y = x + 1\n    => y\n  }\n`
+          `export program =\n  effect {\n    x <- fetchNumber()\n    _ <- Console.log(x)\n    y = x + 1\n    => y\n  }\n`,
         );
       });
 
@@ -206,7 +226,9 @@ export program = effect {
 `.trim();
 
         expect(() => format(invalid)).toThrow(ParseError);
-        expect(() => format(invalid)).toThrow("Effect block must end with an explicit '=> returnValue'");
+        expect(() => format(invalid)).toThrow(
+          "Effect block must end with an explicit '=> returnValue'",
+        );
       });
     });
 
@@ -218,7 +240,9 @@ export program = effect {
 }
 `.trim();
 
-        const result = await Effect.runPromise(compileString(valid, "valid-effect.fun"));
+        const result = await Effect.runPromise(
+          compileString(valid, "valid-effect.fun"),
+        );
         expect(result.typescript).toContain("return 42;");
       });
 
@@ -230,8 +254,10 @@ export program = effect {
 }
 `.trim();
 
-        await expect(Effect.runPromise(compileString(invalid, "invalid-effect.fun"))).rejects.toThrow(
-          "Effect block must end with an explicit '=> returnValue'"
+        await expect(
+          Effect.runPromise(compileString(invalid, "invalid-effect.fun")),
+        ).rejects.toThrow(
+          "Effect block must end with an explicit '=> returnValue'",
         );
       });
 
@@ -243,8 +269,10 @@ export program = effect {
 }
 `.trim();
 
-        await expect(Effect.runPromise(compileString(invalid, "bare-expr.fun"))).rejects.toThrow(
-          "Non-final bare expression in effect block is not executed"
+        await expect(
+          Effect.runPromise(compileString(invalid, "bare-expr.fun")),
+        ).rejects.toThrow(
+          "Non-final bare expression in effect block is not executed",
         );
       });
 
@@ -256,9 +284,9 @@ export program = effect {
 }
 `.trim();
 
-        await expect(Effect.runPromise(compileString(invalid, "stmt-after-return.fun"))).rejects.toThrow(
-          "Effect block return must be the final statement"
-        );
+        await expect(
+          Effect.runPromise(compileString(invalid, "stmt-after-return.fun")),
+        ).rejects.toThrow("Effect block return must be the final statement");
       });
     });
   });
@@ -343,7 +371,9 @@ export program = effect {
       it("emits native JavaScript/TypeScript relational comparison operators for numbers", async () => {
         const source = `export compare = (a: Number, b: Number) => a < b and a <= b and a > b and a >= b`;
 
-        const result = await Effect.runPromise(compileString(source, "compare.fun"));
+        const result = await Effect.runPromise(
+          compileString(source, "compare.fun"),
+        );
         expect(result.typescript).toContain("(a < b)");
         expect(result.typescript).toContain("(a <= b)");
         expect(result.typescript).toContain("(a > b)");
@@ -352,7 +382,9 @@ export program = effect {
 
       it("emits native comparison operators in funx source", async () => {
         const source = `export inRange = 10 < 20`;
-        const result = await Effect.runPromise(compileString(source, "range.funx"));
+        const result = await Effect.runPromise(
+          compileString(source, "range.funx"),
+        );
         expect(result.typescript).toContain("(10 < 20)");
       });
     });
@@ -361,7 +393,9 @@ export program = effect {
       it("formats relational operators with standard spacing", () => {
         const unformatted = `export res = 1<2 and 3<=4 and 5>4 and 6>=5`;
         const formatted = format(unformatted);
-        expect(formatted).toBe(`export res = 1 < 2 and 3 <= 4 and 5 > 4 and 6 >= 5\n`);
+        expect(formatted).toBe(
+          `export res = 1 < 2 and 3 <= 4 and 5 > 4 and 6 >= 5\n`,
+        );
       });
 
       it("preserves arithmetic, comparison, and equality grouping idempotently", () => {
@@ -378,20 +412,26 @@ export program = effect {
     describe("Stage 4: Diagnostics", () => {
       it("accepts valid numeric literal comparisons without diagnostics", async () => {
         const source = `export valid = 1 < 2 and 3 <= 4 and 5 > 0 and 10 >= 10`;
-        const result = await Effect.runPromise(compileString(source, "valid-compare.fun"));
+        const result = await Effect.runPromise(
+          compileString(source, "valid-compare.fun"),
+        );
         expect(result.typescript).toContain("(1 < 2)");
       });
 
       it("accepts valid typed Number parameter comparisons without diagnostics", async () => {
         const source = `export isPositive = (n: Number) => n > 0`;
-        const result = await Effect.runPromise(compileString(source, "positive.fun"));
+        const result = await Effect.runPromise(
+          compileString(source, "positive.fun"),
+        );
         expect(result.typescript).toContain("(n > 0)");
       });
 
       it("rejects string literal operands with '<' and suggests Order.isLessThan(String.Order)", async () => {
         const source = `export invalid = "apple" < "banana"`;
-        await expect(Effect.runPromise(compileString(source, "invalid-lt-literal.fun"))).rejects.toThrow(
-          '< is only available for numbers; this operand has type "apple". Use Order.isLessThan(String.Order)(...) or an explicit domain Order.'
+        await expect(
+          Effect.runPromise(compileString(source, "invalid-lt-literal.fun")),
+        ).rejects.toThrow(
+          '< is only available for numbers; this operand has type "apple". Use Order.isLessThan(String.Order)(...) or an explicit domain Order.',
         );
       });
 
@@ -400,8 +440,10 @@ export program = effect {
 ts { declare const str1: string; declare const str2: string }
 export invalid = str1 <= str2
 `.trim();
-        await expect(Effect.runPromise(compileString(source, "invalid-lte-typed.fun"))).rejects.toThrow(
-          "<= is only available for numbers; this operand has type string. Use Order.isLessThanOrEqualTo(String.Order)(...) or an explicit domain Order."
+        await expect(
+          Effect.runPromise(compileString(source, "invalid-lte-typed.fun")),
+        ).rejects.toThrow(
+          "<= is only available for numbers; this operand has type string. Use Order.isLessThanOrEqualTo(String.Order)(...) or an explicit domain Order.",
         );
       });
 
@@ -410,8 +452,10 @@ export invalid = str1 <= str2
 ts { declare const str1: string; declare const str2: string }
 export invalid = str1 > str2
 `.trim();
-        await expect(Effect.runPromise(compileString(source, "invalid-gt-typed.fun"))).rejects.toThrow(
-          "> is only available for numbers; this operand has type string. Use Order.isGreaterThan(String.Order)(...) or an explicit domain Order."
+        await expect(
+          Effect.runPromise(compileString(source, "invalid-gt-typed.fun")),
+        ).rejects.toThrow(
+          "> is only available for numbers; this operand has type string. Use Order.isGreaterThan(String.Order)(...) or an explicit domain Order.",
         );
       });
 
@@ -420,8 +464,10 @@ export invalid = str1 > str2
 ts { declare const str1: string; declare const str2: string }
 export invalid = str1 >= str2
 `.trim();
-        await expect(Effect.runPromise(compileString(source, "invalid-gte-typed.fun"))).rejects.toThrow(
-          ">= is only available for numbers; this operand has type string. Use Order.isGreaterThanOrEqualTo(String.Order)(...) or an explicit domain Order."
+        await expect(
+          Effect.runPromise(compileString(source, "invalid-gte-typed.fun")),
+        ).rejects.toThrow(
+          ">= is only available for numbers; this operand has type string. Use Order.isGreaterThanOrEqualTo(String.Order)(...) or an explicit domain Order.",
         );
       });
 
@@ -430,8 +476,10 @@ export invalid = str1 >= str2
 ts { declare const flag1: boolean; declare const flag2: boolean }
 export invalid = flag1 < flag2
 `.trim();
-        await expect(Effect.runPromise(compileString(source, "invalid-bool.fun"))).rejects.toThrow(
-          "< is only available for numbers; this operand has type boolean. Use Order.isLessThan(String.Order)(...) or an explicit domain Order."
+        await expect(
+          Effect.runPromise(compileString(source, "invalid-bool.fun")),
+        ).rejects.toThrow(
+          "< is only available for numbers; this operand has type boolean. Use Order.isLessThan(...)(...) or an explicit domain Order.",
         );
       });
 
@@ -440,7 +488,9 @@ export invalid = flag1 < flag2
 ts { declare const isBefore: (a: string, b: string) => boolean }
 export check = isBefore("apple", "banana")
 `.trim();
-        const result = await Effect.runPromise(compileString(source, "order-alternative.fun"));
+        const result = await Effect.runPromise(
+          compileString(source, "order-alternative.fun"),
+        );
         expect(result.typescript).toContain('isBefore("apple", "banana")');
       });
     });

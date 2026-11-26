@@ -1,7 +1,18 @@
 import ts from "typescript";
-import type { Program, RecordTypeNode, Span, TypeNode } from "../ast/types.js";
+import type {
+  Program,
+  RecordTypeNode,
+  Span,
+  TypeNode,
+  TypeReferenceNode,
+} from "../ast/types.js";
 import { walkAst } from "../ast/walk.js";
 import { renderImport } from "../emitter/imports.js";
+import {
+  emitTypeNode,
+  emitTypeParameters,
+  type TypeEmitterContext,
+} from "../emitter/types.js";
 import { FunScriptError } from "../errors.js";
 import { RECORD_CONTRACT_BRAND } from "./record-contracts.js";
 import { type TypeScriptCompilationContext } from "./typescript-context.js";
@@ -13,34 +24,61 @@ export function resolvePackageRecordContracts(
   known: ReadonlyMap<string, RecordTypeNode>,
 ): Map<string, RecordTypeNode> {
   const candidates = new Map<string, Span>();
-  const usedTypes = new Set<string>();
+  const usedTypeRefs = new Map<string, TypeReferenceNode>();
   walkAst(ast, (node) => {
     if (node.kind === "TypeReferenceNode") {
-      usedTypes.add((node.name as { name: string }).name);
+      const ref = node as unknown as TypeReferenceNode;
+      if (!usedTypeRefs.has(ref.name.name) || ref.typeArgs?.length) {
+        usedTypeRefs.set(ref.name.name, ref);
+      }
     }
   });
   const imports: string[] = [];
+  const importedLocals = new Set<string>();
   for (const item of ast.body) {
     if (item.kind !== "ImportDeclaration" || item.isSideEffect) continue;
     imports.push(renderImport(item));
-    for (const spec of item.specifiers)
-      if (usedTypes.has(spec.local.name) && !known.has(spec.local.name))
+    for (const spec of item.specifiers) {
+      importedLocals.add(spec.local.name);
+      if (usedTypeRefs.has(spec.local.name) && !known.has(spec.local.name))
         candidates.set(spec.local.name, spec.local.span);
-    if (
-      item.defaultBinding &&
-      usedTypes.has(item.defaultBinding.name) &&
-      !known.has(item.defaultBinding.name)
-    )
-      candidates.set(item.defaultBinding.name, item.defaultBinding.span);
+    }
+    if (item.defaultBinding) {
+      importedLocals.add(item.defaultBinding.name);
+      if (
+        usedTypeRefs.has(item.defaultBinding.name) &&
+        !known.has(item.defaultBinding.name)
+      )
+        candidates.set(item.defaultBinding.name, item.defaultBinding.span);
+    }
+    if (item.namespaceBinding) {
+      importedLocals.add(item.namespaceBinding.name);
+    }
   }
   if (!candidates.size) return new Map();
+  const effectImports = new Set<string>();
+  const typeCtx: TypeEmitterContext = {
+    emitExpression: () => "unknown",
+    emitBindingTarget: () => "_",
+    emitTypeNode: (n) => emitTypeNode(typeCtx, n),
+    emitTypeParameters: (tp, f) => emitTypeParameters(typeCtx, tp, f),
+    declaredTypeNames: new Set(),
+    recordContracts: { has: () => false },
+    isUserBinding: (name) => importedLocals.has(name),
+    options: {},
+    addEffectImport: (name) => effectImports.add(name),
+  };
   const entries = [...candidates.entries()];
-  const source = [
-    ...imports,
-    ...entries.map(
-      ([name], index) => `type $funscriptContractProbe${index} = ${name};`,
-    ),
-  ].join("\n");
+  const probes = entries.map(([name], index) => {
+    const ref = usedTypeRefs.get(name);
+    const rhs = ref?.typeArgs?.length ? emitTypeNode(typeCtx, ref) : name;
+    return `type $funscriptContractProbe${index} = ${rhs};`;
+  });
+  const effectImportLines =
+    effectImports.size > 0
+      ? [`import { ${[...effectImports].sort().join(", ")} } from "effect";`]
+      : [];
+  const source = [...effectImportLines, ...imports, ...probes].join("\n");
   const checked = context.check(source);
   if (!checked) return new Map();
   const { checker, sourceFile } = checked;

@@ -55,6 +55,7 @@ import {
   emitErrorDeclaration,
   emitServiceDeclaration,
   emitTopLevelDeclaration,
+  emitUnpackedRecordPattern,
   extractRecordFields,
   isPrimitiveType,
   patternHasOptionalField,
@@ -1266,134 +1267,6 @@ export class Emitter {
     return false;
   }
 
-  private validateRecordParameterUse(
-    expr: FunctionExpression,
-    name: string,
-    _aliases: Set<BindingDeclaration>,
-  ): void {
-    const shadowed = new Set(
-      expr.params.flatMap((param) => this.collectBindingNames(param.name)),
-    );
-    const collectBindings = (value: unknown): void => {
-      if (!value || typeof value !== "object") return;
-      if (Array.isArray(value)) {
-        value.forEach(collectBindings);
-        return;
-      }
-      const node = value as Record<string, unknown>;
-      if (
-        (node.kind === "BindingDeclaration" ||
-          node.kind === "EffectBindStatement") &&
-        node.id &&
-        typeof node.id === "object"
-      )
-        shadowed.add((node.id as { name: string }).name);
-      if (
-        node.kind === "VariablePattern" &&
-        node.name &&
-        typeof node.name === "object"
-      )
-        shadowed.add((node.name as { name: string }).name);
-      if (node.kind === "FunctionExpression" && Array.isArray(node.params)) {
-        for (const param of node.params as unknown[]) {
-          if (
-            param &&
-            typeof param === "object" &&
-            "name" in param &&
-            param.name &&
-            typeof param.name === "object" &&
-            "kind" in param.name
-          ) {
-            for (const n of this.collectBindingNames(
-              param.name as BindingTarget,
-            ))
-              shadowed.add(n);
-          }
-        }
-      }
-      for (const [key, child] of Object.entries(node))
-        if (key !== "span") collectBindings(child);
-    };
-    collectBindings(expr.body);
-    const source = expr.params.find(
-      (param) => param.name.kind === "Identifier" && param.name.name === name,
-    )?.typeAnnotation;
-    if (this.isHtmlPropsType(source)) return;
-    const visit = (
-      value: unknown,
-      parent?: Record<string, unknown>,
-      key?: string,
-      allowMember = true,
-      inJs = false,
-      jsxTarget?: unknown,
-    ): void => {
-      if (!value || typeof value !== "object") return;
-      if (Array.isArray(value)) {
-        value.forEach((child) =>
-          visit(child, parent, key, allowMember, inJs, jsxTarget),
-        );
-        return;
-      }
-      const node = value as Record<string, unknown>;
-      if (
-        node.kind === "FunctionExpression" &&
-        Array.isArray(node.params) &&
-        node.params.some((param) => {
-          const p = param as { name?: BindingTarget };
-          return p.name && this.collectBindingNames(p.name).includes(name);
-        })
-      )
-        return;
-      if (node.kind === "MemberExpression") {
-        const field = this.recordField(node as unknown as Expression);
-        const matchedOptional =
-          field?.optional &&
-          parent?.kind === "MatchExpression" &&
-          key === "scrutinee";
-        const allowedNested =
-          !field?.optional &&
-          ((parent?.kind === "MemberExpression" && key === "object") ||
-            (inJs && parent?.kind === "CallExpression" && key === "args"));
-        if (field?.fields && !matchedOptional && !allowedNested) {
-          return;
-        }
-      }
-      if (node.kind === "Identifier" && node.name === name) {
-        return;
-      }
-      for (const [childKey, child] of Object.entries(node)) {
-        const target =
-          childKey === "attributes" &&
-          (node.kind === "JSXOpeningElement" ||
-            node.kind === "JSXSelfClosingElement")
-            ? node.name
-            : jsxTarget;
-        if (
-          childKey !== "span" &&
-          childKey !== "typeAnnotation" &&
-          childKey !== "returnType"
-        )
-          visit(
-            child,
-            node,
-            childKey,
-            allowMember,
-            inJs || node.kind === "JsExpression",
-            target,
-          );
-      }
-    };
-    visit(expr.body);
-    const param = expr.params.find(
-      (item) => item.name.kind === "Identifier" && item.name.name === name,
-    );
-    if (param?.typeAnnotation?.kind === "RecordTypeNode") {
-      for (const field of param.typeAnnotation.fields)
-        if (field.defaultValue)
-          visit(field.defaultValue, undefined, undefined, false);
-    }
-  }
-
   private validateRecordDefault(
     value: Expression,
     currentParamNames: Set<string>,
@@ -2414,25 +2287,238 @@ export class Emitter {
 
   private emitFunctionExpression(expr: FunctionExpression): string {
     const isTryThunk = this.emitCtx.pendingTryThunk;
-    return this.withEmitContext(
-      {
-        pendingTryThunk: false,
-        inTryContext: isTryThunk,
-        inPipelineStage: false,
-        currentPlaceholderParam: null,
-      },
-      () => {
-        for (const p of expr.params) {
-          if (this.isPrimitiveType(p.typeAnnotation)) {
+    const prevPrimitiveIdentifiers = new Set(this.primitiveIdentifiers);
+    try {
+      return this.withEmitContext(
+        {
+          pendingTryThunk: false,
+          inTryContext: isTryThunk,
+          inPipelineStage: false,
+          currentPlaceholderParam: null,
+        },
+        () => {
+          for (const p of expr.params) {
+            const isPrim = this.isPrimitiveType(p.typeAnnotation);
             for (const n of this.collectBindingNames(p.name)) {
-              this.primitiveIdentifiers.add(n);
+              if (isPrim) {
+                this.primitiveIdentifiers.add(n);
+              } else {
+                this.primitiveIdentifiers.delete(n);
+              }
             }
           }
-        }
-        const params = expr.params
-          .map((p, index) => {
-            const rest = p.isRest ? "..." : "";
-            let name = this.emitBindingTarget(p.name);
+          const params = expr.params
+            .map((p, index) => {
+              const rest = p.isRest ? "..." : "";
+              let name = this.emitBindingTarget(p.name);
+              if (p.name.kind === "RecordPattern") {
+                let recType: TypeNode | undefined = p.typeAnnotation;
+                if (recType?.kind === "TypeReferenceNode") {
+                  recType = this.getRecordTypeNode(recType.name.name);
+                }
+                const recFields =
+                  recType?.kind === "RecordTypeNode"
+                    ? extractRecordFields(recType, (name) =>
+                        this.getRecordTypeNode(name),
+                      )
+                    : undefined;
+                if (patternHasOptionalField(p.name, recFields)) {
+                  name = `$funscriptParam${index}`;
+                }
+              }
+              let typeAnn = "";
+              if (p.typeAnnotation) {
+                const base = this.emitTypeNode(p.typeAnnotation);
+                typeAnn = `: ${base}`;
+              }
+              const defaultValue = p.defaultValue
+                ? ` = ${this.emitExpression(p.defaultValue)}`
+                : "";
+              return `${rest}${name}${typeAnn}${defaultValue}`;
+            })
+            .join(", ");
+          const typeParams = this.emitTypeParameters(expr.typeParams, true);
+          const retType = expr.returnType
+            ? `: ${this.emitTypeNode(expr.returnType)}`
+            : "";
+
+          const records = new Map<
+            string,
+            Map<string, RecordFieldInfo> | undefined
+          >();
+          const recordDefaults: string[] = [];
+          expr.params.forEach((param, paramIndex) => {
+            if (param.name.kind === "RecordPattern") {
+              let recType: TypeNode | undefined = param.typeAnnotation;
+              if (recType?.kind === "TypeReferenceNode") {
+                recType = this.getRecordTypeNode(recType.name.name);
+              }
+              const recFields =
+                recType?.kind === "RecordTypeNode"
+                  ? extractRecordFields(recType, (name) =>
+                      this.getRecordTypeNode(name),
+                    )
+                  : undefined;
+              if (patternHasOptionalField(param.name, recFields)) {
+                recordDefaults.push(
+                  ...emitUnpackedRecordPattern({
+                    pat: param.name,
+                    basePath: `$funscriptParam${paramIndex}`,
+                    fieldsMap: recFields,
+                    emitBindingTarget: (target) =>
+                      this.emitBindingTarget(target),
+                    addEffectImport: (name) => this.effectImports.add(name),
+                    indent: "  ",
+                    onRecordBinding: (varName, fields) => {
+                      records.set(varName, fields);
+                    },
+                  }),
+                );
+              }
+              return;
+            }
+            if (param.name.kind !== "Identifier") return;
+            const paramName = param.name.name;
+            const declared = param.typeAnnotation;
+            if (this.isHtmlPropsType(declared)) {
+              records.set(paramName, undefined);
+              return;
+            }
+            const recordType =
+              declared?.kind === "TypeReferenceNode"
+                ? this.getRecordTypeNode(declared.name.name)
+                : declared;
+            if (recordType?.kind !== "RecordTypeNode") {
+              records.set(paramName, undefined);
+              return;
+            }
+            const fields = recordType.fields;
+            const nestedFields = (
+              type: TypeNode,
+            ): Map<string, RecordFieldInfo> | undefined => {
+              if (type.kind !== "RecordTypeNode") {
+                return undefined;
+              }
+              const result = new Map<string, RecordFieldInfo>();
+              for (const field of type.fields) {
+                const children = nestedFields(field.typeAnnotation);
+                result.set(field.name.name, {
+                  optional: Boolean(field.optional),
+                  fields: children,
+                });
+              }
+              return [...result.values()].some(
+                (field) => field.optional || field.fields,
+              )
+                ? result
+                : undefined;
+            };
+            if (
+              !fields.some(
+                (field) =>
+                  field.optional ||
+                  field.defaultValue ||
+                  nestedFields(field.typeAnnotation),
+              )
+            ) {
+              records.set(paramName, undefined);
+              return;
+            }
+            const mapped = new Map<string, RecordFieldInfo>();
+            fields.forEach((field, fieldIndex) => {
+              const binding = field.defaultValue
+                ? `$funscriptField${paramIndex}_${fieldIndex}`
+                : undefined;
+              if (field.defaultValue) {
+                const currentParamNames = new Set(
+                  this.collectBindingNames(expr.params[paramIndex].name),
+                );
+                const subsequentParamNames = new Set(
+                  expr.params
+                    .slice(paramIndex + 1)
+                    .flatMap((p) => this.collectBindingNames(p.name)),
+                );
+                this.validateRecordDefault(
+                  field.defaultValue,
+                  currentParamNames,
+                  subsequentParamNames,
+                );
+                const raw = `$funscriptFieldRaw${paramIndex}_${fieldIndex}`;
+                recordDefaults.push(
+                  `  const ${raw} = ${paramName}.${field.name.name};`,
+                );
+                recordDefaults.push(
+                  `  const ${binding} = ${raw} === undefined ? ${this.emitExpression(field.defaultValue)} : ${raw};`,
+                );
+              }
+              const children = nestedFields(field.typeAnnotation);
+              mapped.set(field.name.name, {
+                optional: Boolean(field.optional),
+                defaultBinding: binding,
+                fields: children,
+              });
+            });
+            records.set(paramName, mapped);
+          });
+          if (expr.body.kind === "BlockStatement") {
+            for (const stmt of expr.body.statements) {
+              if (
+                stmt.kind !== "BindingDeclaration" ||
+                stmt.isMut ||
+                stmt.isJs ||
+                !("name" in stmt.id) ||
+                records.has(stmt.id.name)
+              )
+                continue;
+              if (stmt.init.kind === "Identifier") {
+                const fields = records.get(stmt.init.name);
+                if (
+                  !fields ||
+                  [...fields.values()].some((field) => field.defaultBinding)
+                )
+                  continue;
+                records.set(stmt.id.name, fields);
+              } else if (stmt.init.kind === "RecordExpression") {
+                const fields = new Map<string, RecordFieldInfo>();
+                let hasTracked = false;
+                for (const prop of stmt.init.entries) {
+                  if (prop.kind === "SpreadEntry") {
+                    if (prop.argument.kind === "Identifier") {
+                      const spreadFields = records.get(prop.argument.name);
+                      if (spreadFields) {
+                        for (const [key, info] of spreadFields) {
+                          if (info.optional) hasTracked = true;
+                          fields.set(key, {
+                            optional: info.optional,
+                            defaultBinding: undefined,
+                            fields: info.fields,
+                          });
+                        }
+                      }
+                    }
+                  } else if (
+                    prop.kind === "FieldEntry" ||
+                    prop.kind === "ShorthandEntry"
+                  ) {
+                    const keyName = prop.key.name;
+                    if (keyName) {
+                      fields.set(keyName, {
+                        optional: false,
+                        defaultBinding: undefined,
+                        fields: undefined,
+                      });
+                    }
+                  }
+                }
+                if (hasTracked) {
+                  records.set(stmt.id.name, fields);
+                }
+              }
+            }
+          }
+          const paramScopeEntries: [string, boolean][] = [];
+          const varTypeEntries: [string, TypeNode | undefined][] = [];
+          for (const p of expr.params) {
             if (p.name.kind === "RecordPattern") {
               let recType: TypeNode | undefined = p.typeAnnotation;
               if (recType?.kind === "TypeReferenceNode") {
@@ -2445,341 +2531,86 @@ export class Emitter {
                     )
                   : undefined;
               if (patternHasOptionalField(p.name, recFields)) {
-                name = `$funscriptParam${index}`;
-              }
-            }
-            let typeAnn = "";
-            if (p.typeAnnotation) {
-              const base = this.emitTypeNode(p.typeAnnotation);
-              typeAnn = `: ${base}`;
-            }
-            const defaultValue = p.defaultValue
-              ? ` = ${this.emitExpression(p.defaultValue)}`
-              : "";
-            return `${rest}${name}${typeAnn}${defaultValue}`;
-          })
-          .join(", ");
-        const typeParams = this.emitTypeParameters(expr.typeParams, true);
-        const retType = expr.returnType
-          ? `: ${this.emitTypeNode(expr.returnType)}`
-          : "";
-
-        const records = new Map<
-          string,
-          Map<string, RecordFieldInfo> | undefined
-        >();
-        const recordDefaults: string[] = [];
-        expr.params.forEach((param, paramIndex) => {
-          if (param.name.kind === "RecordPattern") {
-            let recType: TypeNode | undefined = param.typeAnnotation;
-            if (recType?.kind === "TypeReferenceNode") {
-              recType = this.getRecordTypeNode(recType.name.name);
-            }
-            const recFields =
-              recType?.kind === "RecordTypeNode"
-                ? extractRecordFields(recType, (name) =>
-                    this.getRecordTypeNode(name),
-                  )
-                : undefined;
-            if (patternHasOptionalField(param.name, recFields)) {
-              this.effectImports.add("Option");
-              let syntheticDestructureId = 0;
-              const unpackPatternFields = (
-                pat: RecordPattern,
-                basePath: string,
-                fieldsMap?: Map<string, RecordFieldInfo>,
-              ) => {
-                const restField = pat.fields.find((f) => f.isRest);
-                if (restField) {
-                  const nonRest = pat.fields.filter((f) => !f.isRest);
-                  const restTemp = `$funscriptRest${paramIndex}_${syntheticDestructureId++}`;
-                  recordDefaults.push(
-                    `  const { ${nonRest.map((f) => `${f.key.name}: _${f.key.name}`).join(", ")}, ...${restTemp} } = ${basePath};`,
-                  );
-                  recordDefaults.push(
-                    `  const ${restField.key.name} = ${restTemp};`,
-                  );
-                }
-                for (const f of pat.fields) {
-                  if (f.isRest) continue;
-                  if (f.pattern?.kind === "WildcardPattern") continue;
-                  const info = fieldsMap?.get(f.key.name);
-                  const isOpt = info?.optional === true;
-                  const fieldPath = `${basePath}.${f.key.name}`;
-                  if (f.pattern?.kind === "RecordPattern") {
-                    if (isOpt) {
-                      const varName = this.emitBindingTarget(f.pattern);
-                      recordDefaults.push(
-                        `  const ${varName} = Option.fromNullishOr(${fieldPath});`,
-                      );
-                    } else {
-                      unpackPatternFields(f.pattern, fieldPath, info?.fields);
+                const collectParamsFromPattern = (
+                  pat: RecordPattern,
+                  fieldsMap?: Map<string, RecordFieldInfo>,
+                  typeNode?: TypeNode,
+                  parentIsOpt = false,
+                ) => {
+                  for (const f of pat.fields) {
+                    if (f.isRest) {
+                      paramScopeEntries.push([f.key.name, parentIsOpt]);
+                      varTypeEntries.push([f.key.name, undefined]);
+                      continue;
                     }
-                  } else if (f.pattern?.kind === "ArrayPattern") {
-                    const varName = this.emitBindingTarget(f.pattern);
-                    if (isOpt) {
-                      recordDefaults.push(
-                        `  const ${varName} = Option.fromNullishOr(${fieldPath});`,
-                      );
-                    } else {
-                      recordDefaults.push(`  const ${varName} = ${fieldPath};`);
-                    }
-                  } else {
-                    const varName = f.pattern
-                      ? this.emitBindingTarget(f.pattern)
-                      : f.key.name;
-                    if (isOpt) {
-                      recordDefaults.push(
-                        `  const ${varName} = Option.fromNullishOr(${fieldPath});`,
-                      );
-                    } else {
-                      recordDefaults.push(`  const ${varName} = ${fieldPath};`);
-                    }
-                    if (info?.fields) {
-                      records.set(varName, info.fields);
-                    }
-                  }
-                }
-              };
-
-              unpackPatternFields(
-                param.name,
-                `$funscriptParam${paramIndex}`,
-                recFields,
-              );
-            }
-            return;
-          }
-          if (param.name.kind !== "Identifier") return;
-          const paramName = param.name.name;
-          const declared = param.typeAnnotation;
-          if (this.isHtmlPropsType(declared)) {
-            records.set(paramName, undefined);
-            return;
-          }
-          const recordType =
-            declared?.kind === "TypeReferenceNode"
-              ? this.getRecordTypeNode(declared.name.name)
-              : declared;
-          if (recordType?.kind !== "RecordTypeNode") {
-            records.set(paramName, undefined);
-            return;
-          }
-          const fields = recordType.fields;
-          const nestedFields = (
-            type: TypeNode,
-          ): Map<string, RecordFieldInfo> | undefined => {
-            if (type.kind !== "RecordTypeNode") {
-              return undefined;
-            }
-            const result = new Map<string, RecordFieldInfo>();
-            for (const field of type.fields) {
-              const children = nestedFields(field.typeAnnotation);
-              result.set(field.name.name, {
-                optional: Boolean(field.optional),
-                fields: children,
-              });
-            }
-            return [...result.values()].some(
-              (field) => field.optional || field.fields,
-            )
-              ? result
-              : undefined;
-          };
-          if (
-            !fields.some(
-              (field) =>
-                field.optional ||
-                field.defaultValue ||
-                nestedFields(field.typeAnnotation),
-            )
-          ) {
-            records.set(paramName, undefined);
-            return;
-          }
-          const mapped = new Map<string, RecordFieldInfo>();
-          fields.forEach((field, fieldIndex) => {
-            const binding = field.defaultValue
-              ? `$funscriptField${paramIndex}_${fieldIndex}`
-              : undefined;
-            if (field.defaultValue) {
-              const currentParamNames = new Set(
-                this.collectBindingNames(expr.params[paramIndex].name),
-              );
-              const subsequentParamNames = new Set(
-                expr.params
-                  .slice(paramIndex + 1)
-                  .flatMap((p) => this.collectBindingNames(p.name)),
-              );
-              this.validateRecordDefault(
-                field.defaultValue,
-                currentParamNames,
-                subsequentParamNames,
-              );
-              const raw = `$funscriptFieldRaw${paramIndex}_${fieldIndex}`;
-              recordDefaults.push(
-                `  const ${raw} = ${paramName}.${field.name.name};`,
-              );
-              recordDefaults.push(
-                `  const ${binding} = ${raw} === undefined ? ${this.emitExpression(field.defaultValue)} : ${raw};`,
-              );
-            }
-            const children = nestedFields(field.typeAnnotation);
-            mapped.set(field.name.name, {
-              optional: Boolean(field.optional),
-              defaultBinding: binding,
-              fields: children,
-            });
-          });
-          records.set(paramName, mapped);
-        });
-        const aliases = new Set<BindingDeclaration>();
-        if (expr.body.kind === "BlockStatement") {
-          for (const stmt of expr.body.statements) {
-            if (
-              stmt.kind !== "BindingDeclaration" ||
-              stmt.isMut ||
-              stmt.isJs ||
-              !("name" in stmt.id) ||
-              records.has(stmt.id.name)
-            )
-              continue;
-            if (stmt.init.kind === "Identifier") {
-              const fields = records.get(stmt.init.name);
-              if (
-                !fields ||
-                [...fields.values()].some((field) => field.defaultBinding)
-              )
-                continue;
-              records.set(stmt.id.name, fields);
-              aliases.add(stmt);
-            } else if (stmt.init.kind === "RecordExpression") {
-              const fields = new Map<string, RecordFieldInfo>();
-              let hasTracked = false;
-              for (const prop of stmt.init.entries) {
-                if (prop.kind === "SpreadEntry") {
-                  if (prop.argument.kind === "Identifier") {
-                    const spreadFields = records.get(prop.argument.name);
-                    if (spreadFields) {
-                      for (const [key, info] of spreadFields) {
-                        if (info.optional) hasTracked = true;
-                        fields.set(key, {
-                          optional: info.optional,
-                          defaultBinding: undefined,
-                          fields: info.fields,
-                        });
-                      }
-                    }
-                  }
-                } else if (
-                  prop.kind === "FieldEntry" ||
-                  prop.kind === "ShorthandEntry"
-                ) {
-                  const keyName = prop.key.name;
-                  if (keyName) {
-                    fields.set(keyName, {
-                      optional: false,
-                      defaultBinding: undefined,
-                      fields: undefined,
-                    });
-                  }
-                }
-              }
-              if (hasTracked) {
-                records.set(stmt.id.name, fields);
-              }
-            }
-          }
-        }
-        const paramScopeEntries: [string, boolean][] = [];
-        const varTypeEntries: [string, TypeNode | undefined][] = [];
-        for (const p of expr.params) {
-          if (p.name.kind === "RecordPattern") {
-            let recType: TypeNode | undefined = p.typeAnnotation;
-            if (recType?.kind === "TypeReferenceNode") {
-              recType = this.getRecordTypeNode(recType.name.name);
-            }
-            const recFields =
-              recType?.kind === "RecordTypeNode"
-                ? extractRecordFields(recType, (name) =>
-                    this.getRecordTypeNode(name),
-                  )
-                : undefined;
-            if (patternHasOptionalField(p.name, recFields)) {
-              const collectParamsFromPattern = (
-                pat: RecordPattern,
-                fieldsMap?: Map<string, RecordFieldInfo>,
-                typeNode?: TypeNode,
-              ) => {
-                for (const f of pat.fields) {
-                  if (f.isRest) {
-                    paramScopeEntries.push([f.key.name, false]);
-                    varTypeEntries.push([f.key.name, undefined]);
-                    continue;
-                  }
-                  const info = fieldsMap?.get(f.key.name);
-                  const isOpt = info?.optional === true;
-                  const matchingFieldType =
-                    typeNode?.kind === "RecordTypeNode"
-                      ? typeNode.fields.find(
-                          (tf) => tf.name.name === f.key.name,
-                        )?.typeAnnotation
-                      : undefined;
-                  if (f.pattern?.kind === "RecordPattern") {
-                    let subType: TypeNode | undefined = matchingFieldType;
-                    if (subType?.kind === "TypeReferenceNode") {
-                      subType = this.getRecordTypeNode(subType.name.name);
-                    }
-                    collectParamsFromPattern(f.pattern, info?.fields, subType);
-                  } else if (f.pattern?.kind === "ArrayPattern") {
-                    const elemType =
-                      matchingFieldType?.kind === "ArrayTypeNode"
-                        ? matchingFieldType.elementType
+                    const info = fieldsMap?.get(f.key.name);
+                    const isOpt = parentIsOpt || info?.optional === true;
+                    const matchingFieldType =
+                      typeNode?.kind === "RecordTypeNode"
+                        ? typeNode.fields.find(
+                            (tf) => tf.name.name === f.key.name,
+                          )?.typeAnnotation
                         : undefined;
-                    for (const el of f.pattern.elements) {
-                      for (const n of this.collectBindingNames(el)) {
-                        paramScopeEntries.push([n, false]);
-                        varTypeEntries.push([n, elemType]);
+                    if (f.pattern?.kind === "RecordPattern") {
+                      let subType: TypeNode | undefined = matchingFieldType;
+                      if (subType?.kind === "TypeReferenceNode") {
+                        subType = this.getRecordTypeNode(subType.name.name);
                       }
+                      collectParamsFromPattern(
+                        f.pattern,
+                        info?.fields,
+                        subType,
+                        isOpt,
+                      );
+                    } else if (f.pattern?.kind === "ArrayPattern") {
+                      const elemType =
+                        matchingFieldType?.kind === "ArrayTypeNode"
+                          ? matchingFieldType.elementType
+                          : undefined;
+                      for (const el of f.pattern.elements) {
+                        for (const n of this.collectBindingNames(el)) {
+                          paramScopeEntries.push([n, isOpt]);
+                          varTypeEntries.push([n, elemType]);
+                        }
+                      }
+                    } else {
+                      const varName =
+                        f.pattern?.kind === "VariablePattern"
+                          ? f.pattern.name.name
+                          : f.key.name;
+                      paramScopeEntries.push([varName, isOpt]);
+                      varTypeEntries.push([varName, matchingFieldType]);
                     }
-                  } else {
-                    const varName =
-                      f.pattern?.kind === "VariablePattern"
-                        ? f.pattern.name.name
-                        : f.key.name;
-                    paramScopeEntries.push([varName, isOpt]);
-                    varTypeEntries.push([varName, matchingFieldType]);
                   }
-                }
-              };
-              collectParamsFromPattern(p.name, recFields, recType);
-              continue;
+                };
+                collectParamsFromPattern(p.name, recFields, recType);
+                continue;
+              }
+            }
+            for (const n of this.collectBindingNames(p.name)) {
+              paramScopeEntries.push([n, false]);
+              varTypeEntries.push([n, p.typeAnnotation]);
             }
           }
-          for (const n of this.collectBindingNames(p.name)) {
-            paramScopeEntries.push([n, false]);
-            varTypeEntries.push([n, p.typeAnnotation]);
+          this.parameterScopes.push(new Map(paramScopeEntries));
+          this.variableTypeScopes.push(new Map(varTypeEntries));
+          this.recordScopes.push(records);
+          try {
+            if (expr.body.kind === "BlockStatement" || recordDefaults.length) {
+              const body = this.emitFunctionBody(expr.body);
+              return `${typeParams}(${params})${retType} => {\n${[...recordDefaults, body].filter(Boolean).join("\n")}\n}`;
+            }
+            return `${typeParams}(${params})${retType} => ${this.emitArrowExpression(expr.body)}`;
+          } finally {
+            this.recordScopes.pop();
+            this.parameterScopes.pop();
+            this.variableTypeScopes.pop();
           }
-        }
-        this.parameterScopes.push(new Map(paramScopeEntries));
-        this.variableTypeScopes.push(new Map(varTypeEntries));
-        this.recordScopes.push(records);
-        try {
-          for (const name of records.keys())
-            if (records.get(name))
-              this.validateRecordParameterUse(expr, name, aliases);
-          if (expr.body.kind === "BlockStatement" || recordDefaults.length) {
-            const body = this.emitFunctionBody(expr.body);
-            return `${typeParams}(${params})${retType} => {\n${[...recordDefaults, body].filter(Boolean).join("\n")}\n}`;
-          }
-          return `${typeParams}(${params})${retType} => ${this.emitArrowExpression(expr.body)}`;
-        } finally {
-          this.recordScopes.pop();
-          this.parameterScopes.pop();
-          this.variableTypeScopes.pop();
-        }
-      },
-    );
+        },
+      );
+    } finally {
+      this.primitiveIdentifiers = prevPrimitiveIdentifiers;
+    }
   }
 
   public emitFunctionBody(body: FunctionBody): string {
@@ -2845,41 +2676,17 @@ export class Emitter {
       requireTsPattern: () => {
         this.needsTsPattern = true;
       },
-      enterOptionalPayload: (name, fields, arm, payloadType) => {
+      enterOptionalPayload: (name, fields, _arm, payloadType) => {
         this.recordScopes.push(new Map([[name, fields]]));
         this.parameterScopes.push(new Map([[name, false]]));
         this.variableTypeScopes.push(new Map([[name, payloadType]]));
-        const validateBody = (body: FunctionBody) => {
-          const synthetic = {
-            kind: "FunctionExpression",
-            params: [
-              {
-                kind: "Parameter",
-                name: { kind: "Identifier", name, span: arm.span },
-                span: arm.span,
-              },
-            ],
-            body,
-            span: arm.span,
-          } as FunctionExpression;
-          this.validateRecordParameterUse(synthetic, name, new Set());
-        };
-        try {
-          validateBody(arm.body);
-          if (arm.guard) validateBody(arm.guard);
-        } catch (error) {
-          this.variableTypeScopes.pop();
-          this.parameterScopes.pop();
-          this.recordScopes.pop();
-          throw error;
-        }
       },
       leaveOptionalPayload: () => {
         this.variableTypeScopes.pop();
         this.parameterScopes.pop();
         this.recordScopes.pop();
       },
-      enterOptionalRecordPattern: (pattern, fields, arm, payloadType) => {
+      enterOptionalRecordPattern: (pattern, fields, _arm, payloadType) => {
         const recordScope = new Map<string, Map<string, RecordFieldInfo>>();
         const paramScope = new Map<string, boolean>();
         const varTypeScope = new Map<string, TypeNode | undefined>();
@@ -2960,34 +2767,6 @@ export class Emitter {
         this.recordScopes.push(recordScope);
         this.parameterScopes.push(paramScope);
         this.variableTypeScopes.push(varTypeScope);
-
-        const validateBody = (body: FunctionBody) => {
-          for (const [boundName] of recordScope) {
-            const synthetic = {
-              kind: "FunctionExpression",
-              params: [
-                {
-                  kind: "Parameter",
-                  name: { kind: "Identifier", name: boundName, span: arm.span },
-                  span: arm.span,
-                },
-              ],
-              body,
-              span: arm.span,
-            } as FunctionExpression;
-            this.validateRecordParameterUse(synthetic, boundName, new Set());
-          }
-        };
-
-        try {
-          validateBody(arm.body);
-          if (arm.guard) validateBody(arm.guard);
-        } catch (error) {
-          this.variableTypeScopes.pop();
-          this.parameterScopes.pop();
-          this.recordScopes.pop();
-          throw error;
-        }
       },
       leaveOptionalRecordPattern: () => {
         this.variableTypeScopes.pop();

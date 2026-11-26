@@ -32,6 +32,12 @@ export const runCommand = (
     const engineIndex = commandArgs.indexOf("--engine");
     const engine =
       engineIndex !== -1 ? commandArgs[engineIndex + 1] : undefined;
+    if (engineIndex !== -1 && engine !== "esbuild" && engine !== "bun") {
+      process.exitCode = 1;
+      return yield* Console.error(
+        `Unsupported run engine '${engine ?? ""}'; supported engines: esbuild, bun.`,
+      );
+    }
     const filePath = commandArgs.find(
       (arg, i) =>
         arg !== "--no-check" &&

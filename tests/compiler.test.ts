@@ -7,6 +7,9 @@ import {
   CompilerError,
   TypeScriptCompilationContext,
 } from "../src/compiler.js";
+import { Lexer } from "../src/lexer/lexer.js";
+import { Parser } from "../src/parser/parser.js";
+import { Emitter } from "../src/emitter/emitter.js";
 import { typeCheckSource } from "../src/compiler/check.js";
 import {
   compile,
@@ -963,11 +966,11 @@ export describeShape = (shape: Shape) =>
       expect(res.typescript).toContain(`match(shape)`);
       expect(res.typescript).toContain(`.with({ _tag: "Circle" }`);
       expect(res.typescript).toContain(
-        `const [r] = Object.values(__fields) as any[];`,
+        `const [r] = Object.values(__match0) as any[];`,
       );
       expect(res.typescript).toContain(`.with({ _tag: "Rect" }`);
       expect(res.typescript).toContain(
-        `const [w, h] = Object.values(__fields) as any[];`,
+        `const [w, h] = Object.values(__match0) as any[];`,
       );
       expect(res.typescript).toContain(`.with({ _tag: "Point" }, () => 0)`);
       expect(res.typescript).toContain(`.otherwise(() => (-1))`);
@@ -1243,6 +1246,120 @@ export bar = var bad = 2
       expect(formatted).toContain("FunScript has no 'var'");
       expect(formatted).toContain("var bad = 2");
       expect(formatted).toContain(">");
+    });
+
+    it("scopes primitiveIdentifiers per function so f(x: Number) does not leak into g(x: User)", async () => {
+      const code = `
+schema User = {
+  id: Number
+}
+
+export f = (x: Number) => x + 1
+
+export g = (x: User, y: User) => x @= y
+`.trim();
+      const res = await compile(code);
+      expect(res.typescript).toContain("referenceEquals(x, y)");
+
+      const checked = await Effect.runPromise(
+        typeCheckSource(code, "primitive-scope.fun"),
+      );
+      expect(checked.success, checked.formattedOutput).toBe(true);
+    });
+
+    it("safely unpacks optional RecordPattern, ArrayPattern, and WildcardPattern in params and bindings", async () => {
+      const code = `
+export readHost = ({ server: { host, port }, tags: [first, ...rest], ignored: _ }: Config) => {
+  => {
+    host: Option.getOrElse(host, "localhost"),
+    port: Option.getOrElse(port, 8080),
+    first: Option.getOrElse(first, "none"),
+    restCount: Option.getOrElse(Option.map(rest, (items) => items.length), 0)
+  }
+}
+
+export { server: { host: boundHost }, tags: [head], ignored: _ }: Config = rawConfig
+`.trim();
+      const span = {
+        start: { offset: 0, line: 1, column: 1 },
+        end: { offset: 0, line: 1, column: 1 },
+      };
+      const id = (name: string) => ({
+        kind: "Identifier" as const,
+        name,
+        span,
+      });
+      const ref = (name: string) => ({
+        kind: "TypeReferenceNode" as const,
+        name: { kind: "UpperIdentifier" as const, name, span },
+        span,
+      });
+      const importedRecordContracts = new Map([
+        [
+          "Config",
+          {
+            kind: "RecordTypeNode" as const,
+            fields: [
+              {
+                kind: "RecordTypeField" as const,
+                name: id("server"),
+                optional: true,
+                typeAnnotation: {
+                  kind: "RecordTypeNode" as const,
+                  fields: [
+                    {
+                      kind: "RecordTypeField" as const,
+                      name: id("host"),
+                      optional: false,
+                      typeAnnotation: ref("String"),
+                      span,
+                    },
+                    {
+                      kind: "RecordTypeField" as const,
+                      name: id("port"),
+                      optional: true,
+                      typeAnnotation: ref("Number"),
+                      span,
+                    },
+                  ],
+                  span,
+                },
+                span,
+              },
+              {
+                kind: "RecordTypeField" as const,
+                name: id("tags"),
+                optional: true,
+                typeAnnotation: {
+                  kind: "ArrayTypeNode" as const,
+                  elementType: ref("String"),
+                  span,
+                },
+                span,
+              },
+              {
+                kind: "RecordTypeField" as const,
+                name: id("ignored"),
+                optional: true,
+                typeAnnotation: ref("String"),
+                span,
+              },
+            ],
+            span,
+          },
+        ],
+      ]);
+
+      const program = new Parser(new Lexer(code).tokenize()).parse();
+      const emitted = new Emitter(program, program, {
+        importedRecordContracts,
+      }).emit();
+      expect(emitted).not.toContain("const { host");
+      expect(emitted).not.toContain("const [first");
+      expect(emitted).not.toContain("const [head");
+      expect(emitted).not.toContain("const  =");
+      expect(emitted).toContain("Option.map(");
+      expect(emitted).toContain("Option.flatMap(");
     });
   });
 });

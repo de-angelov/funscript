@@ -494,12 +494,12 @@ export class FunScriptLspServer extends EventEmitter {
   }
 
   private cancelCodeActionsFor(uri: string): void {
-    if (
-      [...this.pendingCodeActions.values()].some(
-        (pending) => pending.uri === uri,
-      )
-    )
-      this.stopCodeActionWorker();
+    for (const [id, pending] of this.pendingCodeActions.entries()) {
+      if (pending.uri === uri) {
+        this.pendingCodeActions.delete(id);
+        pending.resolve([]);
+      }
+    }
   }
 
   private stopCodeActionWorker(): void {

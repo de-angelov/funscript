@@ -69,11 +69,14 @@ export interface Comment {
 export function extractComments(source: string): Comment[] {
   const comments: Comment[] = [];
   let inString = false;
+  let inTemplate = false;
   let escape = false;
   let line = 1;
   let col = 1;
   let lineHasCode = false;
-  const braceStack: ("string" | "interpolation")[] = [];
+  const braceStack: (
+    "string" | "template" | "interpolation" | "template_interpolation" | "brace"
+  )[] = [];
 
   for (let i = 0; i < source.length; i++) {
     const c = source[i];
@@ -98,9 +101,35 @@ export function extractComments(source: string): Comment[] {
         ) {
           braceStack.pop();
         }
-      } else if (c === "{" && !escape) {
+      } else if (c === "{") {
         braceStack.push("interpolation");
         inString = false;
+      }
+      col++;
+      continue;
+    }
+
+    if (inTemplate) {
+      if (escape) {
+        escape = false;
+      } else if (c === "\\") {
+        escape = true;
+      } else if (c === "`") {
+        inTemplate = false;
+        if (
+          braceStack.length > 0 &&
+          braceStack[braceStack.length - 1] === "template"
+        ) {
+          braceStack.pop();
+        }
+      } else if (c === "$" && source[i + 1] === "{") {
+        braceStack.push("template_interpolation");
+        inTemplate = false;
+        i++;
+        col++;
+      } else if (c === "{") {
+        braceStack.push("template_interpolation");
+        inTemplate = false;
       }
       col++;
       continue;
@@ -114,15 +143,41 @@ export function extractComments(source: string): Comment[] {
       continue;
     }
 
-    if (
-      c === "}" &&
-      braceStack.length > 0 &&
-      braceStack[braceStack.length - 1] === "interpolation"
-    ) {
-      braceStack.pop();
-      inString = true;
+    if (c === "`") {
+      inTemplate = true;
+      braceStack.push("template");
+      lineHasCode = true;
       col++;
       continue;
+    }
+
+    if (c === "{") {
+      braceStack.push("brace");
+      lineHasCode = true;
+      col++;
+      continue;
+    }
+
+    if (c === "}" && braceStack.length > 0) {
+      const top = braceStack[braceStack.length - 1];
+      if (top === "brace") {
+        braceStack.pop();
+        lineHasCode = true;
+        col++;
+        continue;
+      }
+      if (top === "interpolation") {
+        braceStack.pop();
+        inString = true;
+        col++;
+        continue;
+      }
+      if (top === "template_interpolation") {
+        braceStack.pop();
+        inTemplate = true;
+        col++;
+        continue;
+      }
     }
 
     if (c === "/" && source[i + 1] === "/") {
@@ -148,8 +203,8 @@ export function extractComments(source: string): Comment[] {
         col,
         isTrailing: lineHasCode,
       });
-      i = end - 1;
       col += end - i;
+      i = end - 1;
       continue;
     }
 
@@ -497,10 +552,12 @@ export class Formatter {
         return this.formatStatement(decl, 0);
       case "TsEscapeDeclaration":
         return this.formatTsEscape(decl.code);
-      case "AsDeclaration":
+      case "AsDeclaration": {
+        const prefix = decl.serviceName ? `as ${decl.serviceName.name}` : "as";
         return decl.code.includes("\n")
-          ? `as {\n${decl.code}\n}`
-          : `as { ${decl.code} }`;
+          ? `${prefix} {\n${decl.code}\n}`
+          : `${prefix} { ${decl.code} }`;
+      }
     }
   }
 
@@ -874,11 +931,15 @@ export class Formatter {
           }
           return `when (${this.formatExpression(stmt.condition, indent)}) => ${this.formatExpression(retExpr, indent)}`;
         }
-        return `when (${this.formatExpression(stmt.condition, indent)}) {\n${this.formatBlockStatement(stmt.consequent as BlockStatement, indent + this.indentSize)}\n${this.spaces(indent)}}`;
+        return `when (${this.formatExpression(stmt.condition, indent)}) {\n${this.formatBlockStatement(stmt.consequent as BlockStatement, indent + this.indentSize, true)}\n${this.spaces(indent)}}`;
     }
   }
 
-  private formatBlockStatement(stmt: BlockStatement, indent: number): string {
+  private formatBlockStatement(
+    stmt: BlockStatement,
+    indent: number,
+    preserveSingleReturn = false,
+  ): string {
     const lines: string[] = [];
     const lineIndent = this.spaces(indent);
     const blockLeading = this.formatLeadingComments(stmt, lineIndent);
@@ -887,6 +948,7 @@ export class Formatter {
     }
 
     const isSingleReturn =
+      !preserveSingleReturn &&
       stmt.statements.length === 1 &&
       stmt.statements[0].kind === "ReturnStatement" &&
       !stmt.finalExpression;
@@ -1063,12 +1125,7 @@ export class Formatter {
     }
   }
 
-  private getMatchArmArrow(_arm: MatchArm): string {
-    return "=>";
-  }
-
   private formatMatchExpression(expr: MatchExpression, indent = 0): string {
-    const isSubjectless = expr.scrutinee === undefined && !expr.isPipeline;
     const isSingleLine =
       expr.arms.length > 0 &&
       expr.arms[0].span.start.line === expr.span.start.line &&
@@ -1078,9 +1135,7 @@ export class Formatter {
       const scrutinee = expr.scrutinee
         ? ` ${this.formatExpression(expr.scrutinee, indent)}`
         : "";
-      const arms = expr.arms
-        .map((a) => this.formatMatchArmInline(a, isSubjectless))
-        .join(" ");
+      const arms = expr.arms.map((a) => this.formatMatchArmInline(a)).join(" ");
       return `match${scrutinee} ${arms}`;
     }
 
@@ -1088,51 +1143,43 @@ export class Formatter {
       ? ` ${this.formatExpression(expr.scrutinee, indent)}`
       : "";
     const arms = expr.arms
-      .map((a) =>
-        this.formatMatchArm(a, indent + this.indentSize, isSubjectless),
-      )
+      .map((a) => this.formatMatchArm(a, indent + this.indentSize))
       .join("\n");
     return `match${scrutinee}\n${arms}`;
   }
 
-  private formatMatchArm(
-    arm: MatchArm,
-    indent: number,
-    isSubjectless: boolean,
-  ): string {
+  private formatMatchArm(arm: MatchArm, indent: number): string {
     const armIndent = this.spaces(indent);
     const leading = this.formatLeadingComments(arm, armIndent);
     const trailing = this.getTrailingComment(arm.span.end.line);
-    const pat = this.formatPattern(arm.pattern, isSubjectless);
+    const pat = this.formatPattern(arm.pattern);
     const guard = arm.guard
       ? ` when ${this.formatExpression(arm.guard, indent)}`
       : "";
-    const arrow = this.getMatchArmArrow(arm);
 
     if (arm.body.kind === "BlockStatement") {
       const bodyIndent = indent + this.indentSize * 2;
       const body = this.formatBlockStatement(arm.body, bodyIndent);
-      return `${leading}${armIndent}| ${pat}${guard} ${arrow}\n${body}${trailing}`;
+      return `${leading}${armIndent}| ${pat}${guard} =>\n${body}${trailing}`;
     } else {
       const body = this.formatExpression(arm.body, indent);
-      return `${leading}${armIndent}| ${pat}${guard} ${arrow} ${body}${trailing}`;
+      return `${leading}${armIndent}| ${pat}${guard} => ${body}${trailing}`;
     }
   }
 
-  private formatMatchArmInline(arm: MatchArm, isSubjectless: boolean): string {
-    const pat = this.formatPattern(arm.pattern, isSubjectless);
+  private formatMatchArmInline(arm: MatchArm): string {
+    const pat = this.formatPattern(arm.pattern);
     const guard = arm.guard
       ? ` when ${this.formatExpression(arm.guard, 0)}`
       : "";
-    const arrow = this.getMatchArmArrow(arm);
     const body =
       arm.body.kind === "BlockStatement"
         ? this.formatBlockStatement(arm.body, 0)
         : this.formatExpression(arm.body, 0);
-    return `| ${pat}${guard} ${arrow} ${body}`;
+    return `| ${pat}${guard} => ${body}`;
   }
 
-  private formatPattern(pat: Pattern, _isSubjectless = false): string {
+  private formatPattern(pat: Pattern): string {
     switch (pat.kind) {
       case "WildcardPattern":
         return "_";
@@ -1521,44 +1568,64 @@ export class Formatter {
         "=>";
     const sig = isArrowOnly ? `=>` : `${typeParams}(${params})${ret} =>`;
 
-    if (
-      expr.body.kind === "BlockStatement" &&
-      expr.body.statements.length > 1
-    ) {
-      const body = this.formatBlockStatement(
-        expr.body,
-        indent + this.indentSize,
-      );
-      return `${sig} {\n${body}\n${this.spaces(indent)}}`;
-    } else if (expr.body.kind === "BlockStatement") {
-      const single = expr.body.statements[0];
-      const singleExpr =
-        single?.kind === "ReturnStatement"
-          ? single.argument
-          : single?.kind === "ExpressionStatement"
-            ? single.expression
-            : null;
-      if (
-        singleExpr &&
-        singleExpr.kind === "PipelineExpression" &&
-        this.shouldExpandPipeline(
-          this.unrollPipeline(singleExpr),
-          indent + this.indentSize,
-        )
+    if (expr.body.kind === "BlockStatement") {
+      if (expr.body.statements.length === 1 && !expr.body.finalExpression) {
+        const single = expr.body.statements[0];
+        const singleExpr =
+          single?.kind === "ReturnStatement"
+            ? single.argument
+            : single?.kind === "ExpressionStatement"
+              ? single.expression
+              : null;
+        if (
+          singleExpr &&
+          singleExpr.kind === "PipelineExpression" &&
+          this.shouldExpandPipeline(
+            this.unrollPipeline(singleExpr),
+            indent + this.indentSize,
+          )
+        ) {
+          const body = this.formatPipelineExpression(
+            singleExpr,
+            indent + this.indentSize,
+          );
+          return `${sig}\n${this.spaces(indent + this.indentSize)}${body}`;
+        } else if (singleExpr) {
+          return `${sig} ${this.formatExpression(singleExpr, indent)}`;
+        }
+      } else if (
+        expr.body.statements.length === 0 &&
+        expr.body.finalExpression
       ) {
-        const body = this.formatPipelineExpression(
-          singleExpr,
-          indent + this.indentSize,
-        );
-        return `${sig}\n${this.spaces(indent + this.indentSize)}${body}`;
-      } else if (singleExpr) {
-        return `${sig} ${this.formatExpression(singleExpr, indent)}`;
+        if (
+          expr.body.finalExpression.kind === "PipelineExpression" &&
+          this.shouldExpandPipeline(
+            this.unrollPipeline(expr.body.finalExpression),
+            indent + this.indentSize,
+          )
+        ) {
+          const body = this.formatPipelineExpression(
+            expr.body.finalExpression,
+            indent + this.indentSize,
+          );
+          return `${sig}\n${this.spaces(indent + this.indentSize)}${body}`;
+        }
+        const bodyStartsWithBrace =
+          this.source.length === 0 ||
+          this.source[expr.body.span?.start.offset ?? -1] === "{";
+        if (!bodyStartsWithBrace) {
+          const body = this.formatBlockStatement(
+            expr.body,
+            indent + this.indentSize,
+          );
+          return `${sig}\n${body}`;
+        }
       }
       const body = this.formatBlockStatement(
         expr.body,
         indent + this.indentSize,
       );
-      return `${sig}\n${body}`;
+      return body ? `${sig} {\n${body}\n${this.spaces(indent)}}` : `${sig} {}`;
     } else if (
       expr.body.kind === "PipelineExpression" &&
       this.shouldExpandPipeline(

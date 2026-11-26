@@ -1,5 +1,4 @@
 import type {
-  ArrayPattern,
   BindingTarget,
   BooleanLiteral,
   ConstructorPattern,
@@ -15,7 +14,10 @@ import type {
   TypeNode,
 } from "../ast/types.js";
 import { FunScriptError } from "../errors.js";
-import { patternHasOptionalField } from "./declarations.js";
+import {
+  emitUnpackedRecordPattern,
+  patternHasOptionalField,
+} from "./declarations.js";
 
 const JS_ERROR_NAMES = new Set([
   "Error",
@@ -245,19 +247,20 @@ export class MatchEmitter {
           if (arm.guard) {
             let guardFn: string;
             if (arm.pattern.kind === "RecordPattern") {
-              const destructParts = this.collectRecordDestructuring(
-                arm.pattern,
-              );
               const scrutineeName =
                 expr.scrutinee?.kind === "Identifier"
                   ? expr.scrutinee.name
                   : undefined;
-              if (destructParts.length > 0) {
+              const unpackLines = this.emitRecordPatternUnpack(
+                arm.pattern,
+                "$matched",
+              );
+              if (unpackLines.length > 0) {
                 const lines = [
                   ...(scrutineeName
                     ? [`const ${scrutineeName} = $matched;`]
                     : []),
-                  `const { ${destructParts.join(", ")} } = $matched;`,
+                  ...unpackLines,
                   `return ${this.context.emitExpression(arm.guard)};`,
                 ];
                 guardFn = `($matched) => {\n    ${lines.join("\n    ")}\n  }`;
@@ -274,7 +277,20 @@ export class MatchEmitter {
                 expr.scrutinee?.kind === "Identifier"
                   ? expr.scrutinee.name
                   : undefined;
-              if (scrutineeName) {
+              const unpackLines = this.emitPatternUnpackLines(
+                arm.pattern,
+                "$matched",
+              );
+              if (unpackLines.length > 0) {
+                const lines = [
+                  ...(scrutineeName
+                    ? [`const ${scrutineeName} = $matched;`]
+                    : []),
+                  ...unpackLines,
+                  `return ${this.context.emitExpression(arm.guard)};`,
+                ];
+                guardFn = `($matched) => {\n    ${lines.join("\n    ")}\n  }`;
+              } else if (scrutineeName) {
                 guardFn = `(${scrutineeName}) => ${this.context.emitExpression(arm.guard)}`;
               } else {
                 guardFn = `($matched) => ${this.context.emitExpression(arm.guard)}`;
@@ -287,12 +303,18 @@ export class MatchEmitter {
                   arm.pattern.constructorName.name === "Some" &&
                   arm.pattern.args.length === 1 &&
                   (arm.pattern.args[0].kind === "VariablePattern" ||
-                    arm.pattern.args[0].kind === "ArrayPattern");
+                    (arm.pattern.args[0].kind === "ArrayPattern" &&
+                      this.isSimpleBindingPattern(arm.pattern.args[0])));
                 const someRecord =
                   arm.pattern.kind === "ConstructorPattern" &&
                   arm.pattern.constructorName.name === "Some" &&
                   arm.pattern.args.length === 1 &&
-                  arm.pattern.args[0].kind === "RecordPattern";
+                  arm.pattern.args[0].kind === "RecordPattern" &&
+                  (this.isSimpleBindingPattern(arm.pattern.args[0]) ||
+                    patternHasOptionalField(
+                      arm.pattern.args[0],
+                      payloadFields,
+                    ));
                 const directOptional =
                   expr.scrutinee?.kind === "Identifier" &&
                   this.context.isOptionalParameter(expr.scrutinee.name);
@@ -320,29 +342,14 @@ export class MatchEmitter {
                 ) {
                   unpack = `const { ${vars.join(", ")} } = $matched as any;`;
                 } else {
-                  const fieldNames =
-                    arm.pattern.kind === "ConstructorPattern" &&
-                    arm.pattern.constructorName.name !== "Some"
-                      ? this.context.getVariantFields?.(
-                          arm.pattern.constructorName.name,
-                        )
-                      : undefined;
-                  if (
-                    arm.pattern.kind === "ConstructorPattern" &&
-                    fieldNames &&
-                    fieldNames.length === arm.pattern.args.length
-                  ) {
-                    const parts: string[] = [];
-                    for (let i = 0; i < fieldNames.length; i++) {
-                      const arg = arm.pattern.args[i];
-                      if (arg.kind === "VariablePattern") {
-                        parts.push(`${fieldNames[i]}: ${arg.name.name}`);
-                      }
-                    }
-                    unpack = `const { ${parts.join(", ")} } = $matched as any;`;
-                  } else {
-                    unpack = `const { _tag: _, ...__fields } = $matched as any;\n    const [${vars.join(", ")}] = Object.values(__fields) as any[];`;
-                  }
+                  unpack = this.emitPatternUnpackLines(
+                    arm.pattern,
+                    "$matched",
+                    {
+                      isOptionalScrutinee: directOptional || isOptional,
+                      payloadFields,
+                    },
+                  ).join("\n    ");
                 }
                 guardFn = `($matched) => {\n    ${unpack}\n    return ${this.context.emitExpression(arm.guard)};\n  }`;
               } else {
@@ -543,34 +550,14 @@ export class MatchEmitter {
         : ` as unknown as { value: typeof $matched extends import("effect").Option.Some<infer V> ? V : any }`;
       const lines: string[] = [
         `const { value: $funscriptSomeInner } = $matched${cast};`,
+        ...emitUnpackedRecordPattern({
+          pat,
+          basePath: "$funscriptSomeInner",
+          fieldsMap: payloadFields,
+          emitBindingTarget: (target) => this.context.emitBindingTarget(target),
+          addEffectImport: (name) => this.context.addEffectImport?.(name),
+        }),
       ];
-      const restField = pat.fields.find((f) => f.isRest);
-      if (restField) {
-        const nonRest = pat.fields.filter((f) => !f.isRest);
-        lines.push(
-          `const { ${nonRest.map((f) => `${f.key.name}: _${f.key.name}`).join(", ")}, ...$funscriptRest } = $funscriptSomeInner;`,
-        );
-        lines.push(`const ${restField.key.name} = $funscriptRest;`);
-      }
-      for (const f of pat.fields) {
-        if (f.isRest) continue;
-        if (
-          f.pattern?.kind === "WildcardPattern" ||
-          f.pattern?.kind === "LiteralPattern"
-        )
-          continue;
-        const varName = f.pattern
-          ? this.context.emitBindingTarget(f.pattern)
-          : f.key.name;
-        const isOpt = payloadFields?.get(f.key.name)?.optional === true;
-        if (isOpt) {
-          lines.push(
-            `const ${varName} = Option.fromNullishOr($funscriptSomeInner.${f.key.name});`,
-          );
-        } else {
-          lines.push(`const ${varName} = $funscriptSomeInner.${f.key.name};`);
-        }
-      }
       return lines.join("\n    ");
     }
     const destructParts = this.collectRecordDestructuring(pat);
@@ -588,16 +575,16 @@ export class MatchEmitter {
     payloadFields?: Map<string, RecordFieldInfo>,
   ): string {
     if (pat?.kind === "RecordPattern") {
-      const destructParts = this.collectRecordDestructuring(pat);
       const scrutineeName =
         scrutinee?.kind === "Identifier" ? scrutinee.name : undefined;
+      const unpackLines = this.emitRecordPatternUnpack(pat, "$matched");
 
-      if (destructParts.length > 0) {
+      if (unpackLines.length > 0) {
         const lines: string[] = [];
         if (scrutineeName) {
           lines.push(`const ${scrutineeName} = $matched;`);
         }
-        lines.push(`const { ${destructParts.join(", ")} } = $matched;`);
+        lines.push(...unpackLines);
         if (body.kind === "BlockStatement") {
           return `($matched) => {\n    ${lines.join("\n    ")}\n${this.context.emitFunctionBody(body)}\n  }`;
         }
@@ -624,7 +611,7 @@ export class MatchEmitter {
       if (scrutineeName) {
         lines.push(`const ${scrutineeName} = $matched;`);
       }
-      lines.push(...this.collectArrayMatchBindings(pat, "$matched"));
+      lines.push(...this.emitPatternUnpackLines(pat, "$matched"));
       if (lines.length > 0) {
         if (body.kind === "BlockStatement") {
           return `($matched) => {\n    ${lines.join("\n    ")}\n${this.context.emitFunctionBody(body)}\n  }`;
@@ -643,6 +630,18 @@ export class MatchEmitter {
     ) {
       const scrutineeName =
         scrutinee?.kind === "Identifier" ? scrutinee.name : undefined;
+      const unpackLines = this.emitPatternUnpackLines(pat, "$matched");
+      if (unpackLines.length > 0) {
+        const lines: string[] = [];
+        if (scrutineeName) {
+          lines.push(`const ${scrutineeName} = $matched;`);
+        }
+        lines.push(...unpackLines);
+        if (body.kind === "BlockStatement") {
+          return `($matched) => {\n    ${lines.join("\n    ")}\n${this.context.emitFunctionBody(body)}\n  }`;
+        }
+        return `($matched) => {\n    ${lines.join("\n    ")}\n    return ${this.context.emitExpression(body)};\n  }`;
+      }
       if (scrutineeName) {
         if (body.kind === "BlockStatement") {
           return `(${scrutineeName}) => {\n${this.context.emitFunctionBody(body)}\n}`;
@@ -680,9 +679,14 @@ export class MatchEmitter {
       pat.constructorName.name === "Some" &&
       pat.args.length === 1
     ) {
-      if (pat.args[0].kind === "RecordPattern") {
+      const arg = pat.args[0];
+      if (
+        arg.kind === "RecordPattern" &&
+        (this.isSimpleBindingPattern(arg) ||
+          patternHasOptionalField(arg, payloadFields))
+      ) {
         const unpack = this.emitSomeRecordUnpack(
-          pat.args[0],
+          arg,
           payloadFields,
           isOptional,
         );
@@ -695,16 +699,29 @@ export class MatchEmitter {
           return `() => {\n${this.context.emitFunctionBody(body)}\n}`;
         return `() => ${this.context.emitArrowExpression(body)}`;
       }
-      if (pat.args[0].kind === "LiteralPattern") {
+      if (arg.kind === "LiteralPattern") {
         if (body.kind === "BlockStatement")
           return `() => {\n${this.context.emitFunctionBody(body)}\n}`;
         return `() => ${this.context.emitArrowExpression(body)}`;
       }
-      const bindingTarget = this.context.emitBindingTarget(pat.args[0]);
-      if (bindingTarget && bindingTarget !== "[]" && bindingTarget !== "{}") {
-        const unpack = isOptional
-          ? `const { value: ${bindingTarget} } = $matched;`
-          : `const { value: ${bindingTarget} } = $matched as unknown as { value: typeof $matched extends import("effect").Option.Some<infer V> ? V : any };`;
+      if (
+        arg.kind === "VariablePattern" ||
+        (arg.kind === "ArrayPattern" && this.isSimpleBindingPattern(arg))
+      ) {
+        const bindingTarget = this.context.emitBindingTarget(arg);
+        if (bindingTarget && bindingTarget !== "[]" && bindingTarget !== "{}") {
+          const unpack = isOptional
+            ? `const { value: ${bindingTarget} } = $matched;`
+            : `const { value: ${bindingTarget} } = $matched as unknown as { value: typeof $matched extends import("effect").Option.Some<infer V> ? V : any };`;
+          if (body.kind === "BlockStatement")
+            return `($matched) => {\n    ${unpack}\n${this.context.emitFunctionBody(body)}\n  }`;
+          return `($matched) => {\n    ${unpack}\n    return ${this.context.emitExpression(body)};\n  }`;
+        }
+      } else if (vars.length > 0) {
+        const unpack = this.emitPatternUnpackLines(pat, "$matched", {
+          isOptionalScrutinee: isOptional,
+          payloadFields,
+        }).join("\n    ");
         if (body.kind === "BlockStatement")
           return `($matched) => {\n    ${unpack}\n${this.context.emitFunctionBody(body)}\n  }`;
         return `($matched) => {\n    ${unpack}\n    return ${this.context.emitExpression(body)};\n  }`;
@@ -713,33 +730,14 @@ export class MatchEmitter {
         return `() => {\n${this.context.emitFunctionBody(body)}\n}`;
       return `() => ${this.context.emitArrowExpression(body)}`;
     }
-    if (vars.length > 0) {
-      let unpack: string;
-      const fieldNames =
-        pat?.kind === "ConstructorPattern" &&
-        pat.constructorName.name !== "Some" &&
-        !JS_ERROR_NAMES.has(pat.constructorName.name)
-          ? this.context.getVariantFields?.(pat.constructorName.name)
-          : undefined;
-
-      if (
-        pat?.kind === "ConstructorPattern" &&
-        fieldNames &&
-        fieldNames.length === pat.args.length
-      ) {
-        const parts: string[] = [];
-        for (let i = 0; i < fieldNames.length; i++) {
-          const arg = pat.args[i];
-          if (arg.kind === "VariablePattern") {
-            parts.push(`${fieldNames[i]}: ${arg.name.name}`);
-          }
-        }
-        unpack = `const { ${parts.join(", ")} } = $matched as any;`;
-      } else if (pat?.kind === "VariablePattern") {
-        unpack = `const { ${vars[0]} } = $matched as any;`;
-      } else {
-        unpack = `const { _tag: _, ...__fields } = $matched as any;\n    const [${vars.join(", ")}] = Object.values(__fields) as any[];`;
-      }
+    if (vars.length > 0 && pat) {
+      const unpack =
+        pat.kind === "VariablePattern"
+          ? `const { ${vars[0]} } = $matched as any;`
+          : this.emitPatternUnpackLines(pat, "$matched", {
+              isOptionalScrutinee: isOptional,
+              payloadFields,
+            }).join("\n    ");
       if (body.kind === "BlockStatement") {
         return `($matched) => {\n    ${unpack}\n${this.context.emitFunctionBody(body)}\n  }`;
       }
@@ -790,60 +788,342 @@ export class MatchEmitter {
     return [];
   }
 
-  private collectArrayMatchBindings(
-    pat: ArrayPattern,
+  /** Returns true when a pattern can be unpacked with plain JS destructuring. */
+  private isSimpleBindingPattern(pat: Pattern): boolean {
+    if (
+      pat.kind === "WildcardPattern" ||
+      pat.kind === "LiteralPattern" ||
+      pat.kind === "VariablePattern"
+    ) {
+      return true;
+    }
+    if (pat.kind === "RestPattern") {
+      return this.isSimpleBindingPattern(pat.argument);
+    }
+    if (pat.kind === "ArrayPattern") {
+      return pat.elements.every((el) => this.isSimpleBindingPattern(el));
+    }
+    if (pat.kind === "RecordPattern") {
+      return pat.fields.every(
+        (f) => f.isRest || !f.pattern || this.isSimpleBindingPattern(f.pattern),
+      );
+    }
+    return false;
+  }
+
+  /** Produces a structural signature of where variables are bound in a pattern. */
+  private patternBindingSignature(pat: Pattern): string {
+    if (pat.kind === "VariablePattern") return `VAR:${pat.name.name}`;
+    if (pat.kind === "WildcardPattern" || pat.kind === "LiteralPattern") {
+      return "_";
+    }
+    if (pat.kind === "RestPattern") {
+      return `...${this.patternBindingSignature(pat.argument)}`;
+    }
+    if (pat.kind === "ArrayPattern") {
+      return `[${pat.elements
+        .map((el, i) =>
+          this.collectPatternVariables(el).length > 0
+            ? `${i}:${this.patternBindingSignature(el)}`
+            : "_",
+        )
+        .join(",")}]`;
+    }
+    if (pat.kind === "RecordPattern") {
+      const entries = pat.fields
+        .filter(
+          (f) =>
+            f.isRest ||
+            !f.pattern ||
+            this.collectPatternVariables(f.pattern).length > 0,
+        )
+        .map((f) =>
+          f.isRest
+            ? `...${f.key.name}`
+            : `${f.key.name}:${f.pattern ? this.patternBindingSignature(f.pattern) : `VAR:${f.key.name}`}`,
+        )
+        .sort();
+      return `{${entries.join(",")}}`;
+    }
+    if (pat.kind === "ConstructorPattern") {
+      return `${pat.constructorName.name}(${pat.args.map((a) => this.patternBindingSignature(a)).join(",")})`;
+    }
+    if (pat.kind === "OrPattern") {
+      return `OR(${pat.patterns.map((p) => this.patternBindingSignature(p)).join("|")})`;
+    }
+    return "_";
+  }
+
+  /** Emits destructuring and nested unpack lines for a record pattern. */
+  private emitRecordPatternUnpack(
+    pat: RecordPattern,
     targetExpr: string,
+    nextTemp: () => string = (() => {
+      let idx = 0;
+      return () => `__match${idx++}`;
+    })(),
   ): string[] {
-    const lines: string[] = [];
-    for (let i = 0; i < pat.elements.length; i++) {
-      const el = pat.elements[i];
-      const elemExpr = `${targetExpr}[${i}]`;
-      if (el.kind === "VariablePattern") {
-        lines.push(`const ${el.name.name} = ${elemExpr};`);
-      } else if (el.kind === "RestPattern") {
-        if (el.argument.kind === "VariablePattern") {
+    if (this.isSimpleBindingPattern(pat)) {
+      const destructParts = this.collectRecordDestructuring(pat);
+      return destructParts.length > 0
+        ? [`const { ${destructParts.join(", ")} } = ${targetExpr};`]
+        : [];
+    }
+
+    const parts: string[] = [];
+    const nestedLines: string[] = [];
+    const hasRest = pat.fields.some((f) => f.isRest);
+
+    for (const f of pat.fields) {
+      if (f.isRest) {
+        parts.push(`...${f.key.name}`);
+      } else if (!f.pattern) {
+        parts.push(f.key.name);
+      } else if (f.pattern.kind === "VariablePattern") {
+        parts.push(`${f.key.name}: ${f.pattern.name.name}`);
+      } else if (this.isSimpleBindingPattern(f.pattern)) {
+        if (f.pattern.kind === "RecordPattern") {
+          const sub = this.collectRecordDestructuring(f.pattern);
+          if (sub.length > 0) {
+            parts.push(`${f.key.name}: { ${sub.join(", ")} }`);
+          } else if (hasRest) {
+            parts.push(`${f.key.name}: _${f.key.name}`);
+          }
+        } else if (f.pattern.kind === "ArrayPattern") {
+          const target = this.context.emitBindingTarget(f.pattern);
+          if (target && target !== "[]") {
+            parts.push(`${f.key.name}: ${target}`);
+          } else if (hasRest) {
+            parts.push(`${f.key.name}: _${f.key.name}`);
+          }
+        } else if (hasRest) {
+          parts.push(`${f.key.name}: _${f.key.name}`);
+        }
+      } else if (this.collectPatternVariables(f.pattern).length > 0) {
+        const tmp = nextTemp();
+        parts.push(`${f.key.name}: ${tmp}`);
+        nestedLines.push(
+          ...this.emitPatternUnpackLines(f.pattern, tmp, { nextTemp }),
+        );
+      } else if (hasRest) {
+        parts.push(`${f.key.name}: _${f.key.name}`);
+      }
+    }
+
+    if (parts.length > 0) {
+      return [`const { ${parts.join(", ")} } = ${targetExpr};`, ...nestedLines];
+    }
+    return nestedLines;
+  }
+
+  /** Recursively unpacks bindings from any match pattern against `targetExpr`. */
+  private emitPatternUnpackLines(
+    pat: Pattern,
+    targetExpr: string,
+    options?: {
+      isOptionalScrutinee?: boolean;
+      payloadFields?: Map<string, RecordFieldInfo>;
+      nextTemp?: () => string;
+    },
+  ): string[] {
+    let tempCounter = 0;
+    const nextTemp = options?.nextTemp ?? (() => `__match${tempCounter++}`);
+    const vars = this.collectPatternVariables(pat);
+    if (vars.length === 0) {
+      return [];
+    }
+
+    if (pat.kind === "VariablePattern") {
+      return [`const ${pat.name.name} = ${targetExpr};`];
+    }
+
+    if (pat.kind === "RestPattern") {
+      return this.emitPatternUnpackLines(pat.argument, targetExpr, {
+        nextTemp,
+      });
+    }
+
+    if (pat.kind === "RecordPattern") {
+      return this.emitRecordPatternUnpack(pat, targetExpr, nextTemp);
+    }
+
+    if (pat.kind === "ArrayPattern") {
+      const lines: string[] = [];
+      for (let i = 0; i < pat.elements.length; i++) {
+        const el = pat.elements[i];
+        const elemExpr = `${targetExpr}[${i}]`;
+        if (el.kind === "RestPattern") {
+          if (el.argument.kind === "VariablePattern") {
+            lines.push(
+              `const ${el.argument.name.name} = ${targetExpr}.slice(${i});`,
+            );
+          } else if (this.collectPatternVariables(el.argument).length > 0) {
+            const tmp = nextTemp();
+            lines.push(`const ${tmp} = ${targetExpr}.slice(${i});`);
+            lines.push(
+              ...this.emitPatternUnpackLines(el.argument, tmp, { nextTemp }),
+            );
+          }
+        } else if (this.collectPatternVariables(el).length > 0) {
           lines.push(
-            `const ${el.argument.name.name} = ${targetExpr}.slice(${i});`,
+            ...this.emitPatternUnpackLines(el, elemExpr, { nextTemp }),
           );
         }
-      } else if (el.kind === "ArrayPattern") {
-        lines.push(...this.collectArrayMatchBindings(el, elemExpr));
-      } else if (el.kind === "RecordPattern") {
-        const destructParts = this.collectRecordDestructuring(el);
-        if (destructParts.length > 0) {
-          lines.push(`const { ${destructParts.join(", ")} } = ${elemExpr};`);
+      }
+      return lines;
+    }
+
+    if (pat.kind === "OrPattern") {
+      const first = pat.patterns[0];
+      if (!first) return [];
+      const firstSig = this.patternBindingSignature(first);
+      const allSameShape = pat.patterns.every(
+        (p) => this.patternBindingSignature(p) === firstSig,
+      );
+      if (allSameShape) {
+        return this.emitPatternUnpackLines(first, targetExpr, {
+          ...options,
+          nextTemp,
+        });
+      }
+      const uniqueVars = Array.from(new Set(vars));
+      const branches = pat.patterns
+        .map((alt) => {
+          const orVar = nextTemp();
+          const altLines = this.emitPatternUnpackLines(alt, orVar, {
+            nextTemp,
+          });
+          const bodyLines = [
+            ...altLines,
+            `return { ${uniqueVars.join(", ")} };`,
+          ];
+          return `.with(${this.emitPattern(alt)}, (${orVar}) => {\n      ${bodyLines.join("\n      ")}\n    })`;
+        })
+        .join("\n    ");
+      return [
+        `const { ${uniqueVars.join(", ")} } = match(${targetExpr} as any)\n    ${branches}\n    .otherwise(() => ({}) as any);`,
+      ];
+    }
+
+    if (pat.kind === "ConstructorPattern") {
+      if (JS_ERROR_NAMES.has(pat.constructorName.name)) {
+        return [`const { ${vars.join(", ")} } = ${targetExpr} as any;`];
+      }
+
+      if (pat.constructorName.name === "Some" && pat.args.length === 1) {
+        const arg = pat.args[0];
+        const useTypedSomeCast =
+          targetExpr !== "$matched" || !options?.isOptionalScrutinee;
+        const cast = useTypedSomeCast
+          ? ` as unknown as { value: Extract<typeof ${targetExpr}, { readonly _tag: "Some" }> extends import("effect").Option.Some<infer V> ? V : any }`
+          : "";
+        if (
+          arg.kind === "RecordPattern" &&
+          targetExpr === "$matched" &&
+          patternHasOptionalField(arg, options?.payloadFields)
+        ) {
+          return [
+            this.emitSomeRecordUnpack(
+              arg,
+              options?.payloadFields,
+              options?.isOptionalScrutinee,
+            ),
+          ].filter(Boolean);
         }
-      } else if (el.kind === "ConstructorPattern") {
-        if (el.constructorName.name === "Some" && el.args.length === 1) {
-          const bindingTarget = this.context.emitBindingTarget(el.args[0]);
+        if (arg.kind === "VariablePattern") {
+          return [`const { value: ${arg.name.name} } = ${targetExpr}${cast};`];
+        }
+        if (
+          (arg.kind === "RecordPattern" || arg.kind === "ArrayPattern") &&
+          this.isSimpleBindingPattern(arg)
+        ) {
+          const bindingTarget = this.context.emitBindingTarget(arg);
           if (
             bindingTarget &&
             bindingTarget !== "[]" &&
             bindingTarget !== "{}" &&
             bindingTarget !== "_"
           ) {
-            lines.push(`const { value: ${bindingTarget} } = ${elemExpr};`);
-          }
-        } else {
-          const fieldNames = this.context.getVariantFields?.(
-            el.constructorName.name,
-          );
-          if (fieldNames && fieldNames.length === el.args.length) {
-            const parts: string[] = [];
-            for (let j = 0; j < fieldNames.length; j++) {
-              const arg = el.args[j];
-              if (arg.kind === "VariablePattern") {
-                parts.push(`${fieldNames[j]}: ${arg.name.name}`);
-              }
-            }
-            if (parts.length > 0) {
-              lines.push(`const { ${parts.join(", ")} } = ${elemExpr};`);
-            }
+            return [
+              `const { value: ${bindingTarget} } = ${targetExpr}${cast};`,
+            ];
           }
         }
+        const tmp = nextTemp();
+        return [
+          `const { value: ${tmp} } = ${targetExpr}${cast};`,
+          ...this.emitPatternUnpackLines(arg, tmp, { nextTemp }),
+        ];
       }
+
+      const fieldNames = this.context.getVariantFields?.(
+        pat.constructorName.name,
+      );
+      if (fieldNames && fieldNames.length === pat.args.length) {
+        const parts: string[] = [];
+        const nestedLines: string[] = [];
+        for (let i = 0; i < fieldNames.length; i++) {
+          const arg = pat.args[i];
+          if (this.collectPatternVariables(arg).length === 0) continue;
+          if (arg.kind === "VariablePattern") {
+            parts.push(`${fieldNames[i]}: ${arg.name.name}`);
+          } else if (
+            arg.kind === "RecordPattern" &&
+            this.isSimpleBindingPattern(arg)
+          ) {
+            const sub = this.collectRecordDestructuring(arg);
+            if (sub.length > 0) {
+              parts.push(`${fieldNames[i]}: { ${sub.join(", ")} }`);
+            }
+          } else if (
+            arg.kind === "ArrayPattern" &&
+            this.isSimpleBindingPattern(arg)
+          ) {
+            const target = this.context.emitBindingTarget(arg);
+            if (target && target !== "[]") {
+              parts.push(`${fieldNames[i]}: ${target}`);
+            }
+          } else {
+            const tmp = nextTemp();
+            parts.push(`${fieldNames[i]}: ${tmp}`);
+            nestedLines.push(
+              ...this.emitPatternUnpackLines(arg, tmp, { nextTemp }),
+            );
+          }
+        }
+        if (parts.length > 0) {
+          return [
+            `const { ${parts.join(", ")} } = ${targetExpr} as any;`,
+            ...nestedLines,
+          ];
+        }
+        return nestedLines;
+      }
+
+      const fieldsVar = nextTemp();
+      const argTargets: string[] = [];
+      const nestedLines: string[] = [];
+      for (const arg of pat.args) {
+        if (this.collectPatternVariables(arg).length === 0) {
+          argTargets.push("");
+        } else if (arg.kind === "VariablePattern") {
+          argTargets.push(arg.name.name);
+        } else {
+          const tmp = nextTemp();
+          argTargets.push(tmp);
+          nestedLines.push(
+            ...this.emitPatternUnpackLines(arg, tmp, { nextTemp }),
+          );
+        }
+      }
+      return [
+        `const { _tag: _, ...${fieldsVar} } = ${targetExpr} as any;`,
+        `const [${argTargets.join(", ")}] = Object.values(${fieldsVar}) as any[];`,
+        ...nestedLines,
+      ];
     }
-    return lines;
+
+    return [];
   }
 
   private emitIfElseMatch(

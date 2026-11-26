@@ -503,5 +503,30 @@ block
         /Unterminated string literal/,
       );
     });
+
+    it("exempts type/data only inside record braces, not inside block braces", () => {
+      expect(() =>
+        new Lexer(`x = { type: "a", data: { type: 1 } }`).tokenize(),
+      ).not.toThrow();
+      expect(() =>
+        new Lexer(`schema S { type: String, data: Number }`).tokenize(),
+      ).not.toThrow();
+
+      expect(() => new Lexer(`effect { type X = 1 }`).tokenize()).toThrow(
+        LexerError,
+      );
+      expect(() => new Lexer(`par { data X = 1 }`).tokenize()).toThrow(
+        LexerError,
+      );
+      expect(() => new Lexer(`when (true) { type X = 1 }`).tokenize()).toThrow(
+        LexerError,
+      );
+      expect(() => new Lexer(`f = () => { type X = 1 }`).tokenize()).toThrow(
+        LexerError,
+      );
+      expect(() =>
+        new Lexer(`obj = { fn: () => { data X = 1 } }`).tokenize(),
+      ).toThrow(LexerError);
+    });
   });
 });

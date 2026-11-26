@@ -21,18 +21,12 @@ export function generateSourceMap(
 
   const s = new MagicString(source);
 
-  const headerLines: string[] = [];
-  for (const line of typescript.split("\n")) {
-    if (line.startsWith("import ")) headerLines.push(line);
-    else if (line.trim() === "" && headerLines.length > 0) break;
-  }
-  const header = headerLines.length > 0 ? headerLines.join("\n") + "\n\n" : "";
-
   if (ast.body.length === 0) {
     if (source.length > 0) {
       s.overwrite(0, source.length, typescript);
     }
   } else {
+    let totalBody = "";
     for (let i = 0; i < ast.body.length; i++) {
       const decl = ast.body[i];
       const nextDecl = ast.body[i + 1];
@@ -42,21 +36,27 @@ export function generateSourceMap(
         emitterOptions,
       );
       const singleOut = single.emit();
-      const code = singleOut
-        .split("\n")
-        .filter((l) => !l.startsWith("import "))
-        .join("\n")
-        .trim();
+      const code =
+        decl.kind === "ImportDeclaration"
+          ? singleOut.trim()
+          : singleOut
+              .split("\n")
+              .filter((l) => !l.startsWith("import "))
+              .join("\n")
+              .trim();
       const startOffset = i === 0 ? 0 : decl.span.start.offset;
       const endOffset = nextDecl ? nextDecl.span.start.offset : source.length;
       const isLast = i === ast.body.length - 1;
       const replacement = code + (isLast ? "\n" : "\n\n");
+      totalBody += replacement;
       s.overwrite(startOffset, endOffset, replacement);
     }
-  }
-
-  if (header.length > 0) {
-    s.prepend(header);
+    if (typescript.endsWith(totalBody)) {
+      const header = typescript.slice(0, typescript.length - totalBody.length);
+      if (header.length > 0) {
+        s.prepend(header);
+      }
+    }
   }
 
   if (s.toString() !== typescript) {

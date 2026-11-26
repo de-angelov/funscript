@@ -77,18 +77,6 @@ export spawned = effect {
 }
 ```
 
-#### Example: Comparison Operations on Values
-
-Historical `Number` comparison aliases (e.g., `greaterThan`, `lessThan`) have been completely removed in favor of native comparison operators for numbers and explicit `Order` instances for other domains:
-
-```funscript
-# Obsolete helper alias (rejected):
-isPositive = (n: Number) => n |> greaterThan(0)
-
-# Canonical FunScript native comparison:
-isPositive = (n: Number) => n > 0
-```
-
 ---
 
 ## 3. Breaking Language and Syntax Changes Protocol

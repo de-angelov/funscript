@@ -10,7 +10,10 @@ import { validateFunScript } from "../src/lsp/server.js";
 
 function evaluateSchemaModule(tsCode: string): any {
   const cjs = ts.transpileModule(tsCode, {
-    compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 },
+    compilerOptions: {
+      module: ts.ModuleKind.CommonJS,
+      target: ts.ScriptTarget.ES2022,
+    },
   }).outputText;
   const module = { exports: {} as any };
   const fn = new Function("exports", "require", "module", cjs);
@@ -51,9 +54,9 @@ describe("Imported TypeScript Schemas (TASK-096)", () => {
 
     it("rejects ts modifier on unsupported declarations", async () => {
       const code = `ts x = 10`;
-      await expect(Effect.runPromise(compileString(code, dummyFile))).rejects.toThrow(
-        "Expected '{ ... }' after 'ts'",
-      );
+      await expect(
+        Effect.runPromise(compileString(code, dummyFile)),
+      ).rejects.toThrow("Expected '{ ... }' after 'ts'");
     });
   });
 
@@ -66,18 +69,34 @@ export ts schema User = UserType
 `.trim();
 
       const result = await Effect.runPromise(compileString(source, dummyFile));
-      expect(result.typescript).toContain("export const User = Schema.Struct({");
+      expect(result.typescript).toContain(
+        "export const User = Schema.Struct({",
+      );
       expect(result.typescript).toContain("id: Schema.String");
       expect(result.typescript).toContain("name: Schema.String");
-      expect(result.typescript).toContain("age: Schema.optional(Schema.Number)");
+      expect(result.typescript).toContain(
+        "age: Schema.optional(Schema.Number)",
+      );
       expect(result.typescript).toContain("bio: Schema.NullOr(Schema.String)");
-      expect(result.typescript).toContain("nickname: Schema.optional(Schema.NullOr(Schema.String))");
+      expect(result.typescript).toContain(
+        "nickname: Schema.optional(Schema.NullOr(Schema.String))",
+      );
       expect(result.typescript).toContain("tags: Schema.Array(Schema.String)");
-      expect(result.typescript).toContain("matrix: Schema.Array(Schema.Array(Schema.Number))");
-      expect(result.typescript).toContain('role: Schema.Union([Schema.Literal("admin"), Schema.Literal("member"), Schema.Literal("guest")])');
-      expect(result.typescript).toContain("status: Schema.Union([Schema.String, Schema.Number])");
-      expect(result.typescript).toContain("export type User = typeof User.Type;");
-      expect(result.typescript).toContain("export const UserFromUnknown = (input: unknown): User => Schema.decodeUnknownSync(User)(input);");
+      expect(result.typescript).toContain(
+        "matrix: Schema.Array(Schema.Array(Schema.Number))",
+      );
+      expect(result.typescript).toContain(
+        'role: Schema.Union([Schema.Literal("admin"), Schema.Literal("member"), Schema.Literal("guest")])',
+      );
+      expect(result.typescript).toContain(
+        "status: Schema.Union([Schema.String, Schema.Number])",
+      );
+      expect(result.typescript).toContain(
+        "export type User = typeof User.Type;",
+      );
+      expect(result.typescript).toContain(
+        "export const UserFromUnknown = (input: unknown): User => Schema.decodeUnknownSync(User)(input);",
+      );
 
       // Verify runtime decoding
       const mod = evaluateSchemaModule(result.typescript);
@@ -90,7 +109,10 @@ export ts schema User = UserType
         name: "Alice",
         bio: null,
         tags: ["admin", "staff"],
-        matrix: [[1, 2], [3, 4]],
+        matrix: [
+          [1, 2],
+          [3, 4],
+        ],
         role: "admin",
         status: "active",
       });
@@ -100,7 +122,9 @@ export ts schema User = UserType
       expect(Object.hasOwn(valid1, "age")).toBe(false);
       const withUndefined = mod.UserFromUnknown({ ...valid1, age: undefined });
       expect(Object.hasOwn(withUndefined, "age")).toBe(true);
-      expect(Object.hasOwn(Schema.encodeSync(mod.User)(withUndefined), "age")).toBe(true);
+      expect(
+        Object.hasOwn(Schema.encodeSync(mod.User)(withUndefined), "age"),
+      ).toBe(true);
 
       // Valid decode with optional age, nickname, and numeric status
       const valid2 = mod.UserFromUnknown({
@@ -170,8 +194,12 @@ export ts schema PairValue = InstantiatedPair
 export ts schema GenericValue = InstantiatedValue
 `.trim();
       const result = await Effect.runPromise(compileString(source, dummyFile));
-      expect(result.typescript).toContain("Fixed = Schema.Tuple([Schema.String, Schema.Number])");
-      expect(result.typescript).toContain("Optional = Schema.Tuple([Schema.String, Schema.optional(Schema.Number)])");
+      expect(result.typescript).toContain(
+        "Fixed = Schema.Tuple([Schema.String, Schema.Number])",
+      );
+      expect(result.typescript).toContain(
+        "Optional = Schema.Tuple([Schema.String, Schema.optional(Schema.Number)])",
+      );
       const mod = evaluateSchemaModule(result.typescript);
       expect(mod.FixedFromUnknown(["x", 2])).toEqual(["x", 2]);
       expect(() => mod.FixedFromUnknown([2, "x"])).toThrow();
@@ -194,26 +222,53 @@ export ts schema NumericChoice = NumericTagged
       const result = await Effect.runPromise(compileString(source, dummyFile));
       expect(result.typescript).toContain('kind: Schema.Literal("text")');
       expect(result.typescript).toContain('kind: Schema.Literal("count")');
-      expect(result.typescript).toContain('enabled: Schema.Literal(true)');
-      expect(result.typescript).toContain('enabled: Schema.Literal(false)');
-      expect(result.typescript).toContain('code: Schema.Literal(1)');
-      expect(result.typescript).toContain('code: Schema.Literal(2)');
+      expect(result.typescript).toContain("enabled: Schema.Literal(true)");
+      expect(result.typescript).toContain("enabled: Schema.Literal(false)");
+      expect(result.typescript).toContain("code: Schema.Literal(1)");
+      expect(result.typescript).toContain("code: Schema.Literal(2)");
 
       const mod = evaluateSchemaModule(result.typescript);
-      expect(mod.StringChoiceFromUnknown({ kind: "text", value: "hello" })).toEqual({ kind: "text", value: "hello" });
-      expect(mod.StringChoiceFromUnknown({ kind: "count", value: 4 })).toEqual({ kind: "count", value: 4 });
-      expect(() => mod.StringChoiceFromUnknown({ kind: "text", value: 4 })).toThrow();
-      expect(() => mod.StringChoiceFromUnknown({ kind: "other", value: "hello" })).toThrow();
+      expect(
+        mod.StringChoiceFromUnknown({ kind: "text", value: "hello" }),
+      ).toEqual({ kind: "text", value: "hello" });
+      expect(mod.StringChoiceFromUnknown({ kind: "count", value: 4 })).toEqual({
+        kind: "count",
+        value: 4,
+      });
+      expect(() =>
+        mod.StringChoiceFromUnknown({ kind: "text", value: 4 }),
+      ).toThrow();
+      expect(() =>
+        mod.StringChoiceFromUnknown({ kind: "other", value: "hello" }),
+      ).toThrow();
 
-      expect(mod.BooleanChoiceFromUnknown({ enabled: true, label: "ready" })).toEqual({ enabled: true, label: "ready" });
-      expect(mod.BooleanChoiceFromUnknown({ enabled: false, reason: "disabled" })).toEqual({ enabled: false, reason: "disabled" });
-      expect(() => mod.BooleanChoiceFromUnknown({ enabled: true, reason: "disabled" })).toThrow();
-      expect(() => mod.BooleanChoiceFromUnknown({ enabled: "true", label: "ready" })).toThrow();
+      expect(
+        mod.BooleanChoiceFromUnknown({ enabled: true, label: "ready" }),
+      ).toEqual({ enabled: true, label: "ready" });
+      expect(
+        mod.BooleanChoiceFromUnknown({ enabled: false, reason: "disabled" }),
+      ).toEqual({ enabled: false, reason: "disabled" });
+      expect(() =>
+        mod.BooleanChoiceFromUnknown({ enabled: true, reason: "disabled" }),
+      ).toThrow();
+      expect(() =>
+        mod.BooleanChoiceFromUnknown({ enabled: "true", label: "ready" }),
+      ).toThrow();
 
-      expect(mod.NumericChoiceFromUnknown({ code: 1, message: "ok" })).toEqual({ code: 1, message: "ok" });
-      expect(mod.NumericChoiceFromUnknown({ code: 2, retryAfter: 3 })).toEqual({ code: 2, retryAfter: 3 });
-      expect(() => mod.NumericChoiceFromUnknown({ code: 3, message: "ok" })).toThrow();
-      expect(() => mod.NumericChoiceFromUnknown({ code: 1, retryAfter: "soon" })).toThrow();
+      expect(mod.NumericChoiceFromUnknown({ code: 1, message: "ok" })).toEqual({
+        code: 1,
+        message: "ok",
+      });
+      expect(mod.NumericChoiceFromUnknown({ code: 2, retryAfter: 3 })).toEqual({
+        code: 2,
+        retryAfter: 3,
+      });
+      expect(() =>
+        mod.NumericChoiceFromUnknown({ code: 3, message: "ok" }),
+      ).toThrow();
+      expect(() =>
+        mod.NumericChoiceFromUnknown({ code: 1, retryAfter: "soon" }),
+      ).toThrow();
     });
 
     it("preserves nested discriminated union structures and supports exhaustive narrowing in match arms (TASK-176)", async () => {
@@ -229,14 +284,22 @@ export handle = (event: Event) =>
 `.trim();
 
       const result = await Effect.runPromise(compileString(source, dummyFile));
-      expect(result.typescript).toContain('type: Schema.Literal("checkout.session.completed")');
-      expect(result.typescript).toContain('type: Schema.Literal("payment_intent.payment_failed")');
-      expect(result.typescript).toContain('id: Schema.String');
-      expect(result.typescript).toContain('amount_total: Schema.Number');
-      expect(result.typescript).toContain('last_payment_error: Schema.String');
-      expect(result.typescript).toContain('.with({ type: "checkout.session.completed" }, (event) => event.data.object.amount_total)');
-      expect(result.typescript).toContain('.with({ type: "payment_intent.payment_failed" }, (event) => event.data.object.last_payment_error)');
-      expect(result.typescript).toContain('.exhaustive()');
+      expect(result.typescript).toContain(
+        'type: Schema.Literal("checkout.session.completed")',
+      );
+      expect(result.typescript).toContain(
+        'type: Schema.Literal("payment_intent.payment_failed")',
+      );
+      expect(result.typescript).toContain("id: Schema.String");
+      expect(result.typescript).toContain("amount_total: Schema.Number");
+      expect(result.typescript).toContain("last_payment_error: Schema.String");
+      expect(result.typescript).toContain(
+        '.with({ type: "checkout.session.completed" }, (event) => event.data.object.amount_total)',
+      );
+      expect(result.typescript).toContain(
+        '.with({ type: "payment_intent.payment_failed" }, (event) => event.data.object.last_payment_error)',
+      );
+      expect(result.typescript).toContain(".exhaustive()");
 
       const mod = evaluateSchemaModule(result.typescript);
       const checkoutEv = {
@@ -296,11 +359,15 @@ export handle = (event: Event) =>
       expect(checkRes.success).toBe(false);
       expect(checkRes.errorCount).toBeGreaterThan(0);
 
-      const err = checkRes.diagnostics.find((d) => d.message.includes("non_existent_field"));
+      const err = checkRes.diagnostics.find((d) =>
+        d.message.includes("non_existent_field"),
+      );
       expect(err).toBeDefined();
       expect(err!.file).toBe("src/test-imported.fun");
       expect(err!.line).toBe(7);
-      expect(err!.message).toContain("Property 'non_existent_field' does not exist");
+      expect(err!.message).toContain(
+        "Property 'non_existent_field' does not exist",
+      );
     });
 
     it("exhaustiveness checking flags missing union variants with a source-mapped error (TASK-176)", async () => {
@@ -347,7 +414,9 @@ export ts schema Bool = BooleanAlias
       const result = await Effect.runPromise(compileString(source, dummyFile));
       expect(result.typescript).toContain("export const Str = Schema.String;");
       expect(result.typescript).toContain("export const Num = Schema.Number;");
-      expect(result.typescript).toContain("export const Bool = Schema.Boolean;");
+      expect(result.typescript).toContain(
+        "export const Bool = Schema.Boolean;",
+      );
 
       const mod = evaluateSchemaModule(result.typescript);
       expect(mod.StrFromUnknown("hello")).toBe("hello");
@@ -367,7 +436,9 @@ export ts schema AlwaysFalse = FalseLiteral
 `.trim();
       const result = await Effect.runPromise(compileString(source, dummyFile));
       expect(result.typescript).toContain("AlwaysTrue = Schema.Literal(true)");
-      expect(result.typescript).toContain("AlwaysFalse = Schema.Literal(false)");
+      expect(result.typescript).toContain(
+        "AlwaysFalse = Schema.Literal(false)",
+      );
       const mod = evaluateSchemaModule(result.typescript);
       expect(mod.AlwaysTrueFromUnknown(true)).toBe(true);
       expect(() => mod.AlwaysTrueFromUnknown(false)).toThrow();
@@ -384,8 +455,12 @@ export ts schema OptionalValue = OptionalUndefined
       const result = await Effect.runPromise(compileString(source, dummyFile));
       const mod = evaluateSchemaModule(result.typescript);
       expect(mod.OptionalValueFromUnknown({})).toEqual({});
-      expect(mod.OptionalValueFromUnknown({ value: undefined })).toEqual({ value: undefined });
-      expect(mod.OptionalValueFromUnknown({ value: "ok", extra: 1 })).toEqual({ value: "ok" });
+      expect(mod.OptionalValueFromUnknown({ value: undefined })).toEqual({
+        value: undefined,
+      });
+      expect(mod.OptionalValueFromUnknown({ value: "ok", extra: 1 })).toEqual({
+        value: "ok",
+      });
       expect(() => mod.OptionalValueFromUnknown({ value: 1 })).toThrow();
     });
 
@@ -398,8 +473,12 @@ export ts schema Numbers = ReadonlyNumberArray
 `.trim();
 
       const result = await Effect.runPromise(compileString(source, dummyFile));
-      expect(result.typescript).toContain("export const Strings = Schema.Array(Schema.String);");
-      expect(result.typescript).toContain("export const Numbers = Schema.Array(Schema.Number);");
+      expect(result.typescript).toContain(
+        "export const Strings = Schema.Array(Schema.String);",
+      );
+      expect(result.typescript).toContain(
+        "export const Numbers = Schema.Array(Schema.Number);",
+      );
 
       const mod = evaluateSchemaModule(result.typescript);
       expect(mod.StringsFromUnknown(["a", "b"])).toEqual(["a", "b"]);
@@ -416,7 +495,9 @@ export ts schema Dict = StringNumberRecord
 `.trim();
 
       const result = await Effect.runPromise(compileString(source, dummyFile));
-      expect(result.typescript).toContain("export const Dict = Schema.Record(Schema.String, Schema.Number);");
+      expect(result.typescript).toContain(
+        "export const Dict = Schema.Record(Schema.String, Schema.Number);",
+      );
 
       const mod = evaluateSchemaModule(result.typescript);
       expect(mod.DictFromUnknown({ x: 1, y: 2 })).toEqual({ x: 1, y: 2 });
@@ -432,8 +513,12 @@ export ts schema Mixed = MixedUnion
 `.trim();
 
       const result = await Effect.runPromise(compileString(source, dummyFile));
-      expect(result.typescript).toContain('export const Status = Schema.Union([Schema.Literal("active"), Schema.Literal("inactive")]);');
-      expect(result.typescript).toContain("export const Mixed = Schema.NullOr(Schema.Union([Schema.String, Schema.Number]));");
+      expect(result.typescript).toContain(
+        'export const Status = Schema.Union([Schema.Literal("active"), Schema.Literal("inactive")]);',
+      );
+      expect(result.typescript).toContain(
+        "export const Mixed = Schema.NullOr(Schema.Union([Schema.String, Schema.Number]));",
+      );
 
       const mod = evaluateSchemaModule(result.typescript);
       expect(mod.StatusFromUnknown("active")).toBe("active");
@@ -454,12 +539,19 @@ export ts schema Nested = NestedUser
 `.trim();
 
       const result = await Effect.runPromise(compileString(source, dummyFile));
-      expect(result.typescript).toContain("export const Nested = Schema.Struct({");
+      expect(result.typescript).toContain(
+        "export const Nested = Schema.Struct({",
+      );
       expect(result.typescript).toContain("avatar: Schema.String");
-      expect(result.typescript).toContain("description: Schema.optional(Schema.String)");
+      expect(result.typescript).toContain(
+        "description: Schema.optional(Schema.String)",
+      );
 
       const mod = evaluateSchemaModule(result.typescript);
-      const valid = mod.NestedFromUnknown({ id: "1", profile: { avatar: "pic.png" } });
+      const valid = mod.NestedFromUnknown({
+        id: "1",
+        profile: { avatar: "pic.png" },
+      });
       expect(valid.profile.avatar).toBe("pic.png");
       expect(() => mod.NestedFromUnknown({ id: "1", profile: {} })).toThrow();
     });
@@ -472,20 +564,42 @@ export ts schema Nested = NestedUser
       expect(editorDiagnostic).toMatchObject({
         code: "FS_IMPORTED_SCHEMA",
         range: { start: { line: 1 } },
-        data: { suggestedAction: expect.stringContaining("concrete data type") },
+        data: {
+          suggestedAction: expect.stringContaining("concrete data type"),
+        },
       });
-      expect(editorDiagnostic.message).toContain("NestedUnsupported.items[].extra");
+      expect(editorDiagnostic.message).toContain(
+        "NestedUnsupported.items[].extra",
+      );
       const related = editorDiagnostic.relatedInformation?.[0];
-      expect(related?.location.uri).toBe(new URL("./fixtures/imported-schemas/model.ts", import.meta.url).href);
-      const lines = (await fs.readFile(path.join(process.cwd(), "tests/fixtures/imported-schemas/model.ts"), "utf8")).split("\n");
-      expect(lines[related!.location.range.start.line].slice(related!.location.range.start.character)).toMatch(/^extra:/);
-      const result = await Effect.runPromise(typeCheckVirtualFiles({ [dummyFile]: source }, { cwd: process.cwd(), compilerOptions: { rootDir: process.cwd() } }));
+      expect(related?.location.uri).toBe(
+        new URL("./fixtures/imported-schemas/model.ts", import.meta.url).href,
+      );
+      const lines = (
+        await fs.readFile(
+          path.join(process.cwd(), "tests/fixtures/imported-schemas/model.ts"),
+          "utf8",
+        )
+      ).split("\n");
+      expect(
+        lines[related!.location.range.start.line].slice(
+          related!.location.range.start.character,
+        ),
+      ).toMatch(/^extra:/);
+      const result = await Effect.runPromise(
+        typeCheckVirtualFiles(
+          { [dummyFile]: source },
+          { cwd: process.cwd(), compilerOptions: { rootDir: process.cwd() } },
+        ),
+      );
       expect(result.diagnostics[0]).toMatchObject({
         diagnosticCode: "FS_IMPORTED_SCHEMA",
         line: 2,
         suggestedAction: expect.stringContaining("concrete data type"),
       });
-      expect(result.formattedOutput).toContain("NestedUnsupported.items[].extra");
+      expect(result.formattedOutput).toContain(
+        "NestedUnsupported.items[].extra",
+      );
       expect(result.diagnostics[0].related?.file).toMatch(/model\.ts$/);
       expect(result.formattedOutput).toContain("TypeScript declaration:");
       expect(result.formattedOutput).not.toContain("Fix the syntax");
@@ -498,9 +612,9 @@ import type { TypeWithFunction } from "${fixturePath}"
 ts schema Bad = TypeWithFunction
 `.trim();
 
-      await expect(Effect.runPromise(compileString(source, dummyFile))).rejects.toThrow(
-        /Method 'TypeWithFunction\.greet' is not supported/,
-      );
+      await expect(
+        Effect.runPromise(compileString(source, dummyFile)),
+      ).rejects.toThrow(/Method 'TypeWithFunction\.greet' is not supported/);
     });
 
     it("rejects 'any' with actionable diagnostic without silent widening", async () => {
@@ -510,9 +624,9 @@ import type { TypeWithAny } from "${fixturePath}"
 ts schema Bad = TypeWithAny
 `.trim();
 
-      await expect(Effect.runPromise(compileString(source, dummyFile))).rejects.toThrow(
-        /Type 'any' in 'TypeWithAny\.extra' is not supported/,
-      );
+      await expect(
+        Effect.runPromise(compileString(source, dummyFile)),
+      ).rejects.toThrow(/Type 'any' in 'TypeWithAny\.extra' is not supported/);
     });
 
     it("rejects 'unknown' with actionable diagnostic", async () => {
@@ -522,7 +636,9 @@ import type { TypeWithUnknown } from "${fixturePath}"
 ts schema Bad = TypeWithUnknown
 `.trim();
 
-      await expect(Effect.runPromise(compileString(source, dummyFile))).rejects.toThrow(
+      await expect(
+        Effect.runPromise(compileString(source, dummyFile)),
+      ).rejects.toThrow(
         /Type 'unknown' in 'TypeWithUnknown\.data' is not supported/,
       );
     });
@@ -534,7 +650,9 @@ import type { TypeWithDate } from "${fixturePath}"
 ts schema Bad = TypeWithDate
 `.trim();
 
-      await expect(Effect.runPromise(compileString(source, dummyFile))).rejects.toThrow(
+      await expect(
+        Effect.runPromise(compileString(source, dummyFile)),
+      ).rejects.toThrow(
         /Type 'Date' in 'TypeWithDate\.createdAt' is not supported/,
       );
     });
@@ -546,9 +664,9 @@ import type { UserClass } from "${fixturePath}"
 ts schema Bad = UserClass
 `.trim();
 
-      await expect(Effect.runPromise(compileString(source, dummyFile))).rejects.toThrow(
-        /Class 'UserClass' is not supported/,
-      );
+      await expect(
+        Effect.runPromise(compileString(source, dummyFile)),
+      ).rejects.toThrow(/Class 'UserClass' is not supported/);
     });
 
     it("derives recursive record schemas and validates nested values", async () => {
@@ -559,33 +677,80 @@ export ts schema Tree = TreeType
 `.trim();
       const result = await Effect.runPromise(compileString(source, dummyFile));
       expect(result.typescript).toContain("Schema.suspend(");
-      const checked = await Effect.runPromise(typeCheckVirtualFiles({ [dummyFile]: source }, { cwd: process.cwd(), compilerOptions: { rootDir: process.cwd(), exactOptionalPropertyTypes: true } }));
+      const checked = await Effect.runPromise(
+        typeCheckVirtualFiles(
+          { [dummyFile]: source },
+          {
+            cwd: process.cwd(),
+            compilerOptions: {
+              rootDir: process.cwd(),
+              exactOptionalPropertyTypes: true,
+            },
+          },
+        ),
+      );
       expect(checked.diagnostics).toEqual([]);
-      const invalid = source + '\nexport bad = (tree: Tree): Number => tree.id';
-      const invalidChecked = await Effect.runPromise(typeCheckVirtualFiles({ [dummyFile]: invalid }, { cwd: process.cwd(), compilerOptions: { rootDir: process.cwd() } }));
-      expect(invalidChecked.diagnostics.map(diagnostic => diagnostic.message).join("\n")).toMatch(/not assignable/);
+      const invalid = source + "\nexport bad = (tree: Tree): Number => tree.id";
+      const invalidChecked = await Effect.runPromise(
+        typeCheckVirtualFiles(
+          { [dummyFile]: invalid },
+          { cwd: process.cwd(), compilerOptions: { rootDir: process.cwd() } },
+        ),
+      );
+      expect(
+        invalidChecked.diagnostics
+          .map((diagnostic) => diagnostic.message)
+          .join("\n"),
+      ).toMatch(/not assignable/);
       const mod = evaluateSchemaModule(result.typescript);
       const value = { id: "root", children: [{ id: "child", children: [] }] };
       expect(mod.TreeFromUnknown(value)).toEqual(value);
-      expect(() => mod.TreeFromUnknown({ id: "root", children: [{ id: 5, children: [] }] })).toThrow();
+      expect(() =>
+        mod.TreeFromUnknown({
+          id: "root",
+          children: [{ id: 5, children: [] }],
+        }),
+      ).toThrow();
     });
 
     it("supports optional recursive fields while rejecting invalid nested values", async () => {
       const source = `import type { OptionalRecursiveTree as NodeType } from "${fixturePath}.js"\nexport schema Node = from ts<NodeType>`;
       const result = await Effect.runPromise(compileString(source, dummyFile));
-      const checked = await Effect.runPromise(typeCheckVirtualFiles({ [dummyFile]: source }, { cwd: process.cwd(), compilerOptions: { rootDir: process.cwd(), exactOptionalPropertyTypes: true } }));
+      const checked = await Effect.runPromise(
+        typeCheckVirtualFiles(
+          { [dummyFile]: source },
+          {
+            cwd: process.cwd(),
+            compilerOptions: {
+              rootDir: process.cwd(),
+              exactOptionalPropertyTypes: true,
+            },
+          },
+        ),
+      );
       expect(checked.diagnostics).toEqual([]);
       const mod = evaluateSchemaModule(result.typescript);
-      expect(mod.NodeFromUnknown({ id: "first", next: { id: "second" } })).toEqual({ id: "first", next: { id: "second" } });
-      expect(mod.NodeFromUnknown({ id: "first", next: undefined })).toEqual({ id: "first", next: undefined });
-      expect(() => mod.NodeFromUnknown({ id: "first", next: { id: 12 } })).toThrow();
+      expect(
+        mod.NodeFromUnknown({ id: "first", next: { id: "second" } }),
+      ).toEqual({ id: "first", next: { id: "second" } });
+      expect(mod.NodeFromUnknown({ id: "first", next: undefined })).toEqual({
+        id: "first",
+        next: undefined,
+      });
+      expect(() =>
+        mod.NodeFromUnknown({ id: "first", next: { id: 12 } }),
+      ).toThrow();
     });
 
     it("continues rejecting functions and non-root recursive cycles", async () => {
       const unsupported = `import type { RecursiveWithFunction } from "${fixturePath}"\nts schema Bad = RecursiveWithFunction`;
-      await expect(Effect.runPromise(compileString(unsupported, dummyFile))).rejects.toThrow(/Method 'RecursiveWithFunction.callback'/);
+      await expect(
+        Effect.runPromise(compileString(unsupported, dummyFile)),
+      ).rejects.toThrow(/Method 'RecursiveWithFunction.callback'/);
       const nested = `import type { NestedRecursiveRoot } from "${fixturePath}"\nts schema Bad = NestedRecursiveRoot`;
-      await expect(Effect.runPromise(compileString(nested, dummyFile))).rejects.toThrow(/Recursive type 'NestedRecursiveNode'/);
+      await expect(
+        Effect.runPromise(compileString(nested, dummyFile)),
+      ).rejects.toThrow(/Recursive type 'NestedRecursiveNode'/);
     });
 
     it("rejects non-existent types with diagnostic", async () => {
@@ -595,22 +760,29 @@ import type { NonExistent } from "${fixturePath}"
 ts schema Bad = NonExistent
 `.trim();
 
-      await expect(Effect.runPromise(compileString(source, dummyFile))).rejects.toThrow(
-        /Cannot resolve type 'NonExistent'/,
-      );
+      await expect(
+        Effect.runPromise(compileString(source, dummyFile)),
+      ).rejects.toThrow(/Cannot resolve type 'NonExistent'/);
     });
   });
 
   describe("Recompilation Reflection", () => {
     it("reflects changes to imported type files on recompilation", async () => {
-      const tempDir = path.resolve(process.cwd(), "tests/fixtures/imported-schemas/temp-recompile");
+      const tempDir = path.resolve(
+        process.cwd(),
+        "tests/fixtures/imported-schemas/temp-recompile",
+      );
       await fs.mkdir(tempDir, { recursive: true });
       const modelFile = path.join(tempDir, "dynamic.ts");
       const funFile = path.join(tempDir, "app.fun");
 
       try {
         // Version 1 of dynamic.ts
-        await fs.writeFile(modelFile, "export interface Config { timeout: number }\n", "utf8");
+        await fs.writeFile(
+          modelFile,
+          "export interface Config { timeout: number }\n",
+          "utf8",
+        );
         const funSource = `import type { Config as ConfigType } from "./dynamic"\n\nexport ts schema Config = ConfigType\n`;
         const res1 = await Effect.runPromise(compileString(funSource, funFile));
         expect(res1.typescript).toContain("timeout: Schema.Number");
@@ -625,6 +797,64 @@ ts schema Bad = NonExistent
         const res2 = await Effect.runPromise(compileString(funSource, funFile));
         expect(res2.typescript).toContain("timeout: Schema.Number");
         expect(res2.typescript).toContain("retries: Schema.Number");
+      } finally {
+        await fs.rm(tempDir, { recursive: true, force: true });
+      }
+    });
+  });
+
+  describe("Option<T> and generic TypeReferenceNode probing", () => {
+    it("derives Schema.Option for Option<T> fields and preserves typeArgs when probing generic types", async () => {
+      const source = `
+import { Option } from "effect"
+
+ts {
+  export interface Box<T> {
+    value: T;
+    opt: Option.Option<T>;
+    optionalOpt?: Option.Option<number>;
+  }
+}
+
+export ts schema StringBox = Box<String>
+`.trim();
+      const result = await Effect.runPromise(compileString(source, dummyFile));
+      expect(result.typescript).toContain("value: Schema.String");
+      expect(result.typescript).toContain("opt: Schema.Option(Schema.String)");
+      expect(result.typescript).toContain(
+        "optionalOpt: Schema.optional(Schema.Option(Schema.Number))",
+      );
+      const checked = await Effect.runPromise(
+        typeCheckVirtualFiles({ [dummyFile]: source }),
+      );
+      expect(checked.diagnostics).toEqual([]);
+    });
+
+    it("preserves typeArgs when probing generic package record contracts", async () => {
+      const tempDir = path.resolve(
+        process.cwd(),
+        "tests/fixtures/imported-schemas/temp-generic-contract",
+      );
+      await fs.mkdir(tempDir, { recursive: true });
+      const contractFile = path.join(tempDir, "contract.d.ts");
+      const funFile = path.join(tempDir, "app.fun");
+
+      try {
+        await fs.writeFile(
+          contractFile,
+          `export type GenericBox<T> = { readonly value: T; readonly note?: string } & { readonly "__funscript_record_contract__"?: true };\n`,
+          "utf8",
+        );
+        const funSource = `
+import type { GenericBox } from "./contract.js"
+import { Option } from "effect"
+
+export make = (note: Option<String>): GenericBox<String> => ({ value: "hi", note })
+`.trim();
+        const compiled = await Effect.runPromise(
+          compileString(funSource, funFile),
+        );
+        expect(compiled.typescript).toContain("GenericBox<string>");
       } finally {
         await fs.rm(tempDir, { recursive: true, force: true });
       }

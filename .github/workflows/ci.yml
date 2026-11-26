@@ -41,7 +41,6 @@ jobs:
 
       - name: Check generated reference documentation
         id: docs_gate
-        continue-on-error: true
         run: npm run docs:check
 
       - name: Auto-rebuild reference documentation on drift
@@ -76,6 +75,9 @@ jobs:
 
       - name: Lint TypeScript source (ESLint + Effect rules)
         run: npm run lint
+
+      - name: Check idiomatic FunScript usage
+        run: npm run check:idiomatic
 
       - name: Check unused files, exports, and dependencies (Knip)
         run: npm run knip

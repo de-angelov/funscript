@@ -89,6 +89,20 @@ describe("FunScript LSP Server", () => {
     });
   });
 
+  it("shows inferred TS types for user identifiers shadowing Effect doc names", () => {
+    const source =
+      "export map = (n: Number) => n + 1\nexport record = { count: 1 }\nexport res = map(record.count)";
+    const uri = `file://${process.cwd()}/shadow-docs.fun`;
+    const mapHover = findHover(source, uri, { line: 2, character: 14 });
+    const mapValue = (mapHover?.contents as { value: string })?.value ?? "";
+    expect(mapValue).toContain("```ts\nmap:");
+    expect(mapValue).not.toContain("Array.map");
+    const recordHover = findHover(source, uri, { line: 2, character: 19 });
+    const recordValue =
+      (recordHover?.contents as { value: string })?.value ?? "";
+    expect(recordValue).toContain("```ts\nrecord: { count: number; }");
+  });
+
   describe("Completion", () => {
     it("offers explicit companion alternatives for ambiguous bare pipeline stages", () => {
       const server = new FunScriptLspServer();
@@ -213,6 +227,57 @@ describe("FunScript LSP Server", () => {
         position: { line: 0, character: 7 },
       });
       expect(methods.map((item) => item.label)).toContain("map");
+    });
+
+    it("escapes regex metacharacters in member names and imported file basenames", async () => {
+      const server = new FunScriptLspServer();
+      await server.handleMessage({
+        jsonrpc: "2.0",
+        id: 10,
+        method: "initialize",
+        params: {},
+      });
+      server.onDidOpenHandler({
+        textDocument: {
+          uri: "file:///project/my.utils+v1.fun",
+          languageId: "funscript",
+          version: 1,
+          text: "export helper = 42\n",
+        },
+      });
+      server.onDidOpenHandler({
+        textDocument: {
+          uri: "file:///project/main.fun",
+          languageId: "funscript",
+          version: 1,
+          text: [
+            'import { helper } from "./my.utils+v1"',
+            "schema User$Data = {",
+            "  id: String",
+            "}",
+            "User$Data.",
+          ].join("\n"),
+        },
+      });
+      const memberItems = server.onCompletionHandler({
+        textDocument: { uri: "file:///project/main.fun" },
+        position: { line: 4, character: 10 },
+      });
+      expect(memberItems.map((item) => item.label)).toContain("id");
+
+      server.onDidChangeHandler({
+        textDocument: { uri: "file:///project/main.fun", version: 2 },
+        contentChanges: [
+          {
+            text: 'import { helper } from "./my.utils+v1"\nhel',
+          },
+        ],
+      });
+      const importedItems = server.onCompletionHandler({
+        textDocument: { uri: "file:///project/main.fun" },
+        position: { line: 1, character: 3 },
+      });
+      expect(importedItems.map((item) => item.label)).toContain("helper");
     });
   });
   describe("Lifecycle Handling", () => {
@@ -2193,6 +2258,49 @@ export schema Config = {
         end: { line: 1, character: 11 },
       });
     });
+
+    it("resolves go-to-definition for non-first branches of an OrPattern", async () => {
+      const server = new FunScriptLspServer();
+      await server.handleMessage({
+        jsonrpc: "2.0",
+        id: 21,
+        method: "initialize",
+        params: {},
+      });
+      const uri = "file:///or-pattern-def.fun";
+      const text = [
+        "schema Shape =",
+        "  | Circle(r: Number)",
+        "  | Square(s: Number)",
+        "describe = (shape: Shape) =>",
+        "  match shape",
+        '    | Circle(_) | Square(_) => "ok"',
+      ].join("\n");
+      await server.handleMessage({
+        jsonrpc: "2.0",
+        method: "textDocument/didOpen",
+        params: {
+          textDocument: { uri, languageId: "funscript", version: 1, text },
+        },
+      });
+      const response = (await server.handleMessage({
+        jsonrpc: "2.0",
+        id: 22,
+        method: "textDocument/definition",
+        params: {
+          textDocument: { uri },
+          position: { line: 5, character: 18 }, // on 'Square' in second OrPattern branch
+        },
+      })) as ResponseMessage;
+
+      expect(response.error).toBeUndefined();
+      const location = response.result as {
+        uri: string;
+        range: { start: { line: number; character: number } };
+      };
+      expect(location).toBeDefined();
+      expect(location.range.start.line).toBe(2);
+    });
   });
 
   describe("Hover Provider (textDocument/hover)", () => {
@@ -2845,6 +2953,67 @@ export schema Config = {
       const serviceHover = serviceRes.result as Hover;
       expect(serviceHover).toBeDefined();
       expect((serviceHover.contents as any).value).toContain("Context.Service");
+    });
+
+    it("disambiguates hover by position when a symbol name appears multiple times", async () => {
+      const server = new FunScriptLspServer();
+      await server.handleMessage({
+        jsonrpc: "2.0",
+        id: 81,
+        method: "initialize",
+        params: {},
+      });
+      const uri = `file://${process.cwd()}/shadowed-hover.fun`;
+      const text = [
+        'import { Effect } from "effect"',
+        "",
+        "first = () =>",
+        "  effect {",
+        "    value <- Effect.succeed(42)",
+        "    => value",
+        "  }",
+        "",
+        "second = () =>",
+        "  effect {",
+        '    value <- Effect.succeed("hello")',
+        "    => value",
+        "  }",
+      ].join("\n");
+      await server.handleMessage({
+        jsonrpc: "2.0",
+        method: "textDocument/didOpen",
+        params: {
+          textDocument: { uri, languageId: "funscript", version: 1, text },
+        },
+      });
+
+      const firstRes = (await server.handleMessage({
+        jsonrpc: "2.0",
+        id: 82,
+        method: "textDocument/hover",
+        params: {
+          textDocument: { uri },
+          position: { line: 4, character: 5 },
+        },
+      })) as ResponseMessage;
+      expect(firstRes.result).not.toBeNull();
+      expect(((firstRes.result as Hover).contents as any).value).toContain(
+        "number",
+      );
+
+      const secondRes = (await server.handleMessage({
+        jsonrpc: "2.0",
+        id: 83,
+        method: "textDocument/hover",
+        params: {
+          textDocument: { uri },
+          position: { line: 10, character: 5 },
+        },
+      })) as ResponseMessage;
+      expect(secondRes.result).not.toBeNull();
+      expect(((secondRes.result as Hover).contents as any).value).toContain(
+        "string",
+      );
     });
   });
 

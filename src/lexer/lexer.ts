@@ -27,8 +27,36 @@ export class Lexer {
   private parenLevel = 0;
   private bracketLevel = 0;
   private braceStack: (
-    "record" | "interpolation" | "template_interpolation" | "jsx_expr"
+    "record" | "block" | "interpolation" | "template_interpolation" | "jsx_expr"
   )[] = [];
+
+  private isBlockBrace(): boolean {
+    const lastToken = this.tokens[this.tokens.length - 1];
+    if (!lastToken) return false;
+    if (
+      lastToken.type === TokenType.EFFECT ||
+      lastToken.type === TokenType.PAR ||
+      lastToken.type === TokenType.ARROW ||
+      lastToken.type === TokenType.RPAREN
+    ) {
+      return true;
+    }
+    for (let i = this.tokens.length - 1; i >= 0; i--) {
+      const t = this.tokens[i].type;
+      if (
+        t === TokenType.NEWLINE ||
+        t === TokenType.INDENT ||
+        t === TokenType.DEDENT ||
+        t === TokenType.LBRACE
+      ) {
+        break;
+      }
+      if (t === TokenType.WHEN) {
+        return true;
+      }
+    }
+    return false;
+  }
   private jsxStack: Array<{
     kind: "tag" | "closing_tag" | "children" | "expr";
     hasTagName?: boolean;
@@ -256,7 +284,7 @@ export class Lexer {
           this.emitToken(TokenType.RBRACKET, "]", 1);
           break;
         case "{":
-          this.braceStack.push("record");
+          this.braceStack.push(this.isBlockBrace() ? "block" : "record");
           this.emitToken(TokenType.LBRACE, "{", 1);
           break;
         case "}":
@@ -933,7 +961,7 @@ export class Lexer {
           (raw === "type" &&
             lastToken?.type === TokenType.EXPORT &&
             /^[ \t]*\{/.test(this.source.slice(this.offset))) ||
-          this.braceStack.includes("record")
+          this.braceStack[this.braceStack.length - 1] === "record"
         ) {
           this.tokens.push({
             type: TokenType.IDENTIFIER,

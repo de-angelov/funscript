@@ -3,6 +3,7 @@ import prettier from "prettier";
 import * as fs from "node:fs";
 import * as path from "node:path";
 import {
+  Formatter,
   format,
   checkFormat,
   extractComments,
@@ -863,6 +864,123 @@ export schema Config = {
           "}) => 42\n",
       );
       expect(format(formattedType)).toBe(formattedType);
+    });
+
+    it("preserves braces and finalExpression in single-statement function blocks", () => {
+      const span = {
+        start: { line: 1, column: 1, offset: 0 },
+        end: { line: 1, column: 1, offset: 0 },
+      };
+      const mutDecl = {
+        kind: "BindingDeclaration" as const,
+        id: { kind: "Identifier" as const, name: "x", span },
+        isMutable: true,
+        isExported: false,
+        init: { kind: "NumberLiteral" as const, value: 1, raw: "1", span },
+        span,
+      };
+      const xId = { kind: "Identifier" as const, name: "x", span };
+      const makeFnProg = (statements: any[], finalExpression?: any) => ({
+        kind: "Program" as const,
+        body: [
+          {
+            kind: "BindingDeclaration" as const,
+            id: { kind: "Identifier" as const, name: "arr", span },
+            isMutable: false,
+            isExported: false,
+            init: {
+              kind: "ArrayExpression" as const,
+              elements: [
+                {
+                  kind: "FunctionExpression" as const,
+                  params: [],
+                  body: {
+                    kind: "BlockStatement" as const,
+                    statements,
+                    ...(finalExpression ? { finalExpression } : {}),
+                    span,
+                  },
+                  span,
+                },
+              ],
+              span,
+            },
+            span,
+          },
+        ],
+        span,
+      });
+
+      expect(new Formatter("", makeFnProg([mutDecl], xId)).format()).toBe(
+        "arr = [\n  () => {\n    x = 1\n    x\n  }\n]\n",
+      );
+      expect(new Formatter("", makeFnProg([mutDecl])).format()).toBe(
+        "arr = [\n  () => {\n    x = 1\n  }\n]\n",
+      );
+      expect(new Formatter("", makeFnProg([], xId)).format()).toBe(
+        "arr = [\n  () => {\n    x\n  }\n]\n",
+      );
+    });
+
+    it("preserves => in single-return when blocks", () => {
+      const source = `f = (cond: Boolean) =>\n  when (cond) {\n    => 1\n  }\n  => 0\n`;
+      expect(format(source)).toBe(source);
+    });
+
+    it("preserves serviceName on AsDeclaration", () => {
+      const ast = {
+        kind: "Program" as const,
+        body: [
+          {
+            kind: "AsDeclaration" as const,
+            serviceName: {
+              kind: "UpperIdentifier" as const,
+              name: "MyService",
+              span: {
+                start: { line: 1, column: 4, offset: 3 },
+                end: { line: 1, column: 13, offset: 12 },
+              },
+            },
+            code: "export function ping(): i32 { return 1; }",
+            span: {
+              start: { line: 1, column: 1, offset: 0 },
+              end: { line: 1, column: 58, offset: 57 },
+            },
+          },
+        ],
+        span: {
+          start: { line: 1, column: 1, offset: 0 },
+          end: { line: 1, column: 58, offset: 57 },
+        },
+      };
+      expect(new Formatter("", ast).format()).toBe(
+        "as MyService { export function ping(): i32 { return 1; } }\n",
+      );
+    });
+
+    it("extracts comments accurately with template literals and nested interpolation braces", () => {
+      const tplSource = "url = `https://example.com`\n// real comment\nx = 1\n";
+      const tplComments = extractComments(tplSource);
+      expect(tplComments).toHaveLength(1);
+      expect(tplComments[0]).toMatchObject({
+        text: "// real comment",
+        line: 2,
+        isTrailing: false,
+      });
+
+      const nestedBraceSource =
+        's = "val: { { a: 1 } } // not comment" // trailing\n';
+      const nestedComments = extractComments(nestedBraceSource);
+      expect(nestedComments).toHaveLength(1);
+      expect(nestedComments[0].text).toBe("// trailing");
+      expect(nestedComments[0].isTrailing).toBe(true);
+
+      const nestedTplSource =
+        "s = `val: ${ { a: 1 } } // not comment` // tpl trailing\n";
+      const nestedTplComments = extractComments(nestedTplSource);
+      expect(nestedTplComments).toHaveLength(1);
+      expect(nestedTplComments[0].text).toBe("// tpl trailing");
+      expect(nestedTplComments[0].isTrailing).toBe(true);
     });
   });
 });

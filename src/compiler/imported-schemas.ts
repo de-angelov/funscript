@@ -5,8 +5,14 @@ import {
   type Program,
   type SchemaDeclaration,
   type Span,
+  type TypeReferenceNode,
 } from "../ast/types.js";
 import { renderImport } from "../emitter/imports.js";
+import {
+  emitTypeNode,
+  emitTypeParameters,
+  type TypeEmitterContext,
+} from "../emitter/types.js";
 import { FunScriptError } from "../errors.js";
 import { type TypeScriptCompilationContext } from "./typescript-context.js";
 
@@ -98,6 +104,39 @@ const UNSUPPORTED_BUILTINS = new Set([
 
 type Recursion = { root: ts.Type; referenced: boolean };
 
+function isOptionMember(type: ts.Type, checker: ts.TypeChecker): boolean {
+  return Boolean(checker.getPropertyOfType(type, "~effect/Option"));
+}
+
+function isOptionType(type: ts.Type, checker: ts.TypeChecker): boolean {
+  return type.isUnion()
+    ? type.types.length > 0 &&
+        type.types.every((member) => isOptionMember(member, checker))
+    : isOptionMember(type, checker);
+}
+
+function extractOptionInnerType(
+  type: ts.Type | undefined,
+  members: readonly ts.Type[],
+  checker: ts.TypeChecker,
+  contextNode: ts.Node,
+): ts.Type | undefined {
+  if (type?.aliasTypeArguments?.[0]) {
+    return type.aliasTypeArguments[0];
+  }
+  for (const member of members) {
+    const valueProp = checker.getPropertyOfType(member, "value");
+    if (valueProp) {
+      return checker.getTypeOfSymbolAtLocation(valueProp, contextNode);
+    }
+  }
+  if (type) {
+    const typeArgs = checker.getTypeArguments(type as ts.TypeReference);
+    if (typeArgs.length > 0) return typeArgs[0];
+  }
+  return undefined;
+}
+
 function convertUnionMembers(
   types: readonly ts.Type[],
   checker: ts.TypeChecker,
@@ -144,6 +183,31 @@ function convertUnionMembers(
       `Empty union at '${formatPath(path)}'.`,
       span,
     );
+  } else if (
+    filteredNonNullish.length > 0 &&
+    filteredNonNullish.every((t) => isOptionMember(t, checker))
+  ) {
+    const innerOpt = extractOptionInnerType(
+      undefined,
+      filteredNonNullish,
+      checker,
+      contextNode,
+    );
+    if (!innerOpt) {
+      throw new ImportedSchemaError(
+        `Could not determine inner type for Option at '${formatPath(path) || "root"}'.`,
+        span,
+      );
+    }
+    inner = `Schema.Option(${convertType(
+      innerOpt,
+      checker,
+      contextNode,
+      span,
+      path,
+      visited,
+      recursion,
+    )})`;
   } else if (filteredNonNullish.length === 1) {
     inner = convertType(
       filteredNonNullish[0],
@@ -365,6 +429,32 @@ function convertType(
     return `Schema.Array(${elemSchema})`;
   }
 
+  // 4b. Option<T> (~effect/Option)
+  if (isOptionType(type, checker)) {
+    const innerOpt = extractOptionInnerType(
+      type,
+      type.isUnion() ? type.types : [type],
+      checker,
+      contextNode,
+    );
+    if (!innerOpt) {
+      throw new ImportedSchemaError(
+        `Could not determine inner type for Option at '${formatPath(path) || "root"}'.`,
+        span,
+      );
+    }
+    const nextVisited = new Set(visited).add(type);
+    return `Schema.Option(${convertType(
+      innerOpt,
+      checker,
+      contextNode,
+      span,
+      path,
+      nextVisited,
+      recursion,
+    )})`;
+  }
+
   // 5. Unions
   if (type.isUnion()) {
     const nextVisited = new Set(visited).add(type);
@@ -479,12 +569,33 @@ export function resolveImportedSchemas(
 ): ReadonlyMap<string, string> {
   const tsSchemas: Array<{ decl: SchemaDeclaration; rhsName: string }> = [];
   const localContractNames = new Set<string>();
+  const importedLocals = new Set<string>();
   for (const item of ast.body) {
+    if (item.kind === "ImportDeclaration") {
+      for (const spec of item.specifiers) importedLocals.add(spec.local.name);
+      if (item.defaultBinding) importedLocals.add(item.defaultBinding.name);
+      if (item.namespaceBinding) importedLocals.add(item.namespaceBinding.name);
+    }
     const decl = item.kind === "ExportDeclaration" ? item.declaration : item;
     if (decl.kind === "SchemaDeclaration") {
       localContractNames.add(decl.id.name);
     }
   }
+
+  const effectImports = new Set<string>();
+  const typeCtx: TypeEmitterContext = {
+    emitExpression: () => "unknown",
+    emitBindingTarget: () => "_",
+    emitTypeNode: (n) => emitTypeNode(typeCtx, n),
+    emitTypeParameters: (tp, f) => emitTypeParameters(typeCtx, tp, f),
+    declaredTypeNames: new Set(),
+    recordContracts: { has: () => false },
+    isUserBinding: (name) => importedLocals.has(name),
+    options: {},
+    addEffectImport: (name) => effectImports.add(name),
+  };
+  const renderProbeRef = (ref: TypeReferenceNode): string =>
+    ref.typeArgs?.length ? emitTypeNode(typeCtx, ref) : ref.name.name;
 
   for (const item of ast.body) {
     if (item.kind === "SchemaDeclaration") {
@@ -494,14 +605,17 @@ export function resolveImportedSchemas(
         item.body.targetType.kind === "TypeReferenceNode" &&
         !localContractNames.has(item.body.targetType.name.name)
       ) {
-        tsSchemas.push({ decl: item, rhsName: item.body.targetType.name.name });
+        tsSchemas.push({
+          decl: item,
+          rhsName: renderProbeRef(item.body.targetType),
+        });
       } else if (
         item.body.kind === "ImportedTsSchema" &&
         item.body.typeNode.kind === "TypeReferenceNode"
       ) {
         tsSchemas.push({
           decl: item,
-          rhsName: item.body.typeNode.name.name,
+          rhsName: renderProbeRef(item.body.typeNode),
         });
       }
     } else if (
@@ -515,14 +629,17 @@ export function resolveImportedSchemas(
         decl.body.targetType.kind === "TypeReferenceNode" &&
         !localContractNames.has(decl.body.targetType.name.name)
       ) {
-        tsSchemas.push({ decl, rhsName: decl.body.targetType.name.name });
+        tsSchemas.push({
+          decl,
+          rhsName: renderProbeRef(decl.body.targetType),
+        });
       } else if (
         decl.body.kind === "ImportedTsSchema" &&
         decl.body.typeNode.kind === "TypeReferenceNode"
       ) {
         tsSchemas.push({
           decl,
-          rhsName: decl.body.typeNode.name.name,
+          rhsName: renderProbeRef(decl.body.typeNode),
         });
       }
     }
@@ -534,6 +651,11 @@ export function resolveImportedSchemas(
 
   // Construct TypeScript probe source:
   const lines: string[] = [];
+  if (effectImports.size > 0) {
+    lines.push(
+      `import { ${[...effectImports].sort().join(", ")} } from "effect";`,
+    );
+  }
 
   for (const item of ast.body) {
     if (item.kind === "ImportDeclaration") {

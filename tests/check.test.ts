@@ -1403,8 +1403,8 @@ import { Effect } from "effect"
 fetchData = () => Effect.succeed("data")
 
 export task = effect {
-  data <- fetchData()
-  => data
+  fetched <- fetchData()
+  => fetched
 }
 `.trim(),
           "lib/valid-effect.fun",
@@ -2032,6 +2032,179 @@ export run = (e: Either.Either<Number, String>) => e |> Either.getOrThrow
       expect(diag?.suggestedAction).toContain("Either.getOrElse");
       expect(diag?.suggestedAction).toContain("Effect.fromEither");
       expect(diag?.suggestedAction).not.toContain("Option.");
+    });
+
+    it("classifies policy CompilerErrors as FS_POLICY rather than FS_SYNTAX", async () => {
+      const noTsRes = await Effect.runPromise(
+        typeCheckSource(
+          `ts { const a = 1; }\nexport x = 1`,
+          "src/no-ts-policy.fun",
+          { noTs: true },
+        ),
+      );
+      expect(noTsRes.success).toBe(false);
+      expect(noTsRes.diagnostics[0]?.code).toBe("POLICY");
+      expect(noTsRes.diagnostics[0]?.diagnosticCode).toBe("FS_POLICY");
+      expect(noTsRes.diagnostics[0]?.explanation).not.toContain(
+        "could not be parsed",
+      );
+
+      const earlyReturnRes = await Effect.runPromise(
+        typeCheckSource(
+          `export f = (x: Number) => {\n  when (x > 0) => 1\n  => 0\n}`,
+          "src/early-return-policy.fun",
+        ),
+      );
+      expect(earlyReturnRes.success).toBe(false);
+      expect(earlyReturnRes.diagnostics[0]?.code).toBe("POLICY");
+      expect(earlyReturnRes.diagnostics[0]?.diagnosticCode).toBe("FS_POLICY");
+    });
+
+    it("does not suppress real TS2339 missing-property errors near fromNullishOr", async () => {
+      const res = await Effect.runPromise(
+        typeCheckSource(
+          `
+ts {
+  declare function maybe(): string | null;
+}
+export bad = () => {
+  x = fromNullishOr(maybe())
+  => x.missingProp
+}
+`.trim(),
+          "src/from-nullish-missing-prop.fun",
+        ),
+      );
+      expect(res.success).toBe(false);
+      expect(res.diagnostics.some((d) => d.code === 2339)).toBe(true);
+    });
+
+    it("only suggests String.Order in comparisonError when received type is string", async () => {
+      const boolRes = await Effect.runPromise(
+        typeCheckSource(
+          `export bad = (a: Boolean, b: Boolean) => a < b`,
+          "src/bool-compare.fun",
+        ),
+      );
+      expect(boolRes.success).toBe(false);
+      expect(boolRes.diagnostics[0]?.message).toContain(
+        "Order.isLessThan(...)(...)",
+      );
+      expect(boolRes.diagnostics[0]?.message).not.toContain("String.Order");
+
+      const strRes = await Effect.runPromise(
+        typeCheckSource(
+          `export bad = (a: String, b: String) => a < b`,
+          "src/str-compare.fun",
+        ),
+      );
+      expect(strRes.success).toBe(false);
+      expect(strRes.diagnostics[0]?.message).toContain(
+        "Order.isLessThan(String.Order)(...)",
+      );
+    });
+
+    it("preserves per-declaration source map mappings when a file has imports", async () => {
+      const { compileString } = await import("../src/compiler.js");
+      const source = `import { Option } from "effect"\n\nexport x = Option.some(1)\nexport y = Option.some(2)`;
+      const res = await Effect.runPromise(
+        compileString(source, "src/with-imports.fun", { sourcemap: true }),
+      );
+      expect(res.map).toBeDefined();
+      const mappings = res.map!.mappings;
+      expect(mappings.split(";").length).toBeGreaterThanOrEqual(4);
+    });
+
+    it("flags ANY_BINDING and UNHANDLED_NULLISH in object and array destructuring", async () => {
+      const res = await Effect.runPromise(
+        typeCheckSource(
+          `
+ts {
+  declare const jsAnyObj: any;
+  declare const jsAnyArr: any[];
+  declare const jsNullObj: { a: string | null };
+  declare const jsNullArr: (number | undefined)[];
+}
+
+export run = () => {
+  { a } = jsAnyObj
+  [x] = jsAnyArr
+  { a: b } = jsNullObj
+  [y] = jsNullArr
+  => [a, x, b, y]
+}
+`.trim(),
+          "src/destructure-interop.fun",
+        ),
+      );
+      expect(res.success).toBe(false);
+      const anyDiags = res.diagnostics.filter((d) => d.code === "ANY_BINDING");
+      const nullDiags = res.diagnostics.filter(
+        (d) => d.code === "UNHANDLED_NULLISH",
+      );
+      expect(anyDiags.length).toBeGreaterThanOrEqual(2);
+      expect(nullDiags.length).toBeGreaterThanOrEqual(2);
+    });
+
+    it("flags raw nullish values in object literals, arrays, Option.some, and Effect.succeed while skipping escapes and annotations", async () => {
+      const res = await Effect.runPromise(
+        typeCheckSource(
+          `
+import { Effect, Option } from "effect"
+
+ts {
+  declare function maybe(): string | undefined;
+  type NullableBox = { a: string | undefined };
+}
+
+export badObj = () => ({ a: maybe() })
+export badArr = () => [maybe()]
+export badSome = () => Option.some(maybe())
+export badSucceed = () => Effect.succeed(maybe())
+
+export okEscaped = ts { ({ a: maybe() }) }
+export okAnnotated: NullableBox = { a: maybe() }
+export okAnnotatedArr: Array<JSOptional<String>> = [maybe()]
+`.trim(),
+          "src/nullish-containers.fun",
+        ),
+      );
+      expect(res.success).toBe(false);
+      const nullishDiags = res.diagnostics.filter(
+        (d) => d.code === "UNHANDLED_NULLISH",
+      );
+      expect(nullishDiags.length).toBeGreaterThanOrEqual(4);
+      expect(
+        nullishDiags.some((d) => d.message.includes("Object property value")),
+      ).toBe(true);
+      expect(
+        nullishDiags.some((d) => d.message.includes("Array element")),
+      ).toBe(true);
+      expect(nullishDiags.some((d) => d.message.includes("Option.some"))).toBe(
+        true,
+      );
+      expect(
+        nullishDiags.some((d) => d.message.includes("Effect.succeed")),
+      ).toBe(true);
+    });
+
+    it("flags REDUNDANT_OPTION_WRAP for fromNullishOrElse and Option.fromNullable", async () => {
+      const res = await Effect.runPromise(
+        typeCheckSource(
+          `
+import { Option } from "effect"
+
+export badElse = (x: Option<String>) => fromNullishOrElse(x, "fallback")
+export badNullable = (x: Option<String>) => Option.fromNullable(x)
+`.trim(),
+          "src/redundant-wrap-extra.fun",
+        ),
+      );
+      expect(res.success).toBe(false);
+      const wrapDiags = res.diagnostics.filter(
+        (d) => d.code === "REDUNDANT_OPTION_WRAP",
+      );
+      expect(wrapDiags).toHaveLength(2);
     });
   });
 });

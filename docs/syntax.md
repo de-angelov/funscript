@@ -1,6 +1,6 @@
 # FunScript syntax
 
-**Status:** Guide to current and planned syntax (FunScript 0.1)
+**Status:** Guide to current and planned syntax (FunScript 0.2.3)
 **Audience:** FunScript users and compiler contributors
 
 This guide covers syntax accepted by the current compiler and also includes planned
@@ -236,7 +236,7 @@ Naming is part of the syntax, not just style:
 
 This convention removes the "is this a binding or a constructor?" ambiguity in patterns:
 a lowercase pattern name binds; an uppercase pattern name must resolve to a constructor
-or a compiler-known pattern (`Some`, `None`, `Left`, `Right`, `Success`, `Failure`).
+or a compiler-known pattern (`Some`, `None`, `Success`, `Failure`).
 
 The compiler enforces the convention for declarations it generates. Imported JavaScript
 values may have any casing; they are only relevant in expression position.
@@ -581,8 +581,8 @@ export schema Profile = {
   preferences: Option<{ theme: Option<String> }>
 }
 
-# Decode at a boundary. The named Profile type contains real Options and can
-# be passed between functions and modules without special forwarding rules.
+// Decode at a boundary. The named Profile type contains real Options and can
+// be passed between functions and modules without special forwarding rules.
 export readNickname = (profile: Profile) => profile.nickname
 export fromInput = (input: SchemaInput<Profile>) => readNickname(ProfileFromUnknown(input))
 ```
@@ -665,11 +665,12 @@ return. A return type can precede a braced body:
 
 ```funscript
 absolute = (value: Number): Number =>
-  when (value < 0) => -value
-  => value
+  match
+    | value < 0 => -value
+    | _ => value
 ```
 
-`when` has three forms: `when (condition) => value` returns early from a function;
+`when` has three forms: `when (condition) => value` returns early from a function (requires `allowEarlyReturns: true`; `match` is the default idiomatic form);
 `when (condition) { ... }` (or an indented body) conditionally executes statements
 and then continues; `| Pattern when condition => value` guards a match arm.
 Early returns require an enclosing function.
@@ -774,17 +775,17 @@ source location, and suggest the actionable Effect `Order` alternative (such as
 like `DateTime.Order`) while linking to this section (`docs/syntax.md#42-equality-and-comparisons`):
 
 ```funscript
-# Numbers
+// Numbers
 isValid = score >= 0
 isPass = score > 50
 
-# Stable machine-string ordering
+// Stable machine-string ordering
 isBefore = name |> Order.isLessThan(String.Order)("m")
 
-# Domain ordering (dates, decimals, durations, or application values)
+// Domain ordering (dates, decimals, durations, or application values)
 isExpired = now |> Order.isGreaterThan(DateTime.Order)(token.expiresAt)
 
-# In a match expression:
+// In a match expression:
 tier =
   match
     | score >= 90 => "Platinum"
@@ -803,12 +804,12 @@ APIs (such as `Number.isLessThan` or `DateTime.isLessThan`), preserving argument
 inferred output types:
 
 ```funscript
-# Pipeline comparison (resolves against static type of score or timestamp)
+// Pipeline comparison (resolves against static type of score or timestamp)
 isBeforeDeadline = score |> lessThan(deadline)
 isRecent = timestamp |> greaterThanOrEqualTo(cutoff)
 inRange = score |> between(0, 100)
 
-# Direct-call comparison (preserves argument order: left compared to right)
+// Direct-call comparison (preserves argument order: left compared to right)
 isPast = lessThan(currentTimestamp, expiresAt)
 ```
 
@@ -899,13 +900,13 @@ Semantics:
   preserves TypeScript contextual type inference) or call Effect's `flow(f, g)` directly.
 
 ```funscript
-# Effect's data-last APIs need no placeholder:
+// Effect's data-last APIs need no placeholder:
 result =
   value
   |> Effect.map(normalize)
   |> Effect.flatMap(save)
 
-# Uncurried functions (user-defined or npm) use `_` for the piped slot:
+// Uncurried functions (user-defined or npm) use `_` for the piped slot:
 score =
   rawScore
   |> parseScore
@@ -921,7 +922,7 @@ known. When a pipeline stage uses a bare function name, the compiler resolves it
 the companion module of the left-hand type:
 
 ```funscript
-# Clean, readable pipeline without repetitive "Array." prefixes:
+// Clean, readable pipeline without repetitive "Array." prefixes:
 topActive =
   users
   |> filter((u) => u.active)
@@ -992,8 +993,8 @@ data contracts, or interfaces based on the static type entering each stage. Infe
 output types from each stage automatically feed resolution of subsequent stages:
 
 ```funscript
-# c has type HttpClient: Afn is resolved from HttpClient, producing an intermediate type
-# which then resolves Bfn from that resulting abstraction:
+// c has type HttpClient: Afn is resolved from HttpClient, producing an intermediate type
+// which then resolves Bfn from that resulting abstraction:
 result = (c: HttpClient) |> Afn |> Bfn
 ```
 
@@ -1046,10 +1047,10 @@ JavaScript object spread, while nested dot-paths (`address.city: "Paris"`) autom
 lower to Mutative's `create(...)`:
 
 ```funscript
-# Shallow update (emits `{ ...user, age: user.age + 1 }`):
+// Shallow update (emits `{ ...user, age: user.age + 1 }`):
 older = { ...user, age: user.age + 1 }
 
-# Deep dot-path update (emits Mutative `create`):
+// Deep dot-path update (emits Mutative `create`):
 relocated = {
   ...user
   age: user.age + 1
@@ -1083,9 +1084,9 @@ export recordLogin = (user: User) =>
   match
     | draft.visits > 10 => draft.tier = "gold"
   draft.tags.push("active")
-  draft
+  => draft
 
-# Pipeline stage form (curried Mutative `create((draft) => ...)`):
+// Pipeline stage form (curried Mutative `create((draft) => ...)`):
 nextUser =
   user
   |> mut (draft) =>
@@ -1202,7 +1203,7 @@ match
   | user.pending => queue(user)
   | _ => archive(user)
 
-# Single-branch guard inside an effect or `mut` block:
+// Single-branch guard inside an effect or `mut` block:
 match
   | draft.visits > 10 => draft.tier = "gold"
 ```
@@ -1376,11 +1377,11 @@ match maybeUser
   | None => "anonymous"
 
 match result
-  | Right(value) => value
-  | Left(error) => error.message
+  | Success(value) => value
+  | Failure(error) => error.message
 ```
 
-`Some(value)`/`None`, `Right(right)`/`Left(left)`, and `Success(value)`/`Failure(cause)`
+`Some(value)`/`None` and `Success(value)`/`Failure(cause)`
 are compiler-known. They lower to structural `_tag` patterns and work with TypeScript
 narrowing.
 
@@ -1460,10 +1461,10 @@ Because `User` is both a type and a `Schema` value, it works in type annotations
 runtime boundaries without duplication:
 
 ```funscript
-# In a type annotation:
+// In a type annotation:
 greetUser = (user: User) => "Hello, {user.name}!"
 
-# At a runtime validation boundary:
+// At a runtime validation boundary:
 user <- rawInput |> decode(User)
 todo <- response |> HttpClientResponse.schemaBodyJson(Todo)
 ```
@@ -1514,7 +1515,7 @@ Rules:
 1. **Data-shape `schema` declarations** (primitives `string`, `number`, `boolean`, `bigint`;
    built-in Schema scalars like `Int`, `NonNegativeInt`, `Positive`, `NonEmptyString`,
    `UUID`, `ULID`, `DateTimeUtc`, `Duration`; string/number/boolean literals; record shapes
-   `{ ... }`; `Array<T>`; tuples `[A, B]`; `Option<T>`; `Either<A, E>`; unions `A | B` of
+   `{ ... }`; `Array<T>`; tuples `[A, B]`; `Option<T>`; `Result<A, E>`; unions `A | B` of
    data shapes; `|> Schema.*` refinement pipelines; and references to other
    `schema`/`error` declarations) compile to a runtime `Schema` value **and**
    `type Name = typeof Name.Type`.
@@ -1949,11 +1950,11 @@ export const getUser = (id: string) =>
 In FunScript, `effect` blocks are **scoped by default** (`Effect.scoped(Effect.gen(...))`). This provides safe, automatic cleanup boundaries for self-contained workflows, ensuring any resources acquired via `Effect.acquireRelease` or finalizers registered via `Effect.addFinalizer` are cleanly torn down when the block exits:
 
 ```funscript
-# Boundary (Consumer): opens and closes its own Scope
+// Boundary (Consumer): opens and closes its own Scope
 export processFile = (path: String) => effect {
   file <- acquireFile(path)
   data <- readFile(file)
-  # 'file' is automatically closed here when the block exits!
+  // 'file' is automatically closed here when the block exits!
   => data
 }
 ```
@@ -1983,22 +1984,23 @@ To build resource constructors that pass open resources and attach finalizers to
 #### Resource Constructor Example:
 
 ```funscript
-# Resource Constructor: attaches cleanup to caller's scope
+// Resource Constructor: attaches cleanup to caller's scope
 export spawnScopedProcess = (cmd: Array<String>, cwd: String) => effect (unscoped) {
   proc = Bun.spawn(cmd, { cwd: cwd })
   _ <- Effect.addFinalizer(() => proc.kill("SIGTERM"))
   => proc
-
 }
-# Resource Consumer (Boundary): manages the lifetime
+
+// Resource Consumer (Boundary): manages the lifetime
 export runAgentSession = (cmd: Array<String>, cwd: String) => effect {
-  proc <- spawnScopedProcess(cmd, cwd) # Finalizer attaches to runAgentSession's scope
-  outText <- js Bun.readableStreamToText(proc.stdout) # Stream reads successfully!
+  proc <- spawnScopedProcess(cmd, cwd)  // Finalizer attaches to runAgentSession's scope
+  outText <- js Bun.readableStreamToText(proc.stdout)  // Stream reads successfully!
   code <- js proc.exited
   => { exitCode: code, output: outText }
-  # Scope closes here when runAgentSession completes or is cancelled,
-  # triggering the finalizer and guaranteeing zero orphan processes!
 }
+
+// Scope closes here when runAgentSession completes or is cancelled,
+// triggering the finalizer and guaranteeing zero orphan processes!
 ```
 
 ```ts
@@ -2034,8 +2036,8 @@ a local reference to the service instance or invoke multiple operations on it.
 ### 9.2 Bind and discard
 
 ```funscript
-name <- fetchName()     # const name = yield* fetchName()
-_ <- Console.log(name)  # execute and discard the result
+name <- fetchName()     // const name = yield* fetchName()
+_ <- Console.log(name)  // execute and discard the result
 ```
 
 - `<-` is the **only** way to execute an effect inside an `effect` block.
@@ -2071,10 +2073,10 @@ This is a syntax rule, not a type-checking afterthought. It prevents the classic
 `Effect.gen` mistake:
 
 ```funscript
-# Rejected: the Console.log effect is created but never executed.
+// Rejected: the Console.log effect is created but never executed.
 effect {
   user <- UserRepo.find(id)
-  Console.log("loaded")      # syntax error: non-final bare expression
+  Console.log("loaded")      // syntax error: non-final bare expression
   => user
 }
 ```
@@ -2120,14 +2122,14 @@ the generator's `E` channel automatically infers and tracks the union of all pos
 ```funscript
 export checkout = (cartId: String) =>
   effect {
-    cart <- CartRepo.find(cartId)  # fails with NotFound
-    _ <- PaymentGateway.charge(cart.total)  # fails with PaymentDeclined
-    _ <- Inventory.reserve(cart.items)  # fails with OutOfStock
+    cart <- CartRepo.find(cartId)  // fails with NotFound
+    _ <- PaymentGateway.charge(cart.total)  // fails with PaymentDeclined
+    _ <- Inventory.reserve(cart.items)  // fails with OutOfStock
     => cart
   }
 
-# Return type inferred as:
-# Effect<Cart, NotFound | PaymentDeclined | OutOfStock, CartRepo | PaymentGateway | Inventory>
+// Return type inferred as:
+// Effect<Cart, NotFound | PaymentDeclined | OutOfStock, CartRepo | PaymentGateway | Inventory>
 ```
 
 Unhandled domain errors are tracked in the signature and can be handled exhaustively with
@@ -2189,7 +2191,7 @@ Library code only describes effects; it never runs them. Running happens once, a
 edge, in an **entry module**.
 
 ```funscript
-# src/main.fun
+// src/main.fun
 import { Effect } from "effect"
 import { program } from "./app.fun"
 import { AppLive } from "./layers.fun"
@@ -2258,8 +2260,9 @@ export fetchDashboard = (userId: String) =>
   par {
     user <- fetchUser(userId)
     orders <- fetchOrders(userId)
-    # Without '=>', returns all bound names, including names from destructuring binds
   }
+
+// Without '=>', returns all bound names, including names from destructuring binds
 ```
 
 ```ts
@@ -2283,7 +2286,7 @@ export fetchLimited = par (2) {
 }
 ```
 
-> **Safety invariant**: Early returns (`when (...) =>`) are statically rejected inside `par` blocks to prevent leaving sibling fibers in an ambiguous or orphaned state.
+> **Safety invariant**: Early returns (`when (...) =>`, when enabled via `allowEarlyReturns: true`) are statically rejected inside `par` blocks to prevent leaving sibling fibers in an ambiguous or orphaned state.
 
 Destructured effect results are unpacked before the implicit record is returned:
 
@@ -2291,7 +2294,8 @@ Destructured effect results are unpacked before the implicit record is returned:
 result = par {
   { user, orders } <- fetchDashboard()
 }
-# result is { user, orders }
+
+// result is { user, orders }
 ```
 
 #### Jittered exponential retries (`retry`)
@@ -2320,17 +2324,17 @@ Most concurrency is "do these N things in parallel and collect the results". Tha
 needs an explicit fork:
 
 ```funscript
-# errgroup: at most 8 in flight; the first failure interrupts the rest
+// errgroup: at most 8 in flight; the first failure interrupts the rest
 users <- ids |> Effect.forEach(fetchUser, { concurrency: 8 })
 
-# fixed set of heterogeneous tasks, run in parallel, typed record result
+// fixed set of heterogeneous tasks, run in parallel, typed record result
 { profile, orders, prefs } <-
   Effect.all({ profile: getProfile(id), orders: getOrders(id), prefs: getPrefs(id) }, { concurrency: 3 })
 
-# select: first to succeed wins, the loser is interrupted
+// select: first to succeed wins, the loser is interrupted
 data <- Effect.race(fetchFromPrimary(key), fetchFromReplica(key))
 
-# deadline
+// deadline
 report <- buildReport |> Effect.timeout("30 seconds")
 ```
 
@@ -2354,12 +2358,13 @@ worker = (jobs: Queue<Job>, id: Number) =>
 
 export pipeline =
   effect {
-    jobs <- Queue.bounded<Job>(100)               # back-pressure: offer waits when full
-    _ <- Effect.forkScoped(producer(jobs))        # "go producer(jobs)"
-    _ <- Array.range(1, 4) |> Effect.forEach((i) => Effect.forkScoped(worker(jobs, i)))
+    jobs <- Queue.bounded < Job > 100  // back-pressure: offer waits when full
+    _ <- Effect.forkScoped(producer(jobs))  // "go producer(jobs)"
+    _ <- Array.range(1, 4)
+    |> Effect.forEach((i) => Effect.forkScoped(worker(jobs, i)))
     => Effect.Never
   }
-  |> Effect.scoped                                 # closing the scope interrupts every fiber
+  |> Effect.scoped  // closing the scope interrupts every fiber
 ```
 
 Rules:
@@ -2390,13 +2395,13 @@ import { Console, Effect, Layer } from "effect"
 export service Greeter
   greet: (name: String) => Effect<String>
 
-# Pure layer (no dependencies):
+// Pure layer (no dependencies):
 export GreeterLive =
   Layer.succeed(Greeter, {
     greet: (name) => Effect.succeed("Hello, {name}!")
   })
 
-# Effectful layer (uses an `effect` block with `<-` to acquire dependencies):
+// Effectful layer (uses an `effect` block with `<-` to acquire dependencies):
 export ConfigurableGreeterLive =
   Layer.effect(Greeter, effect {
     prefix <- PrefixConfig
@@ -2494,19 +2499,24 @@ export service StripeClient
 #### Implementing the Layer with `js` interop
 
 ```funscript
-import { Layer, Effect } from "effect"
+import { Config, Effect, Layer, Redacted } from "effect"
 import Stripe from "stripe"
 
-stripe = Stripe(process.env.STRIPE_SECRET_KEY)
-
-export StripeClientLive = Layer.succeed(StripeClient, {
-  createCustomer: (email) =>
-    js stripe.customers.create({ email })
-    |> Effect.mapError(e => StripeError(e.message)),
-  deleteCustomer: (id) =>
-    js stripe.customers.del(id)
-    |> Effect.mapError(e => StripeError(e.message))
-})
+export StripeClientLive = Layer.effect(
+  StripeClient,
+  effect {
+    apiKey <- Config.redacted("STRIPE_SECRET_KEY")
+    stripe = Stripe(Redacted.value(apiKey))
+    => {
+      createCustomer: (email) =>
+        js stripe.customers.create({ email })
+        |> Effect.mapError((e) => StripeError(e.message)),
+      deleteCustomer: (id) =>
+        js stripe.customers.del(id)
+        |> Effect.mapError((e) => StripeError(e.message))
+    }
+  }
+)
 ```
 
 Because `js` safely catches all Promise rejections and lifts them into `JsInteropError`, the compiler strictly requires mapping or handling errors before matching the service's declared error channel `StripeError`.
@@ -2576,7 +2586,7 @@ type import when needed):
 | ----------------- | ------------------------- |
 | `Effect<A, E, R>` | `Effect.Effect<A, E, R>`  |
 | `Option<A>`       | `Option.Option<A>`        |
-| `Either<A, E>`    | `Either.Either<A, E>`     |
+| `Result<A, E>`    | `Result.Result<A, E>`     |
 | `Layer<A, E, R>`  | `Layer.Layer<A, E, R>`    |
 | `Stream<A, E, R>` | `Stream.Stream<A, E, R>`  |
 | `Array<A>`        | `ReadonlyArray<A>`        |
@@ -2638,7 +2648,7 @@ The pipeline stage `payload |> decode(TargetSchema)` auto-resolves against
 `Schema.decodeUnknown(TargetSchema)` to parse and decode untrusted dictionaries
 (e.g., webhook metadata, query params, JSON payloads) into typed FunScript schemas.
 It returns an Effect whose error channel contains `ParseError`.
-`Schema.decodeUnknown(User)` also remains callable explicitly. `Schema.decodeUnknownEither(User)` returns an Either for explicit
+`Schema.decodeUnknown(User)` also remains callable explicitly. `Schema.decodeUnknownResult(User)` returns a `Result` for explicit
 success/failure handling. `Schema.decodeUnknownSync(User)` validates synchronously
 and throws on invalid input; use it at synchronous boundaries, or catch that
 exception with `Effect.try` when entering an Effect program. JSON text must first
@@ -2677,7 +2687,7 @@ nor `Unknown` itself proves that an external value satisfies a schema.
 | `FS_ENV_GLOBAL`            | Error    | Ambient environment variables (`process.env`, `Deno.env`, `Bun.env`) are forbidden outside entry modules.                                                         | Declare configuration using Effect's `Config` service (e.g. `Config.string("PORT")`) or pass configuration as explicit parameters.                                                                    |
 | `FS_DETACHED_FIBER`        | Error    | `Effect.forkDetach` is forbidden outside entry modules because detached fibers outlive their caller with no owner.                                                | Use `Effect.forkScoped` (tied to an enclosing `Scope`) or `Effect.forkChild` (tied to parent fiber). Long-lived background tasks belong in a `Layer` (`Layer.effectDiscard(Effect.forkScoped(...))`). |
 | `FS_UNBOUNDED_CONCURRENCY` | Warning  | `{ concurrency: "unbounded" }` is flagged to prevent resource exhaustion (socket, descriptor, or memory starvation under burst load).                             | Specify an explicit concurrency limit (e.g. `{ concurrency: 10 }`).                                                                                                                                   |
-| `FS_THROW`                 | Error    | Raw `throw` statements and throwing methods (`Option.getOrThrow`, `Either.getOrThrow`, `JSON.parse`, `Error(...)`) are forbidden.                                 | Model failures with Effect typed errors (`Effect.fail`, `error Name { ... }`), handle absence with `Option.getOrElse`/`match`, or decode JSON with `Schema.parseJson`.                                |
+| `FS_THROW`                 | Error    | Raw `throw` statements and throwing methods (`Option.getOrThrow`, `Result.getOrThrow`, `JSON.parse`, `Error(...)`) are forbidden.                                 | Model failures with Effect typed errors (`Effect.fail`, `error Name { ... }`), handle absence with `Option.getOrElse`/`match`, or decode JSON with `Schema.parseJson`.                                |
 | `FS_NATIVE_API`            | Error    | Unmanaged native JS/Node APIs (`fetch`, `setTimeout`, `setInterval`, `console.log` in library code, `Promise.resolve`, etc.) are forbidden.                       | Use Effect ecosystem equivalents (`@effect/platform` `HttpClient`, `Effect.sleep`, `Schedule.spaced`, `Console.log`, `Effect.promise`) or isolate foreign calls with `js ...`.                        |
 | `FS_INPLACE_MUTATION`      | Error    | In-place mutating array methods (`.push()`, `.pop()`, `.shift()`, `.unshift()`, `.splice()`, `.sort()`, `.reverse()`) are quarantined outside draft proxy blocks. | Use immutable functional alternatives (`Array.append`, `Array.remove`, `Array.modify`) or isolate mutable recipes inside `mut (draft) => { ... }`.                                                    |
 | `FS_NON_EXHAUSTIVE_MATCH`  | Error    | Pattern match on schemas, variants, or tagged unions fails to handle all cases without a wildcard fallback.                                                       | Add an explicit pattern arm for the missing variant (e.g. `\| Overnight => ...`) or add a wildcard fallback `\| _ => ...`.                                                                            |
@@ -2868,7 +2878,7 @@ The formatter is canonical and has no configuration.
 ## 15. Complete example
 
 ```funscript
-# A small program using `schema`, tagged unions, `mut` copy-on-write, and effects.
+// A small program using `schema`, tagged unions, `mut` copy-on-write, and effects.
 
 import { Array, Console, Effect, Schema } from "effect"
 
@@ -2894,7 +2904,7 @@ export recordLogin = (user: User) =>
   mut draft = user
   draft.logins = draft.logins + 1
   draft.active = true
-  draft
+  => draft
 
 export label = (role: Role) =>
   match role

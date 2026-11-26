@@ -137,13 +137,28 @@ export class TypeView {
     };
   }
 
-  async update(file: string): Promise<void> {
+  async update(file: string, persist = true): Promise<void> {
     file = path.resolve(file);
+    const relative = path.relative(this.root, file);
     if (
       !/\.funx?$/.test(file) ||
-      !this.inputs.some((input) => this.inside(input, file))
+      !this.inputs.some((input) => this.inside(input, file)) ||
+      relative
+        .split(path.sep)
+        .some(
+          (part) =>
+            part === "node_modules" || (part.startsWith(".") && part !== "."),
+        )
     )
       return;
+    let stat;
+    try {
+      stat = await fs.lstat(file);
+    } catch (error: unknown) {
+      if ((error as { code?: string })?.code === "ENOENT") return;
+      throw error;
+    }
+    if (stat.isSymbolicLink() || !stat.isFile()) return;
     const other = file.endsWith(".funx")
       ? file.slice(0, -5) + ".fun"
       : file.slice(0, -4) + ".funx";
@@ -162,7 +177,6 @@ export class TypeView {
     }
     const source = await fs.readFile(file, "utf8");
     const { compiled, shim } = this.paths(file);
-    const relative = path.relative(this.root, file);
     const hash = createHash("sha256").update(source).digest("hex");
     if (
       this.hashes.get(relative) === hash &&
@@ -176,6 +190,7 @@ export class TypeView {
       ).then((exists) => exists.every(Boolean)))
     ) {
       this.known.add(file);
+      if (persist) await this.writeManifest();
       return;
     }
     const output = await Effect.runPromise(
@@ -214,9 +229,10 @@ export class TypeView {
     await fs.writeFile(shim, shimText);
     this.known.add(file);
     this.hashes.set(relative, hash);
+    if (persist) await this.writeManifest();
   }
 
-  async remove(file: string): Promise<void> {
+  async remove(file: string, persist = true): Promise<void> {
     file = path.resolve(file);
     if (!this.known.has(file)) return;
     const { compiled, shim } = this.paths(file);
@@ -226,6 +242,7 @@ export class TypeView {
     ]);
     this.known.delete(file);
     this.hashes.delete(path.relative(this.root, file));
+    if (persist) await this.writeManifest();
   }
 
   private async writeManifest(): Promise<void> {
@@ -285,18 +302,18 @@ export class TypeView {
         ).flat(),
       ),
     ].sort();
-    for (const file of files) await this.update(file);
+    for (const file of files) await this.update(file, false);
     for (const file of this.known)
-      if (!files.includes(file)) await this.remove(file);
+      if (!files.includes(file)) await this.remove(file, false);
     await this.writeManifest();
   }
 
   async refresh(file: string): Promise<void> {
     try {
-      await this.update(file);
+      await this.update(file, false);
     } catch (error) {
       // Do not let consumers silently use a stale successful compilation.
-      await this.remove(file);
+      await this.remove(file, false);
       await this.writeManifest();
       throw error;
     }
@@ -305,6 +322,5 @@ export class TypeView {
 
   async forget(file: string): Promise<void> {
     await this.remove(file);
-    await this.writeManifest();
   }
 }

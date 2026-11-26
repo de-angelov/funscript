@@ -1002,8 +1002,8 @@ export class DefinitionFinder {
         break;
       }
       case "OrPattern": {
-        if (pattern.patterns.length > 0) {
-          this.collectAndVisitPattern(pattern.patterns[0], scope);
+        for (const sub of pattern.patterns) {
+          this.collectAndVisitPattern(sub, scope);
         }
         break;
       }

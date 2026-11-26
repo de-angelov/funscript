@@ -1,3 +1,4 @@
+import * as Console from "effect/Console";
 import * as Effect from "effect/Effect";
 import { spawn } from "node:child_process";
 import { existsSync, mkdirSync, unlinkSync, writeFileSync } from "node:fs";
@@ -10,6 +11,12 @@ export const testCommand = (args: string[]) =>
     const isWatch = args.includes("--watch");
     const engineIndex = args.indexOf("--engine");
     const engine = engineIndex !== -1 ? args[engineIndex + 1] : undefined;
+    if (engineIndex !== -1 && engine !== "vitest" && engine !== "bun") {
+      process.exitCode = 1;
+      return yield* Console.error(
+        `Unsupported test engine '${engine ?? ""}'; supported engines: vitest, bun.`,
+      );
+    }
     const isFast = args.includes("--fast");
     const isBun =
       engine === "bun" ||

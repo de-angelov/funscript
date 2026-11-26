@@ -1190,6 +1190,32 @@ export const typeCheckVirtualFiles = (
                 "In-place mutation is quarantined in FunScript. Arrays and records are immutable by default outside 'mut (draft) =>' blocks.";
               suggestedAction =
                 "Use immutable functional alternatives (e.g. 'Array.append', 'Array.modify') or wrap local mutations in 'mut (draft) => { ... }'.";
+            } else if (
+              compErr.message.includes(
+                "TypeScript escapes are disabled by --no-ts",
+              ) ||
+              compErr.message.includes(
+                "AssemblyScript blocks are disabled by --no-ts",
+              ) ||
+              compErr.message.includes(
+                "globalThis is disabled by project policy",
+              ) ||
+              compErr.message.includes("Redundant pipeline prefix") ||
+              compErr.message.includes(
+                "exceeds the maximum allowed depth of",
+              ) ||
+              compErr.message.includes(
+                "Early returns ('when (...) =>') are disabled by default",
+              ) ||
+              compErr.message.includes("Effect-only policy disallows") ||
+              compErr.message.includes("Effect-only local import")
+            ) {
+              code = "POLICY";
+              diagnosticCode = "FS_POLICY";
+              explanation =
+                "A configured project policy disallowed this construct.";
+              suggestedAction =
+                "Update the code to comply with the active project policy or adjust the policy in funscript.config.fun.";
             }
 
             const header = `${filePath}:${errLine}:${errCol} - error: ${compErr.message}`;
@@ -1477,6 +1503,7 @@ export const typeCheckVirtualFiles = (
           if (
             diag.code === 2339 &&
             /Option<|Option\.|\bOption\b/.test(message) &&
+            /Property 'fromNullishOr'/.test(message) &&
             !diag.file.text
               .slice(
                 Math.max(0, (diag.start ?? 0) - 100),
@@ -1543,6 +1570,44 @@ export const typeCheckVirtualFiles = (
           });
         }
 
+        const collectBindingPatternNames = (
+          target: unknown,
+          names: Set<string>,
+        ): void => {
+          if (!target || typeof target !== "object") return;
+          const node = target as Record<string, unknown>;
+          if (
+            (node.kind === "Identifier" || node.kind === "UpperIdentifier") &&
+            typeof node.name === "string"
+          ) {
+            names.add(node.name);
+            return;
+          }
+          if (node.kind === "VariablePattern") {
+            collectBindingPatternNames(node.name, names);
+            return;
+          }
+          if (node.kind === "RestPattern") {
+            collectBindingPatternNames(node.argument, names);
+            return;
+          }
+          if (node.kind === "RecordPattern" && Array.isArray(node.fields)) {
+            for (const field of node.fields as Array<Record<string, unknown>>) {
+              if (field.pattern) {
+                collectBindingPatternNames(field.pattern, names);
+              } else {
+                collectBindingPatternNames(field.key, names);
+              }
+            }
+            return;
+          }
+          if (node.kind === "ArrayPattern" && Array.isArray(node.elements)) {
+            for (const elem of node.elements) {
+              collectBindingPatternNames(elem, names);
+            }
+          }
+        };
+
         const getFunScriptUnannotatedBindings = (
           ast?: Program,
         ): Set<string> => {
@@ -1555,11 +1620,8 @@ export const typeCheckVirtualFiles = (
               n.kind === "TsEscapeExpression"
             )
               return;
-            if (n.kind === "BindingDeclaration") {
-              const id = n.id as { name?: string } | undefined;
-              if (id?.name && !n.typeAnnotation) {
-                names.add(id.name);
-              }
+            if (n.kind === "BindingDeclaration" && !n.typeAnnotation) {
+              collectBindingPatternNames(n.id, names);
             }
             for (const key of Object.keys(n)) {
               if (key === "span") continue;
@@ -2961,6 +3023,94 @@ export const typeCheckVirtualFiles = (
             }
           };
 
+          const hasExplicitTypeAnnotation = (expr: ts.Node): boolean => {
+            let curr: ts.Node | undefined = expr;
+            while (curr && curr.parent) {
+              const p: ts.Node = curr.parent;
+              if (ts.isParenthesizedExpression(p)) {
+                curr = p;
+                continue;
+              }
+              if (
+                (ts.isVariableDeclaration(p) ||
+                  ts.isParameter(p) ||
+                  ts.isPropertyDeclaration(p)) &&
+                p.initializer === curr &&
+                Boolean(p.type)
+              ) {
+                return true;
+              }
+              if (
+                ts.isAsExpression(p) ||
+                ts.isTypeAssertionExpression(p) ||
+                ts.isSatisfiesExpression(p)
+              ) {
+                return true;
+              }
+              break;
+            }
+            return false;
+          };
+
+          const isOptionBoundaryAdapter = (expr: ts.Expression): boolean => {
+            if (!ts.isCallExpression(expr)) return false;
+            const text = expr.expression.getText(sf);
+            return (
+              text === "Option.getOrNull" || text === "Option.getOrUndefined"
+            );
+          };
+
+          const reportUnhandledNullishValue = (
+            expr: ts.Node,
+            type: ts.Type,
+            contextDescription: string,
+          ) => {
+            addCustomDiag(
+              expr,
+              "UNHANDLED_NULLISH",
+              `${contextDescription} has nullable/optional type '${checker.typeToString(type)}' from JS/TS interop.`,
+              "Raw 'null' and 'undefined' values cannot flow through FunScript values; absence must be lifted to Option<T> at the interop edge.",
+              `Wrap the value at the edge with 'fromNullishOr(...)' or 'fromNullishOrElse(..., fallback)' (or '<- js ...' for Promises).`,
+            );
+          };
+
+          const checkBindingTarget = (
+            bindingName: ts.BindingName,
+            hasInitializer: boolean,
+          ): void => {
+            if (ts.isIdentifier(bindingName)) {
+              if (unannotatedBindings.has(bindingName.text)) {
+                const type = checker.getTypeAtLocation(bindingName);
+                if (type.flags & ts.TypeFlags.Any) {
+                  addCustomDiag(
+                    bindingName,
+                    "ANY_BINDING",
+                    `Cannot infer untyped 'any' for binding '${bindingName.text}'. Values from untyped foreign JavaScript or TypeScript must be explicitly typed as 'Unknown' (e.g. '${bindingName.text}: Unknown = ...') or validated with a schema.`,
+                  );
+                } else if (hasInitializer && hasNullishMember(type)) {
+                  addCustomDiag(
+                    bindingName,
+                    "UNHANDLED_NULLISH",
+                    `Binding '${bindingName.text}' has nullable/optional type '${checker.typeToString(type)}' from JS/TS interop.`,
+                    "Raw 'null' and 'undefined' values cannot flow into FunScript bindings; absence must be lifted to Option<T> at the interop edge.",
+                    `Wrap the value at the edge with 'fromNullishOr(...)' or 'fromNullishOrElse(..., fallback)' (or '<- js ...' for Promises).`,
+                  );
+                }
+              }
+              return;
+            }
+            if (
+              ts.isObjectBindingPattern(bindingName) ||
+              ts.isArrayBindingPattern(bindingName)
+            ) {
+              for (const elem of bindingName.elements) {
+                if (ts.isBindingElement(elem)) {
+                  checkBindingTarget(elem.name, hasInitializer);
+                }
+              }
+            }
+          };
+
           const visit = (node: ts.Node): void => {
             if (
               ts.isFunctionDeclaration(node) &&
@@ -2979,6 +3129,8 @@ export const typeCheckVirtualFiles = (
               const calleeText = node.expression.getText(sf);
               if (
                 calleeText === "fromNullishOr" ||
+                calleeText === "fromNullishOrElse" ||
+                calleeText === "Option.fromNullable" ||
                 calleeText === "Option.fromNullishOr" ||
                 calleeText === "Option.fromUndefinedOr"
               ) {
@@ -2995,9 +3147,71 @@ export const typeCheckVirtualFiles = (
                     node,
                     "REDUNDANT_OPTION_WRAP",
                     `Value is already an '${argTypeStr}'; calling '${calleeText}' again double-wraps it into 'Option<Option<...>>'.`,
-                    "Wrapping an existing Option with fromNullishOr/fromUndefinedOr creates Option<Option<T>>, which breaks downstream Option.getOrElse and pattern matching.",
-                    "Use the Option value directly without calling fromNullishOr/fromUndefinedOr again.",
+                    "Wrapping an existing Option with fromNullishOr/fromNullishOrElse/Option.fromNullable/Option.fromUndefinedOr creates Option<Option<T>>, which breaks downstream Option.getOrElse and pattern matching.",
+                    "Use the Option value directly without calling the Option wrapper again.",
                   );
+                }
+              } else if (
+                (calleeText === "Option.some" ||
+                  calleeText === "Effect.succeed") &&
+                !isNodeInTsEscape(node) &&
+                !hasExplicitTypeAnnotation(node) &&
+                !node.typeArguments?.length
+              ) {
+                const argType = checker.getTypeAtLocation(node.arguments[0]);
+                if (hasNullishMember(argType)) {
+                  reportUnhandledNullishValue(
+                    node.arguments[0],
+                    argType,
+                    `Argument to '${calleeText}'`,
+                  );
+                }
+              }
+            }
+            if (
+              ts.isObjectLiteralExpression(node) &&
+              !isNodeInTsEscape(node) &&
+              !hasExplicitTypeAnnotation(node)
+            ) {
+              for (const prop of node.properties) {
+                if (
+                  ts.isPropertyAssignment(prop) &&
+                  !isOptionBoundaryAdapter(prop.initializer)
+                ) {
+                  const valType = checker.getTypeAtLocation(prop.initializer);
+                  if (hasNullishMember(valType)) {
+                    reportUnhandledNullishValue(
+                      prop.initializer,
+                      valType,
+                      "Object property value",
+                    );
+                  }
+                } else if (ts.isShorthandPropertyAssignment(prop)) {
+                  const valType = checker.getTypeAtLocation(prop.name);
+                  if (hasNullishMember(valType)) {
+                    reportUnhandledNullishValue(
+                      prop.name,
+                      valType,
+                      `Object property '${prop.name.text}'`,
+                    );
+                  }
+                }
+              }
+            } else if (
+              ts.isArrayLiteralExpression(node) &&
+              !isNodeInTsEscape(node) &&
+              !hasExplicitTypeAnnotation(node)
+            ) {
+              for (const elem of node.elements) {
+                if (!ts.isSpreadElement(elem)) {
+                  const elemType = checker.getTypeAtLocation(elem);
+                  if (hasNullishMember(elemType)) {
+                    reportUnhandledNullishValue(
+                      elem,
+                      elemType,
+                      "Array element",
+                    );
+                  }
                 }
               }
             }
@@ -3007,7 +3221,9 @@ export const typeCheckVirtualFiles = (
                 enc &&
                 !ts.isFunctionExpression(enc) &&
                 !ts.isArrowFunction(enc) &&
-                !ts.isFunctionDeclaration(enc)
+                !ts.isFunctionDeclaration(enc) &&
+                !ts.isMethodDeclaration(enc) &&
+                !ts.isGetAccessorDeclaration(enc)
               ) {
                 enc = enc.parent;
               }
@@ -3043,7 +3259,9 @@ export const typeCheckVirtualFiles = (
                   enc.parent.parent &&
                   (ts.isArrowFunction(enc.parent.parent) ||
                     ts.isFunctionExpression(enc.parent.parent) ||
-                    ts.isFunctionDeclaration(enc.parent.parent)) &&
+                    ts.isFunctionDeclaration(enc.parent.parent) ||
+                    ts.isMethodDeclaration(enc.parent.parent) ||
+                    ts.isGetAccessorDeclaration(enc.parent.parent)) &&
                   enc.parent.parent.type,
                 );
               if (enc && !hasExplicitReturnType && !isNodeInTsEscape(node)) {
@@ -3083,31 +3301,8 @@ export const typeCheckVirtualFiles = (
                   );
                 }
               }
-            } else if (
-              ts.isVariableDeclaration(node) &&
-              ts.isIdentifier(node.name) &&
-              !node.type
-            ) {
-              if (unannotatedBindings.has(node.name.text)) {
-                const type = checker.getTypeAtLocation(node.name);
-                if (type.flags & ts.TypeFlags.Any) {
-                  addCustomDiag(
-                    node.name,
-                    "ANY_BINDING",
-                    `Cannot infer untyped 'any' for binding '${node.name.text}'. Values from untyped foreign JavaScript or TypeScript must be explicitly typed as 'Unknown' (e.g. '${node.name.text}: Unknown = ...') or validated with a schema.`,
-                  );
-                } else if (node.initializer) {
-                  if (hasNullishMember(type)) {
-                    addCustomDiag(
-                      node.name,
-                      "UNHANDLED_NULLISH",
-                      `Binding '${node.name.text}' has nullable/optional type '${checker.typeToString(type)}' from JS/TS interop.`,
-                      "Raw 'null' and 'undefined' values cannot flow into FunScript bindings; absence must be lifted to Option<T> at the interop edge.",
-                      `Wrap the value at the edge with 'fromNullishOr(...)' or 'fromNullishOrElse(..., fallback)' (or '<- js ...' for Promises).`,
-                    );
-                  }
-                }
-              }
+            } else if (ts.isVariableDeclaration(node) && !node.type) {
+              checkBindingTarget(node.name, Boolean(node.initializer));
             } else if (ts.isPropertyAccessExpression(node)) {
               if (memberAccesses.has(node.name.text)) {
                 const targetType = checker.getTypeAtLocation(node.expression);

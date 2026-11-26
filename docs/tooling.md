@@ -1,20 +1,16 @@
 # FunScript tooling
 
 This page describes how to use the published CLI in a project. The command surface is
-generated directly from code in the [CLI reference](reference/cli.md). Project scaffolding
-and Vite/Vitest wrappers are planned, not part of the current command surface.
-Use the package manager and ecosystem tools directly when you need those features.
+generated directly from code in the [CLI reference](reference/cli.md).
 
 ## Supported CLI commands
 
 `funscript --help` and the generated [CLI reference](reference/cli.md) are the source of
 truth for command syntax.
 
-The CLI does not currently provide `new`, `dev`, `preview`, or `add`.
-For project creation, create ordinary `package.json`, `tsconfig.json`, and tool config files
-using the relevant ecosystem tool. Use Vite for web development and builds, Vitest for
-JavaScript/TypeScript tests, and npm, pnpm, or Bun to manage dependencies. These tools do not
-automatically discover `.fun` tests or start through a FunScript wrapper.
+The CLI does not currently provide `dev`, `preview`, or `add`.
+Use Vite for web development and builds, Vitest for JavaScript/TypeScript tests, and npm,
+pnpm, or Bun to manage dependencies.
 
 `funscript run src/main.fun -- --verbose` passes arguments after `--` to the program.
 The command bundles local FunScript imports before starting Node, so imported modules do
@@ -92,9 +88,7 @@ document, type information may be unavailable.
 
 ## Minimal command-line project
 
-In FunScript source, use brace-delimited `effect { ... }` as the canonical form for Effect sequencing. The existing
-indentation-based `effect` block remains compatible syntax; both forms compile through
-the same `Effect.gen` support.
+In FunScript source, use brace-delimited `effect { ... }` as the canonical form for Effect sequencing.
 
 Install FunScript and the runtime libraries your source imports in a normal Node project.
 Add scripts that point to files or directories explicitly:
@@ -117,8 +111,7 @@ Add scripts that point to files or directories explicitly:
 A basic workflow is `npm run check`, `npm run format`, `npm run run`, `npm run dev`,
 `npm run build`, and `npm test`. The compiler's formatter accepts `.fun` source files.
 Vite and Vitest run from the project's own configuration and scripts; configure the
-FunScript Vite plugin if the app imports `.fun` modules. Vitest tests are JavaScript or
-TypeScript tests; `.fun` test discovery is not implemented. For output beyond compiling
+FunScript Vite plugin if the app imports `.fun` modules. For output beyond compiling
 FunScript files to TypeScript, configure Vite or another standard bundler directly.
 
 ### Vite and framework type views
@@ -314,7 +307,6 @@ Add `funscript.config.fun` to the project root (the working directory for CLI an
 export config = {
   noTs: ["app/domain", "app/services"]
   noGlobalThis: ["app/domain", "app/services"]
-  noOptional: ["app/domain", "app/services"]
   barePipelines: ["app/domain", "app/services"]
   noDeepDestructure: ["app/domain", "app/services"]
   maxDestructureDepth: 2
@@ -322,9 +314,9 @@ export config = {
 }
 ```
 
-`noTs`, `noGlobalThis`, `noOptional`, `barePipelines`, and `noDeepDestructure` accept `true` to apply everywhere, `false` to disable the rule, or arrays of project-relative directories. `maxDestructureDepth` accepts an integer between 1 and 10 to configure the maximum allowable structural destructuring depth (defaults to 2 when `noDeepDestructure` is enabled). `effectOnly` accepts an array of project-relative directories. Paths must not escape the project root. Policies apply to descendants of those directories; multiple restrictions combine. CLI flags can enable a project-wide restriction but cannot disable a configured policy. The config is parsed as a single literal exported record; it is never executed. Unknown options, nonliteral values and invalid paths are errors.
+`noTs`, `noGlobalThis`, `barePipelines`, and `noDeepDestructure` accept `true` to apply everywhere, `false` to disable the rule, or arrays of project-relative directories. `maxDestructureDepth` accepts an integer between 1 and 10 to configure the maximum allowable structural destructuring depth (defaults to 2 when `noDeepDestructure` is enabled). `effectOnly` accepts an array of project-relative directories. Paths must not escape the project root. Policies apply to descendants of those directories; multiple restrictions combine. CLI flags can enable a project-wide restriction but cannot disable a configured policy. The config is parsed as a single literal exported record; it is never executed. Unknown options, nonliteral values and invalid paths are errors.
 
-`barePipelines` enforces shorter, cleaner pipeline expressions by rejecting redundant companion module prefixes (e.g. `|> String.replace(...)`, `|> String.trim`, `|> String.toLowerCase`, `|> Array.map(...)`). Because FunScript infers the piped companion type automatically, prefixing the module name adds noise; `barePipelines` forces concise bare forms like `|> replace(...) |> trim |> toLowerCase`. Non-pipeline direct calls (`String.trim(s)`) remain allowed. `noGlobalThis` rejects references to `globalThis`, including indexed access and aliases. Property names and string values with the same spelling are allowed. Raw TS or AssemblyScript blocks are not inspected by this rule; combine it with `noTs` when needed. `noOptional` strictly disallows TypeScript-style optional values (`?`) in function parameters, record type fields, and schemas, ensuring core domain code models absence explicitly with Effect's `Option<T>` and keeps `?` at the TS interop edge or within `ts { ... }` escape hatches. `noDeepDestructure` and `maxDestructureDepth` enforce clean architectural boundaries and prevent train-wreck destructuring (such as `{ user: { profile: { address: { street } } } }`) across parameters, `let` bindings, match patterns, and effect binds. It defaults to allowing up to 2 levels of structural destructuring when enabled (`noDeepDestructure: true`), while allowing fine-grained depth limits (e.g. `maxDestructureDepth: 1` or `maxDestructureDepth: 3`). `noTs` applies the escape restrictions and standalone-source audit described above to matching paths. `effectOnly` prohibits raw TS/AssemblyScript escapes, JS interop expressions, common ambient side-effect APIs (including `globalThis`, `fetch`, `process`, `console`, and timers), and non-Effect package imports. Imports from `effect`, `effect/*`, and `@effect/*` are permitted. Relative imports must resolve to FunScript within a configured Effect-only directory; list shared directories too if they need to be used. Pure ordinary functions remain allowed.
+`barePipelines` enforces shorter, cleaner pipeline expressions by rejecting redundant companion module prefixes (e.g. `|> String.replace(...)`, `|> String.trim`, `|> String.toLowerCase`, `|> Array.map(...)`). Because FunScript infers the piped companion type automatically, prefixing the module name adds noise; `barePipelines` forces concise bare forms like `|> replace(...) |> trim |> toLowerCase`. Non-pipeline direct calls (`String.trim(s)`) remain allowed. `noGlobalThis` rejects references to `globalThis`, including indexed access and aliases. Property names and string values with the same spelling are allowed. Raw TS or AssemblyScript blocks are not inspected by this rule; combine it with `noTs` when needed. `noDeepDestructure` and `maxDestructureDepth` enforce clean architectural boundaries and prevent train-wreck destructuring (such as `{ user: { profile: { address: { street } } } }`) across parameters, `let` bindings, match patterns, and effect binds. It defaults to allowing up to 2 levels of structural destructuring when enabled (`noDeepDestructure: true`), while allowing fine-grained depth limits (e.g. `maxDestructureDepth: 1` or `maxDestructureDepth: 3`). `noTs` applies the escape restrictions and standalone-source audit described above to matching paths. `effectOnly` prohibits raw TS/AssemblyScript escapes, JS interop expressions, common ambient side-effect APIs (including `globalThis`, `fetch`, `process`, `console`, and timers), and non-Effect package imports. Imports from `effect`, `effect/*`, and `@effect/*` are permitted. Relative imports must resolve to FunScript within a configured Effect-only directory; list shared directories too if they need to be used. Pure ordinary functions remain allowed.
 
 `check`, `build`, `emit`, `run`, and the REPL load this policy automatically. `funscript tsc` checks project FunScript policies before invoking TypeScript. The language server applies the nearest project policy during type diagnostics; a config edit takes effect on the next diagnostic pass. Vite and Bun plugin compilation also applies policies. Use `funscript check app/` in CI to audit standalone source files in the selected tree; plugin transforms inspect FunScript source but do not audit all files on disk. Programmatic compiler and type-checker users can pass policy options explicitly.
 

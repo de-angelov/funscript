@@ -924,5 +924,75 @@ export classifyShape = (s) =>
       expect(classifyShape(Rectangle(15, 30))).toBe("rect: 15x30");
       expect(classifyShape(Dot)).toBe("dot");
     });
+
+    it("unpacks nested Some(Some(x)) patterns including guards", async () => {
+      const source = `
+import { Option } from "effect"
+
+export unwrapNested = (opt: Option<Option<Number>>) =>
+  match opt
+    | Some(Some(x)) when x > 10 => x * 2
+    | Some(Some(x)) => x
+    | Some(None) => -1
+    | None => 0
+`;
+      const res = await Effect.runPromise(compileString(source));
+      const unwrapNested = evaluateTsFunction(res.typescript, "unwrapNested");
+      expect(unwrapNested(Option.some(Option.some(15)))).toBe(30);
+      expect(unwrapNested(Option.some(Option.some(4)))).toBe(4);
+      expect(unwrapNested(Option.some(Option.none()))).toBe(-1);
+      expect(unwrapNested(Option.none())).toBe(0);
+    });
+
+    it("unpacks nested record and constructor patterns inside custom variants", async () => {
+      const source = `
+import { Option } from "effect"
+
+export schema Box =
+  | Pair(payload: { a: Number, b: Number })
+  | OptVal(value: Option<Number>)
+  | Empty
+
+export evalBox = (box: Box) =>
+  match box
+    | Pair({ a, b }) when a #= 10 => a - b
+    | Pair({ a, b }) => a + b
+    | OptVal(Some(n)) => n
+    | OptVal(None) => 0
+    | Empty => -1
+`;
+      const res = await Effect.runPromise(compileString(source));
+      const { Pair, OptVal, Empty, evalBox } = evaluateTsExports(
+        res.typescript,
+      );
+      expect(evalBox(Pair({ a: 10, b: 3 }))).toBe(7);
+      expect(evalBox(Pair({ a: 2, b: 5 }))).toBe(7);
+      expect(evalBox(OptVal(Option.some(42)))).toBe(42);
+      expect(evalBox(OptVal(Option.none()))).toBe(0);
+      expect(evalBox(Empty)).toBe(-1);
+    });
+
+    it("unpacks bindings in OrPattern of RecordPatterns", async () => {
+      const source = `
+export extractSameField = (item) =>
+  match item
+    | { kind: "a", value } | { kind: "b", value } when value #= 7 => value * 10
+    | { kind: "a", value } | { kind: "b", value } => value
+    | _ => 0
+
+export extractDiffFields = (item) =>
+  match item
+    | { kind: "left", left: v } | { kind: "right", right: v } => v
+    | _ => 0
+`;
+      const res = await Effect.runPromise(compileString(source));
+      const { extractSameField, extractDiffFields } = evaluateTsExports(
+        res.typescript,
+      );
+      expect(extractSameField({ kind: "a", value: 7 })).toBe(70);
+      expect(extractSameField({ kind: "b", value: -3 })).toBe(-3);
+      expect(extractDiffFields({ kind: "left", left: 11 })).toBe(11);
+      expect(extractDiffFields({ kind: "right", right: 22 })).toBe(22);
+    });
   });
 });

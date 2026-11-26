@@ -99,4 +99,57 @@ describe("type-directed pipeline resolution conformance", () => {
       "map is ambiguous for this pipeline; write Array.map(...) or Option.map(...)",
     );
   }, 60000);
+
+  it("updates/clears companion and type across unwrapping and predicate stages", async () => {
+    const source = `
+import { Option } from "effect"
+
+export f = (nums: Array<Number>) =>
+  nums |> head |> getOrElse(() => 10) |> lessThan(5)
+
+export g = (nums: Array<Number>) =>
+  nums |> head |> Option.isSome
+`.trim();
+    const result = await Effect.runPromise(
+      compileString(source, "src/unwrap.fun"),
+    );
+    expect(result.typescript).toContain("Array.head");
+    expect(result.typescript).toContain("Option.getOrElse");
+    expect(result.typescript).toContain("Number.isLessThan");
+    expect(result.typescript).toContain("Option.isSome");
+  }, 60000);
+
+  it("respects function-local shadowing of pipeline stage names and direct calls", async () => {
+    const source = `
+export f = (trim: (s: String) => String, s: String) =>
+  s |> trim
+
+export g = (map: (a: Number, b: Number) => Number, x: Number, y: Number) =>
+  map(x, y)
+`.trim();
+    const result = await Effect.runPromise(
+      compileString(source, "src/shadow.fun"),
+    );
+    expect(result.typescript).toMatch(/pipe\(\s*s,\s*trim\s*\)/);
+    expect(result.typescript).toContain("map(x, y)");
+    expect(result.typescript).not.toContain("Array.map(x, y)");
+  }, 60000);
+
+  it("scopes bindingCompanions per function/block instead of leaking across functions", async () => {
+    const source = `
+import { Option } from "effect"
+
+export f1 = () => {
+  x = [1, 2] |> Array.map((n) => n + 1)
+  => x
+}
+
+export f2 = (x: Option.Option<Number>) =>
+  x |> getOrElse(() => 0)
+`.trim();
+    const result = await Effect.runPromise(
+      compileString(source, "src/scope-leak.fun"),
+    );
+    expect(result.typescript).toContain("Option.getOrElse");
+  }, 60000);
 });

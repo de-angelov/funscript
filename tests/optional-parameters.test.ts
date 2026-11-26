@@ -335,3 +335,52 @@ describe("schema input types", () => {
     );
   });
 });
+
+describe("optional forwarding edge cases", () => {
+  it("forwards Option for string-literal property keys", async () => {
+    const source = `
+import { Option } from "effect"
+
+ts {
+  declare function takeObj(o: { "foo-bar"?: string }): string | undefined;
+}
+
+export callObj = (opt: Option<String>) => fromNullishOr(takeObj({ "foo-bar": opt }))
+`.trim();
+    const compiled = await compile(source);
+    expect(compiled.typescript).toContain('"foo-bar"');
+    expect(compiled.typescript).toContain(
+      'Option.isSome(__value) ? { ["foo-bar"]: __value.value } : {}',
+    );
+  });
+
+  it("allows Option.none() for optional properties and JSX attributes that accept Option", async () => {
+    const objSource = `
+import { Option } from "effect"
+
+ts {
+  declare function acceptOptProp(o: { x?: Option.Option<number> }): number;
+}
+
+export run = () => acceptOptProp({ x: Option.none() })
+`.trim();
+    const objChecked = await typeCheck(objSource, "opt-prop-option.fun");
+    expect(objChecked.success, objChecked.formattedOutput).toBe(true);
+
+    const { compileString } = await import("../src/compiler.js");
+    const { Effect } = await import("effect");
+    const jsxSource = `
+import { Option } from "effect"
+
+ts {
+  declare function Comp(props: { x?: Option.Option<number> }): any;
+}
+
+export used = () => <Comp x={Option.none()} />
+`.trim();
+    const jsxCompiled = await Effect.runPromise(
+      compileString(jsxSource, "opt-attr.funx"),
+    );
+    expect(jsxCompiled.typescript).toContain("x={Option.none()}");
+  });
+});

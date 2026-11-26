@@ -4,7 +4,11 @@ import {
   type Range,
   type TextEdit,
 } from "vscode-languageserver/node";
-import type { ImportDeclaration, Program } from "../ast/types.js";
+import type {
+  ImportDeclaration,
+  ImportSpecifier,
+  Program,
+} from "../ast/types.js";
 import { isExpectedSyntaxError } from "../errors.js";
 import { Lexer } from "../lexer/lexer.js";
 import { TokenType, type Token } from "../lexer/tokens.js";
@@ -66,6 +70,15 @@ function getImportSource(decl: ImportDeclaration): string {
   return decl.source.raw.replace(/^["']|["']$/g, "");
 }
 
+function formatImportSpecifier(spec: ImportSpecifier): string {
+  const typePrefix = spec.isTypeOnly ? "type " : "";
+  const binding =
+    spec.imported.name === spec.local.name
+      ? spec.imported.name
+      : `${spec.imported.name} as ${spec.local.name}`;
+  return `${typePrefix}${binding}`;
+}
+
 export function findAutoImportCodeActions(
   source: string,
   uri: string,
@@ -114,7 +127,13 @@ export function findAutoImportCodeActions(
   for (const entry of program.body) {
     if (entry.kind === "ImportDeclaration") {
       const decl = entry;
-      if (getImportSource(decl) === "effect") {
+      if (
+        getImportSource(decl) === "effect" &&
+        !decl.isTypeOnly &&
+        !decl.isSideEffect &&
+        !decl.defaultBinding &&
+        !decl.namespaceBinding
+      ) {
         existingEffectImport = decl;
       }
       for (const spec of decl.specifiers) {
@@ -146,10 +165,11 @@ export function findAutoImportCodeActions(
   if (existingEffectImport && existingEffectImport.specifiers.length > 0) {
     // Add to existing import { ... } from "effect"
     const currentSpecs = existingEffectImport.specifiers.map(
-      (s) => s.imported.name,
+      formatImportSpecifier,
     );
     const updatedSpecs = [...new Set([...currentSpecs, symbolName])].sort();
-    const newText = `import { ${updatedSpecs.join(", ")} } from "effect"`;
+    const typeOnlyDecl = existingEffectImport.isTypeOnly ? "type " : "";
+    const newText = `import ${typeOnlyDecl}{ ${updatedSpecs.join(", ")} } from ${existingEffectImport.source.raw}`;
 
     actions.push({
       title: `Add import { ${symbolName} } from "effect"`,
@@ -310,12 +330,9 @@ export function findRemoveUnusedImportsCodeActions(
       }
     } else {
       // Partially unused: rewrite specifier list
-      const updatedSpecs = usedSpecs.map((s) =>
-        s.imported.name === s.local.name
-          ? s.imported.name
-          : `${s.imported.name} as ${s.local.name}`,
-      );
-      const newText = `import { ${updatedSpecs.join(", ")} } from ${decl.source.raw}`;
+      const updatedSpecs = usedSpecs.map(formatImportSpecifier);
+      const typeOnlyDecl = decl.isTypeOnly ? "type " : "";
+      const newText = `import ${typeOnlyDecl}{ ${updatedSpecs.join(", ")} } from ${decl.source.raw}`;
       const editRange = {
         start: {
           line: declStartLine,

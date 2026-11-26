@@ -97,4 +97,27 @@ export c = 3
     expect((res as any).result.length).toBeGreaterThan(0);
     expect((res as any).result[0].label).toBe(": 100");
   });
+
+  it("disambiguates inlay hints when the same binding name appears multiple times", () => {
+    const source = `
+import { Effect } from "effect"
+
+first = () =>
+  effect {
+    value <- Effect.succeed(42)
+    => value
+  }
+
+second = () =>
+  effect {
+    value <- Effect.succeed("hello")
+    => value
+  }
+`;
+    const hints = findInlayHints(source, fixtureUri);
+    const firstHint = hints.find((h) => h.position.line === 5);
+    const secondHint = hints.find((h) => h.position.line === 11);
+    expect(firstHint?.label).toBe(": number");
+    expect(secondHint?.label).toBe(": string");
+  });
 });

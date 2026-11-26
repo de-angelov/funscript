@@ -84,6 +84,29 @@ export makeRef = Ref({ id: "1" })
 
       expect(actions.length).toBe(0);
     });
+
+    it("preserves as Alias and type modifiers when adding to an existing effect import", () => {
+      const source = `
+import { Console as C, type Scope } from "effect"
+
+export main = (s: Scope) =>
+  effect {
+    r <- Ref.make(0)
+    _ <- C.log("Hello")
+    => r
+  }
+`;
+      const actions = findAutoImportCodeActions(source, uri, {
+        start: { line: 5, character: 9 },
+        end: { line: 5, character: 12 },
+      });
+
+      expect(actions.length).toBe(1);
+      const edit = actions[0].edit?.changes?.[uri]?.[0];
+      expect(edit?.newText).toBe(
+        'import { Console as C, Ref, type Scope } from "effect"',
+      );
+    });
   });
 
   describe("Remove Unused Imports", () => {
@@ -137,6 +160,30 @@ export main = Console.log("Only console used")
       expect(removeSchedule).toBeDefined();
       const edit = removeSchedule?.edit?.changes?.[uri]?.[0];
       expect(edit?.newText).toBe("");
+    });
+
+    it("preserves as Alias and type modifiers when removing unused imports", () => {
+      const source = `
+import { Console as C, type Scope, Unused } from "effect"
+import type { Duration, UnusedType } from "effect"
+
+export main = (s: Scope, d: Duration.Duration) => C.log("hi")
+`;
+      const actions = findRemoveUnusedImportsCodeActions(source, uri, {
+        start: { line: 1, character: 0 },
+        end: { line: 2, character: 50 },
+      });
+
+      const organize = actions.find(
+        (a) => a.title === "Remove all unused imports",
+      );
+      expect(organize).toBeDefined();
+      const edits = organize?.edit?.changes?.[uri] ?? [];
+      expect(edits).toHaveLength(2);
+      expect(edits[0].newText).toBe(
+        'import { Console as C, type Scope } from "effect"',
+      );
+      expect(edits[1].newText).toBe('import type { Duration } from "effect"');
     });
   });
 

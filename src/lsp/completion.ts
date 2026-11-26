@@ -15,6 +15,10 @@ export interface IndexedDocument {
   text: string;
 }
 
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
 /** Builds completion candidates from the current open workspace snapshot. */
 export function complete(
   source: string,
@@ -59,8 +63,9 @@ export function complete(
   };
 
   if (member) {
+    const escapedMember = escapeRegExp(member);
     const schema = new RegExp(
-      `(?:schema\\s+)?${member}\\s*=\\s*\\{([\\s\\S]*?)\\n\\}`,
+      `(?:schema\\s+)?${escapedMember}\\s*=\\s*\\{([\\s\\S]*?)\\n\\}`,
       "m",
     ).exec(source);
     if (schema)
@@ -69,7 +74,7 @@ export function complete(
       ))
         add(field[1], CompletionItemKind.Field, field[2].trim());
     const variants = new RegExp(
-      `schema\\s+${member}\\s*=([\\s\\S]*?)(?:\\n\\S|$)`,
+      `schema\\s+${escapedMember}\\s*=([\\s\\S]*?)(?:\\n\\S|$)`,
       "m",
     ).exec(source);
     if (variants)
@@ -111,7 +116,7 @@ export function complete(
         if (
           base &&
           new RegExp(
-            `from\\s+["'][^"']*${base}(?:\\.(?:funx?|tsx?))?["']`,
+            `from\\s+["'][^"']*${escapeRegExp(base)}(?:\\.(?:funx?|tsx?))?["']`,
           ).test(source)
         ) {
           for (const found of doc.text.matchAll(

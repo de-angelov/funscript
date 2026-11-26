@@ -1109,5 +1109,30 @@ increment = (value) =>
       expect(() => parser.parse()).toThrow(ParseError);
       expect(parser.parsingBraceEffect).toBe(false);
     });
+
+    it("throws ParseError on member assignment to indexed expression", () => {
+      expect(() => parse(`mut arr = [{ x: 0 }]\narr[0].x = 1`)).toThrow(
+        ParseError,
+      );
+    });
+
+    it("allows member and index assignments on mut bindings inside effect blocks", () => {
+      const ast = parse(`
+run = () => effect {
+  mut obj = { x: 0 }
+  obj.x = 1
+  mut arr = [0]
+  arr[0] = 2
+  => obj.x
+}
+`);
+      const fn = (ast.body[0] as BindingDeclaration).init as FunctionExpression;
+      const eff = fn.body as EffectBlockExpression;
+      expect(eff.body.some((s) => s.kind === "AssignmentStatement")).toBe(true);
+      const assignments = eff.body.filter(
+        (s) => s.kind === "AssignmentStatement",
+      );
+      expect(assignments).toHaveLength(2);
+    });
   });
 });

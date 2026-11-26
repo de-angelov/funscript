@@ -379,6 +379,14 @@ export function funscriptBunPlugin(options: BunPluginOptions = {}): BunPlugin {
             }),
           );
           contents = res.typescript;
+          const rawMap = res.sourcemap ?? res.map;
+          if (compileOptions.sourcemap && rawMap) {
+            const encodedMap = Buffer.from(
+              JSON.stringify(rawMap),
+              "utf8",
+            ).toString("base64");
+            contents = `${contents}\n//# sourceMappingURL=data:application/json;base64,${encodedMap}\n`;
+          }
           if (cachePath) {
             try {
               await fs.promises.mkdir(path.dirname(cachePath), {
@@ -406,9 +414,9 @@ export function funscriptBunPlugin(options: BunPluginOptions = {}): BunPlugin {
         }
         const isEntry = options.entryFile
           ? path.resolve(args.path) === path.resolve(options.entryFile)
-          : typeof process !== "undefined" && process.argv?.[1]
-            ? path.resolve(args.path) === path.resolve(process.argv[1])
-            : true;
+          : typeof process !== "undefined" &&
+            Boolean(process.argv?.[1]) &&
+            path.resolve(args.path) === path.resolve(process.argv[1]);
         const shouldRunMain =
           options.runMain ||
           options.executable ||
@@ -429,15 +437,11 @@ export function funscriptBunPlugin(options: BunPluginOptions = {}): BunPlugin {
   };
 }
 
-// Auto-register when imported in a Bun environment (e.g. via bunfig.toml `preload = ["funscript/bun"]`)
 type BunGlobal = {
   file: (path: string) => { text: () => Promise<string> };
   plugin: (plugin: unknown) => void;
 };
 declare const Bun: BunGlobal | undefined;
-if (typeof Bun !== "undefined" && typeof Bun.plugin === "function") {
-  Bun.plugin(funscriptBunPlugin());
-}
 
 export const bunPlugin = funscriptBunPlugin;
 export default funscriptBunPlugin;

@@ -86,7 +86,6 @@ export enum TokenType {
   JSX_CLOSING_TAG_OPEN = "JSX_CLOSING_TAG_OPEN",
   JSX_ATTRIBUTE_NAME = "JSX_ATTRIBUTE_NAME",
   JSX_TEXT = "JSX_TEXT",
-  JSX_TAG_NAME = "JSX_TAG_NAME",
 }
 
 export interface Token {
@@ -172,4 +171,3 @@ export const JsxSlashClose = TokenType.JSX_SLASH_CLOSE;
 export const JsxClosingTagOpen = TokenType.JSX_CLOSING_TAG_OPEN;
 export const JsxAttributeName = TokenType.JSX_ATTRIBUTE_NAME;
 export const JsxText = TokenType.JSX_TEXT;
-export const JsxTagName = TokenType.JSX_TAG_NAME;

@@ -57,6 +57,35 @@ function shouldSkipType(typeStr: string): boolean {
   );
 }
 
+function pickTsDeclByPosition(
+  matches: ts.VariableDeclaration[] | undefined,
+  sourceFile: ts.SourceFile,
+  targetLine: number,
+  targetChar: number,
+): ts.VariableDeclaration | undefined {
+  if (!matches || matches.length === 0) return undefined;
+  if (matches.length === 1) return matches[0];
+  let best = matches[0];
+  let bestLineDiff = Infinity;
+  let bestCharDiff = Infinity;
+  for (const candidate of matches) {
+    const pos = sourceFile.getLineAndCharacterOfPosition(
+      candidate.name.getStart(sourceFile),
+    );
+    const lineDiff = Math.abs(pos.line - targetLine);
+    const charDiff = Math.abs(pos.character - targetChar);
+    if (
+      lineDiff < bestLineDiff ||
+      (lineDiff === bestLineDiff && charDiff < bestCharDiff)
+    ) {
+      best = candidate;
+      bestLineDiff = lineDiff;
+      bestCharDiff = charDiff;
+    }
+  }
+  return best;
+}
+
 export function findInlayHints(
   source: string,
   uri: string,
@@ -117,9 +146,13 @@ export function findInlayHints(
       const decl = node as BindingDeclaration;
       if (decl.id.kind === "Identifier" && !decl.typeAnnotation) {
         const name = decl.id.name;
-        const matches = tsVars.get(name);
-        if (matches && matches.length === 1) {
-          const tsDecl = matches[0];
+        const tsDecl = pickTsDeclByPosition(
+          tsVars.get(name),
+          checked.sourceFile,
+          decl.id.span.start.line - 1,
+          decl.id.span.start.column - 1,
+        );
+        if (tsDecl) {
           if (decl.init.kind === "FunctionExpression") {
             const func = decl.init;
             if (!func.returnType && tsDecl.initializer) {
@@ -207,9 +240,13 @@ export function findInlayHints(
       const bind = node as EffectBindStatement;
       if (bind.id.kind === "Identifier") {
         const name = bind.id.name;
-        const matches = tsVars.get(name);
-        if (matches && matches.length === 1) {
-          const tsDecl = matches[0];
+        const tsDecl = pickTsDeclByPosition(
+          tsVars.get(name),
+          checked.sourceFile,
+          bind.id.span.start.line - 1,
+          bind.id.span.start.column - 1,
+        );
+        if (tsDecl) {
           const sym = checked.checker.getSymbolAtLocation(tsDecl.name);
           if (sym) {
             const type = checked.checker.getTypeOfSymbolAtLocation(

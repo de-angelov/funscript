@@ -39,10 +39,14 @@ export const buildCommand = (
     const targetIndex = args.indexOf("--target");
     const target = targetIndex !== -1 ? args[targetIndex + 1] : undefined;
     const engineIndex = args.indexOf("--engine");
-    const engine =
-      engineIndex !== -1
-        ? (args[engineIndex + 1] as "auto" | "bun" | "esbuild")
-        : undefined;
+    const rawEngine = engineIndex !== -1 ? args[engineIndex + 1] : undefined;
+    if (engineIndex !== -1 && rawEngine !== "esbuild" && rawEngine !== "bun") {
+      process.exitCode = 1;
+      return yield* Console.error(
+        `Unsupported build engine '${rawEngine ?? ""}'; supported engines: esbuild, bun.`,
+      );
+    }
+    const engine = rawEngine as "bun" | "esbuild" | undefined;
     const isFast = args.includes("--fast");
     if (target !== undefined && target !== "bun") {
       process.exitCode = 1;

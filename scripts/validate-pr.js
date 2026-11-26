@@ -37,6 +37,16 @@ export const CHECKS = [
     args: ["run", "lint"],
   },
   {
+    name: "Idiomatic FunScript Check",
+    cmd: "npm",
+    args: ["run", "check:idiomatic"],
+  },
+  {
+    name: "Unused Exports Check (Knip)",
+    cmd: "npm",
+    args: ["run", "knip"],
+  },
+  {
     name: "Prettier Formatting Check",
     cmd: "npm",
     args: ["run", "prettier:check"],

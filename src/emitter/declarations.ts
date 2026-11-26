@@ -1,4 +1,5 @@
 import type {
+  ArrayPattern,
   BindingDeclaration,
   BindingTarget,
   ErrorDeclaration,
@@ -152,6 +153,184 @@ export function patternHasOptionalField(
   return false;
 }
 
+export function emitUnpackedRecordPattern(options: {
+  pat: RecordPattern;
+  basePath: string;
+  fieldsMap?: Map<string, RecordFieldInfo>;
+  emitBindingTarget: (target: BindingTarget | Pattern) => string;
+  addEffectImport: (name: string) => void;
+  exp?: string;
+  keyword?: string;
+  indent?: string;
+  onRecordBinding?: (
+    varName: string,
+    fields: Map<string, RecordFieldInfo>,
+  ) => void;
+}): string[] {
+  const {
+    pat,
+    basePath,
+    fieldsMap,
+    emitBindingTarget,
+    addEffectImport,
+    exp = "",
+    keyword = "const",
+    indent = "",
+    onRecordBinding,
+  } = options;
+  const lines: string[] = [];
+
+  const unpackOptionalArray = (arrPat: ArrayPattern, optRef: string) => {
+    addEffectImport("Option");
+    for (let i = 0; i < arrPat.elements.length; i++) {
+      const el = arrPat.elements[i];
+      if (el.kind === "WildcardPattern" || el.kind === "LiteralPattern") {
+        continue;
+      }
+      if (el.kind === "RestPattern") {
+        const arg = emitBindingTarget(el.argument);
+        if (arg) {
+          lines.push(
+            `${indent}${exp}${keyword} ${arg} = Option.map(${optRef}, ($v) => $v.slice(${i}));`,
+          );
+        }
+        continue;
+      }
+      const elemOpt = `Option.flatMap(${optRef}, ($v) => Option.fromNullishOr($v[${i}]))`;
+      if (el.kind === "RecordPattern") {
+        const subOpt = `$funscriptOpt${syntheticDestructureId++}`;
+        lines.push(`${indent}const ${subOpt} = ${elemOpt};`);
+        unpackOptionalRecord(el, subOpt, undefined);
+      } else if (el.kind === "ArrayPattern") {
+        const subOpt = `$funscriptOpt${syntheticDestructureId++}`;
+        lines.push(`${indent}const ${subOpt} = ${elemOpt};`);
+        unpackOptionalArray(el, subOpt);
+      } else {
+        const varName = emitBindingTarget(el);
+        if (varName) {
+          lines.push(`${indent}${exp}${keyword} ${varName} = ${elemOpt};`);
+        }
+      }
+    }
+  };
+
+  const unpackOptionalRecord = (
+    recPat: RecordPattern,
+    optRef: string,
+    subFieldsMap?: Map<string, RecordFieldInfo>,
+  ) => {
+    addEffectImport("Option");
+    const restField = recPat.fields.find((f) => f.isRest);
+    if (restField) {
+      const nonRest = recPat.fields.filter((f) => !f.isRest);
+      lines.push(
+        `${indent}${exp}${keyword} ${restField.key.name} = Option.map(${optRef}, ({ ${nonRest.map((f) => `${f.key.name}: _${f.key.name}`).join(", ")}, ...$funscriptRest }) => $funscriptRest);`,
+      );
+    }
+    for (const f of recPat.fields) {
+      if (f.isRest) continue;
+      if (
+        f.pattern?.kind === "WildcardPattern" ||
+        f.pattern?.kind === "LiteralPattern"
+      ) {
+        continue;
+      }
+      const info = subFieldsMap?.get(f.key.name);
+      const isOpt = info?.optional === true;
+      const mappedOpt = isOpt
+        ? `Option.flatMap(${optRef}, ($v) => Option.fromNullishOr($v.${f.key.name}))`
+        : `Option.map(${optRef}, ($v) => $v.${f.key.name})`;
+      if (f.pattern?.kind === "RecordPattern") {
+        const subOpt = `$funscriptOpt${syntheticDestructureId++}`;
+        lines.push(`${indent}const ${subOpt} = ${mappedOpt};`);
+        unpackOptionalRecord(f.pattern, subOpt, info?.fields);
+      } else if (f.pattern?.kind === "ArrayPattern") {
+        const subOpt = `$funscriptOpt${syntheticDestructureId++}`;
+        lines.push(`${indent}const ${subOpt} = ${mappedOpt};`);
+        unpackOptionalArray(f.pattern, subOpt);
+      } else {
+        const varName = f.pattern ? emitBindingTarget(f.pattern) : f.key.name;
+        if (varName) {
+          lines.push(`${indent}${exp}${keyword} ${varName} = ${mappedOpt};`);
+        }
+      }
+    }
+  };
+
+  const unpackRecord = (
+    recPat: RecordPattern,
+    currentPath: string,
+    subFieldsMap?: Map<string, RecordFieldInfo>,
+  ) => {
+    const restField = recPat.fields.find((f) => f.isRest);
+    if (restField) {
+      const nonRest = recPat.fields.filter((f) => !f.isRest);
+      const restTemp = `$funscriptRest${syntheticDestructureId++}`;
+      lines.push(
+        `${indent}const { ${nonRest.map((f) => `${f.key.name}: _${f.key.name}`).join(", ")}, ...${restTemp} } = ${currentPath};`,
+      );
+      lines.push(
+        `${indent}${exp}${keyword} ${restField.key.name} = ${restTemp};`,
+      );
+    }
+    for (const f of recPat.fields) {
+      if (f.isRest) continue;
+      if (
+        f.pattern?.kind === "WildcardPattern" ||
+        f.pattern?.kind === "LiteralPattern"
+      ) {
+        continue;
+      }
+      const info = subFieldsMap?.get(f.key.name);
+      const isOpt = info?.optional === true;
+      const fieldPath = `${currentPath}.${f.key.name}`;
+      if (f.pattern?.kind === "RecordPattern") {
+        if (isOpt) {
+          const optTemp = `$funscriptOpt${syntheticDestructureId++}`;
+          addEffectImport("Option");
+          lines.push(
+            `${indent}const ${optTemp} = Option.fromNullishOr(${fieldPath});`,
+          );
+          unpackOptionalRecord(f.pattern, optTemp, info?.fields);
+        } else {
+          unpackRecord(f.pattern, fieldPath, info?.fields);
+        }
+      } else if (f.pattern?.kind === "ArrayPattern") {
+        if (isOpt) {
+          const optTemp = `$funscriptOpt${syntheticDestructureId++}`;
+          addEffectImport("Option");
+          lines.push(
+            `${indent}const ${optTemp} = Option.fromNullishOr(${fieldPath});`,
+          );
+          unpackOptionalArray(f.pattern, optTemp);
+        } else {
+          const varName = emitBindingTarget(f.pattern);
+          if (varName) {
+            lines.push(`${indent}${exp}${keyword} ${varName} = ${fieldPath};`);
+          }
+        }
+      } else {
+        const varName = f.pattern ? emitBindingTarget(f.pattern) : f.key.name;
+        if (!varName) continue;
+        if (isOpt) {
+          addEffectImport("Option");
+          lines.push(
+            `${indent}${exp}${keyword} ${varName} = Option.fromNullishOr(${fieldPath});`,
+          );
+        } else {
+          lines.push(`${indent}${exp}${keyword} ${varName} = ${fieldPath};`);
+          if (info?.fields) {
+            onRecordBinding?.(varName, info.fields);
+          }
+        }
+      }
+    }
+  };
+
+  unpackRecord(pat, basePath, fieldsMap);
+  return lines;
+}
+
 function getRecordFieldInfoForBinding(
   ctx: DeclarationEmitterContext,
   decl: BindingDeclaration,
@@ -283,6 +462,8 @@ export function emitBindingDeclaration(
     ctx.variableTypeScopes.at(-1)?.set(idName, decl.typeAnnotation);
     if (isPrimitiveType(decl.typeAnnotation) || ctx.isPrimitive(decl.init)) {
       ctx.primitiveIdentifiers.add(idName);
+    } else {
+      ctx.primitiveIdentifiers.delete(idName);
     }
   }
 
@@ -339,31 +520,17 @@ export function emitBindingDeclaration(
       initStatement = `const ${sourceRef}${typeAnn} = ${initExpr};\n`;
     }
 
-    const restField = decl.id.fields.find((f) => f.isRest);
-    let restDestructure = "";
-    const lines: string[] = [];
-    if (restField) {
-      const restName = restField.key.name;
-      const nonRestFields = decl.id.fields.filter((f) => !f.isRest);
-      const restTemp = `$funscriptRest${syntheticDestructureId++}`;
-      restDestructure = `const { ${nonRestFields.map((f) => `${f.key.name}: _${f.key.name}`).join(", ")}, ...${restTemp} } = ${sourceRef};\n`;
-      lines.push(`${exp}${keyword} ${restName} = ${restTemp};`);
-    }
+    const lines = emitUnpackedRecordPattern({
+      pat: decl.id,
+      basePath: sourceRef,
+      fieldsMap: fieldsInfo,
+      emitBindingTarget: (target) => ctx.emitBindingTarget(target),
+      addEffectImport: (name) => ctx.addEffectImport(name),
+      exp,
+      keyword,
+    });
 
-    for (const f of decl.id.fields) {
-      if (f.isRest) continue;
-      const varName = f.pattern ? ctx.emitBindingTarget(f.pattern) : f.key.name;
-      const isOpt = fieldsInfo.get(f.key.name)?.optional === true;
-      if (isOpt) {
-        lines.push(
-          `${exp}${keyword} ${varName} = Option.fromNullishOr(${sourceRef}.${f.key.name});`,
-        );
-      } else {
-        lines.push(`${exp}${keyword} ${varName} = ${sourceRef}.${f.key.name};`);
-      }
-    }
-
-    return `${initStatement}${restDestructure}${lines.join("\n")}`;
+    return `${initStatement}${lines.join("\n")}`;
   }
 
   const target = ctx.emitBindingTarget(decl.id);
@@ -446,75 +613,31 @@ export function emitBindingDeclaration(
               : undefined;
           if (patternHasOptionalField(p.name, recFields)) {
             ctx.addEffectImport("Option");
-            const bindings: string[] = [];
-            let syntheticDestructureId = 0;
-            const unpackPatternFields = (
-              pat: RecordPattern,
-              basePath: string,
-              fieldsMap?: Map<string, RecordFieldInfo>,
-            ) => {
-              const restField = pat.fields.find((f) => f.isRest);
-              if (restField) {
-                const nonRest = pat.fields.filter((f) => !f.isRest);
-                const restTemp = `$funscriptRest${index}_${syntheticDestructureId++}`;
-                bindings.push(
-                  `  const { ${nonRest.map((f) => `${f.key.name}: _${f.key.name}`).join(", ")}, ...${restTemp} } = ${basePath};`,
-                );
-                bindings.push(`  const ${restField.key.name} = ${restTemp};`);
-              }
-              for (const f of pat.fields) {
-                if (f.isRest) continue;
-                if (f.pattern?.kind === "WildcardPattern") continue;
-                const info = fieldsMap?.get(f.key.name);
-                const isOpt = info?.optional === true;
-                const fieldPath = `${basePath}.${f.key.name}`;
-                if (f.pattern?.kind === "RecordPattern") {
-                  if (isOpt) {
-                    const varName = ctx.emitBindingTarget(f.pattern);
-                    bindings.push(
-                      `  const ${varName} = Option.fromNullishOr(${fieldPath});`,
-                    );
-                  } else {
-                    unpackPatternFields(f.pattern, fieldPath, info?.fields);
-                  }
-                } else if (f.pattern?.kind === "ArrayPattern") {
-                  const varName = ctx.emitBindingTarget(f.pattern);
-                  if (isOpt) {
-                    bindings.push(
-                      `  const ${varName} = Option.fromNullishOr(${fieldPath});`,
-                    );
-                  } else {
-                    bindings.push(`  const ${varName} = ${fieldPath};`);
-                  }
-                } else {
-                  const varName = f.pattern
-                    ? ctx.emitBindingTarget(f.pattern)
-                    : f.key.name;
-                  if (isOpt) {
-                    bindings.push(
-                      `  const ${varName} = Option.fromNullishOr(${fieldPath});`,
-                    );
-                  } else {
-                    bindings.push(`  const ${varName} = ${fieldPath};`);
-                  }
-                }
-              }
-            };
             const sourceRef = p.typeAnnotation
               ? `$funscriptDecoded${index}`
               : `$funscriptParam${index}`;
-            unpackPatternFields(p.name, sourceRef, recFields);
-            return bindings;
+            return emitUnpackedRecordPattern({
+              pat: p.name,
+              basePath: sourceRef,
+              fieldsMap: recFields,
+              emitBindingTarget: (target) => ctx.emitBindingTarget(target),
+              addEffectImport: (name) => ctx.addEffectImport(name),
+              indent: "  ",
+            });
           }
         }
         return [];
       });
       if (validations || optionalBindings.length > 0)
         ctx.addEffectImport("Schema");
+      const prevPrimitiveIdentifiers = new Set(ctx.primitiveIdentifiers);
       for (const p of fn.params) {
-        if (isPrimitiveType(p.typeAnnotation)) {
-          for (const n of collectBindingNames(p.name)) {
+        const isPrim = isPrimitiveType(p.typeAnnotation);
+        for (const n of collectBindingNames(p.name)) {
+          if (isPrim) {
             ctx.primitiveIdentifiers.add(n);
+          } else {
+            ctx.primitiveIdentifiers.delete(n);
           }
         }
       }
@@ -602,15 +725,16 @@ export function emitBindingDeclaration(
               pat: RecordPattern,
               fieldsMap?: Map<string, RecordFieldInfo>,
               typeNode?: TypeNode,
+              parentIsOpt = false,
             ) => {
               for (const f of pat.fields) {
                 if (f.isRest) {
-                  paramScopeEntries.push([f.key.name, false]);
+                  paramScopeEntries.push([f.key.name, parentIsOpt]);
                   varTypeEntries.push([f.key.name, undefined]);
                   continue;
                 }
                 const info = fieldsMap?.get(f.key.name);
-                const isOpt = info?.optional === true;
+                const isOpt = parentIsOpt || info?.optional === true;
                 const matchingFieldType =
                   typeNode?.kind === "RecordTypeNode"
                     ? typeNode.fields.find((tf) => tf.name.name === f.key.name)
@@ -621,7 +745,12 @@ export function emitBindingDeclaration(
                   if (subType?.kind === "TypeReferenceNode") {
                     subType = lookup(subType.name.name);
                   }
-                  collectParamsFromPattern(f.pattern, info?.fields, subType);
+                  collectParamsFromPattern(
+                    f.pattern,
+                    info?.fields,
+                    subType,
+                    isOpt,
+                  );
                 } else if (f.pattern?.kind === "ArrayPattern") {
                   const elemType =
                     matchingFieldType?.kind === "ArrayTypeNode"
@@ -629,7 +758,7 @@ export function emitBindingDeclaration(
                       : undefined;
                   for (const el of f.pattern.elements) {
                     for (const n of collectBindingNames(el)) {
-                      paramScopeEntries.push([n, false]);
+                      paramScopeEntries.push([n, isOpt]);
                       varTypeEntries.push([n, elemType]);
                     }
                   }
@@ -640,7 +769,7 @@ export function emitBindingDeclaration(
                       : ctx.emitBindingTarget(f.pattern)
                     : f.key.name;
                   paramScopeEntries.push([varName, isOpt]);
-                  if (info?.fields) {
+                  if (!isOpt && info?.fields) {
                     recordScope.set(varName, info.fields);
                   }
                   if (matchingFieldType) {
@@ -683,6 +812,7 @@ export function emitBindingDeclaration(
         }
         return `${exp}${keyword} ${target} = (${params}) => {\n${prefix}  return Effect.runPromise(${ctx.emitExpression(fn.body)});\n};`;
       } finally {
+        ctx.primitiveIdentifiers = prevPrimitiveIdentifiers;
         ctx.recordScopes.pop();
         ctx.parameterScopes.pop();
         ctx.variableTypeScopes.pop();

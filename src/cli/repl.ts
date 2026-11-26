@@ -19,34 +19,61 @@ import {
 import { FUNSCRIPT_VERSION } from "../version.js";
 import { FunScriptError, isFileNotFoundError } from "../errors.js";
 
-const replProjectRoot = process.cwd();
-const replProjectConfig = loadProjectConfig(replProjectRoot);
-const replFile = path.join(replProjectRoot, "repl.fun");
-const replPolicyOptions = {
-  noTs: isPathPolicyEnabled(replProjectConfig.noTs, replProjectRoot, replFile),
-  noGlobalThis: isPathPolicyEnabled(
-    replProjectConfig.noGlobalThis,
-    replProjectRoot,
-    replFile,
-  ),
-  barePipelines: isPathPolicyEnabled(
-    replProjectConfig.barePipelines,
-    replProjectRoot,
-    replFile,
-  ),
-  noDeepDestructure: isPathPolicyEnabled(
-    replProjectConfig.noDeepDestructure,
-    replProjectRoot,
-    replFile,
-  ),
-  maxDestructureDepth: replProjectConfig.maxDestructureDepth,
-  effectOnly: isEffectOnlyFile(replProjectConfig, replProjectRoot, replFile),
-  effectOnlyDirectories: replProjectConfig.effectOnly,
-  policyRoot: replProjectRoot,
-};
+interface ReplRuntimeConfig {
+  projectRoot: string;
+  replFile: string;
+  policyOptions: {
+    noTs: boolean;
+    noGlobalThis: boolean;
+    barePipelines: boolean;
+    noDeepDestructure: boolean;
+    maxDestructureDepth: number | undefined;
+    effectOnly: boolean;
+    effectOnlyDirectories: string[] | undefined;
+    policyRoot: string;
+  };
+}
 
-const compileReplSource = (source: string) =>
-  compileString(source, replFile, { sourcemap: false, ...replPolicyOptions });
+let cachedReplConfig: ReplRuntimeConfig | undefined;
+
+function loadReplRuntimeConfig(cwd = process.cwd()): ReplRuntimeConfig {
+  const projectRoot = cwd;
+  const projectConfig = loadProjectConfig(projectRoot);
+  const replFile = path.join(projectRoot, "repl.fun");
+  return {
+    projectRoot,
+    replFile,
+    policyOptions: {
+      noTs: isPathPolicyEnabled(projectConfig.noTs, projectRoot, replFile),
+      noGlobalThis: isPathPolicyEnabled(
+        projectConfig.noGlobalThis,
+        projectRoot,
+        replFile,
+      ),
+      barePipelines: isPathPolicyEnabled(
+        projectConfig.barePipelines,
+        projectRoot,
+        replFile,
+      ),
+      noDeepDestructure: isPathPolicyEnabled(
+        projectConfig.noDeepDestructure,
+        projectRoot,
+        replFile,
+      ),
+      maxDestructureDepth: projectConfig.maxDestructureDepth,
+      effectOnly: isEffectOnlyFile(projectConfig, projectRoot, replFile),
+      effectOnlyDirectories: projectConfig.effectOnly,
+      policyRoot: projectRoot,
+    },
+  };
+}
+
+function getReplRuntimeConfig(): ReplRuntimeConfig {
+  if (!cachedReplConfig || cachedReplConfig.projectRoot !== process.cwd()) {
+    cachedReplConfig = loadReplRuntimeConfig(process.cwd());
+  }
+  return cachedReplConfig;
+}
 
 export interface ReplOptions {
   input?: NodeJS.ReadableStream;
@@ -158,6 +185,10 @@ export async function compileReplCode(
       trimmed,
     ) && !/^\s*(match\b|effect\b)/.test(trimmed);
 
+  const { projectRoot, replFile, policyOptions } = getReplRuntimeConfig();
+  const compileReplSource = (source: string) =>
+    compileString(source, replFile, { sourcemap: false, ...policyOptions });
+
   let compiled: CompileResult;
   let checkedSource = trimmed;
   let tsCode = "";
@@ -235,11 +266,11 @@ export async function compileReplCode(
       [globals, ...nextDeclarations.values()].join("\n"),
       replFile,
       {
-        noGlobalThis: replPolicyOptions.noGlobalThis,
-        barePipelines: replPolicyOptions.barePipelines,
-        noDeepDestructure: replPolicyOptions.noDeepDestructure,
-        maxDestructureDepth: replPolicyOptions.maxDestructureDepth,
-        cwd: replProjectRoot,
+        noGlobalThis: policyOptions.noGlobalThis,
+        barePipelines: policyOptions.barePipelines,
+        noDeepDestructure: policyOptions.noDeepDestructure,
+        maxDestructureDepth: policyOptions.maxDestructureDepth,
+        cwd: projectRoot,
       },
     ),
   );
@@ -380,6 +411,7 @@ export function createReplEvaluator(): repl.REPLEval {
  * Starts a custom FunScript interactive REPL using Node's native node:repl module.
  */
 export function startRepl(options: ReplOptions = {}): REPLServer {
+  cachedReplConfig = loadReplRuntimeConfig(process.cwd());
   const prompt = options.prompt ?? "funscript> ";
   const isTty =
     options.terminal ?? (process.stdin.isTTY && process.stdout.isTTY);

@@ -465,12 +465,8 @@ export function parseEffectBlock(
           effect: eff,
           span: { start: id.span.start, end: eff.span.end },
         });
-      } else if (
-        ctx.check(TokenType.IDENTIFIER) &&
-        ctx.peekAhead(1).type === TokenType.EQ &&
-        ctx.isMutableVariable(ctx.peek().value)
-      ) {
-        const target = ctx.parseIdentifier();
+      } else if (ctx.isAssignmentStart()) {
+        const target = ctx.parseAssignmentTarget();
         ctx.consume(TokenType.EQ, "Expected '=' in assignment");
         let hasIndent = false;
         if (ctx.match(TokenType.NEWLINE)) {
@@ -820,9 +816,13 @@ export function parseAssignmentTarget(
       path.unshift(current.property);
       current = current.object;
     }
-    if (current.kind === "Identifier" || current.kind === "UpperIdentifier") {
-      path.unshift(current);
+    if (current.kind !== "Identifier" && current.kind !== "UpperIdentifier") {
+      throw new ParseError(
+        "Invalid assignment target: member assignment on indexed or complex expressions is not supported",
+        expr.span,
+      );
     }
+    path.unshift(current);
     return { kind: "DotPathExpression", path, span: expr.span };
   }
   throw new ParseError("Invalid assignment target", expr.span);

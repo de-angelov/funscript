@@ -103,17 +103,51 @@ function symbolHoverFromResult(
     const checked = context.check(result.typescript);
     if (!checked) return null;
     const found = new Map<ts.Symbol, ts.Identifier>();
+    const candidates: Array<{
+      symbol: ts.Symbol;
+      node: ts.Identifier;
+      line: number;
+      character: number;
+    }> = [];
     const visit = (node: ts.Node): void => {
       if (ts.isIdentifier(node) && node.text === token.value) {
         const symbol = checked.checker.getSymbolAtLocation(node);
-        if (symbol) found.set(symbol, node);
+        if (symbol) {
+          found.set(symbol, node);
+          const pos = checked.sourceFile.getLineAndCharacterOfPosition(
+            node.getStart(checked.sourceFile),
+          );
+          candidates.push({
+            symbol,
+            node,
+            line: pos.line,
+            character: pos.character,
+          });
+        }
       }
       ts.forEachChild(node, visit);
     };
     visit(checked.sourceFile);
-    // Without precise source mappings, never guess across shadowed symbols.
-    if (found.size !== 1) return null;
-    const [symbol, node] = [...found.entries()][0];
+    if (candidates.length === 0) return null;
+    let symbol: ts.Symbol;
+    let node: ts.Identifier;
+    if (found.size === 1) {
+      [symbol, node] = [...found.entries()][0];
+    } else {
+      const targetLine = token.span.start.line - 1;
+      const targetChar = token.span.start.column - 1;
+      candidates.sort((a, b) => {
+        const lineDiff =
+          Math.abs(a.line - targetLine) - Math.abs(b.line - targetLine);
+        if (lineDiff !== 0) return lineDiff;
+        return (
+          Math.abs(a.character - targetChar) -
+          Math.abs(b.character - targetChar)
+        );
+      });
+      symbol = candidates[0].symbol;
+      node = candidates[0].node;
+    }
     const type = checked.checker.typeToString(
       checked.checker.getTypeOfSymbolAtLocation(symbol, node),
       node,
@@ -355,9 +389,13 @@ function findHoverInTokens(
     (tokens[matchedIndex + 2].type === TokenType.UPPER_IDENTIFIER ||
       tokens[matchedIndex + 2].type === TokenType.IDENTIFIER)
   ) {
+    const qualified = `${token.value}.${tokens[matchedIndex + 2].value}`;
+    const doc = getHoverDocumentation(qualified);
+
     // If the token itself has documentation (like `Effect` or `Layer`), prioritize the token's own doc
+    // when the qualified access is also a known catalog entry; otherwise prefer user symbol hover.
     const ownDoc = getHoverDocumentation(token.value);
-    if (ownDoc) {
+    if (ownDoc && doc) {
       return {
         contents: {
           kind: MarkupKind.Markdown,
@@ -367,8 +405,6 @@ function findHoverInTokens(
       };
     }
 
-    const qualified = `${token.value}.${tokens[matchedIndex + 2].value}`;
-    const doc = getHoverDocumentation(qualified);
     if (doc) {
       return {
         contents: {
@@ -379,6 +415,21 @@ function findHoverInTokens(
           start: token.span.start,
           end: tokens[matchedIndex + 2].span.end,
         }),
+      };
+    }
+
+    if (!skipSymbol && posCol < token.span.end.column) {
+      const tsHover = symbolHover(source, uri, token);
+      if (tsHover) return tsHover;
+    }
+
+    if (ownDoc) {
+      return {
+        contents: {
+          kind: MarkupKind.Markdown,
+          value: ownDoc,
+        },
+        range: spanToRange(token.span),
       };
     }
   }
@@ -429,6 +480,14 @@ function findHoverInTokens(
     }
   }
 
+  // Try TypeScript symbol hover before static DOC_CATALOG fallback so user
+  // identifiers/member accesses named `map`, `filter`, `fail`, `record`, `error`,
+  // etc. show their inferred TS type instead of static Effect docs.
+  if (!skipSymbol && posCol < token.span.end.column) {
+    const tsHover = symbolHover(source, uri, token);
+    if (tsHover) return tsHover;
+  }
+
   // Case D: Individual keyword, operator, primitive, or Effect function
   const doc = getHoverDocumentation(token.value);
   if (doc) {
@@ -441,9 +500,7 @@ function findHoverInTokens(
     };
   }
 
-  return !skipSymbol && posCol < token.span.end.column
-    ? symbolHover(source, uri, token)
-    : null;
+  return null;
 }
 
 function findHoverInLineText(
