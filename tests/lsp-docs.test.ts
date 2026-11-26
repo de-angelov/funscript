@@ -145,12 +145,12 @@ describe("LSP Keyword & Built-in Documentation Catalog", () => {
 
   describe("Standard Primitives & Types", () => {
     const primitives = [
-      "string",
-      "number",
-      "boolean",
-      "void",
-      "unknown",
-      "never",
+      "String",
+      "Number",
+      "Boolean",
+      "Void",
+      "Unknown",
+      "Never",
       "Array",
       "Record",
       "Option",

@@ -205,12 +205,12 @@ Resolves unqualified between comparison against the static type of the operand, 
 
 See also: `lessThan`, `greaterThan`.
 
-## `boolean`
+## `Boolean`
 
 Primitive boolean logic type.
 
 ```funscript
-type boolean = true | false
+type Boolean = true | false
 ```
 
 Represents logical truth values (`true` or `false`).
@@ -685,7 +685,7 @@ See also: `service`, `js`, `Layer`.
 Constructs an Effect that fails with a recoverable typed error.
 
 ```funscript
-Effect.fail(error: E): Effect<never, E, never>
+Effect.fail(error: E): Effect<Never, E, Never>
 # in effect block:
 _ <- Effect.fail(ErrorType(reason))
 ```
@@ -971,19 +971,19 @@ Rules:
 
 See also: `record`, `|>`.
 
-## `never`
+## `Never`
 
 The bottom type representing values that never occur.
 
 ```funscript
-type never
+type Never
 ```
 
-Uninhabited type used for functions that never return, effects that cannot fail (`Effect<A, never>`), or unreachable branches in exhaustive pattern matching.
+Uninhabited type used for functions that never return, effects that cannot fail (`Effect<A, Never>`), or unreachable branches in exhaustive pattern matching.
 
 
 
-See also: `unknown`, `void`.
+See also: `Unknown`, `Void`.
 
 ## `None`
 
@@ -1032,19 +1032,19 @@ isEmpty = (list: Array<String>) => not (list.length > 0)
 
 See also: `and`, `or`.
 
-## `number`
+## `Number`
 
 Double-precision IEEE 754 floating point and integer numeric primitive.
 
 ```funscript
-type number
+type Number
 ```
 
 Represents all numbers in FunScript, including floating-point values and integers. Can be refined to integers via `Int` schema.
 
 
 
-See also: `Int`, `string`, `boolean`.
+See also: `Int`, `String`, `Boolean`.
 
 ## `Option`
 
@@ -1185,14 +1185,14 @@ See also: `Effect.retry`, `Effect.repeat`, `Duration`.
 Unified declaration for record shapes, tagged unions, refinements, and type signatures.
 
 ```funscript
-schema Name = { field: Type, optional?: Type }
+schema Name = { field: Type, optional: Option<Type> }
 # or tagged union:
 schema Name = | CaseA | CaseB(v: Type)
 ```
 
 Declares data models backed by Effect Schema and `Data.TaggedEnum`.
 
-Data schema fields declared with `?` decode missing or undefined input to a real Effect `Option`; encoding `None` omits the field. Decoding is explicit. `SchemaInput<Name>` describes the encoded JavaScript input type without decoding it. A generic data record produces a schema factory: pass one runtime schema per type parameter. A record containing a function or Effect type is instead a compile-time contract with no runtime decoder.
+Data schema fields declared with `Option<T>` decode missing, null, or undefined input to a real Effect `Option`; encoding `None` omits the field. Decoding is explicit. `SchemaInput<Name>` describes the encoded JavaScript input type without decoding it. A generic data record produces a schema factory: pass one runtime schema per type parameter. A record containing a function or Effect type is instead a compile-time contract with no runtime decoder.
 
 
 
@@ -1243,19 +1243,19 @@ Represents the presence of a value in an `Option` container.
 
 See also: `Option`, `None`.
 
-## `string`
+## `String`
 
 UTF-16 text string primitive type.
 
 ```funscript
-type string
+type String
 ```
 
 Represents immutable textual data. FunScript strings support string interpolation via curly brace syntax `"{status}: {message}"` and multiline string literals.
 
 
 
-See also: `NonEmptyString`, `number`, `boolean`.
+See also: `NonEmptyString`, `Number`, `Boolean`.
 
 ## `true`
 
@@ -1277,7 +1277,7 @@ TypeScript escape hatch for complex declarations, expressions, and types.
 
 ```funscript
 schema Dict = ts { Record<string, unknown> }
-type Position = ts { import('vscode-languageserver').Position }
+schema Position = ts { import('vscode-languageserver').Position }
 ```
 
 Embeds verbatim TypeScript in a balanced `ts { ... }` block without expanding FunScript's core grammar. Useful for generics, utility types, and third-party library types.
@@ -1286,19 +1286,19 @@ Embeds verbatim TypeScript in a balanced `ts { ... }` block without expanding Fu
 
 See also: `js`, `schema`.
 
-## `unknown`
+## `Unknown`
 
 The type-safe counterpart of any; represents an uninspected value.
 
 ```funscript
-type unknown
+type Unknown
 ```
 
 Top type representing values whose type is not statically known (e.g. from external API payloads). Must be narrowed via `raw |> decode(TargetSchema)` or `match` before access.
 
 
 
-See also: `never`, `schema`.
+See also: `Never`, `schema`.
 
 ## `UUID`
 
@@ -1332,33 +1332,19 @@ Under the hood, variants compile to Effect `Data.TaggedEnum` and `Schema.Union`.
 
 See also: `schema`, `match`, `error`.
 
-## `void`
-
-Represents the absence of a meaningful return value.
-
-```funscript
-type void
-```
-
-Used as the return type for side-effecting operations that do not produce a useful value, such as `Console.log` or mutating operations yielding `Effect<void>`.
-
-
-
-See also: `never`, `unknown`.
-
 ## `Void`
 
 Void type and value representing the absence of meaningful data.
 
 ```funscript
-type Void = void
+type Void
 ```
 
 Used as the canonical void type and discard return value in FunScript (e.g. '=> Void' or 'Effect<Void>'). Compiles cleanly to TypeScript void.
 
 
 
-See also: `void`, `effect`.
+See also: `Unknown`, `Never`, `effect`.
 
 ## `when`
 
