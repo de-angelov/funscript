@@ -67,6 +67,12 @@ parentPort?.on("message", async (request: Request) => {
         }
       }
     previousFiles = currentFiles;
+    for (const [root, cache] of caches) {
+      if (!groups.has(root)) {
+        cache.clear();
+        caches.delete(root);
+      }
+    }
     const checkedDiagnostics = new Map<
       string,
       TypeCheckResult["diagnostics"]

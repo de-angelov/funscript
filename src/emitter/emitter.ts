@@ -604,6 +604,7 @@ export class Emitter {
   private needsOptionTry = false;
   public primitiveIdentifiers = new Set<string>();
   private currentPlaceholderParam: string | null = null;
+  private placeholderCounter = 0;
   public bindings = new Map<string, BindingDeclaration>();
   private tryContextStack: boolean[] = [false];
   private pendingTryThunk = false;
@@ -1974,59 +1975,67 @@ export class Emitter {
       return `Schema.brand(${expr.args.map((a) => this.emitExpression(a)).join(", ")})`;
     }
 
-    if (
-      this.options.markPipelineSources &&
-      !this.inPipelineStage &&
-      expr.callee.kind === "Identifier" &&
-      expr.args.length >= 1
-    ) {
-      const fnName = expr.callee.name;
+    const isPipelineStageCall = this.inPipelineStage;
+    this.inPipelineStage = false;
+    try {
       if (
-        fnName in COMPARISON_METHOD_MAP ||
-        (!this.bindings.has(fnName) && !this.userEffectBindings.has(fnName))
+        this.options.markPipelineSources &&
+        !isPipelineStageCall &&
+        expr.callee.kind === "Identifier" &&
+        expr.args.length >= 1
       ) {
-        const firstArg = this.emitExpression(expr.args[0]);
-        const restArgs = expr.args.slice(1).map((a) => this.emitExpression(a));
-        const markedFirstArg = `__funscriptDirectCall(${expr.span.start.offset}, ${firstArg})`;
-        return `${fnName}(${[markedFirstArg, ...restArgs].join(", ")})`;
-      }
-    }
-
-    if (this.options.directCallResolutions?.has(expr.span.start.offset)) {
-      const res = this.options.directCallResolutions.get(
-        expr.span.start.offset,
-      )!;
-      if (isEffectModule(res.module)) {
-        this.effectImports.add(res.module);
-      }
-      const callee = `${res.module}.${res.method ?? (expr.callee as Identifier).name}`;
-      return `${callee}(${expr.args.map((a) => this.emitExpression(a)).join(", ")})`;
-    }
-
-    if (
-      expr.callee.kind === "Identifier" &&
-      !this.bindings.has(expr.callee.name) &&
-      ES_TOOLKIT_METHODS.has(expr.callee.name)
-    ) {
-      this.esToolkitImports.add(expr.callee.name);
-    }
-
-    return `${this.emitExpression(expr.callee)}(${expr.args
-      .map((a) => {
-        const emitted = this.emitExpression(a);
-        if (this.options.forwardNullArguments?.has(a.span.start.offset)) {
-          this.effectImports.add("Option");
-          return `Option.getOrNull(${emitted})`;
+        const fnName = expr.callee.name;
+        if (
+          fnName in COMPARISON_METHOD_MAP ||
+          (!this.bindings.has(fnName) && !this.userEffectBindings.has(fnName))
+        ) {
+          const firstArg = this.emitExpression(expr.args[0]);
+          const restArgs = expr.args
+            .slice(1)
+            .map((a) => this.emitExpression(a));
+          const markedFirstArg = `__funscriptDirectCall(${expr.span.start.offset}, ${firstArg})`;
+          return `${fnName}(${[markedFirstArg, ...restArgs].join(", ")})`;
         }
-        if (this.options.forwardOptionalArguments?.has(a.span.start.offset)) {
-          this.effectImports.add("Option");
-          return `Option.getOrUndefined(${emitted})`;
+      }
+
+      if (this.options.directCallResolutions?.has(expr.span.start.offset)) {
+        const res = this.options.directCallResolutions.get(
+          expr.span.start.offset,
+        )!;
+        if (isEffectModule(res.module)) {
+          this.effectImports.add(res.module);
         }
-        return this.options.markCallArguments
-          ? `__funscriptCallArgument(${a.span.start.offset}, ${emitted})`
-          : emitted;
-      })
-      .join(", ")})`;
+        const callee = `${res.module}.${res.method ?? (expr.callee as Identifier).name}`;
+        return `${callee}(${expr.args.map((a) => this.emitExpression(a)).join(", ")})`;
+      }
+
+      if (
+        expr.callee.kind === "Identifier" &&
+        !this.bindings.has(expr.callee.name) &&
+        ES_TOOLKIT_METHODS.has(expr.callee.name)
+      ) {
+        this.esToolkitImports.add(expr.callee.name);
+      }
+
+      return `${this.emitExpression(expr.callee)}(${expr.args
+        .map((a) => {
+          const emitted = this.emitExpression(a);
+          if (this.options.forwardNullArguments?.has(a.span.start.offset)) {
+            this.effectImports.add("Option");
+            return `Option.getOrNull(${emitted})`;
+          }
+          if (this.options.forwardOptionalArguments?.has(a.span.start.offset)) {
+            this.effectImports.add("Option");
+            return `Option.getOrUndefined(${emitted})`;
+          }
+          return this.options.markCallArguments
+            ? `__funscriptCallArgument(${a.span.start.offset}, ${emitted})`
+            : emitted;
+        })
+        .join(", ")})`;
+    } finally {
+      this.inPipelineStage = isPipelineStageCall;
+    }
   }
 
   private emitPipelineExpression(expr: PipelineExpression): string {
@@ -2055,16 +2064,17 @@ export class Emitter {
     stages.unshift(curr);
 
     const prevInPipeline = this.inPipelineStage;
-    this.inPipelineStage = true;
     try {
       let preferredCompanion = resolver.inferPipelineCompanion(stages[0]);
       const emittedStages = stages.map((s, idx) => {
         if (idx === 0) {
+          this.inPipelineStage = false;
           const emitted = this.emitExpression(s);
           return this.options.markPipelineSources
             ? `__funscriptPipelineSource(${s.span.start.offset}, ${emitted})`
             : emitted;
         }
+        this.inPipelineStage = true;
 
         if (s.kind === "MutBlockExpression") {
           this.needsMutative = true;
@@ -2144,7 +2154,9 @@ export class Emitter {
                 : (res.method ?? callee.name);
             const calleeName = `${res.module}.${method}`;
             if (resolver.hasPlaceholder(s)) {
-              const placeholderParam = "__p";
+              const placeholderParam = this.currentPlaceholderParam
+                ? `__p${++this.placeholderCounter}`
+                : "__p";
               const prevPlaceholderParam = this.currentPlaceholderParam;
               this.currentPlaceholderParam = placeholderParam;
               try {
@@ -2182,7 +2194,9 @@ export class Emitter {
 
         // Check if stage has placeholder '_'
         if (resolver.hasPlaceholder(resolvedStage)) {
-          const placeholderParam = "__p";
+          const placeholderParam = this.currentPlaceholderParam
+            ? `__p${++this.placeholderCounter}`
+            : "__p";
           const prevPlaceholderParam = this.currentPlaceholderParam;
           this.currentPlaceholderParam = placeholderParam;
           try {
@@ -2743,6 +2757,10 @@ export class Emitter {
     this.variableTypeScopes.push(new Map(varTypeEntries));
     this.recordScopes.push(records);
     this.tryContextStack.push(isTryThunk);
+    const prevInPipelineStage = this.inPipelineStage;
+    const prevPlaceholderParam = this.currentPlaceholderParam;
+    this.inPipelineStage = false;
+    this.currentPlaceholderParam = null;
     try {
       for (const name of records.keys())
         if (records.get(name))
@@ -2757,6 +2775,8 @@ export class Emitter {
       }
       return `${typeParams}(${params})${retType} => ${this.emitArrowExpression(expr.body)}`;
     } finally {
+      this.currentPlaceholderParam = prevPlaceholderParam;
+      this.inPipelineStage = prevInPipelineStage;
       this.tryContextStack.pop();
       this.recordScopes.pop();
       this.parameterScopes.pop();
