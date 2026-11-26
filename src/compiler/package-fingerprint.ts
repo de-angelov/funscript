@@ -38,7 +38,9 @@ export function packageFingerprint(
     for (;;) {
       const manifest = path.join(dir, "package.json");
       if (fs.existsSync(manifest)) {
-        const parsed = JSON.parse(fs.readFileSync(manifest, "utf8"));
+        const parsed = JSON.parse(fs.readFileSync(manifest, "utf8")) as {
+          name?: unknown;
+        };
         if (parsed.name === name) {
           root = fs.realpathSync(dir);
           break;
@@ -53,7 +55,11 @@ export function packageFingerprint(
     hash.update(JSON.stringify([name, root]));
     const manifest = JSON.parse(
       fs.readFileSync(path.join(root, "package.json"), "utf8"),
-    );
+    ) as {
+      dependencies?: Record<string, string>;
+      optionalDependencies?: Record<string, string>;
+      peerDependencies?: Record<string, string>;
+    };
     const declared = new Set(
       Object.keys({
         ...manifest.dependencies,

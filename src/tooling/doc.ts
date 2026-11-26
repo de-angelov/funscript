@@ -719,9 +719,9 @@ export async function generateDocs(
 
   try {
     const pkgRaw = await fs.readFile(path.join(root, "package.json"), "utf8");
-    const pkg = JSON.parse(pkgRaw);
-    if (pkg.name) title = pkg.name;
-    if (pkg.version) version = pkg.version;
+    const pkg = JSON.parse(pkgRaw) as { name?: unknown; version?: unknown };
+    if (typeof pkg.name === "string" && pkg.name) title = pkg.name;
+    if (typeof pkg.version === "string" && pkg.version) version = pkg.version;
   } catch (error) {
     /* Package json is optional */
     if (!isFileNotFoundError(error) && !(error instanceof SyntaxError)) {

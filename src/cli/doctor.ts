@@ -40,7 +40,7 @@ export const doctorCommand = (args: string[]) =>
     );
     try {
       if (packageText === undefined) throw new Error("file not found");
-      packageJson = JSON.parse(packageText);
+      packageJson = JSON.parse(packageText) as Record<string, unknown>;
       add("package.json", "pass", "Found and parsed package.json");
     } catch (error: unknown) {
       add(

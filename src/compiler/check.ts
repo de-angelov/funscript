@@ -389,9 +389,12 @@ export function isEntryModule(
   try {
     const configPath = path.join(cwd, "funscript.json");
     if (syncFs.existsSync(configPath)) {
-      const config = JSON.parse(syncFs.readFileSync(configPath, "utf8"));
+      const config = JSON.parse(syncFs.readFileSync(configPath, "utf8")) as {
+        entry?: unknown;
+      };
       if (Array.isArray(config.entry)) {
         for (const entry of config.entry) {
+          if (typeof entry !== "string") continue;
           const resolvedEntry = path.normalize(path.resolve(cwd, entry));
           if (
             normPath === resolvedEntry ||
