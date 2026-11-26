@@ -18,6 +18,7 @@ export default defineConfig({
           label: "Guides",
           items: [
             { label: "Overview", slug: "guides/overview" },
+            { label: "Language Overview", slug: "guides/language-overview" },
             { label: "Syntax", slug: "guides/syntax" },
             { label: "Tooling", slug: "guides/tooling" },
             { label: "Compatibility", slug: "guides/compatibility" },
