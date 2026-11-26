@@ -294,15 +294,16 @@ export async function evaluateReplLine(
     return undefined;
   }
 
-  let value = vm.runInContext(compiled.jsCode, context);
+  let value: unknown = vm.runInContext(compiled.jsCode, context);
   if (Effect.isEffect(value)) {
     value = await Effect.runPromise(
       value as Effect.Effect<unknown, unknown, never>,
     );
   } else if (
-    value !== null &&
-    value !== undefined &&
-    typeof (value as { then?: unknown }).then === "function"
+    ((v: unknown): v is PromiseLike<unknown> =>
+      v !== null &&
+      v !== undefined &&
+      typeof (v as { then?: unknown }).then === "function")(value)
   ) {
     value = await value;
   }

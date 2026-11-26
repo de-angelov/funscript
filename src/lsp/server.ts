@@ -1,4 +1,3 @@
-/* eslint-disable @typescript-eslint/no-explicit-any */
 import { EventEmitter } from "node:events";
 import * as Effect from "effect/Effect";
 import type * as Fiber from "effect/Fiber";
@@ -112,11 +111,17 @@ type InteropDocumentNotification =
   | { kind: "close"; uri: string };
 
 class NormalizingMessageReader extends StreamMessageReader {
-  public override listen(callback: (value: any) => void) {
-    return super.listen((msg: any) => {
-      if (msg && msg.method === "initialize") {
-        if (!msg.params) msg.params = {};
-        if (!msg.params.capabilities) msg.params.capabilities = {};
+  public override listen(
+    callback: Parameters<StreamMessageReader["listen"]>[0],
+  ) {
+    return super.listen((msg) => {
+      const record = msg as unknown as {
+        method?: unknown;
+        params?: { capabilities?: Record<string, unknown> };
+      };
+      if (record && record.method === "initialize") {
+        if (!record.params) record.params = {};
+        if (!record.params.capabilities) record.params.capabilities = {};
       }
       callback(msg);
     });
@@ -128,7 +133,8 @@ export class FunScriptLspServer extends EventEmitter {
   private interopDocuments: Map<string, TextDocumentItem> = new Map();
   private isInitialized = false;
   private isShutdown = false;
-  private clientCapabilities: any = null;
+  private clientCapabilities: InitializeParams["capabilities"] | undefined =
+    undefined;
   private workspaceRoots: string[] = [];
   private readonly projectConfigWatchers = new Map<string, FSWatcher>();
   private readonly interopRenameSession = new InteropRenameSession();
@@ -153,7 +159,12 @@ export class FunScriptLspServer extends EventEmitter {
   private documentRevision = 0;
   private readonly pendingRenames = new Map<
     number,
-    { revision: number; resolve: (result: any) => void }
+    {
+      revision: number;
+      resolve: (
+        result: ReturnType<typeof prepareRename> | ReturnType<typeof rename>,
+      ) => void;
+    }
   >();
   private connection: Connection | null = null;
   private diagnosticDebounceFiber: Fiber.Fiber<void, never> | undefined;
@@ -787,9 +798,17 @@ export class FunScriptLspServer extends EventEmitter {
   }
 
   private renameInWorker(
+    method: "prepare",
+    params: PrepareRenameParams,
+  ): Promise<ReturnType<typeof prepareRename>>;
+  private renameInWorker(
+    method: "rename",
+    params: RenameParams,
+  ): Promise<ReturnType<typeof rename>>;
+  private renameInWorker(
     method: "prepare" | "rename",
     params: PrepareRenameParams | RenameParams,
-  ): Promise<any> {
+  ): Promise<ReturnType<typeof prepareRename> | ReturnType<typeof rename>> {
     if (!this.renameWorker) {
       try {
         const worker = new Worker(
@@ -803,7 +822,10 @@ export class FunScriptLspServer extends EventEmitter {
           if (!pending) return;
           this.pendingRenames.delete(message.id);
           pending.resolve(
-            pending.revision === this.documentRevision ? message.result : null,
+            pending.revision === this.documentRevision
+              ? (message.result as
+                  ReturnType<typeof prepareRename> | ReturnType<typeof rename>)
+              : null,
           );
         });
         const failed = () => {
