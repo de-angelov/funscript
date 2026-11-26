@@ -1289,10 +1289,21 @@ export class Emitter {
       )
         shadowed.add((node.name as { name: string }).name);
       if (node.kind === "FunctionExpression" && Array.isArray(node.params)) {
-        for (const param of node.params)
-          if (param?.name)
-            for (const n of this.collectBindingNames(param.name))
+        for (const param of node.params as unknown[]) {
+          if (
+            param &&
+            typeof param === "object" &&
+            "name" in param &&
+            param.name &&
+            typeof param.name === "object" &&
+            "kind" in param.name
+          ) {
+            for (const n of this.collectBindingNames(
+              param.name as BindingTarget,
+            ))
               shadowed.add(n);
+          }
+        }
       }
       for (const [key, child] of Object.entries(node))
         if (key !== "span") collectBindings(child);

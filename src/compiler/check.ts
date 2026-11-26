@@ -432,20 +432,12 @@ const EFFECT_RUNNER_MODULES = new Set([
 ]);
 
 function getEffectRunnerName(
-  node:
-    | {
-        kind?: string;
-        object?: { name?: string };
-        property?: { name?: string };
-        name?: string;
-      }
-    | null
-    | undefined,
+  node: AstInspectNode | null | undefined,
 ): string | null {
   if (!node) return null;
   if (node.kind === "MemberExpression") {
-    const objName = node.object?.name;
-    const propName = node.property?.name;
+    const objName = astName(astChild(node, "object"));
+    const propName = astName(astChild(node, "property"));
     if (
       objName &&
       propName &&
@@ -455,8 +447,9 @@ function getEffectRunnerName(
       return `${objName}.${propName}`;
     }
   } else if (node.kind === "Identifier") {
-    if (node.name && EFFECT_RUNNER_FUNCTIONS.has(node.name)) {
-      return node.name;
+    const name = astName(node);
+    if (name && EFFECT_RUNNER_FUNCTIONS.has(name)) {
+      return name;
     }
   }
   return null;
@@ -468,12 +461,71 @@ interface CheckScope {
   bindings: Map<string, { isMut: boolean }>;
 }
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-type AstAny = any;
 interface AstInspectNode {
   kind: string;
   span?: Span;
-  [key: string]: AstAny;
+}
+
+function asRecord(node: AstInspectNode): Record<string, unknown> {
+  return node as unknown as Record<string, unknown>;
+}
+
+function isAstNode(val: unknown): val is AstInspectNode {
+  return (
+    typeof val === "object" &&
+    val !== null &&
+    "kind" in val &&
+    typeof val.kind === "string"
+  );
+}
+
+function astChild(
+  node: AstInspectNode | null | undefined,
+  key: string,
+): AstInspectNode | null {
+  if (!node) return null;
+  const val = asRecord(node)[key];
+  return isAstNode(val) ? val : null;
+}
+
+function astChildren(
+  node: AstInspectNode | null | undefined,
+  key: string,
+): AstInspectNode[] {
+  if (!node) return [];
+  const val = asRecord(node)[key];
+  return Array.isArray(val) ? val.filter(isAstNode) : [];
+}
+
+function astString(
+  node: AstInspectNode | null | undefined,
+  key: string,
+): string | undefined {
+  if (!node) return undefined;
+  const val = asRecord(node)[key];
+  return typeof val === "string" ? val : undefined;
+}
+
+function astBool(
+  node: AstInspectNode | null | undefined,
+  key: string,
+): boolean {
+  if (!node) return false;
+  return asRecord(node)[key] === true;
+}
+
+function astName(node: AstInspectNode | null | undefined): string | undefined {
+  return astString(node, "name");
+}
+
+function getMemberNames(
+  node: AstInspectNode | null | undefined,
+): { object?: string; property?: string } | null {
+  if (!node || node.kind !== "MemberExpression") return null;
+  return {
+    object: astName(astChild(node, "object")),
+    property: astName(astChild(node, "property")),
+  };
 }
 
 function collectPatternVars(pat: unknown): string[] {
@@ -1854,46 +1906,52 @@ export const typeCheckVirtualFiles = (
               let shadowed = false;
               const scan = (n: AstInspectNode | null | undefined) => {
                 if (!n || typeof n !== "object" || shadowed) return;
+                const nId = astChild(n, "id");
                 if (
                   n.kind === "BindingDeclaration" &&
-                  n.id?.kind === "Identifier" &&
-                  n.id.name === "process"
+                  nId?.kind === "Identifier" &&
+                  astName(nId) === "process"
                 ) {
                   shadowed = true;
                   return;
                 }
                 if (
                   (n.kind === "VariablePattern" || n.kind === "Parameter") &&
-                  (n.name?.name === "process" || n.id?.name === "process")
+                  (astName(astChild(n, "name")) === "process" ||
+                    astName(nId) === "process")
                 ) {
                   shadowed = true;
                   return;
                 }
                 if (
                   n.kind === "ImportDeclaration" &&
-                  n.source?.value !== "node:process"
+                  astString(astChild(n, "source"), "value") !== "node:process"
                 ) {
                   const specs = [
-                    ...(Array.isArray(n.specifiers) ? n.specifiers : []),
-                    ...(n.defaultImport ? [n.defaultImport] : []),
-                    ...(n.namespaceImport ? [n.namespaceImport] : []),
-                  ];
+                    ...astChildren(n, "specifiers"),
+                    astChild(n, "defaultImport"),
+                    astChild(n, "namespaceImport"),
+                  ].filter((s): s is AstInspectNode => s !== null);
                   if (
                     specs.some(
                       (s) =>
-                        s?.local?.name === "process" || s?.name === "process",
+                        astName(astChild(s, "local")) === "process" ||
+                        astName(s) === "process",
                     )
                   ) {
                     shadowed = true;
                     return;
                   }
                 }
-                for (const key of Object.keys(n)) {
+                const rec = asRecord(n);
+                for (const key of Object.keys(rec)) {
                   if (key === "span" || key === "kind") continue;
-                  const val = n[key];
+                  const val = rec[key];
                   if (Array.isArray(val)) {
-                    for (const item of val) scan(item);
-                  } else if (val && typeof val === "object" && "kind" in val) {
+                    for (const item of val) {
+                      if (isAstNode(item)) scan(item);
+                    }
+                  } else if (isAstNode(val)) {
                     scan(val);
                   }
                 }
@@ -1932,7 +1990,7 @@ export const typeCheckVirtualFiles = (
                   meta.funPath,
                 )
               ) {
-                const label = (node as { label?: string }).label || "???";
+                const label = astString(node, "label") || "???";
                 addAstDiag(
                   node.span,
                   "TYPED_HOLE",
@@ -1945,7 +2003,7 @@ export const typeCheckVirtualFiles = (
 
               if (
                 node.kind === "WhenStatement" &&
-                (node as { isEarlyReturn?: boolean }).isEarlyReturn &&
+                astBool(node, "isEarlyReturn") &&
                 !options?.allowEarlyReturns &&
                 !isPathPolicyEnabled(
                   options?.allowEarlyReturnsPaths,
@@ -1975,16 +2033,19 @@ export const typeCheckVirtualFiles = (
               }
 
               if (node.kind === "CallExpression") {
-                const callee = node.callee;
+                const callee = astChild(node, "callee");
+                const calleeMember = getMemberNames(callee);
+                const calleeName = astName(callee);
+                const nodeArgs = astChildren(node, "args");
                 if (
                   !currentInMut &&
-                  callee?.kind === "MemberExpression" &&
-                  INPLACE_MUTATING_METHODS.has(callee.property?.name)
+                  calleeMember?.property &&
+                  INPLACE_MUTATING_METHODS.has(calleeMember.property)
                 ) {
                   addAstDiag(
                     node.span,
                     "INPLACE_MUTATION",
-                    `In-place mutation '.${callee.property.name}()' is quarantined in FunScript. Arrays are immutable by default outside 'mut (draft) =>' blocks.`,
+                    `In-place mutation '.${calleeMember.property}()' is quarantined in FunScript. Arrays are immutable by default outside 'mut (draft) =>' blocks.`,
                     "error",
                     "Direct array mutation outside draft proxy blocks causes accidental state pollution.",
                     `Use immutable functional alternatives (e.g. 'Array.append', 'Array.modify') or wrap local mutations in 'mut (draft) => { ... }'.`,
@@ -1992,19 +2053,20 @@ export const typeCheckVirtualFiles = (
                 } else if (
                   (callee?.kind === "UpperIdentifier" ||
                     callee?.kind === "Identifier") &&
-                  ERROR_CONSTRUCTORS.has(callee.name)
+                  calleeName &&
+                  ERROR_CONSTRUCTORS.has(calleeName)
                 ) {
                   addAstDiag(
                     node.span,
                     "THROW",
-                    `\`${callee.name}(...)\` constructs an unmanaged JavaScript exception. In FunScript, declare domain failures with 'error Name { ... }' or fail within Effect using 'Effect.fail' or 'Effect.die'.`,
+                    `\`${calleeName}(...)\` constructs an unmanaged JavaScript exception. In FunScript, declare domain failures with 'error Name { ... }' or fail within Effect using 'Effect.fail' or 'Effect.die'.`,
                     "error",
                     "FunScript avoids raw JavaScript Error exceptions in favor of typed errors or explicit defects.",
                     "Declare a typed error using `error Name { ... }` or use `Effect.dieMessage(...)`.",
                   );
                 } else if (
                   callee?.kind === "Identifier" &&
-                  callee.name === "fetch"
+                  calleeName === "fetch"
                 ) {
                   addAstDiag(
                     node.span,
@@ -2016,35 +2078,35 @@ export const typeCheckVirtualFiles = (
                   );
                 } else if (
                   callee?.kind === "Identifier" &&
-                  (callee.name === "setTimeout" ||
-                    callee.name === "setInterval" ||
-                    callee.name === "clearTimeout" ||
-                    callee.name === "clearInterval")
+                  (calleeName === "setTimeout" ||
+                    calleeName === "setInterval" ||
+                    calleeName === "clearTimeout" ||
+                    calleeName === "clearInterval")
                 ) {
                   addAstDiag(
                     node.span,
                     "NATIVE_API",
-                    `\`${callee.name}\` is an unmanaged native timer. Time and scheduling are Effect services; use 'Effect.sleep' or 'Schedule.spaced' to ensure fibers can be interrupted and tested deterministically.`,
+                    `\`${calleeName}\` is an unmanaged native timer. Time and scheduling are Effect services; use 'Effect.sleep' or 'Schedule.spaced' to ensure fibers can be interrupted and tested deterministically.`,
                     "error",
                     "Native timers run outside Effect's fiber scheduler, leak when tasks are cancelled, and cannot be controlled with TestClock.",
                     "Replace with `Effect.sleep(...)` or `Schedule.spaced(...)`.",
                   );
                 } else if (
                   callee?.kind === "Identifier" &&
-                  (callee.name === "getOrThrow" ||
-                    callee.name === "getOrThrowWith")
+                  (calleeName === "getOrThrow" ||
+                    calleeName === "getOrThrowWith")
                 ) {
                   addAstDiag(
                     node.span,
                     "THROW",
-                    `\`${callee.name}\` throws an unhandled exception at runtime. In FunScript, handle absence or failure safely using 'getOrElse', pattern matching ('match'), or lift with 'Effect.fromOption'.`,
+                    `\`${calleeName}\` throws an unhandled exception at runtime. In FunScript, handle absence or failure safely using 'getOrElse', pattern matching ('match'), or lift with 'Effect.fromOption'.`,
                     "error",
                     "FunScript disallows runtime throwing methods.",
                     "Use `Option.getOrElse`, `Option.match`, or `Effect.fromOption`.",
                   );
                 } else if (
                   callee?.kind === "UpperIdentifier" &&
-                  callee.name === "Date"
+                  calleeName === "Date"
                 ) {
                   addAstDiag(
                     node.span,
@@ -2054,9 +2116,9 @@ export const typeCheckVirtualFiles = (
                     "Time and randomness are Effect services; reading global non-deterministic constructors creates flaky tests.",
                     "Replace `Date()` with `now <- Clock.currentTimeMillis` or `DateTime.now`.",
                   );
-                } else if (callee?.kind === "MemberExpression") {
-                  const o = callee.object?.name;
-                  const p = callee.property?.name;
+                } else if (calleeMember) {
+                  const o = calleeMember.object;
+                  const p = calleeMember.property;
                   if (
                     (o === "Semaphore" || (o && /semaphore|sem/i.test(o))) &&
                     (p === "take" || p === "release")
@@ -2081,7 +2143,7 @@ export const typeCheckVirtualFiles = (
                   } else if (
                     o === "Queue" &&
                     p === "make" &&
-                    (!node.args || node.args.length === 0)
+                    nodeArgs.length === 0
                   ) {
                     addAstDiag(
                       node.span,
@@ -2208,12 +2270,13 @@ export const typeCheckVirtualFiles = (
               ) {
                 const isProp =
                   parent?.kind === "MemberExpression" &&
-                  parent?.property === node;
+                  astChild(parent, "property") === node;
                 const isCallee =
-                  parent?.kind === "CallExpression" && parent?.callee === node;
+                  parent?.kind === "CallExpression" &&
+                  astChild(parent, "callee") === node;
                 const isBinding =
                   (parent?.kind === "BindingDeclaration" &&
-                    parent?.id === node) ||
+                    astChild(parent, "id") === node) ||
                   parent?.kind === "FunctionDeclaration" ||
                   parent?.kind === "VariablePattern";
                 const isImport =
@@ -2223,14 +2286,16 @@ export const typeCheckVirtualFiles = (
                   parent?.kind === "TypeReferenceNode" ||
                   parent?.kind === "QualifiedTypeReferenceNode";
 
+                const nodeName = astName(node);
                 if (
                   !isProp &&
                   !isCallee &&
                   !isBinding &&
                   !isImport &&
-                  !isType
+                  !isType &&
+                  nodeName
                 ) {
-                  if (node.name === "fetch") {
+                  if (nodeName === "fetch") {
                     addAstDiag(
                       node.span,
                       "NATIVE_API",
@@ -2240,24 +2305,24 @@ export const typeCheckVirtualFiles = (
                       "Use '@effect/platform' HttpClient or lift with `js fetch(...)`.",
                     );
                   } else if (
-                    node.name === "setTimeout" ||
-                    node.name === "setInterval" ||
-                    node.name === "clearTimeout" ||
-                    node.name === "clearInterval"
+                    nodeName === "setTimeout" ||
+                    nodeName === "setInterval" ||
+                    nodeName === "clearTimeout" ||
+                    nodeName === "clearInterval"
                   ) {
                     addAstDiag(
                       node.span,
                       "NATIVE_API",
-                      `\`${node.name}\` is an unmanaged native timer. Time and scheduling are Effect services; use 'Effect.sleep' or 'Schedule.spaced'.`,
+                      `\`${nodeName}\` is an unmanaged native timer. Time and scheduling are Effect services; use 'Effect.sleep' or 'Schedule.spaced'.`,
                       "error",
                       "Native timers run outside Effect's fiber scheduler and cannot be controlled with TestClock.",
                       "Replace with `Effect.sleep(...)` or `Schedule.spaced(...)`.",
                     );
-                  } else if (ERROR_CONSTRUCTORS.has(node.name)) {
+                  } else if (ERROR_CONSTRUCTORS.has(nodeName)) {
                     addAstDiag(
                       node.span,
                       "THROW",
-                      `\`${node.name}\` is an unmanaged JavaScript exception constructor. In FunScript, declare domain failures with 'error Name { ... }' or fail within Effect using 'Effect.fail' or 'Effect.die'.`,
+                      `\`${nodeName}\` is an unmanaged JavaScript exception constructor. In FunScript, declare domain failures with 'error Name { ... }' or fail within Effect using 'Effect.fail' or 'Effect.die'.`,
                       "error",
                       "FunScript avoids raw JavaScript Error exceptions in favor of typed errors or explicit defects.",
                       "Declare a typed error using `error Name { ... }` or use `Effect.dieMessage(...)`.",
@@ -2265,22 +2330,23 @@ export const typeCheckVirtualFiles = (
                   }
                 }
               } else if (node.kind === "PipelineExpression") {
-                const r = node.right;
+                const r = astChild(node, "right");
+                const rMember = getMemberNames(r);
+                const rName = astName(r);
                 if (
-                  (r?.kind === "MemberExpression" &&
-                    (r.object?.name === "Option" ||
-                      r.object?.name === "Either") &&
-                    (r.property?.name === "getOrThrow" ||
-                      r.property?.name === "getOrThrowWith")) ||
+                  (rMember &&
+                    (rMember.object === "Option" ||
+                      rMember.object === "Either") &&
+                    (rMember.property === "getOrThrow" ||
+                      rMember.property === "getOrThrowWith")) ||
                   (r?.kind === "Identifier" &&
-                    (r.name === "getOrThrow" || r.name === "getOrThrowWith"))
+                    (rName === "getOrThrow" || rName === "getOrThrowWith"))
                 ) {
-                  const targetName =
-                    r.kind === "MemberExpression"
-                      ? `${r.object.name}.${r.property.name}`
-                      : r.name;
+                  const targetName = rMember
+                    ? `${rMember.object}.${rMember.property}`
+                    : rName;
                   addAstDiag(
-                    r.span || node.span,
+                    r?.span || node.span,
                     "THROW",
                     `\`${targetName}\` throws an unhandled exception at runtime. In FunScript, handle absence or failure safely using 'getOrElse', pattern matching ('match'), or lift to Effect.`,
                     "error",
@@ -2288,22 +2354,23 @@ export const typeCheckVirtualFiles = (
                     "Use `Option.getOrElse`, `Option.match`, or `Effect.fromOption`.",
                   );
                 } else if (r?.kind === "CallExpression") {
-                  const c = r.callee;
+                  const c = astChild(r, "callee");
+                  const cMember = getMemberNames(c);
+                  const cName = astName(c);
                   if (
-                    (c?.kind === "MemberExpression" &&
-                      (c.object?.name === "Option" ||
-                        c.object?.name === "Either") &&
-                      (c.property?.name === "getOrThrow" ||
-                        c.property?.name === "getOrThrowWith")) ||
+                    (cMember &&
+                      (cMember.object === "Option" ||
+                        cMember.object === "Either") &&
+                      (cMember.property === "getOrThrow" ||
+                        cMember.property === "getOrThrowWith")) ||
                     (c?.kind === "Identifier" &&
-                      (c.name === "getOrThrow" || c.name === "getOrThrowWith"))
+                      (cName === "getOrThrow" || cName === "getOrThrowWith"))
                   ) {
-                    const targetName =
-                      c.kind === "MemberExpression"
-                        ? `${c.object.name}.${c.property.name}`
-                        : c.name;
+                    const targetName = cMember
+                      ? `${cMember.object}.${cMember.property}`
+                      : cName;
                     addAstDiag(
-                      c.span || r.span,
+                      c?.span || r.span,
                       "THROW",
                       `\`${targetName}\` throws an unhandled exception at runtime. In FunScript, handle absence or failure safely using 'getOrElse', pattern matching ('match'), or lift to Effect.`,
                       "error",
@@ -2313,9 +2380,11 @@ export const typeCheckVirtualFiles = (
                   }
                 }
               } else if (node.kind === "MemberExpression") {
+                const nodeObj = astChild(node, "object");
+                const nodeProp = astChild(node, "property");
                 if (
-                  node.object?.kind === "IndexExpression" &&
-                  node.object.index?.kind !== "StringLiteral"
+                  nodeObj?.kind === "IndexExpression" &&
+                  astChild(nodeObj, "index")?.kind !== "StringLiteral"
                 ) {
                   addAstDiag(
                     node.span,
@@ -2326,9 +2395,9 @@ export const typeCheckVirtualFiles = (
                     "Unwrap with match, Option.map, or Option.getOrElse before accessing properties.",
                   );
                 }
+                const o = astName(nodeObj);
+                const p = astName(nodeProp);
                 if (parent?.kind !== "CallExpression") {
-                  const o = node.object?.name;
-                  const p = node.property?.name;
                   if (o === "Date" && p === "now") {
                     addAstDiag(
                       node.span,
@@ -2353,17 +2422,15 @@ export const typeCheckVirtualFiles = (
                   }
                 }
                 if (
-                  node.object?.kind === "Identifier" &&
-                  (node.object.name === "process" ||
-                    node.object.name === "Bun" ||
-                    node.object.name === "Deno") &&
-                  node.property?.name === "exit" &&
-                  !(node.object.name === "process" && hasUserProcessBinding)
+                  nodeObj?.kind === "Identifier" &&
+                  (o === "process" || o === "Bun" || o === "Deno") &&
+                  p === "exit" &&
+                  !(o === "process" && hasUserProcessBinding)
                 ) {
                   addAstDiag(
                     node.span,
                     "PROCESS_EXIT",
-                    `\`${node.object.name}.exit\` aborts the runtime immediately and skips Effect Scope finalizers.`,
+                    `\`${o}.exit\` aborts the runtime immediately and skips Effect Scope finalizers.`,
                     "error",
                     "Calling `.exit()` bypasses structured concurrency cleanup and resource finalizers.",
                     "Return a typed failure (`Effect.fail(...)`) and run the root program with `BunRuntime.runMain` or `NodeRuntime.runMain`.",
@@ -2377,16 +2444,18 @@ export const typeCheckVirtualFiles = (
                 let runnerSpan: Span | null = null;
 
                 if (node.kind === "CallExpression") {
-                  runnerName = getEffectRunnerName(node.callee);
-                  runnerSpan = node.callee?.span || node.span;
+                  const callee = astChild(node, "callee");
+                  runnerName = getEffectRunnerName(callee);
+                  runnerSpan = callee?.span || node.span || null;
                 } else if (node.kind === "PipelineExpression") {
-                  const r = node.right;
+                  const r = astChild(node, "right");
                   if (r?.kind === "CallExpression") {
-                    runnerName = getEffectRunnerName(r.callee);
-                    runnerSpan = r.callee?.span || r.span;
+                    const rCallee = astChild(r, "callee");
+                    runnerName = getEffectRunnerName(rCallee);
+                    runnerSpan = rCallee?.span || r.span || null;
                   } else {
                     runnerName = getEffectRunnerName(r);
-                    runnerSpan = r?.span || node.span;
+                    runnerSpan = r?.span || node.span || null;
                   }
                 }
 
@@ -2403,17 +2472,19 @@ export const typeCheckVirtualFiles = (
 
                 // §1.11: Reading globals for configuration and ambient process state
                 if (node.kind === "MemberExpression") {
-                  const obj = node.object;
-                  const prop = node.property;
+                  const obj = astChild(node, "object");
+                  const prop = astChild(node, "property");
+                  const objName = astName(obj);
+                  const propName = astName(prop);
                   if (
                     obj?.kind === "Identifier" &&
-                    (obj.name === "process" ||
-                      obj.name === "Deno" ||
-                      obj.name === "Bun") &&
-                    prop?.name === "env" &&
-                    !(obj.name === "process" && hasUserProcessBinding)
+                    (objName === "process" ||
+                      objName === "Deno" ||
+                      objName === "Bun") &&
+                    propName === "env" &&
+                    !(objName === "process" && hasUserProcessBinding)
                   ) {
-                    const fullName = `${obj.name}.env`;
+                    const fullName = `${objName}.env`;
                     addAstDiag(
                       node.span,
                       "ENV_GLOBAL",
@@ -2424,35 +2495,37 @@ export const typeCheckVirtualFiles = (
                     );
                   } else if (
                     obj?.kind === "Identifier" &&
-                    obj.name === "process" &&
+                    objName === "process" &&
                     !hasUserProcessBinding &&
-                    prop?.name &&
-                    prop.name !== "env" &&
-                    prop.name !== "exit"
+                    propName &&
+                    propName !== "env" &&
+                    propName !== "exit"
                   ) {
                     addAstDiag(
                       node.span,
                       "PROCESS_GLOBAL",
-                      `\`process.${prop.name}\` reads ambient Node/Bun process state directly. In FunScript, library code should depend on Effect services instead of global \`process\`.`,
+                      `\`process.${propName}\` reads ambient Node/Bun process state directly. In FunScript, library code should depend on Effect services instead of global \`process\`.`,
                       "error",
                       "Direct `process` access in library code couples modules to ambient runtime state and makes testing difficult.",
-                      processPropertySuggestion(prop.name),
+                      processPropertySuggestion(propName),
                     );
                   }
                 } else if (
                   node.kind === "Identifier" &&
-                  node.name === "process" &&
+                  astName(node) === "process" &&
                   !hasUserProcessBinding &&
                   !(
                     parent?.kind === "MemberExpression" &&
-                    (parent?.object === node || parent?.property === node)
+                    (astChild(parent, "object") === node ||
+                      astChild(parent, "property") === node)
                   ) &&
                   !(
-                    parent?.kind === "CallExpression" && parent?.callee === node
+                    parent?.kind === "CallExpression" &&
+                    astChild(parent, "callee") === node
                   ) &&
                   !(
                     (parent?.kind === "BindingDeclaration" &&
-                      parent?.id === node) ||
+                      astChild(parent, "id") === node) ||
                     parent?.kind === "FunctionDeclaration" ||
                     parent?.kind === "VariablePattern"
                   ) &&
@@ -2464,8 +2537,14 @@ export const typeCheckVirtualFiles = (
                     parent?.kind === "TypeReferenceNode" ||
                     parent?.kind === "QualifiedTypeReferenceNode"
                   ) &&
-                  !(parent?.kind === "FieldEntry" && parent?.key === node) &&
-                  !(parent?.kind === "Parameter" && parent?.name === node)
+                  !(
+                    parent?.kind === "FieldEntry" &&
+                    astChild(parent, "key") === node
+                  ) &&
+                  !(
+                    parent?.kind === "Parameter" &&
+                    astChild(parent, "name") === node
+                  )
                 ) {
                   addAstDiag(
                     node.span,
@@ -2479,15 +2558,15 @@ export const typeCheckVirtualFiles = (
 
                 // §1.13: Detached fibers
                 if (node.kind === "CallExpression") {
-                  const c = node.callee;
+                  const c = astChild(node, "callee");
+                  const cMember = getMemberNames(c);
                   if (
-                    (c?.kind === "MemberExpression" &&
-                      c.object?.name === "Effect" &&
-                      c.property?.name === "forkDetach") ||
-                    (c?.kind === "Identifier" && c.name === "forkDetach")
+                    (cMember?.object === "Effect" &&
+                      cMember.property === "forkDetach") ||
+                    (c?.kind === "Identifier" && astName(c) === "forkDetach")
                   ) {
                     addAstDiag(
-                      c.span || node.span,
+                      c?.span || node.span,
                       "DETACHED_FIBER",
                       "`Effect.forkDetach` creates a detached fiber nobody owns. It keeps running after its caller is interrupted. Use 'Effect.forkScoped' (tied to Scope) or 'Effect.forkChild' (tied to parent fiber) to ensure structured concurrency.",
                       "error",
@@ -2496,15 +2575,15 @@ export const typeCheckVirtualFiles = (
                     );
                   }
                 } else if (node.kind === "PipelineExpression") {
-                  const r = node.right;
+                  const r = astChild(node, "right");
+                  const rMember = getMemberNames(r);
                   if (
-                    (r?.kind === "MemberExpression" &&
-                      r.object?.name === "Effect" &&
-                      r.property?.name === "forkDetach") ||
-                    (r?.kind === "Identifier" && r.name === "forkDetach")
+                    (rMember?.object === "Effect" &&
+                      rMember.property === "forkDetach") ||
+                    (r?.kind === "Identifier" && astName(r) === "forkDetach")
                   ) {
                     addAstDiag(
-                      r.span || node.span,
+                      r?.span || node.span,
                       "DETACHED_FIBER",
                       "`Effect.forkDetach` creates a detached fiber nobody owns. It keeps running after its caller is interrupted. Use 'Effect.forkScoped' (tied to Scope) or 'Effect.forkChild' (tied to parent fiber) to ensure structured concurrency.",
                       "error",
@@ -2512,15 +2591,15 @@ export const typeCheckVirtualFiles = (
                       "Use `Effect.forkScoped` (tied to Scope) or `Effect.forkChild` (tied to parent fiber), or long-lived background work in `Layer.effectDiscard(Effect.forkScoped(...))`.",
                     );
                   } else if (r?.kind === "CallExpression") {
-                    const c = r.callee;
+                    const c = astChild(r, "callee");
+                    const cMember = getMemberNames(c);
                     if (
-                      (c?.kind === "MemberExpression" &&
-                        c.object?.name === "Effect" &&
-                        c.property?.name === "forkDetach") ||
-                      (c?.kind === "Identifier" && c.name === "forkDetach")
+                      (cMember?.object === "Effect" &&
+                        cMember.property === "forkDetach") ||
+                      (c?.kind === "Identifier" && astName(c) === "forkDetach")
                     ) {
                       addAstDiag(
-                        c.span || r.span,
+                        c?.span || r.span,
                         "DETACHED_FIBER",
                         "`Effect.forkDetach` creates a detached fiber nobody owns. It keeps running after its caller is interrupted. Use 'Effect.forkScoped' (tied to Scope) or 'Effect.forkChild' (tied to parent fiber) to ensure structured concurrency.",
                         "error",
@@ -2533,14 +2612,16 @@ export const typeCheckVirtualFiles = (
 
                 // § Pit of Success: Untyped literal error in Effect.fail
                 if (node.kind === "CallExpression") {
-                  const callee = node.callee;
+                  const callee = astChild(node, "callee");
+                  const calleeMember = getMemberNames(callee);
                   const isFail =
-                    (callee?.kind === "MemberExpression" &&
-                      callee.object?.name === "Effect" &&
-                      callee.property?.name === "fail") ||
-                    (callee?.kind === "Identifier" && callee.name === "fail");
-                  if (isFail && node.args?.length > 0) {
-                    const arg = node.args[0];
+                    (calleeMember?.object === "Effect" &&
+                      calleeMember.property === "fail") ||
+                    (callee?.kind === "Identifier" &&
+                      astName(callee) === "fail");
+                  const args = astChildren(node, "args");
+                  if (isFail && args.length > 0) {
+                    const arg = args[0];
                     if (
                       arg.kind === "StringLiteral" ||
                       arg.kind === "NumberLiteral"
@@ -2556,19 +2637,20 @@ export const typeCheckVirtualFiles = (
                     }
                   }
                 } else if (node.kind === "PipelineExpression") {
-                  const r = node.right;
+                  const r = astChild(node, "right");
+                  const rMember = getMemberNames(r);
                   const isFail =
-                    (r?.kind === "MemberExpression" &&
-                      r.object?.name === "Effect" &&
-                      r.property?.name === "fail") ||
-                    (r?.kind === "Identifier" && r.name === "fail");
+                    (rMember?.object === "Effect" &&
+                      rMember.property === "fail") ||
+                    (r?.kind === "Identifier" && astName(r) === "fail");
+                  const left = astChild(node, "left");
                   if (
                     isFail &&
-                    (node.left?.kind === "StringLiteral" ||
-                      node.left?.kind === "NumberLiteral")
+                    (left?.kind === "StringLiteral" ||
+                      left?.kind === "NumberLiteral")
                   ) {
                     addAstDiag(
-                      node.left.span || node.span,
+                      left.span || node.span,
                       "UNTYPED_ERROR",
                       "`Effect.fail` with untyped literal. In FunScript, library domain errors should be tagged (using Schema.TaggedError or Data.TaggedError) to enable type-safe error discrimination with 'catchTag'.",
                       "warning",
@@ -2579,15 +2661,14 @@ export const typeCheckVirtualFiles = (
                 }
               }
 
-              if (
-                node.kind === "RecordExpression" &&
-                Array.isArray(node.entries)
-              ) {
-                for (const entry of node.entries) {
+              if (node.kind === "RecordExpression") {
+                for (const entry of astChildren(node, "entries")) {
                   if (entry.kind === "FieldEntry") {
-                    const key = entry.key?.name;
+                    const key = astName(astChild(entry, "key"));
+                    const entryVal = astChild(entry, "value");
                     const val =
-                      entry.value?.raw || entry.value?.parts?.[0]?.value;
+                      astString(entryVal, "raw") ||
+                      astString(astChildren(entryVal, "parts")[0], "value");
                     if (
                       key === "concurrency" &&
                       (val === '"unbounded"' || val === "unbounded")
@@ -2634,14 +2715,16 @@ export const typeCheckVirtualFiles = (
               };
 
               if (node.kind === "CallExpression") {
-                const callee = node.callee;
+                const callee = astChild(node, "callee");
+                const calleeMember = getMemberNames(callee);
                 const isSucceed =
-                  (callee?.kind === "MemberExpression" &&
-                    callee.object?.name === "Effect" &&
-                    callee.property?.name === "succeed") ||
-                  (callee?.kind === "Identifier" && callee.name === "succeed");
-                if (isSucceed && node.args?.length > 0) {
-                  const arg = node.args[0];
+                  (calleeMember?.object === "Effect" &&
+                    calleeMember.property === "succeed") ||
+                  (callee?.kind === "Identifier" &&
+                    astName(callee) === "succeed");
+                const args = astChildren(node, "args");
+                if (isSucceed && args.length > 0) {
+                  const arg = args[0];
                   if (
                     (arg.kind === "CallExpression" &&
                       !isPureDataConstructor(arg)) ||
@@ -2658,14 +2741,14 @@ export const typeCheckVirtualFiles = (
                   }
                 }
               } else if (node.kind === "PipelineExpression") {
-                const r = node.right;
+                const r = astChild(node, "right");
+                const rMember = getMemberNames(r);
                 const isSucceed =
-                  (r?.kind === "MemberExpression" &&
-                    r.object?.name === "Effect" &&
-                    r.property?.name === "succeed") ||
-                  (r?.kind === "Identifier" && r.name === "succeed");
+                  (rMember?.object === "Effect" &&
+                    rMember.property === "succeed") ||
+                  (r?.kind === "Identifier" && astName(r) === "succeed");
                 if (isSucceed) {
-                  const left = node.left;
+                  const left = astChild(node, "left");
                   if (
                     (left?.kind === "CallExpression" &&
                       !isPureDataConstructor(left)) ||
@@ -2723,14 +2806,12 @@ export const typeCheckVirtualFiles = (
                   return null;
                 };
 
-                for (const stmt of node.body || []) {
-                  let effExpr: unknown;
-                  if (
+                for (const stmt of astChildren(node, "body")) {
+                  const effExpr =
                     stmt.kind === "EffectBindStatement" ||
                     stmt.kind === "EffectDiscardStatement"
-                  ) {
-                    effExpr = stmt.effect;
-                  }
+                      ? astChild(stmt, "effect")
+                      : null;
                   if (effExpr) {
                     const op = getRefOp(effExpr);
                     if (op) {
@@ -2754,11 +2835,15 @@ export const typeCheckVirtualFiles = (
                 }
               }
 
-              if (node.kind === "EffectBlockExpression" && !node.unscoped) {
+              if (
+                node.kind === "EffectBlockExpression" &&
+                !astBool(node, "unscoped")
+              ) {
+                const finalExpr = astChild(node, "finalExpression");
                 const isUnit =
-                  (node.finalExpression?.kind === "Identifier" ||
-                    node.finalExpression?.kind === "UpperIdentifier") &&
-                  node.finalExpression.name === "Void";
+                  (finalExpr?.kind === "Identifier" ||
+                    finalExpr?.kind === "UpperIdentifier") &&
+                  astName(finalExpr) === "Void";
 
                 if (!isUnit) {
                   const findFinalizer = (
@@ -2766,10 +2851,7 @@ export const typeCheckVirtualFiles = (
                   ): { name: string; span: Span } | null => {
                     if (!n || typeof n !== "object") return null;
                     const objNode = n as Record<string, unknown>;
-                    if (
-                      objNode !== node &&
-                      objNode.kind === "EffectBlockExpression"
-                    )
+                    if (n !== node && objNode.kind === "EffectBlockExpression")
                       return null;
                     if (objNode.kind === "CallExpression") {
                       const callee = objNode.callee as
@@ -2820,15 +2902,15 @@ export const typeCheckVirtualFiles = (
                   };
 
                   let detectedCall: { name: string; span: Span } | null = null;
-                  for (const stmt of node.body || []) {
+                  for (const stmt of astChildren(node, "body")) {
                     const res = findFinalizer(stmt);
                     if (res) {
                       detectedCall = res;
                       break;
                     }
                   }
-                  if (!detectedCall && node.finalExpression) {
-                    detectedCall = findFinalizer(node.finalExpression);
+                  if (!detectedCall && finalExpr) {
+                    detectedCall = findFinalizer(finalExpr);
                   }
 
                   if (detectedCall) {
@@ -2845,7 +2927,7 @@ export const typeCheckVirtualFiles = (
                 }
               }
 
-              const nodeRecord = node as Record<string, unknown>;
+              const nodeRecord = asRecord(node);
               for (const k of Object.keys(nodeRecord)) {
                 if (k === "span") continue;
                 const child = nodeRecord[k];
@@ -2854,20 +2936,13 @@ export const typeCheckVirtualFiles = (
                     ? true
                     : currentInMatchArm;
                 if (Array.isArray(child)) {
-                  for (const c of child)
-                    walkAst(
-                      c as AstInspectNode,
-                      node,
-                      currentInMut,
-                      nextInMatchArm,
-                    );
-                } else if (child && typeof child === "object") {
-                  walkAst(
-                    child as AstInspectNode,
-                    node,
-                    currentInMut,
-                    nextInMatchArm,
-                  );
+                  for (const c of child) {
+                    if (isAstNode(c)) {
+                      walkAst(c, node, currentInMut, nextInMatchArm);
+                    }
+                  }
+                } else if (isAstNode(child)) {
+                  walkAst(child, node, currentInMut, nextInMatchArm);
                 }
               }
             };

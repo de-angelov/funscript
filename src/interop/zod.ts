@@ -1,4 +1,3 @@
-/* eslint-disable @typescript-eslint/no-explicit-any */
 import * as Effect from "effect/Effect";
 import * as Result from "effect/Result";
 import * as Schema from "effect/Schema";
@@ -23,7 +22,7 @@ function convertZodErrorToIssue(
   ast: SchemaAST.AST,
   error: z.ZodError,
   input: unknown,
-  options: any,
+  options: SchemaAST.ParseOptions | undefined,
 ): SchemaIssue.Issue {
   if (error.issues.length === 0) {
     return new SchemaIssue.InvalidType(ast, input, options);
@@ -101,13 +100,17 @@ export function fromZod<T extends z.ZodTypeAny>(
     return Schema.decodeUnknownSync(rawSchema)(input);
   }, rawSchema) as unknown as ZodEffectSchema<z.output<T>, z.input<T>>;
 
+  const rawRecord = rawSchema as unknown as Record<symbol, unknown>;
+  const schemaRecord = schema as unknown as Record<symbol, unknown>;
   for (const sym of Object.getOwnPropertySymbols(rawSchema)) {
-    (schema as any)[sym] = (rawSchema as any)[sym];
+    schemaRecord[sym] = rawRecord[sym];
   }
-  Object.setPrototypeOf(schema, Object.getPrototypeOf(rawSchema));
+  const proto: unknown = Object.getPrototypeOf(rawSchema);
+  Object.setPrototypeOf(schema, proto as object | null);
 
   if (zodSchema["~standard"]) {
-    (schema as any)["~standard"] = zodSchema["~standard"];
+    (schema as { "~standard"?: z.ZodTypeAny["~standard"] })["~standard"] =
+      zodSchema["~standard"];
   }
 
   return schema;
@@ -126,11 +129,14 @@ export function toZod<A, I = unknown>(
 ): z.ZodType<A, z.ZodTypeDef, I> {
   return z.unknown().transform((val, ctx) => {
     try {
-      const res = Schema.decodeUnknownResult(schema as any)(val, {
-        errors: "all",
-      });
+      const res = Schema.decodeUnknownResult(schema as Schema.Codec<A, I>)(
+        val,
+        {
+          errors: "all",
+        },
+      );
       if (Result.isSuccess(res)) {
-        return (res.success ?? (res as any).value) as A;
+        return res.success;
       }
       const formatted = SchemaIssue.makeFormatterStandardSchemaV1()(
         res.failure.issue,
@@ -144,14 +150,19 @@ export function toZod<A, I = unknown>(
       }
       return z.NEVER;
     } catch {
-      return Schema.decodeUnknownPromise(schema as any)(val, {
+      return Schema.decodeUnknownPromise(schema as Schema.Codec<A, I>)(val, {
         errors: "all",
       }).then(
-        (decoded) => decoded as A,
-        (err) => {
-          if (err && err.issue) {
+        (decoded) => decoded,
+        (err: unknown) => {
+          if (
+            typeof err === "object" &&
+            err !== null &&
+            "issue" in err &&
+            err.issue
+          ) {
             const formatted = SchemaIssue.makeFormatterStandardSchemaV1()(
-              err.issue,
+              err.issue as SchemaIssue.Issue,
             );
             for (const issue of formatted.issues) {
               ctx.addIssue({
@@ -177,8 +188,10 @@ export function toZod<A, I = unknown>(
  * Schema decoder helper compatible across Effect versions.
  * In Effect v4, delegates to Schema.decodeUnknownEffect.
  */
-export const decodeUnknown =
-  (Schema as any).decodeUnknown ?? Schema.decodeUnknownEffect;
+export const decodeUnknown: typeof Schema.decodeUnknownEffect =
+  ((Schema as unknown as Record<string, unknown>).decodeUnknown as
+    typeof Schema.decodeUnknownEffect | undefined) ??
+  Schema.decodeUnknownEffect;
 export const decodeUnknownSync = Schema.decodeUnknownSync;
 export const decodeUnknownPromise = Schema.decodeUnknownPromise;
 export const decodeUnknownResult = Schema.decodeUnknownResult;

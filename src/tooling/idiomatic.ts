@@ -1,5 +1,5 @@
 import ts from "typescript";
-import type { Program } from "../ast/types.js";
+import type { Program, TsEscapeDeclaration } from "../ast/types.js";
 import { FunScriptError } from "../errors.js";
 import { Lexer } from "../lexer/lexer.js";
 import { Parser } from "../parser/parser.js";
@@ -145,13 +145,16 @@ function checkTsBlockCode(
   return diagnostics;
 }
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-function traverseAst(node: any, visit: (n: any) => void) {
+function traverseAst(
+  node: unknown,
+  visit: (n: Record<string, unknown>) => void,
+) {
   if (!node || typeof node !== "object") return;
-  visit(node);
-  for (const key of Object.keys(node)) {
+  const record = node as Record<string, unknown>;
+  visit(record);
+  for (const key of Object.keys(record)) {
     if (key === "span") continue;
-    const child = (node as Record<string, unknown>)[key];
+    const child = record[key];
     if (Array.isArray(child)) {
       for (const c of child) traverseAst(c, visit);
     } else if (child && typeof child === "object") {
@@ -183,9 +186,10 @@ export function auditIdiomaticFunScript(
 
   traverseAst(program, (node) => {
     if (node.kind === "TsEscapeDeclaration") {
-      const baseLine = node.span.start.line;
-      const baseCol = node.span.start.column;
-      const diags = checkTsBlockCode(node.code, baseLine, baseCol, filePath);
+      const decl = node as unknown as TsEscapeDeclaration;
+      const baseLine = decl.span.start.line;
+      const baseCol = decl.span.start.column;
+      const diags = checkTsBlockCode(decl.code, baseLine, baseCol, filePath);
       diagnostics.push(...diags);
     }
   });

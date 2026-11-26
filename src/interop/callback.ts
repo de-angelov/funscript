@@ -143,8 +143,11 @@ export function decodeCheckedRecord<
     typeof structFields === "object" &&
     structFields !== null &&
     Reflect.ownKeys(structFields).length === 0;
-  const decoded = emptyStruct ? {} : parsed;
-  const prototype = Object.getPrototypeOf(decoded);
+  const decoded: unknown = emptyStruct ? {} : parsed;
+  if (typeof decoded !== "object" || decoded === null) {
+    throw new TypeError("The data schema must decode to a plain record");
+  }
+  const prototype: unknown = Object.getPrototypeOf(decoded);
   if (prototype !== Object.prototype && prototype !== null) {
     throw new TypeError("The data schema must decode to a plain record");
   }
@@ -173,7 +176,7 @@ export function decodeCheckedRecord<
         new TypeError(`Missing callback field '${key}'`),
       );
     }
-    const raw = Reflect.get(input, key);
+    const raw: unknown = Reflect.get(input, key);
     Object.defineProperty(output, key, {
       value: optional && raw === undefined ? undefined : adapters[key](raw),
       enumerable: true,

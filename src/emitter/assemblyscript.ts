@@ -347,7 +347,7 @@ export async function prepareAssemblyScript(
   let binary = cache.get(decl.code);
   if (!binary) {
     try {
-      const asc: {
+      interface AscModule {
         compileString(
           source: string,
           options: object,
@@ -356,7 +356,10 @@ export async function prepareAssemblyScript(
           binary: Uint8Array | null;
           stderr: { toString(): string };
         }>;
-      } = await import("assemblyscript/" + "asc");
+      }
+      const asc = (await import(
+        "assemblyscript/" + "asc"
+      )) as unknown as AscModule;
       let compileSource =
         transformed +
         "\nclass BigInt64Array extends Int64Array {}\nclass BigUint64Array extends Uint64Array {}\nexport function __funscript_reset_heap(): void { __reset(); }\n";

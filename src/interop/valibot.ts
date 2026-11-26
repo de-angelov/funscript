@@ -1,18 +1,17 @@
-/* eslint-disable @typescript-eslint/no-explicit-any */
 import * as Effect from "effect/Effect";
 import * as Schema from "effect/Schema";
 import type * as SchemaAST from "effect/SchemaAST";
 import * as SchemaIssue from "effect/SchemaIssue";
 import * as v from "valibot";
 
-type AnySchema = any;
+type ValibotSchema = v.BaseSchema<unknown, unknown, v.BaseIssue<unknown>>;
 
 /** Convert the supported Effect Schema AST subset to native Valibot schemas. */
-export function toValibotSchema(schema: Schema.Constraint): AnySchema {
+export function toValibotSchema(schema: Schema.Constraint): ValibotSchema {
   return effectAstToValibot(schema.ast);
 }
 
-function effectAstToValibot(ast: SchemaAST.AST): AnySchema {
+function effectAstToValibot(ast: SchemaAST.AST): ValibotSchema {
   switch (ast._tag) {
     case "String":
       return v.string();
@@ -23,7 +22,9 @@ function effectAstToValibot(ast: SchemaAST.AST): AnySchema {
     case "BigInt":
       return v.bigint();
     case "Literal":
-      return v.literal(ast.literal as any);
+      return v.literal(
+        ast.literal as string | number | boolean | bigint | symbol,
+      );
     case "Arrays": {
       const item = ast.rest[0];
       if (!item || ast.elements.length)
@@ -31,7 +32,7 @@ function effectAstToValibot(ast: SchemaAST.AST): AnySchema {
       return v.array(effectAstToValibot(item));
     }
     case "Objects": {
-      const entries: Record<string, AnySchema> = {};
+      const entries: Record<string, ValibotSchema> = {};
       for (const field of ast.propertySignatures) {
         const child = effectAstToValibot(field.type);
         const isOptional =
@@ -54,7 +55,12 @@ function effectAstToValibot(ast: SchemaAST.AST): AnySchema {
         ? findTagKey(ast.types as SchemaAST.Objects[])
         : undefined;
       const members = ast.types.map(effectAstToValibot);
-      return tagged ? v.variant(tagged, members) : v.union(members);
+      return tagged
+        ? v.variant(
+            tagged,
+            members as unknown as Parameters<typeof v.variant>[1],
+          )
+        : v.union(members);
     }
     case "Undefined":
       return v.undefined();
@@ -77,14 +83,16 @@ function findTagKey(objects: SchemaAST.Objects[]): string | undefined {
 }
 
 /** Wrap a Valibot schema as an Effect codec, preserving Valibot paths/messages. */
-export function fromValibotSchema<T extends AnySchema>(schema: T): AnySchema {
+export function fromValibotSchema<
+  T extends v.BaseSchema<never, unknown, v.BaseIssue<unknown>>,
+>(
+  schema: T,
+): Schema.Codec<v.InferOutput<T>, v.InferInput<T>> &
+  ((input: unknown) => v.InferOutput<T>) {
   const wrapped = Schema.declareConstructor<unknown, unknown>()(
     [],
     () => (input, ast, options) => {
-      const result = v.safeParse(
-        schema as v.BaseSchema<unknown, unknown, v.BaseIssue<unknown>>,
-        input,
-      );
+      const result = v.safeParse(schema, input);
       if (result.success) return Effect.succeed(result.output);
       const issues = result.issues.map((issue) => {
         const leaf = new SchemaIssue.InvalidValue(
@@ -117,9 +125,14 @@ export function fromValibotSchema<T extends AnySchema>(schema: T): AnySchema {
   const callable = Object.assign(
     (input: unknown) => Schema.decodeUnknownSync(wrapped)(input),
     wrapped,
-  );
-  for (const symbol of Object.getOwnPropertySymbols(wrapped))
-    (callable as any)[symbol] = (wrapped as any)[symbol];
-  Object.setPrototypeOf(callable, Object.getPrototypeOf(wrapped));
+  ) as unknown as Schema.Codec<v.InferOutput<T>, v.InferInput<T>> &
+    ((input: unknown) => v.InferOutput<T>);
+  const wrappedRecord = wrapped as unknown as Record<symbol, unknown>;
+  const callableRecord = callable as unknown as Record<symbol, unknown>;
+  for (const symbol of Object.getOwnPropertySymbols(wrapped)) {
+    callableRecord[symbol] = wrappedRecord[symbol];
+  }
+  const proto: unknown = Object.getPrototypeOf(wrapped);
+  Object.setPrototypeOf(callable, proto as object | null);
   return callable;
 }

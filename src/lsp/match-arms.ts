@@ -1,4 +1,3 @@
-/* eslint-disable @typescript-eslint/no-explicit-any */
 import {
   type CodeAction,
   CodeActionKind,
@@ -10,6 +9,7 @@ import type {
   MatchExpression,
   Pattern,
   Program,
+  TypeNode,
 } from "../ast/types.js";
 import { isExpectedSyntaxError } from "../errors.js";
 import { Lexer } from "../lexer/lexer.js";
@@ -44,6 +44,20 @@ const BUILTIN_SCHEMAS = new Map<string, VariantInfo[]>([
   ],
 ]);
 
+function getTypeName(typeNode: TypeNode | undefined): string | undefined {
+  if (!typeNode || !("name" in typeNode)) return undefined;
+  const nameNode = typeNode.name;
+  if (
+    nameNode &&
+    typeof nameNode === "object" &&
+    "name" in nameNode &&
+    typeof nameNode.name === "string"
+  ) {
+    return nameNode.name;
+  }
+  return undefined;
+}
+
 function extractPatternNames(pattern: Pattern): string[] {
   if (pattern.kind === "ConstructorPattern") {
     return [pattern.constructorName.name];
@@ -52,10 +66,7 @@ function extractPatternNames(pattern: Pattern): string[] {
     return [pattern.name.name];
   }
   if (pattern.kind === "OrPattern") {
-    return [
-      ...extractPatternNames((pattern as any).left),
-      ...extractPatternNames((pattern as any).right),
-    ];
+    return pattern.patterns.flatMap(extractPatternNames);
   }
   return [];
 }
@@ -121,11 +132,10 @@ export function findFillMatchArmsCodeActions(
     if (n.kind === "FunctionExpression") {
       const fn = node as FunctionExpression;
       for (const p of fn.params) {
-        if ("name" in p && p.name && p.typeAnnotation) {
-          const pName = (p.name as any).name;
-          const pType = (p.typeAnnotation as any).name?.name;
-          if (pName && pType) {
-            functionParams.set(pName, pType);
+        if (p.name.kind === "Identifier" && p.typeAnnotation) {
+          const pType = getTypeName(p.typeAnnotation);
+          if (pType) {
+            functionParams.set(p.name.name, pType);
           }
         }
       }
@@ -134,7 +144,7 @@ export function findFillMatchArmsCodeActions(
     if (n.kind === "BindingDeclaration") {
       const b = node as BindingDeclaration;
       if (b.id.kind === "Identifier" && b.typeAnnotation) {
-        const tName = (b.typeAnnotation as any).name?.name;
+        const tName = getTypeName(b.typeAnnotation);
         if (tName) {
           functionParams.set(b.id.name, tName);
         }
@@ -193,7 +203,7 @@ export function findFillMatchArmsCodeActions(
     // B. Check from scrutinee type
     if (!targetSchema && matchExpr.scrutinee) {
       if (matchExpr.scrutinee.kind === "Identifier") {
-        const varName = (matchExpr.scrutinee as any).name;
+        const varName = matchExpr.scrutinee.name;
         if (functionParams.has(varName)) {
           targetSchema = functionParams.get(varName);
         }

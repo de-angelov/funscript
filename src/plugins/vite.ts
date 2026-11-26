@@ -186,11 +186,11 @@ export function funscriptPlugin(options: FunscriptPluginOptions = {}): Plugin {
       const view = typeView;
       let pending = Promise.resolve();
       const enqueue = (work: () => Promise<void>) => {
-        pending = pending
-          .then(work)
-          .catch((error) =>
-            server.config.logger.error(`FunScript type view: ${error.message}`),
-          );
+        pending = pending.then(work).catch((error: unknown) => {
+          const message =
+            error instanceof Error ? error.message : String(error);
+          server.config.logger.error(`FunScript type view: ${message}`);
+        });
       };
       const update = (file: string) => {
         if (/\.funx?$/.test(file)) enqueue(() => view.refresh(file));
@@ -263,10 +263,19 @@ export function funscriptPlugin(options: FunscriptPluginOptions = {}): Plugin {
         }),
       );
 
+      const rawMap = res.sourcemap ?? res.map;
       return {
         code: res.typescript,
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        map: (res.sourcemap ?? res.map ?? null) as any,
+        map: rawMap
+          ? {
+              version: rawMap.version,
+              file: rawMap.file,
+              sources: rawMap.sources,
+              sourcesContent: rawMap.sourcesContent?.map((s) => s ?? ""),
+              names: rawMap.names,
+              mappings: rawMap.mappings,
+            }
+          : null,
       };
     },
 

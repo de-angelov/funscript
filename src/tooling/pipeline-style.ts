@@ -1,4 +1,5 @@
 import * as Effect from "effect/Effect";
+import type { PipelineExpression } from "../ast/types.js";
 import { compileString } from "../compiler.js";
 import { TypeScriptCompilationContext } from "../compiler/typescript-context.js";
 import {
@@ -17,6 +18,15 @@ type Edit = {
   method: string;
 };
 
+function isPipelineExpression(node: unknown): node is PipelineExpression {
+  return (
+    typeof node === "object" &&
+    node !== null &&
+    "kind" in node &&
+    node.kind === "PipelineExpression"
+  );
+}
+
 /** Convert only pipeline stages whose generated TypeScript is unchanged. */
 export function convertPipelineStyle(
   source: string,
@@ -34,10 +44,9 @@ export function convertPipelineStyle(
     source,
   ).parse();
   let hasCandidate = false;
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const scan = (node: any): void => {
+  const scan = (node: unknown): void => {
     if (!node || typeof node !== "object" || hasCandidate) return;
-    if (node.kind === "PipelineExpression") {
+    if (isPipelineExpression(node)) {
       const stage = node.right;
       const target = stage.kind === "CallExpression" ? stage.callee : stage;
       const start = target.span.start.offset;
@@ -86,10 +95,9 @@ export function convertPipelineStyle(
       : compiled.pipelineStageResolutions;
   const edits: Edit[] = [];
   let candidateCount = 0;
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const visit = (node: any): void => {
+  const visit = (node: unknown): void => {
     if (!node || typeof node !== "object") return;
-    if (node.kind === "PipelineExpression") {
+    if (isPipelineExpression(node)) {
       const stage = node.right;
       const target = stage.kind === "CallExpression" ? stage.callee : stage;
       const start = target.span.start.offset;
