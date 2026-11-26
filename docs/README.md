@@ -19,26 +19,27 @@ language rules.
 - [CI and release operations](ci-release.md) — operational workflow.
 - [Tooling](tooling.md) and [toolchain](toolchain.md) — supported integration guidance.
 - [Language compatibility policy](compatibility.md) — adopted Strict Zero-Alias compatibility policy for Effect aliases, breaking syntax, and pipeline ambiguity.
+- [Package entry point migration](package-entrypoint-migration.md) — replacements for removed duplicate import paths.
 
 ## Authoritative sources and drift maintenance
 
 To prevent documentation drift, documentation facts are categorized into generated references, automated code-asserted facts, and intentionally manual guidance:
 
-| Documentation Section | Category | Authoritative Source | Automated Drift Protection |
-| --- | --- | --- | --- |
-| CLI commands & flags (`docs/reference/cli.md`) | Generated | `src/cli/commands.ts` (`CLI_COMMANDS`) | `npm run docs:check`, `tests/cli-help.test.ts` |
-| Package entry points (`docs/reference/api.md`) | Generated | `package.json` (`exports`) | `npm run docs:check`, `tests/reference-docs.test.ts` |
-| Hover language catalogue (`docs/reference/language.md`) | Generated | `src/lsp/docs.ts` (`DOC_CATALOG`) | `npm run docs:check`, `tests/lsp-docs.test.ts` |
-| Example inventory (`docs/reference/examples.md`, `README.md`) | Generated | `examples/` files | `npm run docs:check`, `npm run test:examples` |
-| Project facts (`README.md`) | Generated | `package.json` (`version`, `dependencies.effect`) | `npm run docs:check` |
-| Lexer keywords (`docs/syntax.md#15-keywords`) | Code-asserted | `src/lexer/tokens.ts` (`KEYWORDS`) | `tests/reference-docs.test.ts`, `tests/lsp-docs.test.ts` |
-| Pipeline companions (`docs/syntax.md#51`, `docs/compatibility.md#4`) | Code-asserted | `src/emitter/pipeline-catalog.ts` (`PIPELINE_COMPANION_CATALOG`) | `tests/reference-docs.test.ts` |
-| Repository scripts (`docs/tooling.md#package-scripts`) | Code-asserted | `package.json` (`scripts`) | `tests/reference-docs.test.ts` |
-| Language semantics & grammar (`docs/syntax.md`) | Manual | Verified compiler tests in `tests/` | Manual review / test suite |
-| Compatibility & deprecation policy (`docs/compatibility.md`) | Manual | Human project decisions (TASK-102, TASK-104) | Manual review / Strict Zero-Alias invariant |
-| Migration tooling (`docs/tooling.md#explicit-return-migration-decision`) | Manual | `src/tooling/migrate.ts` | Tested in `tests/migrate.test.ts` |
-| Toolchain helper instructions (`docs/toolchain.md`) | Manual | `scripts/toolchain.{sh,ps1}` | Tested in `tests/toolchain.test.ts` |
-| Benchmark baseline numbers (`docs/toolchain.md`) | Manual | Reference host runs (`AMD Ryzen AI 7 350`) | Host-dependent informational baselines |
+| Documentation Section                                                    | Category      | Authoritative Source                                             | Automated Drift Protection                               |
+| ------------------------------------------------------------------------ | ------------- | ---------------------------------------------------------------- | -------------------------------------------------------- |
+| CLI commands & flags (`docs/reference/cli.md`)                           | Generated     | `src/cli/commands.ts` (`CLI_COMMANDS`)                           | `npm run docs:check`, `tests/cli-help.test.ts`           |
+| Package entry points (`docs/reference/api.md`)                           | Generated     | `package.json` (`exports`)                                       | `npm run docs:check`, `tests/reference-docs.test.ts`     |
+| Hover language catalogue (`docs/reference/language.md`)                  | Generated     | `src/lsp/docs.ts` (`DOC_CATALOG`)                                | `npm run docs:check`, `tests/lsp-docs.test.ts`           |
+| Example inventory (`docs/reference/examples.md`, `README.md`)            | Generated     | `examples/` files                                                | `npm run docs:check`, `npm run test:examples`            |
+| Project facts (`README.md`)                                              | Generated     | `package.json` (`version`, `dependencies.effect`)                | `npm run docs:check`                                     |
+| Lexer keywords (`docs/syntax.md#15-keywords`)                            | Code-asserted | `src/lexer/tokens.ts` (`KEYWORDS`)                               | `tests/reference-docs.test.ts`, `tests/lsp-docs.test.ts` |
+| Pipeline companions (`docs/syntax.md#51`, `docs/compatibility.md#4`)     | Code-asserted | `src/emitter/pipeline-catalog.ts` (`PIPELINE_COMPANION_CATALOG`) | `tests/reference-docs.test.ts`                           |
+| Repository scripts (`docs/tooling.md#package-scripts`)                   | Code-asserted | `package.json` (`scripts`)                                       | `tests/reference-docs.test.ts`                           |
+| Language semantics & grammar (`docs/syntax.md`)                          | Manual        | Verified compiler tests in `tests/`                              | Manual review / test suite                               |
+| Compatibility & deprecation policy (`docs/compatibility.md`)             | Manual        | Human project decisions (TASK-102, TASK-104)                     | Manual review / Strict Zero-Alias invariant              |
+| Migration tooling (`docs/tooling.md#explicit-return-migration-decision`) | Manual        | `src/tooling/migrate.ts`                                         | Tested in `tests/migrate.test.ts`                        |
+| Toolchain helper instructions (`docs/toolchain.md`)                      | Manual        | `scripts/toolchain.{sh,ps1}`                                     | Tested in `tests/toolchain.test.ts`                      |
+| Benchmark baseline numbers (`docs/toolchain.md`)                         | Manual        | Reference host runs (`AMD Ryzen AI 7 350`)                       | Host-dependent informational baselines                   |
 
 ### Maintenance workflow
 

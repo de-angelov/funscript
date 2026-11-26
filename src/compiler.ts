@@ -683,7 +683,7 @@ export const compileString = (
               barePipelineStageResolutions: bareStageResolutions,
             };
           }
-          const importedSchemas = resolveImportedSchemas(ast, source, context);
+          const importedSchemas = resolveImportedSchemas(ast, context);
           const emitterOptions: EmitterOptions = {
             pipelineCompanions,
             stageResolutions,

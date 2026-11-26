@@ -30,7 +30,7 @@ export default tseslint.config(
     },
     rules: {
       // General code quality
-      "no-empty": ["error", { allowEmptyCatch: true }],
+      "no-empty": "error",
       "prefer-const": "error",
       "no-useless-escape": "error",
       "no-case-declarations": "off",

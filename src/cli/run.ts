@@ -83,20 +83,16 @@ export const runCommand = (
         noDeepDestructurePaths: Array.isArray(projectPolicy.noDeepDestructure)
           ? projectPolicy.noDeepDestructure
           : undefined,
-        allowHoles:
-          commandArgs.includes("--allow-holes") ||
-          isPathPolicyEnabled(
-            projectPolicy.allowHoles,
-            process.cwd(),
-            filePath,
-          ),
-        allowEarlyReturns:
-          commandArgs.includes("--allow-early-returns") ||
-          isPathPolicyEnabled(
-            projectPolicy.allowEarlyReturns,
-            process.cwd(),
-            filePath,
-          ),
+        allowHoles: isPathPolicyEnabled(
+          projectPolicy.allowHoles,
+          process.cwd(),
+          filePath,
+        ),
+        allowEarlyReturns: isPathPolicyEnabled(
+          projectPolicy.allowEarlyReturns,
+          process.cwd(),
+          filePath,
+        ),
       }))
     )
       return;

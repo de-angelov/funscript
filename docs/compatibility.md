@@ -43,7 +43,7 @@ When upstream Effect renames, restructures, or deprecates module exports:
 
 1. **Immediate Canonical Adoption:** FunScript adopts the new canonical export name in compiler companion catalogs and documentation.
 2. **Zero Retention Windows:** Obsolete Effect aliases are not retained behind deprecation warnings or long grace periods. They are removed immediately.
-3. **Audit of Legacy Exceptions:** Any temporary compatibility entries in [`EFFECT_PIPELINE_COMPATIBILITY_ALIASES`](../src/emitter/pipeline-catalog.ts) (such as historical `catchAll` mapping to `catch`) are explicit legacy exceptions undergoing active audit and scheduled removal. They must never serve as precedent for introducing new aliases.
+3. **Canonical names:** Use Effect v4 names; historical aliases are rejected.
 
 ### Code Examples: Effect Aliases
 
@@ -52,7 +52,7 @@ When upstream Effect renames, restructures, or deprecates module exports:
 Effect v4 renamed `catchAll` to `catch`. In FunScript:
 
 ```funscript
-# Audited compatibility alias (compiles to Effect.catch; slated for removal):
+# Obsolete alias (rejected):
 export recover = task |> catchAll((err) => Effect.succeed("fallback"))
 
 # Canonical Effect v4 operation:

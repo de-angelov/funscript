@@ -200,7 +200,7 @@ function importedSchemaHover(
     if (!target) return null;
 
     const context = new TypeScriptCompilationContext(uri);
-    const schemas = resolveImportedSchemas(program, source, context);
+    const schemas = resolveImportedSchemas(program, context);
     const checked = context.check(
       new Emitter(program, undefined, { importedSchemas: schemas }).emit(),
     );
@@ -256,7 +256,6 @@ function findHoverInTokens(
   posLine: number,
   posCol: number,
   currentLine: string,
-  lineIndex: number,
   source: string,
   uri: string,
   skipSymbol = false,
@@ -691,7 +690,6 @@ export function findHover(
       posLine,
       posCol,
       currentLine,
-      lineIndex,
       source,
       uri,
       skipSymbol,

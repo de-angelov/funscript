@@ -151,7 +151,6 @@ export function parseBlock(
                 if (requireExplicitReturn) {
                   throw new ParseError(FUNCTION_RETURN_DIAGNOSTIC, bind.span);
                 }
-                bind.isTrailingBinding = true;
                 statements.push(bind);
                 if (
                   bind.id.kind === "Identifier" ||

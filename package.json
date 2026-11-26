@@ -11,22 +11,14 @@
   "exports": {
     ".": "./dist/index.js",
     "./prettier": "./dist/formatter/prettier.js",
-    "./prettier-plugin-funscript": "./dist/formatter/prettier.js",
     "./record": "./dist/interop/record.js",
     "./zod": "./dist/interop/zod.js",
-    "./interop/zod": "./dist/interop/zod.js",
     "./valibot": "./dist/interop/valibot.js",
-    "./interop/valibot": "./dist/interop/valibot.js",
     "./vite": "./dist/plugins/vite.js",
-    "./plugins/vite": "./dist/plugins/vite.js",
     "./bun": "./dist/plugins/bun.js",
-    "./plugins/bun": "./dist/plugins/bun.js",
     "./bun/preload": "./dist/plugins/bun-preload.js",
-    "./plugins/bun-preload": "./dist/plugins/bun-preload.js",
     "./esbuild": "./dist/plugins/esbuild.js",
-    "./plugins/esbuild": "./dist/plugins/esbuild.js",
     "./test": "./dist/testing/index.js",
-    "./testing": "./dist/testing/index.js",
     "./callback": "./dist/interop/callback.js"
   },
   "scripts": {
@@ -43,7 +35,7 @@
     "fmt:check": "node ./dist/cli/index.js fmt --check src examples tests/fixtures/formatter",
     "fmt:ts": "prettier --write 'src/**/*.ts'",
     "fmt:ts:check": "prettier --check 'src/**/*.ts'",
-    "lint": "eslint src",
+    "lint": "eslint src --max-warnings=0",
     "lint:fix": "eslint src --fix",
     "prettier:check": "prettier --plugin ./dist/formatter/prettier.js --check examples/hello.fun tests/fixtures/formatter/*.funx docs/ci-release.md",
     "docs:generate": "npm run build && node scripts/generate-reference-docs.mjs",
@@ -81,7 +73,6 @@
     "type-fest": "^5.10.0",
     "typescript": "^5.6.3",
     "valibot": "^1.5.0",
-    "vscode-languageclient": "^11.0.0",
     "vscode-languageserver": "^11.0.0",
     "zod": "^3.25.76"
   },
@@ -105,7 +96,8 @@
     "typescript-eslint": "^8.73.0",
     "typescript71": "npm:typescript@^7.1.0-beta",
     "vite": "^5.4.21",
-    "vitest": "^2.1.3"
+    "vitest": "^2.1.3",
+    "vscode-languageclient": "^11.0.0"
   },
   "files": [
     "dist/",

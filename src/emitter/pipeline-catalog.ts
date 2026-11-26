@@ -796,25 +796,9 @@ export const PIPELINE_COMPANION_CATALOG: Readonly<
   ),
 };
 
-/** FunScript spellings retained while Effect v4 uses a renamed export. */
-export const EFFECT_PIPELINE_COMPATIBILITY_ALIASES: Readonly<
-  Record<string, string>
-> = {
-  catchAll: "catch",
-};
-
 export const pipelineCompanionCandidates = (
   operation: string,
 ): PipelineCompanionModule[] =>
   (Object.keys(PIPELINE_COMPANION_CATALOG) as PipelineCompanionModule[]).filter(
-    (module) =>
-      PIPELINE_COMPANION_CATALOG[module].includes(operation) ||
-      (module === "Effect" &&
-        operation in EFFECT_PIPELINE_COMPATIBILITY_ALIASES),
+    (module) => PIPELINE_COMPANION_CATALOG[module].includes(operation),
   );
-
-/** Modules considered separately because their pipeline semantics are broader. */
-export const DEFERRED_PIPELINE_COMPANION_MODULES = [] as const;
-
-/** Effect 4 has no public Either module; Result is its supported equivalent. */
-export const UNAVAILABLE_PIPELINE_COMPANION_MODULES = ["Either"] as const;

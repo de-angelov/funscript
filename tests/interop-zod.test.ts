@@ -58,7 +58,9 @@ describe("Zod and @effect/schema bidirectional interop", () => {
       const fromPromise = await decodeUnknownPromise(ItemSchema)(valid);
       expect(fromPromise).toEqual(valid);
 
-      const fromHelper = await Effect.runPromise(decodeUnknown(ItemSchema)(valid));
+      const fromHelper = await Effect.runPromise(
+        decodeUnknown(ItemSchema)(valid),
+      );
       expect(fromHelper).toEqual(valid);
     });
 
@@ -115,18 +117,21 @@ describe("Zod and @effect/schema bidirectional interop", () => {
     });
 
     it("handles asynchronous Zod refinements and transforms", async () => {
-      const AsyncSlugZod = z.string().refine(async (slug) => slug.startsWith("post-"), {
-        message: "Slug must start with post-",
-      });
+      const AsyncSlugZod = z
+        .string()
+        .refine(async (slug) => slug.startsWith("post-"), {
+          message: "Slug must start with post-",
+        });
 
       const AsyncSlugSchema = fromZod(AsyncSlugZod);
 
-      const valid = await decodeUnknownPromise(AsyncSlugSchema)("post-hello-world");
+      const valid =
+        await decodeUnknownPromise(AsyncSlugSchema)("post-hello-world");
       expect(valid).toBe("post-hello-world");
 
-      await expect(decodeUnknownPromise(AsyncSlugSchema)("invalid-slug")).rejects.toThrow(
-        "Slug must start with post-"
-      );
+      await expect(
+        decodeUnknownPromise(AsyncSlugSchema)("invalid-slug"),
+      ).rejects.toThrow("Slug must start with post-");
     });
 
     it("exposes StandardSchema (~standard) property when present", () => {
@@ -194,7 +199,9 @@ describe("Zod and @effect/schema bidirectional interop", () => {
       expect(result.success).toBe(false);
       if (!result.success) {
         const issues = result.error.issues;
-        const emailIssue = issues.find((i) => i.path.includes("user") && i.path.includes("email"));
+        const emailIssue = issues.find(
+          (i) => i.path.includes("user") && i.path.includes("email"),
+        );
         const balanceIssue = issues.find((i) => i.path.includes("balance"));
 
         expect(emailIssue).toBeDefined();
@@ -248,7 +255,10 @@ describe("Zod and @effect/schema bidirectional interop", () => {
       expect(OptionalTag.safeParse({ name: "tech" }).success).toBe(true);
 
       const TagList = toZod(TagSchema).array();
-      const listParsed = TagList.safeParse([{ name: "fun" }, { name: "script" }]);
+      const listParsed = TagList.safeParse([
+        { name: "fun" },
+        { name: "script" },
+      ]);
       expect(listParsed.success).toBe(true);
       if (listParsed.success) {
         expect(listParsed.data).toEqual([{ name: "fun" }, { name: "script" }]);
@@ -268,7 +278,9 @@ describe("Zod and @effect/schema bidirectional interop", () => {
       const asyncParse = await ZodData.parseAsync({ token: "xyz-789" });
       expect(asyncParse).toEqual({ token: "xyz-789" });
 
-      await expect(ZodData.parseAsync({ token: 999 })).rejects.toBeInstanceOf(z.ZodError);
+      await expect(ZodData.parseAsync({ token: 999 })).rejects.toBeInstanceOf(
+        z.ZodError,
+      );
     });
 
     it("supports StandardSchema (~standard) validation", async () => {
@@ -302,7 +314,10 @@ describe("Zod and @effect/schema bidirectional interop", () => {
       const BackToZod = toZod(AsEffect);
 
       const valid = { city: "New York", zip: "10001" };
-      expect(BackToZod.safeParse(valid)).toEqual({ success: true, data: valid });
+      expect(BackToZod.safeParse(valid)).toEqual({
+        success: true,
+        data: valid,
+      });
 
       const invalid = BackToZod.safeParse({ city: "New York", zip: "ABCDE" });
       expect(invalid.success).toBe(false);
@@ -321,7 +336,7 @@ describe("Zod and @effect/schema bidirectional interop", () => {
       expect(Schema.decodeUnknownSync(BackToEffect)(valid)).toEqual(valid);
 
       expect(() =>
-        Schema.decodeUnknownSync(BackToEffect)({ active: "yes", score: 95 })
+        Schema.decodeUnknownSync(BackToEffect)({ active: "yes", score: 95 }),
       ).toThrow();
     });
   });
@@ -330,7 +345,7 @@ describe("Zod and @effect/schema bidirectional interop", () => {
     it("compiles and runs FunScript decoding a Zod schema in an effect block", async () => {
       const source = `
 import { z } from "zod"
-import { fromZod } from "funscript/interop/zod"
+import { fromZod } from "funscript/zod"
 
 export CustomerZod = z.object({
   name: z.string(),
@@ -347,7 +362,9 @@ export parseCustomer = (dict: Unknown) =>
 `;
 
       const compiled = await Effect.runPromise(compileString(source));
-      expect(compiled.typescript).toMatch(/Schema\.decode(Unknown)?\(CustomerSchema\)/);
+      expect(compiled.typescript).toMatch(
+        /Schema\.decode(Unknown)?\(CustomerSchema\)/,
+      );
 
       // Transpile and evaluate to verify runtime behavior
       const transpiled = ts
@@ -362,10 +379,16 @@ export parseCustomer = (dict: Unknown) =>
         "pipe",
         "z",
         "fromZod",
-        `${transpiled}; return { parseCustomer, CustomerZod, CustomerSchema };`
+        `${transpiled}; return { parseCustomer, CustomerZod, CustomerSchema };`,
       );
 
-      const { parseCustomer } = runFn(Effect, Schema, Effect.pipe ?? ((v: any, f: any) => f(v)), z, fromZod);
+      const { parseCustomer } = runFn(
+        Effect,
+        Schema,
+        Effect.pipe ?? ((v: any, f: any) => f(v)),
+        z,
+        fromZod,
+      );
 
       const validPayload = { name: "Dana", email: "dana@example.com" };
       const resultEffect = parseCustomer(validPayload);
@@ -373,7 +396,9 @@ export parseCustomer = (dict: Unknown) =>
       expect(output).toEqual(validPayload);
 
       const invalidPayload = { name: "Dana", email: "bad-email" };
-      await expect(Effect.runPromise(parseCustomer(invalidPayload))).rejects.toThrow();
+      await expect(
+        Effect.runPromise(parseCustomer(invalidPayload)),
+      ).rejects.toThrow();
     });
   });
 });

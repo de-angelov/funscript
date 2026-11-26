@@ -59,7 +59,7 @@ export forwardedNone = forward(Option.none())`;
   it("forwards Option<String> to foreign optional TS parameters", async () => {
     const source = `import { Option } from "effect"
 ts { declare function read(value?: string): string | undefined }
-export forward = (value: Option<String>) => read(value)`;
+export forward = (value: Option<String>): JSOptional<String> => read(value)`;
     const checked = await typeCheck(source, "optional-forward.fun");
     expect(checked.success, checked.formattedOutput).toBe(true);
     const { forward } = await execute(source, {
@@ -128,7 +128,7 @@ export forward = (value: Option<String>) => read(value)`;
 
   it("does not silently erase a present undefined when forwarding", async () => {
     const source =
-      "ts { type MaybeText = string | undefined; declare function read(value?: string): string | undefined }\nexport forward = (value: Option<MaybeText>) => read(value)";
+      "ts { type MaybeText = string | undefined; declare function read(value?: string): string | undefined }\nexport forward = (value: Option<MaybeText>): JSOptional<String> => read(value)";
     await expectCompileError(source, /may contain undefined/);
     const normalized =
       'import { Option } from "effect"\n' +

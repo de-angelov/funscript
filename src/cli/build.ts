@@ -62,11 +62,10 @@ export const buildCommand = (
         arg === "--no-ts" ||
         arg === "--no-global-this" ||
         arg === "--bare-pipelines" ||
+        arg === "--no-deep-destructure" ||
         arg === "--bin" ||
         arg === "--watch" ||
-        arg === "--fast" ||
-        arg === "--modular-effect" ||
-        arg === "--effect-subpaths"
+        arg === "--fast"
       )
         return false;
       if (arg === "--out" || (outIndex !== -1 && i === outIndex + 1))
@@ -429,26 +428,19 @@ export const buildCommand = (
             filePath,
           ),
         maxDestructureDepth: projectPolicy.maxDestructureDepth,
-        allowHoles:
-          args.includes("--allow-holes") ||
-          isPathPolicyEnabled(
-            projectPolicy.allowHoles,
-            process.cwd(),
-            filePath,
-          ),
-        allowEarlyReturns:
-          args.includes("--allow-early-returns") ||
-          isPathPolicyEnabled(
-            projectPolicy.allowEarlyReturns,
-            process.cwd(),
-            filePath,
-          ),
+        allowHoles: isPathPolicyEnabled(
+          projectPolicy.allowHoles,
+          process.cwd(),
+          filePath,
+        ),
+        allowEarlyReturns: isPathPolicyEnabled(
+          projectPolicy.allowEarlyReturns,
+          process.cwd(),
+          filePath,
+        ),
         effectOnly: isEffectOnlyFile(projectPolicy, process.cwd(), filePath),
         effectOnlyDirectories: projectPolicy.effectOnly,
-        modularEffectImports:
-          args.includes("--modular-effect") ||
-          args.includes("--effect-subpaths") ||
-          projectPolicy.modularEffectImports,
+        modularEffectImports: projectPolicy.modularEffectImports,
         policyRoot: process.cwd(),
         outputFile: path.basename(targetOut),
       });

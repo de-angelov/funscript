@@ -381,12 +381,12 @@ Versatile combinator that chains an Effect or a pure function after another Effe
 
 See also: `Effect.map`, `Effect.flatMap`.
 
-## `Effect.catchAll`
+## `Effect.catch`
 
 Recovers from any error in the Effect's error channel.
 
 ```funscript
-Effect.catchAll<A, E, R, B, E2, R2>(self: Effect<A, E, R>, handler: (err: E) => Effect<B, E2, R2>): Effect<A | B, E2, R | R2>
+Effect.catch<A, E, R, B, E2, R2>(self: Effect<A, E, R>, handler: (err: E) => Effect<B, E2, R2>): Effect<A | B, E2, R | R2>
 ```
 
 Catches all typed errors in `E` and invokes a recovery function that returns an alternative Effect.
@@ -407,7 +407,7 @@ Selectively catches errors matching a specific discriminant tag (from `error` sc
 
 
 
-See also: `error`, `Effect.catchAll`.
+See also: `error`, `Effect.catch`.
 
 ## `Effect.die`
 
@@ -451,12 +451,12 @@ Replaces imperative loops for effectful iteration. Can run sequentially or concu
 
 See also: `Effect.all`.
 
-## `Effect.fork`
+## `Effect.forkChild`
 
 Spawns an Effect onto a new concurrent background fiber.
 
 ```funscript
-Effect.fork<A, E>(self: Effect<A, E, R>): Effect<Fiber<A, E>, never, R>
+Effect.forkChild<A, E, R>(self: Effect<A, E, R>): Effect<Fiber<A, E>, never, R>
 ```
 
 Starts background execution of an Effect in an isolated green fiber.
@@ -477,7 +477,7 @@ Spawns a fiber that is automatically interrupted and cleaned up when the enclosi
 
 
 
-See also: `Effect.fork`, `Effect.scoped`.
+See also: `Effect.forkChild`, `Effect.scoped`.
 
 ## `Effect.map`
 
@@ -692,7 +692,7 @@ _ <- Effect.fail(ErrorType(reason))
 
 FunScript eliminates unchecked exceptions, `throw`, and `try/catch`. All recoverable failures are modeled as typed values in the Effect `E` channel.
 
-`fail` (or `Effect.fail`) produces an Effect that terminates execution along the error channel. Callers must handle the typed error exhaustively using `match`, `Effect.catchTag`, or `Effect.catchAll`.
+`fail` (or `Effect.fail`) produces an Effect that terminates execution along the error channel. Callers must handle the typed error exhaustively using `match`, `Effect.catchTag`, or `Effect.catch`.
 
 
 
@@ -824,7 +824,7 @@ export js handler = (...) => ...
 eff |> runPromise
 ```
 
-Lifts JS Promises into Effects inside effect blocks (`res <- js promiseFn()`). Native throws and rejections become the typed `JsInteropError` channel. When TypeScript declares the resolved value as `A | null | undefined`, js converts it to `Option<A>` with `Option.fromNullishOr`; non-nullable values remain `A`. An `any`, `unknown`, or unresolved native result becomes `Option<Unknown>`, requiring both absence handling and schema validation. It also compiles exported functions to Promise-returning JS functions (`export js handler`) and pipes Effects to JS Promises (`eff |> runPromise` or legacy `eff |> js`).
+Lifts JS Promises into Effects inside effect blocks (`res <- js promiseFn()`). Native throws and rejections become the typed `JsInteropError` channel. When TypeScript declares the resolved value as `A | null | undefined`, js converts it to `Option<A>` with `Option.fromNullishOr`; non-nullable values remain `A`. An `any`, `unknown`, or unresolved native result becomes `Option<Unknown>`, requiring both absence handling and schema validation. It also compiles exported functions to Promise-returning JS functions (`export js handler`) and pipes Effects to JS Promises (`eff |> runPromise`).
 
 ### Syntax-checked example
 

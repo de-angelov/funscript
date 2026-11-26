@@ -27,7 +27,7 @@ export js getPublicGreeting = (name: String) =>
     => res
   }
 
-// 5. 'eff |> js': Converts Effect to Promise in pipeline
+// 5. Run the greeting workflow
 export main = () =>
   effect {
     _ <- fetchUserGreeting("Ada Lovelace")

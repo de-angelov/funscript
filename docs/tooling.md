@@ -184,10 +184,10 @@ The policy governs three key evolutionary areas:
 
 ### 1. Effect aliases
 
-Obsolete Effect compatibility aliases are avoided to remain synchronized with upstream Effect v4 public exports. FunScript enforces canonical names (such as `forkChild` instead of obsolete `fork`). A single audited transitional alias (`catchAll` mapping to `catch`) remains temporarily available in `EFFECT_PIPELINE_COMPATIBILITY_ALIASES` for compatibility, but canonical Effect v4 names should always be preferred.
+Obsolete Effect compatibility aliases are avoided to remain synchronized with upstream Effect v4 public exports. FunScript enforces canonical names (such as `forkChild` instead of obsolete `fork`). Use `catch` in place of `catchAll`.
 
 ```funscript
-# Audited compatibility alias (compiles to Effect.catch; slated for removal):
+# Obsolete alias (rejected):
 export recover = task |> catchAll((err) => Effect.succeed("fallback"))
 
 # Canonical Effect operation:

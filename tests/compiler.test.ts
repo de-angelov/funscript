@@ -194,15 +194,33 @@ export res = 5 |> add(10, _)
     expect(checked.success, checked.formattedOutput).toBe(true);
   });
 
-  it("keeps Effect compatibility aliases available as bare Effect stages", async () => {
-    const result = await Effect.runPromise(
-      compileString(
-        `export recovered = Effect.fail("nope") |> catchAll(() => Effect.succeed("ok"))`,
-      ),
-    );
-    expect(result.typescript).toContain(
-      `Effect.catch(() => Effect.succeed("ok"))`,
-    );
+  it("rejects removed Effect aliases and suggests canonical names", async () => {
+    for (const [source, replacement] of [
+      [
+        'export value = Effect.catchAll(Effect.fail("no"), (err) => Effect.succeed(err))',
+        "Effect.catch",
+      ],
+      ["export value = Effect.fork(Effect.succeed(1))", "Effect.forkChild"],
+      ["export value = Effect.succeed(1) |> fork", "forkChild"],
+      [
+        'export value = Effect.fail("no") |> catchAll((err) => Effect.succeed(err))',
+        "catch",
+      ],
+    ]) {
+      await expect(Effect.runPromise(compileString(source))).rejects.toThrow(
+        replacement,
+      );
+    }
+  });
+
+  it("preserves locally bound functions named like removed aliases", async () => {
+    const source = `
+catchAll = (input) => input
+fork = (input) => input
+export value = Effect.succeed(1) |> catchAll |> fork
+`.trim();
+    const result = await Effect.runPromise(compileString(source));
+    expect(result.typescript).toContain("catchAll,\n  fork");
   });
 
   it("resolves Schedule and Layer stages from their proven sources", async () => {
@@ -414,7 +432,7 @@ export ts schema Config = { timeout: Number }
     expect(ConfigFromUnknown({ timeout: 5000 })).toEqual({ timeout: 5000 });
   });
 
-  it("compiles 'js' keyword for interop (export js, effect ingress, pipeline js)", async () => {
+  it("compiles 'js' keyword for interop (export js and effect ingress)", async () => {
     const code = `
 export js fetchUser = (id: String) =>
   effect {
@@ -423,7 +441,7 @@ export js fetchUser = (id: String) =>
     => payload
 
   }
-export runPromiseTest = fetchUser("123") |> js
+export runPromiseTest = fetchUser("123") |> runPromise
 `.trim();
 
     const res = await Effect.runPromise(compileString(code));
@@ -454,7 +472,6 @@ export testPromiseBare = eff |> runPromise
 export testPromiseCall = eff |> runPromise()
 export testSyncBare = eff |> runSync
 export testSyncCall = eff |> runSync()
-export testLegacyJs = eff |> js
 `.trim();
 
     const res = await Effect.runPromise(compileString(code));
@@ -470,9 +487,14 @@ export testLegacyJs = eff |> js
     expect(res.typescript).toContain(
       `export const testSyncCall = pipe(\n  eff,\n  Effect.runSync\n);`,
     );
-    expect(res.typescript).toContain(
-      `export const testLegacyJs = pipe(\n  eff,\n  Effect.runPromise\n);`,
-    );
+  });
+
+  it("rejects the removed js pipeline alias with its replacement", async () => {
+    await expect(
+      Effect.runPromise(
+        compileString("export value = Effect.succeed(1) |> js"),
+      ),
+    ).rejects.toThrow("use |> runPromise");
   });
 
   it("uses TypeScript return types to normalize nullable js results to Option", async () => {

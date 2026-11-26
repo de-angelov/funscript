@@ -5,7 +5,6 @@ import type {
   RecordEntry,
 } from "../ast/types.js";
 import {
-  EFFECT_PIPELINE_COMPATIBILITY_ALIASES,
   PIPELINE_COMPANION_CATALOG,
   pipelineCompanionCandidates,
   type PipelineCompanionModule,
@@ -247,15 +246,18 @@ export class PipelineResolver {
     stage: Expression,
     preferredCompanion?: CompanionModule,
   ): Expression {
-    // 0. 'runPromise' / 'runSync' / 'js' pipeline stage:
+    // 0. 'runPromise' / 'runSync' pipeline stage:
     //    eff |> runPromise => pipe(eff, Effect.runPromise)
     //    eff |> runSync => pipe(eff, Effect.runSync)
-    //    eff |> js => pipe(eff, Effect.runPromise) (legacy alias)
+    if (stage.kind === "Identifier" && stage.name === "js") {
+      throw new PipelineResolutionError(
+        "The |> js pipeline alias was removed; use |> runPromise instead.",
+        stage.span,
+      );
+    }
     const isRunnerIdentifier =
       stage.kind === "Identifier" &&
-      (stage.name === "runPromise" ||
-        stage.name === "runSync" ||
-        stage.name === "js");
+      (stage.name === "runPromise" || stage.name === "runSync");
 
     const isRunnerCall =
       stage.kind === "CallExpression" &&
@@ -266,9 +268,7 @@ export class PipelineResolver {
     if (isRunnerIdentifier || isRunnerCall) {
       const runnerName =
         stage.kind === "Identifier"
-          ? stage.name === "js"
-            ? "runPromise"
-            : stage.name
+          ? stage.name
           : (stage.callee as Identifier).name;
       this.context.effectImports.add("Effect");
       return {
@@ -678,11 +678,7 @@ export class PipelineResolver {
     if (module === "Duration") return DURATION_COMPANION_METHODS.has(operation);
     if (module === "Struct")
       return operation === "pick" || operation === "omit";
-    return (
-      (PIPELINE_COMPANION_CATALOG[module]?.includes(operation) ?? false) ||
-      (module === "Effect" &&
-        operation in EFFECT_PIPELINE_COMPATIBILITY_ALIASES)
-    );
+    return PIPELINE_COMPANION_CATALOG[module]?.includes(operation) ?? false;
   }
 
   public assertPipelineStageIsNotAmbiguous(

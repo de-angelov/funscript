@@ -2866,8 +2866,7 @@ export schema Config = {
 
       writer.write(message);
 
-      await new Promise((resolve) => setTimeout(resolve, 50));
-      expect(received).toHaveLength(1);
+      await vi.waitFor(() => expect(received).toHaveLength(1));
       expect(received[0]).toEqual(message);
 
       reader.dispose();
@@ -2892,8 +2891,7 @@ export schema Config = {
       const chunk = formatMessage(msg1) + formatMessage(msg2);
       stream.write(chunk);
 
-      await new Promise((resolve) => setTimeout(resolve, 50));
-      expect(received).toHaveLength(2);
+      await vi.waitFor(() => expect(received).toHaveLength(2));
       expect(received[0].id).toBe(1);
       expect(received[1].id).toBe(2);
 
@@ -2916,8 +2914,7 @@ export schema Config = {
       const messageWithHeaders = `Content-Type: application/vscode-jsonrpc; charset=utf-8\r\nContent-Length: ${byteLength}\r\n\r\n${payload}`;
 
       stream.write(messageWithHeaders);
-      await new Promise((resolve) => setTimeout(resolve, 20));
-      expect(received).toHaveLength(1);
+      await vi.waitFor(() => expect(received).toHaveLength(1));
       expect(received[0].id).toBe(7);
 
       reader.dispose();
@@ -2929,6 +2926,10 @@ export schema Config = {
       const cliPath = path.resolve(__dirname, "../dist/cli/index.js");
 
       const child = spawn("node", [cliPath, "lsp", "--stdio"]);
+      let stderr = "";
+      child.stderr.on("data", (chunk) => {
+        stderr += chunk.toString();
+      });
 
       const responses: any[] = [];
       const reader = new StreamMessageReader(child.stdout);
@@ -2946,7 +2947,10 @@ export schema Config = {
 
       await vi.waitFor(
         () => {
-          expect(responses.some((r) => r.id === 1)).toBe(true);
+          expect(
+            responses.some((r) => r.id === 1),
+            `LSP stderr: ${stderr}`,
+          ).toBe(true);
         },
         { timeout: 10000, interval: 50 },
       );

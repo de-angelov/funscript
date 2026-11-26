@@ -134,7 +134,10 @@ describe("LSP Keyword & Built-in Documentation Catalog", () => {
       const { KEYWORDS } = await import("../src/lexer/tokens.js");
       for (const kw of Object.keys(KEYWORDS)) {
         const doc = getHoverDocumentation(kw);
-        expect(doc, `Missing hover documentation for keyword '${kw}'`).toBeTypeOf("string");
+        expect(
+          doc,
+          `Missing hover documentation for keyword '${kw}'`,
+        ).toBeTypeOf("string");
         expect(doc).toContain("```funscript");
       }
     });
@@ -186,7 +189,7 @@ describe("LSP Keyword & Built-in Documentation Catalog", () => {
       "Effect.map",
       "Effect.flatMap",
       "Effect.andThen",
-      "Effect.catchAll",
+      "Effect.catch",
       "Effect.catchTag",
       "Effect.all",
       "Effect.forEach",
@@ -195,7 +198,7 @@ describe("LSP Keyword & Built-in Documentation Catalog", () => {
       "Effect.retry",
       "Effect.repeat",
       "Effect.timeout",
-      "Effect.fork",
+      "Effect.forkChild",
       "Effect.forkScoped",
       "Effect.scoped",
       "Effect.runPromise",
@@ -246,21 +249,37 @@ describe("LSP Keyword & Built-in Documentation Catalog", () => {
     });
 
     it("resolves keywords case-insensitively", () => {
-      expect(getHoverDocumentation("SERVICE")).toBe(getHoverDocumentation("service"));
-      expect(getHoverDocumentation("Match")).toBe(getHoverDocumentation("match"));
+      expect(getHoverDocumentation("SERVICE")).toBe(
+        getHoverDocumentation("service"),
+      );
+      expect(getHoverDocumentation("Match")).toBe(
+        getHoverDocumentation("match"),
+      );
       expect(getHoverDocumentation("MUT")).toBe(getHoverDocumentation("mut"));
     });
 
     it("resolves Effect function aliases without 'Effect.' prefix", () => {
-      expect(getHoverDocumentation("succeed")).toBe(getHoverDocumentation("Effect.succeed"));
-      expect(getHoverDocumentation("catchTag")).toBe(getHoverDocumentation("Effect.catchTag"));
-      expect(getHoverDocumentation("forEach")).toBe(getHoverDocumentation("Effect.forEach"));
-      expect(getHoverDocumentation("orDie")).toBe(getHoverDocumentation("Effect.orDie"));
+      expect(getHoverDocumentation("succeed")).toBe(
+        getHoverDocumentation("Effect.succeed"),
+      );
+      expect(getHoverDocumentation("catchTag")).toBe(
+        getHoverDocumentation("Effect.catchTag"),
+      );
+      expect(getHoverDocumentation("forEach")).toBe(
+        getHoverDocumentation("Effect.forEach"),
+      );
+      expect(getHoverDocumentation("orDie")).toBe(
+        getHoverDocumentation("Effect.orDie"),
+      );
     });
 
     it("trims surrounding whitespace", () => {
-      expect(getHoverDocumentation("  service  ")).toBe(getHoverDocumentation("service"));
-      expect(getHoverDocumentation("\teffect\n")).toBe(getHoverDocumentation("effect"));
+      expect(getHoverDocumentation("  service  ")).toBe(
+        getHoverDocumentation("service"),
+      );
+      expect(getHoverDocumentation("\teffect\n")).toBe(
+        getHoverDocumentation("effect"),
+      );
     });
 
     it("returns null for unknown keywords", () => {
@@ -291,9 +310,13 @@ describe("LSP Keyword & Built-in Documentation Catalog", () => {
         // formatDocToMarkdown should produce Markdown without throwing
         const md = formatDocToMarkdown(item);
         expect(md).toContain("```funscript\n" + item.signature + "\n```");
-        expect(md).toContain(`**${item.name}** (\`${item.category}\`) — ${item.summary}`);
+        expect(md).toContain(
+          `**${item.name}** (\`${item.category}\`) — ${item.summary}`,
+        );
         expect(md).toContain(item.description);
-        expect(md).toContain("### Example\n```funscript\n" + item.snippet + "\n```");
+        expect(md).toContain(
+          "### Example\n```funscript\n" + item.snippet + "\n```",
+        );
       }
     });
   });

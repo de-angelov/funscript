@@ -88,7 +88,7 @@ export const DOC_MAP: Record<string, DocDef> = {
     "keyword",
     "Effect.fail(error: E): Effect<never, E, never>\n# in effect block:\n_ <- Effect.fail(ErrorType(reason))",
     "Constructs an Effect that fails with a recoverable typed error.",
-    "FunScript eliminates unchecked exceptions, `throw`, and `try/catch`. All recoverable failures are modeled as typed values in the Effect `E` channel.\n\n`fail` (or `Effect.fail`) produces an Effect that terminates execution along the error channel. Callers must handle the typed error exhaustively using `match`, `Effect.catchTag`, or `Effect.catchAll`.",
+    "FunScript eliminates unchecked exceptions, `throw`, and `try/catch`. All recoverable failures are modeled as typed values in the Effect `E` channel.\n\n`fail` (or `Effect.fail`) produces an Effect that terminates execution along the error channel. Callers must handle the typed error exhaustively using `match`, `Effect.catchTag`, or `Effect.catch`.",
     "findAccount = (id: string) =>\n  match db.lookup(id)\n    | Some(acc) => Effect.succeed(acc)\n    | None => Effect.fail(AccountNotFound(id))",
     ["effect", "error", "Effect.succeed", "Effect.catchTag"],
     ["Effect.fail"],
@@ -273,7 +273,7 @@ export const DOC_MAP: Record<string, DocDef> = {
     "keyword",
     "res <- js promiseFn()\nexport js handler = (...) => ...\neff |> runPromise",
     "JavaScript and npm interop keyword for typed async interop.",
-    "Lifts JS Promises into Effects inside effect blocks (`res <- js promiseFn()`). Native throws and rejections become the typed `JsInteropError` channel. When TypeScript declares the resolved value as `A | null | undefined`, js converts it to `Option<A>` with `Option.fromNullishOr`; non-nullable values remain `A`. An `any`, `unknown`, or unresolved native result becomes `Option<Unknown>`, requiring both absence handling and schema validation. It also compiles exported functions to Promise-returning JS functions (`export js handler`) and pipes Effects to JS Promises (`eff |> runPromise` or legacy `eff |> js`).",
+    "Lifts JS Promises into Effects inside effect blocks (`res <- js promiseFn()`). Native throws and rejections become the typed `JsInteropError` channel. When TypeScript declares the resolved value as `A | null | undefined`, js converts it to `Option<A>` with `Option.fromNullishOr`; non-nullable values remain `A`. An `any`, `unknown`, or unresolved native result becomes `Option<Unknown>`, requiring both absence handling and schema validation. It also compiles exported functions to Promise-returning JS functions (`export js handler`) and pipes Effects to JS Promises (`eff |> runPromise`).",
     "fetchData = (url: String) => effect {\n  res <- js fetch(url)\n  result <- js res.json()\n  => result\n}",
     ["ts", "effect", "export"],
   ],
@@ -546,14 +546,14 @@ export const DOC_MAP: Record<string, DocDef> = {
     ["Effect.map", "Effect.flatMap"],
     ["andThen"],
   ],
-  "Effect.catchAll": [
+  "Effect.catch": [
     "effect",
-    "Effect.catchAll<A, E, R, B, E2, R2>(self: Effect<A, E, R>, handler: (err: E) => Effect<B, E2, R2>): Effect<A | B, E2, R | R2>",
+    "Effect.catch<A, E, R, B, E2, R2>(self: Effect<A, E, R>, handler: (err: E) => Effect<B, E2, R2>): Effect<A | B, E2, R | R2>",
     "Recovers from any error in the Effect's error channel.",
     "Catches all typed errors in `E` and invokes a recovery function that returns an alternative Effect.",
-    "safeQuery =\n  riskyQuery\n  |> Effect.catchAll((err) => Effect.succeed(defaultFallback))",
+    "safeQuery =\n  riskyQuery\n  |> Effect.catch((err) => Effect.succeed(defaultFallback))",
     ["Effect.catchTag", "fail"],
-    ["catchAll"],
+    ["catch"],
   ],
   "Effect.catchTag": [
     "effect",
@@ -561,7 +561,7 @@ export const DOC_MAP: Record<string, DocDef> = {
     "Recovers from a specific tagged error matching _tag.",
     "Selectively catches errors matching a specific discriminant tag (from `error` schemas). Leaves all other errors intact in the `E` channel.",
     'workflow =\n  UserRepo.find(id)\n  |> Effect.catchTag("NotFound", (_err) => Effect.succeed(guestUser))',
-    ["error", "Effect.catchAll"],
+    ["error", "Effect.catch"],
     ["catchTag"],
   ],
   "Effect.all": [
@@ -627,14 +627,14 @@ export const DOC_MAP: Record<string, DocDef> = {
     ["Duration"],
     ["timeout"],
   ],
-  "Effect.fork": [
+  "Effect.forkChild": [
     "effect",
-    "Effect.fork<A, E>(self: Effect<A, E, R>): Effect<Fiber<A, E>, never, R>",
+    "Effect.forkChild<A, E, R>(self: Effect<A, E, R>): Effect<Fiber<A, E>, never, R>",
     "Spawns an Effect onto a new concurrent background fiber.",
     "Starts background execution of an Effect in an isolated green fiber.",
-    "fiber <- Effect.fork(backgroundTask)",
+    "fiber <- Effect.forkChild(backgroundTask)",
     ["Effect.forkScoped"],
-    ["fork"],
+    ["forkChild"],
   ],
   "Effect.forkScoped": [
     "effect",
@@ -642,7 +642,7 @@ export const DOC_MAP: Record<string, DocDef> = {
     "Forks a fiber bound to the current Scope's lifetime.",
     "Spawns a fiber that is automatically interrupted and cleaned up when the enclosing Scope closes.",
     "scopedFiber <- Effect.forkScoped(longLivedService)",
-    ["Effect.fork", "Effect.scoped"],
+    ["Effect.forkChild", "Effect.scoped"],
     ["forkScoped"],
   ],
   "Effect.scoped": [

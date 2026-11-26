@@ -475,7 +475,6 @@ function convertType(
 
 export function resolveImportedSchemas(
   ast: Program,
-  source: string,
   context: TypeScriptCompilationContext,
 ): ReadonlyMap<string, string> {
   const tsSchemas: Array<{ decl: SchemaDeclaration; rhsName: string }> = [];

@@ -136,7 +136,7 @@ export function validateFunScript(
       const context = new TypeScriptCompilationContext(uri);
       if (!ast.body.some((decl) => decl.kind === "AsDeclaration"))
         validateNumericComparisons(ast, source, context);
-      resolveImportedSchemas(ast, source, context);
+      resolveImportedSchemas(ast, context);
     } catch (error: unknown) {
       diagnostics.push(toDiagnostic(error));
     }

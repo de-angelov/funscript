@@ -849,9 +849,7 @@ String ordering is deliberately not implicit: choose `String.Order` for stable
 technical values, or construct an explicit locale-aware `Order<String>` with
 `Order.make` and `String.localeCompare` for user-facing text.
 
-Effect companion names follow the installed Effect API. Existing Effect pipeline
-compatibility aliases are retained explicitly in the compiler's catalog; they are
-exceptions for compatibility, not a general naming convention for new operations.
+Effect companion names follow the installed Effect API; obsolete aliases are rejected.
 
 ### 4.3 Boolean operators
 
@@ -1738,7 +1736,7 @@ Effect.fail(new NotFound({ id }));
 Fields are `readonly` and support the exact same `Schema` types and `|> Schema.*`
 refinements as `schema` declarations. `_tag` is reserved. Because `error` lowers to
 `Schema.TaggedError`, every error is **both** a real Effect tagged error (`catchTag`,
-`catchAll`, `Effect.fail`, stack traces, and `match` patterns) **and** a runtime `Schema`
+`catch`, `Effect.fail`, stack traces, and `match` patterns) **and** a runtime `Schema`
 that can be serialized/decoded across HTTP or RPC boundaries.
 
 Construction is positional: `NotFound(id)`; the compiler inserts `new` in the emitted
@@ -2178,7 +2176,7 @@ export loadDefaultConfig =
 into an uncatchable Effect defect. Thanks to Type-Directed Pipeline Resolution (§8.1), bare `orDie`
 resolves directly to `Effect.orDie` with zero extra imports.
 
-Use `Effect.catchAll`, `Effect.catchTag`, `Effect.retry`, `Effect.timeout`,
+Use `Effect.catch`, `Effect.catchTag`, `Effect.retry`, `Effect.timeout`,
 `Effect.orElse`, and the rest of the combinators. Defects use `Effect.die`; they are not
 part of the typed error channel.
 

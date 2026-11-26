@@ -3,10 +3,10 @@
 ## Continuous integration
 
 The `CI` workflow runs for pull requests targeting `main` and pushes to `main`. It
-uses Node.js 22.19, installs from `package-lock.json` with `npm ci`, builds both the
+uses the latest LTS Node.js, installs from `package-lock.json` with `npm ci`, builds both the
 compiler and VS Code extension, checks formatting on supported `.fun` examples
 with the CLI and Prettier, checks a `.funx` JSX fixture, runs the Vitest
-suite with bounded worker concurrency, and installs the packed artifact in a clean consumer project on Node.js 22.19 and the minimum supported Node.js 20. The formatter preserves JSX source; `.funx` files with embedded
+suite and the separate example application integration suite with bounded worker concurrency, and installs the packed artifact in a clean consumer project on the latest LTS Node.js and the minimum supported Node.js 20. The formatter preserves JSX source; `.funx` files with embedded
 TypeScript blocks and several `.fun` examples with embedded TypeScript or
 multiline strings remain outside the formatting check until those formatter
 cases are supported. Superseded runs for the same pull request or branch are
@@ -45,9 +45,7 @@ token and does not publish to npm.
 
 ## Future npm publishing and rollback
 
-The release job has narrowly scoped `id-token: write` permission for future OIDC
-trusted publishing, but currently has no step that requests an OIDC token and does
-not invoke `npm publish`. Before enabling npm trusted publishing, maintainers must configure
+The release job does not request an OIDC token or invoke `npm publish`. Before enabling npm trusted publishing, maintainers must configure
 the npm package's trusted publisher to the exact GitHub owner, repository, and
 release workflow, and configure the repository's `npm-release` environment
 reviewers. Verify npm's current trusted publishing requirements at that time.

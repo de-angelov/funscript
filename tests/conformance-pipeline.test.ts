@@ -4,7 +4,7 @@ import * as fs from "node:fs/promises";
 import * as path from "node:path";
 import { compileString } from "../src/compiler.js";
 
-const FIXTURES_DIR = path.resolve("tests/fixtures/conformance/pipeline");
+const FIXTURES_DIR = path.resolve("tests/fixtures/conformance/pipelines");
 
 describe("type-directed pipeline resolution conformance", () => {
   it("verifies fixture files exist and have adjacent expected outcomes", async () => {
@@ -15,7 +15,8 @@ describe("type-directed pipeline resolution conformance", () => {
     for (const funFile of funFiles) {
       const base = funFile.slice(0, -4);
       const hasAdjacentOutcome =
-        files.includes(`${base}.expected.ts`) || files.includes(`${base}.expected.error`);
+        files.includes(`${base}.expected.ts`) ||
+        files.includes(`${base}.expected.error`);
       expect(
         hasAdjacentOutcome,
         `Fixture ${funFile} in ${FIXTURES_DIR} must have an adjacent .expected.ts or .expected.error outcome`,
@@ -23,11 +24,12 @@ describe("type-directed pipeline resolution conformance", () => {
     }
   });
 
-  it(
-    "compiles accepted explicitly qualified pipeline fixture",
-    async () => {
+  it("compiles accepted explicitly qualified pipeline fixture", async () => {
     const fixturePath = path.join(FIXTURES_DIR, "explicit-qualification.fun");
-    const expectedPath = path.join(FIXTURES_DIR, "explicit-qualification.expected.ts");
+    const expectedPath = path.join(
+      FIXTURES_DIR,
+      "explicit-qualification.expected.ts",
+    );
 
     const source = await fs.readFile(fixturePath, "utf-8");
     const expected = await fs.readFile(expectedPath, "utf-8");
@@ -65,7 +67,10 @@ describe("type-directed pipeline resolution conformance", () => {
 
   it("reports actionable diagnostic for rejected ambiguous bare operation fixture", async () => {
     const fixturePath = path.join(FIXTURES_DIR, "ambiguous-bare-operation.fun");
-    const expectedErrorPath = path.join(FIXTURES_DIR, "ambiguous-bare-operation.expected.error");
+    const expectedErrorPath = path.join(
+      FIXTURES_DIR,
+      "ambiguous-bare-operation.expected.error",
+    );
 
     const source = await fs.readFile(fixturePath, "utf-8");
     const expectedError = await fs.readFile(expectedErrorPath, "utf-8");
@@ -90,6 +95,8 @@ describe("type-directed pipeline resolution conformance", () => {
     expect(
       thrownError.message,
       `Diagnostic message for fixture ${fixturePath} must contain actionable suggestion`,
-    ).toContain("map is ambiguous for this pipeline; write Array.map(...) or Option.map(...)");
+    ).toContain(
+      "map is ambiguous for this pipeline; write Array.map(...) or Option.map(...)",
+    );
   }, 60000);
 });

@@ -91,8 +91,6 @@ export type BindingTarget =
 export interface BindingDeclaration extends NodeBase {
   kind: "BindingDeclaration";
   isMut: boolean;
-  /** Legacy parser metadata used by the migration tool. */
-  isTrailingBinding?: boolean;
   isJs?: boolean;
   id: BindingTarget;
   typeAnnotation?: TypeNode;

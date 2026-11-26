@@ -69,10 +69,7 @@ import {
   emitJsxText,
 } from "./jsx.js";
 import { MatchEmitter, type RecordFieldInfo } from "./match.js";
-import {
-  EFFECT_PIPELINE_COMPATIBILITY_ALIASES,
-  type PipelineCompanionModule,
-} from "./pipeline-catalog.js";
+import { type PipelineCompanionModule } from "./pipeline-catalog.js";
 import {
   COMPARISON_METHOD_MAP,
   ES_TOOLKIT_METHODS,
@@ -552,11 +549,6 @@ function getRootCalleeName(node: Expression): string | null {
 export function isEffectModule(moduleName: string): boolean {
   return EFFECT_MODULE_NAMES.has(moduleName);
 }
-
-const EFFECT_V4_MEMBER_RENAMES: Readonly<Record<string, string>> = {
-  ...EFFECT_PIPELINE_COMPATIBILITY_ALIASES,
-  fork: "forkChild",
-};
 
 const AUTO_NEW_CONSTRUCTORS = new Set([
   "Set",
@@ -1316,13 +1308,12 @@ export class Emitter {
       key?: string,
       allowMember = true,
       inJs = false,
-      index?: number,
       jsxTarget?: unknown,
     ): void => {
       if (!value || typeof value !== "object") return;
       if (Array.isArray(value)) {
-        value.forEach((child, i) =>
-          visit(child, parent, key, allowMember, inJs, i, jsxTarget),
+        value.forEach((child) =>
+          visit(child, parent, key, allowMember, inJs, jsxTarget),
         );
         return;
       }
@@ -1371,7 +1362,6 @@ export class Emitter {
             childKey,
             allowMember,
             inJs || node.kind === "JsExpression",
-            undefined,
             target,
           );
       }
@@ -1625,11 +1615,22 @@ export class Emitter {
   }
 
   public emitMemberProperty(expr: MemberExpression): string {
-    if (expr.object.kind === "UpperIdentifier") {
-      if (expr.object.name === "Effect")
-        return (
-          EFFECT_V4_MEMBER_RENAMES[expr.property.name] ?? expr.property.name
+    if (
+      expr.object.kind === "UpperIdentifier" &&
+      expr.object.name === "Effect"
+    ) {
+      const replacement =
+        expr.property.name === "catchAll"
+          ? "catch"
+          : expr.property.name === "fork"
+            ? "forkChild"
+            : undefined;
+      if (replacement) {
+        throw new FunScriptError(
+          `Effect.${expr.property.name} was removed; use Effect.${replacement} instead.`,
+          expr.span,
         );
+      }
     }
     return expr.property.name;
   }

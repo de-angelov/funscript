@@ -26,7 +26,6 @@ import {
 } from "../emitter/pipeline-resolution.js";
 import {
   type PipelineCompanionModule,
-  EFFECT_PIPELINE_COMPATIBILITY_ALIASES,
   PIPELINE_COMPANION_CATALOG,
   pipelineCompanionCandidates,
 } from "../emitter/pipeline-catalog.js";
@@ -580,6 +579,20 @@ export function inferPipelineCompanions(
         isExplicit = true;
       }
 
+      if (
+        !isExplicit &&
+        currentCompanion === "Effect" &&
+        fnName &&
+        !pipelineScopeBindings.get(stage.span.start.offset)?.has(fnName) &&
+        (fnName === "catchAll" || fnName === "fork")
+      ) {
+        const replacement = fnName === "catchAll" ? "catch" : "forkChild";
+        throw new PipelineResolutionError(
+          `${fnName} was removed; use ${replacement} instead.`,
+          stage.span,
+        );
+      }
+
       if (isExplicit && explicitModule) {
         stageResolutions.set(stage.span.start.offset, {
           module: explicitModule,
@@ -589,11 +602,9 @@ export function inferPipelineCompanions(
           fnName &&
           !pipelineScopeBindings.get(stage.span.start.offset)?.has(fnName) &&
           currentCompanion === explicitModule &&
-          (PIPELINE_COMPANION_CATALOG[
+          PIPELINE_COMPANION_CATALOG[
             currentCompanion as PipelineCompanionModule
-          ]?.includes(fnName) ||
-            (currentCompanion === "Effect" &&
-              fnName in EFFECT_PIPELINE_COMPATIBILITY_ALIASES))
+          ]?.includes(fnName)
         ) {
           bareStageResolutions.set(stage.span.start.offset, {
             module: currentCompanion,
@@ -734,15 +745,9 @@ export function inferPipelineCompanions(
           ];
         if (
           !ES_TOOLKIT_STRING_METHODS.has(fnName) &&
-          (catalog.includes(fnName) ||
-            (currentCompanion === "Effect" &&
-              fnName in EFFECT_PIPELINE_COMPATIBILITY_ALIASES))
+          catalog.includes(fnName)
         ) {
-          const method =
-            currentCompanion === "Effect" &&
-            fnName in EFFECT_PIPELINE_COMPATIBILITY_ALIASES
-              ? EFFECT_PIPELINE_COMPATIBILITY_ALIASES[fnName]
-              : fnName;
+          const method = fnName;
           stageResolutions.set(stage.span.start.offset, {
             module: currentCompanion,
             method,

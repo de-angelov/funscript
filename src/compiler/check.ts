@@ -2872,6 +2872,19 @@ export const typeCheckVirtualFiles = (
             checkCapturedMutInEffect(meta.ast, addAstDiag);
           }
 
+          const reportUnhandledNullishReturn = (expr: ts.Expression) => {
+            const retType = checker.getTypeAtLocation(expr);
+            if (hasNullishMember(retType)) {
+              addCustomDiag(
+                expr,
+                "UNHANDLED_NULLISH",
+                `Return value has nullable/optional type '${checker.typeToString(retType)}' from JS/TS interop.`,
+                "Raw 'null' and 'undefined' values cannot flow out of FunScript returns; absence must be lifted to Option<T> at the interop edge.",
+                `Wrap the returned value at the edge with 'fromNullishOr(...)' or 'fromNullishOrElse(..., fallback)' (or '<- js ...' for Promises).`,
+              );
+            }
+          };
+
           const visit = (node: ts.Node): void => {
             if (
               ts.isFunctionDeclaration(node) &&
@@ -2961,17 +2974,21 @@ export const typeCheckVirtualFiles = (
                   enc.parent.parent.type,
                 );
               if (enc && !hasExplicitReturnType && !isNodeInTsEscape(node)) {
-                const retType = checker.getTypeAtLocation(node.expression);
-                if (hasNullishMember(retType)) {
-                  addCustomDiag(
-                    node.expression,
-                    "UNHANDLED_NULLISH",
-                    `Return value has nullable/optional type '${checker.typeToString(retType)}' from JS/TS interop.`,
-                    "Raw 'null' and 'undefined' values cannot flow out of FunScript returns; absence must be lifted to Option<T> at the interop edge.",
-                    `Wrap the returned value at the edge with 'fromNullishOr(...)' or 'fromNullishOrElse(..., fallback)' (or '<- js ...' for Promises).`,
-                  );
-                }
+                reportUnhandledNullishReturn(node.expression);
               }
+            } else if (
+              ts.isArrowFunction(node) &&
+              !ts.isBlock(node.body) &&
+              !node.type &&
+              !(
+                node.parent &&
+                ts.isCallExpression(node.parent) &&
+                ts.isIdentifier(node.parent.expression) &&
+                node.parent.expression.text === "__funscriptJs"
+              ) &&
+              !isNodeInTsEscape(node.body)
+            ) {
+              reportUnhandledNullishReturn(node.body);
             } else if (
               ts.isYieldExpression(node) &&
               node.asteriskToken &&

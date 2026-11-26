@@ -27,7 +27,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: 22.19.0
+          node-version: lts/*
           cache: npm
 
       - name: Install dependencies
@@ -80,11 +80,11 @@ jobs:
       - name: Check Markdown formatting
         run: npm run prettier:check
 
-      # Vitest discovers every test under tests/, including the example builds,
-      # dogfooding applications, VS Code extension, TextMate grammar, LSP,
-      # CLI, REPL, and Vite-plugin integration suites.
-      - name: Run complete test suite (examples, editor tooling, and integrations)
+      - name: Run test suite (editor tooling and integrations)
         run: npm test -- --reporter=basic 2>&1 | tee test.log
+
+      - name: Run example application integration tests
+        run: npm run test:examples -- --reporter=basic 2>&1 | tee examples-test.log
 
       - name: Verify npm package contents
         run: npm run package:check
@@ -107,4 +107,5 @@ jobs:
           path: |
             build.log
             test.log
+            examples-test.log
             dist/**/*.map

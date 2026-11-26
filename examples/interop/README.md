@@ -11,7 +11,7 @@ export buttonProps = omit(props, ["internal"])
 
 ## Zod Interop
 
-`funscript/interop/zod` (and `funscript/zod`) provides a bidirectional interop adapter between
+`funscript/zod` provides a bidirectional interop adapter between
 FunScript's `@effect/schema` and external `zod` schemas.
 
 - `fromZod(zodSchema)`: Wraps an external Zod schema into an Effect `Schema` for use in FunScript
@@ -21,7 +21,7 @@ FunScript's `@effect/schema` and external `zod` schemas.
 
 ```funscript
 import { z } from "zod"
-import { fromZod, toZod } from "funscript/interop/zod"
+import { fromZod, toZod } from "funscript/zod"
 
 # Wrap third-party Zod schema into FunScript/Effect schema:
 ThirdPartyUser = z.object({

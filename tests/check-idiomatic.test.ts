@@ -81,8 +81,8 @@ describe("Audit Showcase Examples and Restrict Unjustified 'ts { }' Blocks (TASK
       expect(content).toContain(
         "export addTodo = (todos: Array<Todo>, title: String): Array<Todo> =>",
       );
-      expect(content).toContain(
-        'draft.push({ id: "new-task", title, completed: false })',
+      expect(content).toMatch(
+        /draft\.push\(\{\s*id:\s*"new-task"\s+title\s+completed:\s*false\s*\}\)/,
       );
 
       // Verify that any ts block in todo-dashboard is restricted strictly to runtime React polyfill

@@ -1901,6 +1901,22 @@ export run = () => effect {
         badEffectRes.diagnostics.some((d) => d.code === "UNHANDLED_NULLISH"),
       ).toBe(true);
 
+      const badArrowReturn = `
+ts {
+  declare function lookup(key: string): string | null;
+}
+
+export run = () => lookup("a")
+`.trim();
+
+      const badArrowRes = await Effect.runPromise(
+        typeCheckSource(badArrowReturn, "src/nullish-arrow-return.fun"),
+      );
+      expect(badArrowRes.success).toBe(false);
+      expect(
+        badArrowRes.diagnostics.some((d) => d.code === "UNHANDLED_NULLISH"),
+      ).toBe(true);
+
       const goodReturn = `
 ts {
   declare function lookup(key: string): string | null;

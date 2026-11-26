@@ -218,14 +218,11 @@ export const checkCommand = (
       noDeepDestructurePaths: Array.isArray(projectPolicy.noDeepDestructure)
         ? projectPolicy.noDeepDestructure
         : undefined,
-      allowHoles:
-        args.includes("--allow-holes") || projectPolicy.allowHoles === true,
+      allowHoles: projectPolicy.allowHoles === true,
       allowHolesPaths: Array.isArray(projectPolicy.allowHoles)
         ? projectPolicy.allowHoles
         : undefined,
-      allowEarlyReturns:
-        args.includes("--allow-early-returns") ||
-        projectPolicy.allowEarlyReturns === true,
+      allowEarlyReturns: projectPolicy.allowEarlyReturns === true,
       allowEarlyReturnsPaths: Array.isArray(projectPolicy.allowEarlyReturns)
         ? projectPolicy.allowEarlyReturns
         : undefined,

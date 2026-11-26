@@ -9,6 +9,34 @@ const run = (cwd: string, args: string[]) =>
   spawnSync(process.execPath, [cli, ...args], { cwd, encoding: "utf8" });
 
 describe("project configuration CLI", () => {
+  it("builds with noDeepDestructure configured and enforces the policy", () => {
+    const dir = mkdtempSync(
+      path.join(tmpdir(), "funscript-destructure-policy-"),
+    );
+    writeFileSync(
+      path.join(dir, "funscript.config.fun"),
+      "export config = { noDeepDestructure: true }",
+    );
+    mkdirSync(path.join(dir, "src"));
+    const file = path.join(dir, "src/main.fun");
+    writeFileSync(file, "export value = 1");
+
+    for (const args of [
+      ["build", "--no-check"],
+      ["build", file, "--no-check"],
+    ]) {
+      const result = run(dir, args);
+      expect(result.status, result.stdout + result.stderr).toBe(0);
+    }
+
+    writeFileSync(file, "export f = ({ user: { profile: { name } } }) => name");
+    const rejected = run(dir, ["build", file, "--no-check"]);
+    expect(rejected.status).not.toBe(0);
+    expect(rejected.stdout + rejected.stderr).toContain(
+      "Destructuring depth of 3 exceeds the maximum allowed depth of 2",
+    );
+  });
+
   it("applies noTs and noGlobalThis without command-line flags", () => {
     const dir = mkdtempSync(path.join(tmpdir(), "funscript-policy-"));
     writeFileSync(
