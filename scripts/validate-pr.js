@@ -2,6 +2,8 @@
 
 import { spawnSync } from "node:child_process";
 import fs from "node:fs";
+import { resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 
 export const CHECKS = [
   {
@@ -119,7 +121,9 @@ export function formatGitHubStepSummary(results) {
 
   lines.push("## 🤖 GitHub Agent PR Validation Summary");
   lines.push("");
-  lines.push(`**Overall Status**: ${allPassed ? "✅ All checks passed" : "❌ Some checks failed"}`);
+  lines.push(
+    `**Overall Status**: ${allPassed ? "✅ All checks passed" : "❌ Some checks failed"}`,
+  );
   lines.push("");
   lines.push("| Status | Check Name | Command | Duration | Exit Code |");
   lines.push("| :---: | :--- | :--- | :---: | :---: |");
@@ -127,7 +131,9 @@ export function formatGitHubStepSummary(results) {
   for (const r of results) {
     const icon = r.passed ? "✅ PASS" : "❌ FAIL";
     const dur = (r.durationMs / 1000).toFixed(2) + "s";
-    lines.push(`| ${icon} | **${r.name}** | \`${r.command}\` | ${dur} | ${r.exitCode} |`);
+    lines.push(
+      `| ${icon} | **${r.name}** | \`${r.command}\` | ${dur} | ${r.exitCode} |`,
+    );
   }
 
   lines.push("");
@@ -138,7 +144,9 @@ export function formatGitHubStepSummary(results) {
     for (const r of results) {
       if (!r.passed) {
         lines.push(`<details open>`);
-        lines.push(`<summary><b>${r.name} (exit code ${r.exitCode})</b></summary>`);
+        lines.push(
+          `<summary><b>${r.name} (exit code ${r.exitCode})</b></summary>`,
+        );
         lines.push("");
         lines.push("```");
         const output = (r.stderr || r.stdout || "").trim();
@@ -155,11 +163,15 @@ export function formatGitHubStepSummary(results) {
 
 export function runAll(checks = CHECKS, options = {}) {
   const results = [];
-  console.log(`Running GitHub Agent PR Validation (${checks.length} checks)...`);
+  console.log(
+    `Running GitHub Agent PR Validation (${checks.length} checks)...`,
+  );
 
   for (let i = 0; i < checks.length; i++) {
     const check = checks[i];
-    process.stdout.write(`  [${i + 1}/${checks.length}] Running ${check.name}... `);
+    process.stdout.write(
+      `  [${i + 1}/${checks.length}] Running ${check.name}... `,
+    );
     const result = runCheck(check, options);
     results.push(result);
     console.log(result.passed ? "✓ PASS" : "✗ FAIL");
@@ -171,9 +183,15 @@ export function runAll(checks = CHECKS, options = {}) {
   if (process.env.GITHUB_STEP_SUMMARY) {
     try {
       const summaryMarkdown = formatGitHubStepSummary(results);
-      fs.appendFileSync(process.env.GITHUB_STEP_SUMMARY, summaryMarkdown + "\n");
+      fs.appendFileSync(
+        process.env.GITHUB_STEP_SUMMARY,
+        summaryMarkdown + "\n",
+      );
     } catch (err) {
-      console.error("Warning: Failed to write to GITHUB_STEP_SUMMARY:", err.message);
+      console.error(
+        "Warning: Failed to write to GITHUB_STEP_SUMMARY:",
+        err.message,
+      );
     }
   }
 
@@ -182,7 +200,10 @@ export function runAll(checks = CHECKS, options = {}) {
 }
 
 // Direct execution
-if (import.meta.url === `file://${process.argv[1]}`) {
+if (
+  process.argv[1] &&
+  resolve(fileURLToPath(import.meta.url)) === resolve(process.argv[1])
+) {
   const { allPassed } = runAll();
   process.exit(allPassed ? 0 : 1);
 }

@@ -35,10 +35,13 @@ function effectAstToValibot(ast: SchemaAST.AST): ValibotSchema {
       const entries: Record<string, ValibotSchema> = {};
       for (const field of ast.propertySignatures) {
         const child = effectAstToValibot(field.type);
-        const isOptional =
+        const alreadyOptional =
           field.type._tag === "Union" &&
+          field.type.types.length === 2 &&
           field.type.types.some((type) => type._tag === "Undefined");
-        entries[String(field.name)] = isOptional ? v.optional(child) : child;
+        const isOptional = Boolean(field.type.context?.isOptional);
+        entries[String(field.name)] =
+          isOptional && !alreadyOptional ? v.optional(child) : child;
       }
       return v.object(entries);
     }

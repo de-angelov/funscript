@@ -173,9 +173,6 @@ export class Lexer {
         this.emitToken(TokenType.STARSTAR, "**", 2);
         continue;
       }
-      if (this.matchAhead("&&")) {
-        throw new LexerError(BANNED_SYMBOLS["&&"], this.currentSpan(2));
-      }
       if (this.matchAhead("??")) {
         throw new LexerError(BANNED_SYMBOLS["??"], this.currentSpan(2));
       }
@@ -578,7 +575,12 @@ export class Lexer {
         return;
       }
 
-      buffer += this.advance();
+      const ch = this.advance();
+      if (ch === "\n") {
+        this.line++;
+        this.column = 1;
+      }
+      buffer += ch;
     }
 
     if (this.isAtEnd()) {
@@ -655,7 +657,12 @@ export class Lexer {
         return;
       }
 
-      buffer += this.advance();
+      const ch = this.advance();
+      if (ch === "\n") {
+        this.line++;
+        this.column = 1;
+      }
+      buffer += ch;
     }
 
     if (this.isAtEnd()) {
@@ -790,6 +797,17 @@ export class Lexer {
 
     while (!this.isAtEnd() && this.peek() !== '"') {
       const c = this.peek();
+
+      if (c === "\n" || c === "\r") {
+        throw new LexerError(
+          "Unterminated string literal (newline in string)",
+          {
+            start: startPos,
+            end: this.currentPosition(),
+          },
+        );
+      }
+
       if (c === "{" && this.peekPrev() !== "\\") {
         const inJsxTag =
           this.isFunx &&
@@ -818,9 +836,14 @@ export class Lexer {
       buffer += this.advance();
     }
 
-    if (!this.isAtEnd() && this.peek() === '"') {
-      this.advance(); // consume closing '"'
+    if (this.isAtEnd()) {
+      throw new LexerError("Unterminated string literal", {
+        start: startPos,
+        end: this.currentPosition(),
+      });
     }
+
+    this.advance(); // consume closing '"'
 
     if (buffer.length > 0) {
       this.tokens.push({
@@ -1222,6 +1245,10 @@ export class Lexer {
       TokenType.UPPER_IDENTIFIER,
       TokenType.NUMBER,
       TokenType.STRING,
+      TokenType.STRING_PART,
+      TokenType.INTERPOLATION_END,
+      TokenType.TEMPLATE_STRING,
+      TokenType.TEMPLATE_PART,
       TokenType.RPAREN,
       TokenType.RBRACKET,
       TokenType.RBRACE,
@@ -1362,8 +1389,9 @@ export class Lexer {
         return;
       }
 
+      const prefix = top.kind === "closing_tag" ? "</" : "<";
       throw new LexerError(
-        `Expected tag name after '<', found '${char}'`,
+        `Expected tag name after '${prefix}', found '${char}'`,
         this.currentSpan(1),
       );
     }

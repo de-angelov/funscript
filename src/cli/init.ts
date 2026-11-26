@@ -3,6 +3,7 @@ import * as Effect from "effect/Effect";
 import * as fs from "node:fs/promises";
 import * as path from "node:path";
 import { toErrorMessage } from "../errors.js";
+import { FUNSCRIPT_VERSION } from "../version.js";
 
 export type TemplateType =
   "effect-cli" | "bun-server" | "vite-react" | "vite-solid";
@@ -70,7 +71,7 @@ dist/
             },
             devDependencies: {
               "@types/bun": "latest",
-              funscript: "^0.2.3",
+              funscript: `^${FUNSCRIPT_VERSION}`,
             },
           },
           null,
@@ -148,7 +149,7 @@ bun run build    # bundle standalone executable with fast native Bun
               "@types/react": "^19.0.0",
               "@types/react-dom": "^19.0.0",
               "@vitejs/plugin-react": "^4.3.4",
-              funscript: "^0.2.3",
+              funscript: `^${FUNSCRIPT_VERSION}`,
               typescript: "^5.6.3",
               vite: "^5.4.11",
               vitest: "^2.1.8",
@@ -247,7 +248,7 @@ npm run build   # build production bundle
               "solid-js": "^1.9.3",
             },
             devDependencies: {
-              funscript: "^0.2.3",
+              funscript: `^${FUNSCRIPT_VERSION}`,
               typescript: "^5.6.3",
               vite: "^5.4.11",
               "vite-plugin-solid": "^2.11.0",
@@ -345,7 +346,7 @@ npm run build   # build production bundle
               effect: "^3.10.0",
             },
             devDependencies: {
-              funscript: "^0.2.3",
+              funscript: `^${FUNSCRIPT_VERSION}`,
               typescript: "^5.6.3",
               vitest: "^2.1.8",
             },

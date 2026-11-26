@@ -14,9 +14,10 @@
  *   node scripts/benchmark.mjs [--json] [--assert] [--iterations <n>] [--warmup <n>]
  */
 
-import { readFileSync, existsSync } from "node:fs";
+import { readFileSync } from "node:fs";
 import { spawnSync } from "node:child_process";
 import { resolve, join } from "node:path";
+import { fileURLToPath } from "node:url";
 import os from "node:os";
 import { performance } from "node:perf_hooks";
 import { Effect } from "effect";
@@ -46,12 +47,19 @@ export const REGRESSION_THRESHOLDS_MS = {
 
 const BENCHMARK_TIMEOUT_MS = 30_000;
 
-export function runWithTimeout(promise, label, timeoutMs = BENCHMARK_TIMEOUT_MS) {
+export function runWithTimeout(
+  promise,
+  label,
+  timeoutMs = BENCHMARK_TIMEOUT_MS,
+) {
   let timer;
   return Promise.race([
     promise,
     new Promise((_, reject) => {
-      timer = setTimeout(() => reject(new Error(`${label} timed out after ${timeoutMs}ms`)), timeoutMs);
+      timer = setTimeout(
+        () => reject(new Error(`${label} timed out after ${timeoutMs}ms`)),
+        timeoutMs,
+      );
     }),
   ]).finally(() => clearTimeout(timer));
 }
@@ -60,14 +68,26 @@ export function measureProcessCold(rootDir, fixturePath, iterations) {
   const timings = [];
   for (let i = 0; i < iterations; i++) {
     const start = performance.now();
-    const child = spawnSync(process.execPath, [resolve(rootDir, "scripts/benchmark.mjs"), "--worker-compile", fixturePath], {
-      cwd: rootDir,
-      encoding: "utf8",
-      timeout: BENCHMARK_TIMEOUT_MS,
-    });
+    const child = spawnSync(
+      process.execPath,
+      [
+        resolve(rootDir, "scripts/benchmark.mjs"),
+        "--worker-compile",
+        fixturePath,
+      ],
+      {
+        cwd: rootDir,
+        encoding: "utf8",
+        timeout: BENCHMARK_TIMEOUT_MS,
+      },
+    );
     const elapsed = performance.now() - start;
-    if (child.error) throw new Error(`Fresh-process compile failed: ${child.error.message}`);
-    if (child.status !== 0) throw new Error(`Fresh-process compile failed: ${child.stderr || child.stdout}`);
+    if (child.error)
+      throw new Error(`Fresh-process compile failed: ${child.error.message}`);
+    if (child.status !== 0)
+      throw new Error(
+        `Fresh-process compile failed: ${child.stderr || child.stdout}`,
+      );
     timings.push(elapsed);
   }
   return timings;
@@ -104,19 +124,33 @@ export function parseArgs(args) {
 
 export function calculateStats(timings) {
   if (timings.length === 0) {
-    return { count: 0, median: 0, min: 0, max: 0, spread: 0, mean: 0, p95: 0, stddev: 0 };
+    return {
+      count: 0,
+      median: 0,
+      min: 0,
+      max: 0,
+      spread: 0,
+      mean: 0,
+      p95: 0,
+      stddev: 0,
+    };
   }
   const sorted = [...timings].sort((a, b) => a - b);
   const min = sorted[0];
   const max = sorted[sorted.length - 1];
   const spread = max - min;
   const mid = Math.floor(sorted.length / 2);
-  const median = sorted.length % 2 === 0 ? (sorted[mid - 1] + sorted[mid]) / 2 : sorted[mid];
-  const p95Index = Math.min(Math.floor(sorted.length * 0.95), sorted.length - 1);
+  const median =
+    sorted.length % 2 === 0 ? (sorted[mid - 1] + sorted[mid]) / 2 : sorted[mid];
+  const p95Index = Math.min(
+    Math.floor(sorted.length * 0.95),
+    sorted.length - 1,
+  );
   const p95 = sorted[p95Index];
   const sum = sorted.reduce((acc, v) => acc + v, 0);
   const mean = sum / sorted.length;
-  const variance = sorted.reduce((acc, v) => acc + (v - mean) ** 2, 0) / sorted.length;
+  const variance =
+    sorted.reduce((acc, v) => acc + (v - mean) ** 2, 0) / sorted.length;
   const stddev = Math.sqrt(variance);
 
   return {
@@ -142,8 +176,8 @@ export function getEnvironmentContext() {
     arch: process.arch,
     cpuModel: cpus[0]?.model || "Unknown",
     cpuCores: cpus.length,
-    totalMemoryGb: Number((os.totalmem() / (1024 ** 3)).toFixed(2)),
-    freeMemoryGb: Number((os.freemem() / (1024 ** 3)).toFixed(2)),
+    totalMemoryGb: Number((os.totalmem() / 1024 ** 3).toFixed(2)),
+    freeMemoryGb: Number((os.freemem() / 1024 ** 3).toFixed(2)),
     timestamp: new Date().toISOString(),
   };
 }
@@ -179,14 +213,19 @@ export function runSingleFileBenchmarks(rootDir, warmups, iterations) {
     warmTimings.push(elapsed);
   }
 
-  const processColdTimings = measureProcessCold(rootDir, fixturePath, iterations);
+  const processColdTimings = measureProcessCold(
+    rootDir,
+    fixturePath,
+    iterations,
+  );
   return [
     {
       id: "single-file-process-cold",
       name: "Single File Process Cold Compilation",
       category: "single-file",
       file: "tests/fixtures/benchmarks/small.fun",
-      description: "Wall time for a fresh Node process to load the compiler and compile the fixture",
+      description:
+        "Wall time for a fresh Node process to load the compiler and compile the fixture",
       warmups: 0,
       iterations,
       timings: processColdTimings.map((t) => Number(t.toFixed(3))),
@@ -221,7 +260,10 @@ export function runSingleFileBenchmarks(rootDir, warmups, iterations) {
 }
 
 export function runPipelineBenchmarks(rootDir, warmups, iterations) {
-  const fixturePath = resolve(rootDir, "tests/fixtures/benchmarks/pipeline.fun");
+  const fixturePath = resolve(
+    rootDir,
+    "tests/fixtures/benchmarks/pipeline.fun",
+  );
   const source = readFileSync(fixturePath, "utf8");
 
   // 1. Cold pipeline compilation (new TypeScriptCompilationContext per call)
@@ -254,12 +296,16 @@ export function runPipelineBenchmarks(rootDir, warmups, iterations) {
   // 3. Shared TypeScript context reuse benchmark
   const sharedContext = new TypeScriptCompilationContext("pipeline.fun");
   // Prime the shared context with initial compilation
-  Effect.runSync(compileString(source, "pipeline.fun", { context: sharedContext }));
+  Effect.runSync(
+    compileString(source, "pipeline.fun", { context: sharedContext }),
+  );
 
   const reuseTimings = [];
   for (let i = 0; i < iterations; i++) {
     const start = performance.now();
-    const res = Effect.runSync(compileString(source, "pipeline.fun", { context: sharedContext }));
+    const res = Effect.runSync(
+      compileString(source, "pipeline.fun", { context: sharedContext }),
+    );
     const elapsed = performance.now() - start;
     if (!res.typescript.includes("pipe(")) {
       throw new Error("Missing expected pipeline output with shared context");
@@ -273,7 +319,8 @@ export function runPipelineBenchmarks(rootDir, warmups, iterations) {
       name: "Pipeline Cold Analysis & Compilation",
       category: "pipeline",
       file: "tests/fixtures/benchmarks/pipeline.fun",
-      description: "Compiles pipeline with fresh TypeScriptCompilationContext and companion inference",
+      description:
+        "Compiles pipeline with fresh TypeScriptCompilationContext and companion inference",
       warmups: 0,
       iterations,
       timings: coldTimings.map((t) => Number(t.toFixed(3))),
@@ -285,7 +332,8 @@ export function runPipelineBenchmarks(rootDir, warmups, iterations) {
       name: "Pipeline Warm Analysis & Compilation",
       category: "pipeline",
       file: "tests/fixtures/benchmarks/pipeline.fun",
-      description: "Compiles pipeline after initial warmup with fresh context per iteration",
+      description:
+        "Compiles pipeline after initial warmup with fresh context per iteration",
       warmups,
       iterations,
       timings: warmTimings.map((t) => Number(t.toFixed(3))),
@@ -297,7 +345,8 @@ export function runPipelineBenchmarks(rootDir, warmups, iterations) {
       name: "Pipeline Shared Context Reuse",
       category: "pipeline",
       file: "tests/fixtures/benchmarks/pipeline.fun",
-      description: "Compiles pipeline reusing primed TypeScriptCompilationContext (subsequent edit model)",
+      description:
+        "Compiles pipeline reusing primed TypeScriptCompilationContext (subsequent edit model)",
       warmups: 1,
       iterations,
       timings: reuseTimings.map((t) => Number(t.toFixed(3))),
@@ -323,7 +372,9 @@ export function runFunxBenchmarks(rootDir, warmups, iterations) {
     const elapsed = performance.now() - start;
 
     if (res.targetExtension !== ".tsx") {
-      throw new Error(`Expected .tsx targetExtension, got ${res.targetExtension}`);
+      throw new Error(
+        `Expected .tsx targetExtension, got ${res.targetExtension}`,
+      );
     }
     if (!res.typescript.includes("export const Button")) {
       throw new Error("Missing expected emitted TSX output in widget.funx");
@@ -340,7 +391,8 @@ export function runFunxBenchmarks(rootDir, warmups, iterations) {
       name: ".funx JSX Component Compilation",
       category: "funx",
       file: "tests/fixtures/benchmarks/widget.funx",
-      description: "Compiles typed JSX component to TSX with sourcemap generation",
+      description:
+        "Compiles typed JSX component to TSX with sourcemap generation",
       warmups,
       iterations,
       timings: timings.map((t) => Number(t.toFixed(3))),
@@ -363,7 +415,9 @@ export async function runMultiFileBenchmarks(rootDir, warmups, iterations) {
   for (let w = 0; w < warmups; w++) {
     const res = await Effect.runPromise(typeCheckFiles(files, options));
     if (!res.success) {
-      throw new Error(`Multi-file warmup check failed: ${JSON.stringify(res.diagnostics)}`);
+      throw new Error(
+        `Multi-file warmup check failed: ${JSON.stringify(res.diagnostics)}`,
+      );
     }
   }
 
@@ -374,7 +428,9 @@ export async function runMultiFileBenchmarks(rootDir, warmups, iterations) {
     const elapsed = performance.now() - start;
 
     if (!res.success) {
-      throw new Error(`Multi-file check failed: ${JSON.stringify(res.diagnostics)}`);
+      throw new Error(
+        `Multi-file check failed: ${JSON.stringify(res.diagnostics)}`,
+      );
     }
     if (res.diagnostics.length !== 0) {
       throw new Error(`Expected 0 diagnostics, got ${res.diagnostics.length}`);
@@ -388,7 +444,8 @@ export async function runMultiFileBenchmarks(rootDir, warmups, iterations) {
       name: "Multi-File Project Import Resolution",
       category: "multi-file",
       file: "tests/fixtures/benchmarks/project/{math.fun,app.fun}",
-      description: "Compiles multiple modules and resolves cross-module import via TypeScript compiler host",
+      description:
+        "Compiles multiple modules and resolves cross-module import via TypeScript compiler host",
       warmups,
       iterations,
       timings: timings.map((t) => Number(t.toFixed(3))),
@@ -399,14 +456,22 @@ export async function runMultiFileBenchmarks(rootDir, warmups, iterations) {
 }
 
 function waitForDiagnostics(server, uri, version, predicate) {
-  return runWithTimeout(new Promise((resolve, reject) => {
-    const listener = (params) => {
-      if (params.uri !== uri || params.version !== version || !predicate(params)) return;
-      server.off("diagnostics", listener);
-      resolve(params);
-    };
-    server.on("diagnostics", listener);
-  }), `Diagnostics for ${uri} version ${version}`);
+  return runWithTimeout(
+    new Promise((resolve, reject) => {
+      const listener = (params) => {
+        if (
+          params.uri !== uri ||
+          params.version !== version ||
+          !predicate(params)
+        )
+          return;
+        server.off("diagnostics", listener);
+        resolve(params);
+      };
+      server.on("diagnostics", listener);
+    }),
+    `Diagnostics for ${uri} version ${version}`,
+  );
 }
 
 async function benchmarkMultiFileTypeDiagnostics(rootDir, warmups, iterations) {
@@ -418,20 +483,51 @@ async function benchmarkMultiFileTypeDiagnostics(rootDir, warmups, iterations) {
   const mathText = readFileSync(mathPath, "utf8");
   const validApp = readFileSync(appPath, "utf8");
   const invalidApp = validApp.replace("multiplier: 5", 'multiplier: "bad"');
-  if (invalidApp === validApp) throw new Error("Multi-file benchmark edit did not match fixture");
+  if (invalidApp === validApp)
+    throw new Error("Multi-file benchmark edit did not match fixture");
   const server = new FunScriptLspServer();
-  server.onDidOpenHandler({ textDocument: { uri: mathUri, languageId: "funscript", version: 1, text: mathText } });
-  server.onDidOpenHandler({ textDocument: { uri: appUri, languageId: "funscript", version: 1, text: validApp } });
+  server.onDidOpenHandler({
+    textDocument: {
+      uri: mathUri,
+      languageId: "funscript",
+      version: 1,
+      text: mathText,
+    },
+  });
+  server.onDidOpenHandler({
+    textDocument: {
+      uri: appUri,
+      languageId: "funscript",
+      version: 1,
+      text: validApp,
+    },
+  });
   let version = 2;
   const sample = async (record) => {
     const nextVersion = version++;
-    const received = waitForDiagnostics(server, appUri, nextVersion, (p) => p.diagnostics.length > 0);
+    const received = waitForDiagnostics(
+      server,
+      appUri,
+      nextVersion,
+      (p) => p.diagnostics.length > 0,
+    );
     const start = performance.now();
-    server.onDidChangeHandler({ textDocument: { uri: appUri, version: nextVersion }, contentChanges: [{ text: invalidApp }] });
+    server.onDidChangeHandler({
+      textDocument: { uri: appUri, version: nextVersion },
+      contentChanges: [{ text: invalidApp }],
+    });
     const params = await received;
     const elapsed = performance.now() - start;
-    if (!params.diagnostics.some((d) => d.code === 2322 || d.message.includes("Type 'string' is not assignable"))) {
-      throw new Error(`Expected completed TypeScript diagnostics for edited app.fun; got ${JSON.stringify(params.diagnostics)}`);
+    if (
+      !params.diagnostics.some(
+        (d) =>
+          d.code === 2322 ||
+          d.message.includes("Type 'string' is not assignable"),
+      )
+    ) {
+      throw new Error(
+        `Expected completed TypeScript diagnostics for edited app.fun; got ${JSON.stringify(params.diagnostics)}`,
+      );
     }
     if (record) return elapsed;
   };
@@ -442,7 +538,10 @@ async function benchmarkMultiFileTypeDiagnostics(rootDir, warmups, iterations) {
 }
 
 export async function runLspBenchmarks(rootDir, warmups, iterations) {
-  const fixturePath = resolve(rootDir, "tests/fixtures/benchmarks/lsp-diagnostics.fun");
+  const fixturePath = resolve(
+    rootDir,
+    "tests/fixtures/benchmarks/lsp-diagnostics.fun",
+  );
   const source = readFileSync(fixturePath, "utf8");
   const docUri = "file:///tests/fixtures/benchmarks/lsp-diagnostics.fun";
 
@@ -459,10 +558,14 @@ export async function runLspBenchmarks(rootDir, warmups, iterations) {
   let versionCounter = 2;
 
   // 1. Immediate syntax diagnostics: this publication is synchronous with didChange.
-  const syntaxTimings = [];
   for (let w = 0; w < warmups; w++) {
     const version = versionCounter++;
-    const diagPromise = waitForDiagnostics(server, docUri, version, (p) => p.diagnostics.length > 0);
+    const diagPromise = waitForDiagnostics(
+      server,
+      docUri,
+      version,
+      (p) => p.diagnostics.length > 0,
+    );
     server.onDidChangeHandler({
       textDocument: { uri: docUri, version },
       contentChanges: [{ text: source }],
@@ -473,14 +576,26 @@ export async function runLspBenchmarks(rootDir, warmups, iterations) {
   const syntaxTimingsMeasured = [];
   for (let i = 0; i < iterations; i++) {
     const version = versionCounter++;
-    const pending = waitForDiagnostics(server, docUri, version, (p) => p.diagnostics.length > 0);
+    const pending = waitForDiagnostics(
+      server,
+      docUri,
+      version,
+      (p) => p.diagnostics.length > 0,
+    );
     const start = performance.now();
-    server.onDidChangeHandler({ textDocument: { uri: docUri, version }, contentChanges: [{ text: source }] });
+    server.onDidChangeHandler({
+      textDocument: { uri: docUri, version },
+      contentChanges: [{ text: source }],
+    });
     await pending;
     syntaxTimingsMeasured.push(performance.now() - start);
   }
 
-  const multiFileTypeTimings = await benchmarkMultiFileTypeDiagnostics(rootDir, warmups, iterations);
+  const multiFileTypeTimings = await benchmarkMultiFileTypeDiagnostics(
+    rootDir,
+    warmups,
+    iterations,
+  );
 
   // 2. LSP onHoverHandler latency
   for (let w = 0; w < warmups; w++) {
@@ -526,7 +641,8 @@ export async function runLspBenchmarks(rootDir, warmups, iterations) {
       name: "LSP Immediate Syntax Diagnostics",
       category: "lsp",
       file: "tests/fixtures/benchmarks/lsp-diagnostics.fun",
-      description: "Measures synchronous syntax diagnostics for matching document version; fixture intentionally contains syntax errors",
+      description:
+        "Measures synchronous syntax diagnostics for matching document version; fixture intentionally contains syntax errors",
       warmups,
       iterations,
       timings: syntaxTimingsMeasured.map((t) => Number(t.toFixed(3))),
@@ -538,7 +654,8 @@ export async function runLspBenchmarks(rootDir, warmups, iterations) {
       name: "LSP Completed Multi-File Type Diagnostics",
       category: "lsp",
       file: "tests/fixtures/benchmarks/project/{math.fun,app.fun}",
-      description: "Measures didChange through debounce and typecheck until matching-version TypeScript diagnostics publish",
+      description:
+        "Measures didChange through debounce and typecheck until matching-version TypeScript diagnostics publish",
       warmups,
       iterations,
       timings: multiFileTypeTimings.map((t) => Number(t.toFixed(3))),
@@ -550,7 +667,8 @@ export async function runLspBenchmarks(rootDir, warmups, iterations) {
       name: "LSP Hover Latency",
       category: "lsp",
       file: "tests/fixtures/benchmarks/lsp-diagnostics.fun",
-      description: "Measures onHoverHandler response latency at identifier position",
+      description:
+        "Measures onHoverHandler response latency at identifier position",
       warmups,
       iterations,
       timings: hoverTimings.map((t) => Number(t.toFixed(3))),
@@ -562,7 +680,8 @@ export async function runLspBenchmarks(rootDir, warmups, iterations) {
       name: "LSP Completion Latency",
       category: "lsp",
       file: "tests/fixtures/benchmarks/lsp-diagnostics.fun",
-      description: "Measures onCompletionHandler response latency for scoped symbols",
+      description:
+        "Measures onCompletionHandler response latency for scoped symbols",
       warmups,
       iterations,
       timings: completionTimings.map((t) => Number(t.toFixed(3))),
@@ -609,11 +728,7 @@ export function formatSummaryTable(results) {
 
   const separator = colWidths.map((w) => "-".repeat(w)).join("  ");
 
-  return [
-    formatRow(headers),
-    separator,
-    ...rows.map(formatRow),
-  ].join("\n");
+  return [formatRow(headers), separator, ...rows.map(formatRow)].join("\n");
 }
 
 export async function runAllBenchmarks(options = {}) {
@@ -625,7 +740,13 @@ export async function runAllBenchmarks(options = {}) {
   results.push(...runSingleFileBenchmarks(rootDir, warmups, iterations));
   results.push(...runPipelineBenchmarks(rootDir, warmups, iterations));
   results.push(...runFunxBenchmarks(rootDir, warmups, iterations));
-  results.push(...(await runMultiFileBenchmarks(rootDir, Math.min(warmups, 2), Math.min(iterations, 3))));
+  results.push(
+    ...(await runMultiFileBenchmarks(
+      rootDir,
+      Math.min(warmups, 2),
+      Math.min(iterations, 3),
+    )),
+  );
   results.push(...(await runLspBenchmarks(rootDir, warmups, iterations)));
 
   const regressions = results.filter((r) => r.stats.median > r.thresholdMs);
@@ -643,10 +764,14 @@ async function main() {
   const workerIndex = process.argv.indexOf("--worker-compile");
   if (workerIndex !== -1) {
     const fixturePath = process.argv[workerIndex + 1];
-    if (!fixturePath) throw new Error("--worker-compile requires a fixture path");
+    if (!fixturePath)
+      throw new Error("--worker-compile requires a fixture path");
     const source = readFileSync(fixturePath, "utf8");
-    const result = Effect.runSync(compileString(source, fixturePath.split("/").pop()));
-    if (!result.typescript) throw new Error("Fresh-process compilation emitted no TypeScript");
+    const result = Effect.runSync(
+      compileString(source, fixturePath.split("/").pop()),
+    );
+    if (!result.typescript)
+      throw new Error("Fresh-process compilation emitted no TypeScript");
     return;
   }
   const options = parseArgs(process.argv.slice(2));
@@ -670,14 +795,28 @@ Options:
   const env = getEnvironmentContext();
 
   if (!options.json) {
-    console.log("================================================================================");
-    console.log("             FunScript Compiler & LSP Performance Benchmarks                   ");
-    console.log("================================================================================");
-    console.log(`Environment : Node ${env.nodeVersion} (V8 ${env.v8Version}) on ${env.platform} (${env.arch})`);
+    console.log(
+      "================================================================================",
+    );
+    console.log(
+      "             FunScript Compiler & LSP Performance Benchmarks                   ",
+    );
+    console.log(
+      "================================================================================",
+    );
+    console.log(
+      `Environment : Node ${env.nodeVersion} (V8 ${env.v8Version}) on ${env.platform} (${env.arch})`,
+    );
     console.log(`Host CPU    : ${env.cpuModel} (${env.cpuCores} cores)`);
-    console.log(`Memory      : ${env.totalMemoryGb} GB total (${env.freeMemoryGb} GB free)`);
-    console.log(`Config      : ${options.warmups} warmups, ${options.iterations} iterations per workload`);
-    console.log("--------------------------------------------------------------------------------\n");
+    console.log(
+      `Memory      : ${env.totalMemoryGb} GB total (${env.freeMemoryGb} GB free)`,
+    );
+    console.log(
+      `Config      : ${options.warmups} warmups, ${options.iterations} iterations per workload`,
+    );
+    console.log(
+      "--------------------------------------------------------------------------------\n",
+    );
   }
 
   const benchmarkReport = await runAllBenchmarks({
@@ -695,26 +834,48 @@ Options:
       console.log(`● [${r.category}] ${r.name} (${r.id})`);
       console.log(`  File:        ${r.file}`);
       console.log(`  Description: ${r.description}`);
-      console.log(`  Runs:        [${r.timings.map((t) => `${t.toFixed(2)}ms`).join(", ")}]`);
-      console.log(`  Median:      ${r.stats.median.toFixed(3)} ms (threshold: <= ${r.thresholdMs} ms) -> ${statusIcon}`);
-      console.log(`  Spread:      ${r.stats.spread.toFixed(3)} ms (min: ${r.stats.min.toFixed(3)} ms, max: ${r.stats.max.toFixed(3)} ms, p95: ${r.stats.p95.toFixed(3)} ms)`);
+      console.log(
+        `  Runs:        [${r.timings.map((t) => `${t.toFixed(2)}ms`).join(", ")}]`,
+      );
+      console.log(
+        `  Median:      ${r.stats.median.toFixed(3)} ms (threshold: <= ${r.thresholdMs} ms) -> ${statusIcon}`,
+      );
+      console.log(
+        `  Spread:      ${r.stats.spread.toFixed(3)} ms (min: ${r.stats.min.toFixed(3)} ms, max: ${r.stats.max.toFixed(3)} ms, p95: ${r.stats.p95.toFixed(3)} ms)`,
+      );
       console.log("");
     }
 
-    console.log("--------------------------------------------------------------------------------");
-    console.log("                             Benchmark Summary Table                            ");
-    console.log("--------------------------------------------------------------------------------");
+    console.log(
+      "--------------------------------------------------------------------------------",
+    );
+    console.log(
+      "                             Benchmark Summary Table                            ",
+    );
+    console.log(
+      "--------------------------------------------------------------------------------",
+    );
     console.log(formatSummaryTable(benchmarkReport.results));
-    console.log("--------------------------------------------------------------------------------");
+    console.log(
+      "--------------------------------------------------------------------------------",
+    );
     if (!benchmarkReport.passed) {
-      console.error(`\n⚠️  PERFORMANCE REGRESSION DETECTED: ${benchmarkReport.regressions.length} workload(s) exceeded threshold.`);
+      console.error(
+        `\n⚠️  PERFORMANCE REGRESSION DETECTED: ${benchmarkReport.regressions.length} workload(s) exceeded threshold.`,
+      );
       for (const reg of benchmarkReport.regressions) {
-        console.error(`   - ${reg.id}: median ${reg.stats.median.toFixed(3)} ms > threshold ${reg.thresholdMs} ms`);
+        console.error(
+          `   - ${reg.id}: median ${reg.stats.median.toFixed(3)} ms > threshold ${reg.thresholdMs} ms`,
+        );
       }
     } else {
-      console.log("\n✓ All performance benchmarks passed regression threshold assertions.");
+      console.log(
+        "\n✓ All performance benchmarks passed regression threshold assertions.",
+      );
     }
-    console.log("================================================================================\n");
+    console.log(
+      "================================================================================\n",
+    );
   }
 
   if (options.assert && !benchmarkReport.passed) {
@@ -722,7 +883,10 @@ Options:
   }
 }
 
-if (import.meta.url === `file://${process.argv[1]}`) {
+if (
+  process.argv[1] &&
+  resolve(fileURLToPath(import.meta.url)) === resolve(process.argv[1])
+) {
   main()
     .then(() => {
       process.exit(0);

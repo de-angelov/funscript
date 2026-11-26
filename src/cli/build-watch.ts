@@ -177,6 +177,14 @@ export async function watchBuild(
             noDeepDestructurePaths: Array.isArray(policy.noDeepDestructure)
               ? policy.noDeepDestructure
               : undefined,
+            allowHoles: policy.allowHoles === true,
+            allowHolesPaths: Array.isArray(policy.allowHoles)
+              ? policy.allowHoles
+              : undefined,
+            allowEarlyReturns: policy.allowEarlyReturns === true,
+            allowEarlyReturnsPaths: Array.isArray(policy.allowEarlyReturns)
+              ? policy.allowEarlyReturns
+              : undefined,
             effectOnly: policy.effectOnly,
           };
           session = new IncrementalBuildSession(cwd, checks);

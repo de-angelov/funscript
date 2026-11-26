@@ -42,6 +42,7 @@ describe("FunScript project policy", () => {
       "export config = { noTs: unknown }",
       "export config = { typo: true }",
       'export config = { effectOnly: ["../outside"] }',
+      'export config = { modularEffectImports: ["src"] }',
       "export config = { noTs: true, noTs: false }",
       "export config = { maxDestructureDepth: 0 }",
       "export config = { maxDestructureDepth: 11 }",

@@ -735,7 +735,6 @@ function extractOptionInnerType(typeNode: TypeNode): TypeNode | undefined {
 export function emitSchemaTypeField(
   ctx: SchemaEmitterContext,
   typeNode: TypeNode,
-  rawRecordFields = false,
 ): string {
   if (
     typeNode.kind === "QualifiedTypeReferenceNode" ||
@@ -746,7 +745,7 @@ export function emitSchemaTypeField(
     return `(Schema.Unknown as unknown as Schema.Codec<${ctx.emitTypeNode(typeNode)}>)`;
   }
   if (typeNode.kind === "ParenthesizedTypeNode") {
-    return emitSchemaTypeField(ctx, typeNode.typeNode, rawRecordFields);
+    return emitSchemaTypeField(ctx, typeNode.typeNode);
   }
   ctx.addEffectImport("Schema");
   if (typeNode.kind === "LiteralTypeNode")
@@ -768,18 +767,10 @@ export function emitSchemaTypeField(
           ? extractOptionInnerType(f.typeAnnotation)
           : undefined;
         if (optionInner) {
-          const innerSchema = emitSchemaTypeField(
-            ctx,
-            optionInner,
-            rawRecordFields,
-          );
+          const innerSchema = emitSchemaTypeField(ctx, optionInner);
           return `  ${fieldKey}: Schema.OptionFromOptionalNullOr(${innerSchema}, { onNoneEncoding: "omit" })`;
         }
-        const schema = emitSchemaTypeField(
-          ctx,
-          f.typeAnnotation,
-          rawRecordFields,
-        );
+        const schema = emitSchemaTypeField(ctx, f.typeAnnotation);
         if (f.defaultValue) {
           ctx.addEffectImport("Effect");
           return `  ${fieldKey}: ${schema}.pipe(Schema.withDecodingDefaultType(Effect.sync(() => ${ctx.emitExpression(f.defaultValue)})))`;
@@ -790,10 +781,10 @@ export function emitSchemaTypeField(
     return `Schema.Struct({\n${inner}\n})`;
   }
   if (typeNode.kind === "ArrayTypeNode") {
-    return `Schema.Array(${emitSchemaTypeField(ctx, typeNode.elementType, rawRecordFields)})`;
+    return `Schema.Array(${emitSchemaTypeField(ctx, typeNode.elementType)})`;
   }
   if (typeNode.kind === "UnionTypeNode") {
-    return `Schema.Union([${typeNode.types.map((type) => emitSchemaTypeField(ctx, type, rawRecordFields)).join(", ")}])`;
+    return `Schema.Union([${typeNode.types.map((type) => emitSchemaTypeField(ctx, type)).join(", ")}])`;
   }
   if (typeNode.kind === "TypeReferenceNode") {
     const tName = typeNode.name.name;
@@ -843,7 +834,7 @@ export function emitSchemaTypeField(
     }
     if (ctx.recordContracts.has(tName)) {
       const contract = ctx.recordContracts.get(tName)!;
-      return emitSchemaTypeField(ctx, contract, rawRecordFields);
+      return emitSchemaTypeField(ctx, contract);
     }
     if (typeNode.typeArgs?.length)
       throw new FunScriptError(

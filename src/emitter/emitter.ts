@@ -898,15 +898,24 @@ export class Emitter {
     // Generate header imports
     let header = "";
     const generatedEffectImports = Array.from(this.effectImports).filter(
-      (name) => !this.userEffectBindings.has(name),
+      (name) => {
+        const asMatch = /^(.+?)\s+as\s+(.+)$/.exec(name);
+        const localName = asMatch ? asMatch[2] : name;
+        return !this.userEffectBindings.has(localName);
+      },
     );
     if (generatedEffectImports.length > 0) {
       if (this.modularEffectImports) {
         for (const name of generatedEffectImports.sort()) {
-          if (name === "pipe") {
-            header += `import { pipe } from "effect/Function";\n`;
+          const asMatch = /^(.+?)\s+as\s+(.+)$/.exec(name);
+          const moduleName = asMatch ? asMatch[1] : name;
+          const localName = asMatch ? asMatch[2] : name;
+          if (moduleName === "pipe") {
+            const spec =
+              localName === moduleName ? "pipe" : `pipe as ${localName}`;
+            header += `import { ${spec} } from "effect/Function";\n`;
           } else {
-            header += `import * as ${name} from "effect/${name}";\n`;
+            header += `import * as ${localName} from "effect/${moduleName}";\n`;
           }
         }
       } else {
@@ -970,11 +979,8 @@ export class Emitter {
     return emitSchemaDeclaration(this, decl, isExport);
   }
 
-  public emitSchemaTypeField(
-    typeNode: TypeNode,
-    rawRecordFields?: boolean,
-  ): string {
-    return emitSchemaTypeField(this, typeNode, rawRecordFields);
+  public emitSchemaTypeField(typeNode: TypeNode): string {
+    return emitSchemaTypeField(this, typeNode);
   }
 
   public emitErrorDeclaration(
@@ -1622,7 +1628,9 @@ export class Emitter {
     ) {
       return `__funscriptJs(${inner}, false)`;
     }
-    return `__funscriptJs(() => ${inner}, false)`;
+    const wrapped =
+      expr.expression.kind === "RecordExpression" ? `(${inner})` : inner;
+    return `__funscriptJs(() => ${wrapped}, false)`;
   }
 
   public emitMemberProperty(expr: MemberExpression): string {

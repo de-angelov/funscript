@@ -675,17 +675,22 @@ function checkCapturedMutInEffect(
       }
 
       case "BindingDeclaration": {
+        const isMut = Boolean(node.isMut);
         if (node.init?.kind === "FunctionExpression") {
           // Allow recursive immutable functions
-          if (!node.isMut) {
+          if (!isMut) {
             for (const name of collectPatternVars(node.id)) {
               scope.bindings.set(name, { isMut: false });
             }
           }
           visit(node.init, scope);
+          if (isMut) {
+            for (const name of collectPatternVars(node.id)) {
+              scope.bindings.set(name, { isMut: true });
+            }
+          }
         } else {
           visit(node.init, scope);
-          const isMut = Boolean(node.isMut);
           for (const name of collectPatternVars(node.id)) {
             scope.bindings.set(name, { isMut });
           }
@@ -1434,7 +1439,7 @@ export const typeCheckVirtualFiles = (
                   `declare const $funscriptRecordContract$${contract}: unique symbol;`,
                 )
               ) {
-                code = "FS_CHECKED_DECODER_UNSUPPORTED";
+                code = "CHECKED_DECODER_UNSUPPORTED";
                 message = `${contract} has no generated checked decoder for this signature. Only required callbacks with supported primitive or local data-schema arguments and results are supported; use explicit callback adapters for other shapes.`;
               }
             }
@@ -1445,7 +1450,7 @@ export const typeCheckVirtualFiles = (
                   `declare const $funscriptRecordContract$${contract}: unique symbol;`,
                 )
               ) {
-                code = "FS_CONTRACT_DECODER";
+                code = "CONTRACT_DECODER";
                 message = `${contract} is a compile-time record contract and has no generated FromUnknown decoder. Use its DecodeChecked function when supported, or validate data separately and use an explicit checked callback boundary.`;
               }
             }
@@ -1649,28 +1654,25 @@ export const typeCheckVirtualFiles = (
 
           const isOptionType = (t: ts.Type): boolean =>
             t.isUnion()
-              ? t.types.some((m) =>
+              ? t.types.length > 0 &&
+                t.types.every((m) =>
                   Boolean(checker.getPropertyOfType(m, "~effect/Option")),
                 )
               : Boolean(checker.getPropertyOfType(t, "~effect/Option"));
 
+          const isNullishFlag = (t: ts.Type): boolean =>
+            Boolean(t.flags & (ts.TypeFlags.Null | ts.TypeFlags.Undefined));
+
+          const hasDirectNullish = (t: ts.Type): boolean =>
+            t.isUnion()
+              ? !isOptionType(t) && t.types.some(isNullishFlag)
+              : isNullishFlag(t);
+
           const hasNullishMember = (t: ts.Type): boolean => {
-            if (t.isUnion()) {
-              return t.types.some(
-                (m) =>
-                  Boolean(
-                    m.flags & (ts.TypeFlags.Null | ts.TypeFlags.Undefined),
-                  ) && !isOptionType(t),
-              );
-            }
+            if (hasDirectNullish(t)) return true;
             const awaited = checker.getAwaitedType(t);
-            if (awaited && awaited !== t && awaited.isUnion()) {
-              return awaited.types.some(
-                (m) =>
-                  Boolean(
-                    m.flags & (ts.TypeFlags.Null | ts.TypeFlags.Undefined),
-                  ) && !isOptionType(awaited),
-              );
+            if (awaited && awaited !== t && hasDirectNullish(awaited)) {
+              return true;
             }
             return false;
           };
@@ -1690,13 +1692,7 @@ export const typeCheckVirtualFiles = (
             )
               return true;
             if (
-              type
-                .getProperties()
-                .some(
-                  (p) =>
-                    p.name.includes("effect/Effect") ||
-                    p.name === "~effect/Effect",
-                )
+              type.getProperties().some((p) => p.name.includes("effect/Effect"))
             )
               return true;
             const str = checker.typeToString(type);
@@ -2135,10 +2131,10 @@ export const typeCheckVirtualFiles = (
                     addAstDiag(
                       node.span,
                       "UNBOUNDED_QUEUE",
-                      `Queue created with infinite capacity. High-volume producers can exhaust memory without backpressure. Prefer 'Queue.bounded(capacity)' or specify '{ capacity: 1024 }'.`,
+                      `Queue created with infinite capacity. High-volume producers can exhaust memory without backpressure. Prefer 'Queue.bounded(capacity)' or 'Queue.make({ capacity })'.`,
                       "warning",
                       "Unbounded queues buffer work indefinitely without limit. If producers outpace consumers, the queue will grow until memory is exhausted.",
-                      "Prefer 'Queue.bounded(capacity)' or specify '{ capacity: 1024 }'.",
+                      "Specify a bounded capacity with 'Queue.bounded(capacity)' or 'Queue.make({ capacity })'.",
                     );
                   } else if (
                     o === "Queue" &&
@@ -2345,13 +2341,14 @@ export const typeCheckVirtualFiles = (
                   const targetName = rMember
                     ? `${rMember.object}.${rMember.property}`
                     : rName;
+                  const o = rMember?.object ?? "Option";
                   addAstDiag(
                     r?.span || node.span,
                     "THROW",
                     `\`${targetName}\` throws an unhandled exception at runtime. In FunScript, handle absence or failure safely using 'getOrElse', pattern matching ('match'), or lift to Effect.`,
                     "error",
                     "FunScript disallows runtime throwing methods.",
-                    "Use `Option.getOrElse`, `Option.match`, or `Effect.fromOption`.",
+                    `Use \`${o}.getOrElse\`, \`${o}.match\`, or \`Effect.from${o}\`.`,
                   );
                 } else if (r?.kind === "CallExpression") {
                   const c = astChild(r, "callee");
@@ -2369,13 +2366,14 @@ export const typeCheckVirtualFiles = (
                     const targetName = cMember
                       ? `${cMember.object}.${cMember.property}`
                       : cName;
+                    const o = cMember?.object ?? "Option";
                     addAstDiag(
                       c?.span || r.span,
                       "THROW",
                       `\`${targetName}\` throws an unhandled exception at runtime. In FunScript, handle absence or failure safely using 'getOrElse', pattern matching ('match'), or lift to Effect.`,
                       "error",
                       "FunScript disallows runtime throwing methods.",
-                      "Use `Option.getOrElse`, `Option.match`, or `Effect.fromOption`.",
+                      `Use \`${o}.getOrElse\`, \`${o}.match\`, or \`Effect.from${o}\`.`,
                     );
                   }
                 }
@@ -2985,16 +2983,13 @@ export const typeCheckVirtualFiles = (
                 calleeText === "Option.fromUndefinedOr"
               ) {
                 const argType = checker.getTypeAtLocation(node.arguments[0]);
-                const hasOptionProperty = (t: ts.Type): boolean =>
-                  Boolean(checker.getPropertyOfType(t, "~effect/Option"));
-                const isOptionValue = argType.isUnion()
-                  ? argType.types.some(hasOptionProperty)
-                  : hasOptionProperty(argType);
+                const isOptionValue = isOptionType(argType);
                 const argTypeStr = checker.typeToString(argType);
                 if (
                   isOptionValue ||
-                  /^Option</.test(argTypeStr) ||
-                  /^Option\.Option</.test(argTypeStr)
+                  ((!argType.isUnion() || !argType.types.some(isNullishFlag)) &&
+                    (/^Option</.test(argTypeStr) ||
+                      /^Option\.Option</.test(argTypeStr)))
                 ) {
                   addCustomDiag(
                     node,

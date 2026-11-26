@@ -1970,5 +1970,68 @@ export runExplicit = (): JSOptional<String> =>
       );
       expect(tsEscapeRes.success).toBe(true);
     });
+
+    it("flags exact undefined/null returns and Option<T> | undefined with UNHANDLED_NULLISH without REDUNDANT_OPTION_WRAP", async () => {
+      const exactUndefRes = await Effect.runPromise(
+        typeCheckSource(
+          `
+ts {
+  declare function retUndef(): undefined;
+  declare function retNull(): null;
+}
+
+export a = () => retUndef()
+export b = () => retNull()
+`.trim(),
+          "src/exact-nullish-return.fun",
+        ),
+      );
+      expect(exactUndefRes.success).toBe(false);
+      expect(
+        exactUndefRes.diagnostics.filter((d) => d.code === "UNHANDLED_NULLISH"),
+      ).toHaveLength(2);
+
+      const optUndefRes = await Effect.runPromise(
+        typeCheckSource(
+          `
+import { Option } from "effect"
+
+ts {
+  declare function maybeOpt(): Option.Option<string> | undefined;
+}
+
+export bad = () => maybeOpt()
+export wrapped = () => maybeOpt() |> fromNullishOr
+`.trim(),
+          "src/option-or-undefined.fun",
+        ),
+      );
+      expect(optUndefRes.success).toBe(false);
+      expect(
+        optUndefRes.diagnostics.some((d) => d.code === "UNHANDLED_NULLISH"),
+      ).toBe(true);
+      expect(
+        optUndefRes.diagnostics.some((d) => d.code === "REDUNDANT_OPTION_WRAP"),
+      ).toBe(false);
+    });
+
+    it("suggests Either helpers for Either.getOrThrow in pipelines", async () => {
+      const res = await Effect.runPromise(
+        typeCheckSource(
+          `
+import { Either } from "effect"
+
+export run = (e: Either.Either<Number, String>) => e |> Either.getOrThrow
+`.trim(),
+          "src/either-pipeline-throw.fun",
+        ),
+      );
+      expect(res.success).toBe(false);
+      const diag = res.diagnostics.find((d) => d.code === "THROW");
+      expect(diag).toBeDefined();
+      expect(diag?.suggestedAction).toContain("Either.getOrElse");
+      expect(diag?.suggestedAction).toContain("Effect.fromEither");
+      expect(diag?.suggestedAction).not.toContain("Option.");
+    });
   });
 });

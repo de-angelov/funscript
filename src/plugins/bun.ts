@@ -170,8 +170,13 @@ export function funscriptBunPlugin(options: BunPluginOptions = {}): BunPlugin {
 
   const ensureTypeView = async () => {
     if (options.types && !typeView) {
-      typeView = new TypeView(process.cwd(), options.types);
-      typeViewInitPromise = typeView.generate();
+      const tv = new TypeView(process.cwd(), options.types);
+      typeView = tv;
+      typeViewInitPromise = tv.generate().catch((err) => {
+        typeView = undefined;
+        typeViewInitPromise = undefined;
+        throw err;
+      });
     }
     if (typeViewInitPromise) {
       await typeViewInitPromise;
@@ -237,6 +242,13 @@ export function funscriptBunPlugin(options: BunPluginOptions = {}): BunPlugin {
             const target = path.isAbsolute(args.path)
               ? args.path
               : path.resolve(dir, args.path);
+            try {
+              if (fs.statSync(target).isFile()) {
+                return undefined;
+              }
+            } catch {
+              // File doesn't exist as .js/.jsx; fall back to companion .fun/.funx
+            }
             const base = target.slice(0, target.lastIndexOf("."));
 
             for (const ext of [".fun", ".funx"]) {

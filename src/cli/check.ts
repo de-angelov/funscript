@@ -259,15 +259,17 @@ export const checkCommand = (
         })),
       );
     if (jsonOutput) {
+      if (!success) process.exitCode = 1;
       yield* Console.log(
         JSON.stringify({
           success,
-          errorCount: result.errorCount,
+          errorCount: result.errorCount + idiomaticDiagnostics.length,
           warningCount: result.warningCount,
           diagnostics,
         }),
       );
     } else if (sarifOutput) {
+      if (!success) process.exitCode = 1;
       const rules = [
         ...new Map(
           diagnostics.map((diagnostic) => [

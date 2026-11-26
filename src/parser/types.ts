@@ -167,7 +167,7 @@ export function parsePrimaryType(ctx: TypesParserContext): TypeNode {
       token.type === TokenType.STRING
         ? token.value
         : token.type === TokenType.NUMBER
-          ? Number(token.value)
+          ? Number(token.value.replaceAll("_", ""))
           : token.type === TokenType.TRUE;
     return { kind: "LiteralTypeNode", value, span: token.span };
   }

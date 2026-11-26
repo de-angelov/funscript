@@ -173,7 +173,7 @@ proprietary project layout or package format.
 
 The repository's own scripts are defined in `package.json`: `build`, `check`, `typecheck`, `benchmark`, `test`,
 `test:fast`, `test:unit`, `test:examples`, `test:watch`, `fmt`, `fmt:check`, `fmt:ts`, `fmt:ts:check`, `lint`, `lint:fix`, `prettier:check`, `docs:generate`,
-`docs:check`, `check:idiomatic`, `package:check`, `verify`, `pr:check`, and `prepare`. They are repository scripts,
+`docs:check`, `check:idiomatic`, `knip`, `package:check`, `verify`, `pr:check`, and `prepare`. They are repository scripts,
 not additional `funscript` CLI commands.
 
 ## Language compatibility policy

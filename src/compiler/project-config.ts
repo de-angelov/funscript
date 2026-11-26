@@ -107,6 +107,8 @@ export function loadProjectConfig(cwd: string): FunScriptProjectConfig {
         }
         config.format = format;
       } else if (entry.value.kind === "ArrayExpression") {
+        if (name === "modularEffectImports")
+          throw new Error(`${name} must be a boolean`);
         const directories: string[] = [];
         for (const item of entry.value.elements) {
           if (
@@ -140,7 +142,7 @@ export function loadProjectConfig(cwd: string): FunScriptProjectConfig {
       } else {
         if (name === "effectOnly" || entry.value.kind !== "BooleanLiteral")
           throw new Error(
-            `${name} must be ${name === "effectOnly" ? "an array of paths" : "a boolean or an array of paths"}`,
+            `${name} must be ${name === "effectOnly" ? "an array of paths" : name === "modularEffectImports" ? "a boolean" : "a boolean or an array of paths"}`,
           );
         config[
           name as

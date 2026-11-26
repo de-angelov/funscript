@@ -691,13 +691,14 @@ export class Parser {
 
   private parseUnary(): Expression {
     if (this.match(TokenType.NOT, TokenType.MINUS)) {
+      const start = this.previous().span.start;
       const op = this.previous().value as "not" | "-";
       const arg = this.parseUnary();
       return {
         kind: "UnaryExpression",
         operator: op,
         argument: arg,
-        span: { start: this.previous().span.start, end: arg.span.end },
+        span: { start, end: arg.span.end },
       };
     }
     return this.parsePostfix();
@@ -1174,11 +1175,12 @@ export class Parser {
       if (this.check(TokenType.RBRACE) || this.check(TokenType.DEDENT)) break;
 
       if (this.match(TokenType.DOTDOTDOT)) {
+        const start = this.previous().span.start;
         const arg = this.parseExpression();
         entries.push({
           kind: "SpreadEntry",
           argument: arg,
-          span: { start: this.previous().span.start, end: arg.span.end },
+          span: { start, end: arg.span.end },
         });
       } else {
         const firstId: Identifier = this.parseRecordKeyIdentifier();

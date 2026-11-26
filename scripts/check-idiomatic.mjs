@@ -2,6 +2,7 @@
 
 import fs from "node:fs/promises";
 import path from "node:path";
+import { fileURLToPath } from "node:url";
 import { auditIdiomaticFunScript } from "../dist/tooling/idiomatic.js";
 
 export async function findFunScriptFiles(dir) {
@@ -32,9 +33,14 @@ export async function checkIdiomatic(targetFiles = [], options = {}) {
   let files = targetFiles.filter((arg) => !arg.startsWith("--"));
 
   if (files.length === 0) {
-    const candidateDirs = ["examples", "programs"].map((d) => path.resolve(rootDir, d));
+    const candidateDirs = ["examples", "programs"].map((d) =>
+      path.resolve(rootDir, d),
+    );
     const nested = await Promise.all(candidateDirs.map(findFunScriptFiles));
-    files = nested.flat().filter((f) => !f.endsWith("sqlite-repository.fun")).sort();
+    files = nested
+      .flat()
+      .filter((f) => !f.endsWith("sqlite-repository.fun"))
+      .sort();
   } else {
     files = files.map((f) => path.resolve(rootDir, f));
   }
@@ -82,17 +88,24 @@ export async function checkIdiomatic(targetFiles = [], options = {}) {
 
 export async function main() {
   const args = process.argv.slice(2);
-  const { success, totalFiles, totalViolations, results } = await checkIdiomatic(args);
+  const { success, totalFiles, totalViolations, results } =
+    await checkIdiomatic(args);
 
   if (success) {
-    console.log(`✓ Idiomatic check passed: ${totalFiles} file(s) checked, 0 non-ambient 'ts { }' violations found.`);
+    console.log(
+      `✓ Idiomatic check passed: ${totalFiles} file(s) checked, 0 non-ambient 'ts { }' violations found.`,
+    );
     process.exit(0);
   } else {
-    console.error(`✗ Idiomatic check failed: ${totalViolations} violation(s) found across ${totalFiles} file(s):\n`);
+    console.error(
+      `✗ Idiomatic check failed: ${totalViolations} violation(s) found across ${totalFiles} file(s):\n`,
+    );
     for (const r of results) {
       if (!r.success) {
         for (const diag of r.diagnostics) {
-          console.error(`  ${diag.file}:${diag.line}:${diag.column} - [${diag.kind}] ${diag.message}`);
+          console.error(
+            `  ${diag.file}:${diag.line}:${diag.column} - [${diag.kind}] ${diag.message}`,
+          );
           if (diag.snippet) {
             console.error(`    > ${diag.snippet}`);
           }
@@ -103,7 +116,10 @@ export async function main() {
   }
 }
 
-if (import.meta.url === `file://${process.argv[1]}`) {
+if (
+  process.argv[1] &&
+  path.resolve(fileURLToPath(import.meta.url)) === path.resolve(process.argv[1])
+) {
   main().catch((err) => {
     console.error("Fatal error:", err);
     process.exit(1);

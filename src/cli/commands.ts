@@ -16,6 +16,7 @@ const commandOptions: Record<string, ReadonlySet<string>> = {
     "--no-ts",
     "--no-global-this",
     "--bare-pipelines",
+    "--no-deep-destructure",
     "--bin",
     "--watch",
     "--engine",
@@ -27,6 +28,7 @@ const commandOptions: Record<string, ReadonlySet<string>> = {
     "--no-ts",
     "--no-global-this",
     "--bare-pipelines",
+    "--no-deep-destructure",
     "--bin",
   ]),
   check: new Set([
@@ -38,12 +40,14 @@ const commandOptions: Record<string, ReadonlySet<string>> = {
     "--no-ts",
     "--no-global-this",
     "--bare-pipelines",
+    "--no-deep-destructure",
   ]),
   run: new Set([
     "--no-check",
     "--no-ts",
     "--no-global-this",
     "--bare-pipelines",
+    "--no-deep-destructure",
     "--engine",
     "--fast",
   ]),
@@ -102,7 +106,7 @@ export const CLI_COMMANDS: readonly CliCommand[] = [
   {
     name: "build",
     usage:
-      "build <file.fun|file.funx...> [--target bun] [--out <file>] [--outDir <dir>] [--sourcemap] [--no-check] [--no-ts] [--no-global-this] [--bare-pipelines] [--bin] [--watch]",
+      "build <file.fun|file.funx...> [--target bun] [--out <file>] [--outDir <dir>] [--sourcemap] [--no-check] [--no-ts] [--no-global-this] [--bare-pipelines] [--no-deep-destructure] [--bin] [--watch] [--engine <auto|bun|esbuild>] [--fast]",
     description:
       "Build FunScript files to TypeScript or TSX in dist/ by default, or bundle one entry and its local modules as a Bun executable.",
     examples: [
@@ -113,14 +117,14 @@ export const CLI_COMMANDS: readonly CliCommand[] = [
   {
     name: "emit",
     usage:
-      "emit <file.fun|file.funx> [--out <file.ts|file.tsx>] [--sourcemap] [--no-ts] [--no-global-this] [--bare-pipelines] [--bin]",
+      "emit <file.fun|file.funx> [--out <file.ts|file.tsx>] [--sourcemap] [--no-ts] [--no-global-this] [--bare-pipelines] [--no-deep-destructure] [--bin]",
     description: "Compile one FunScript file to TypeScript or TSX.",
     examples: ["funscript emit src/main.fun --out src/main.ts --sourcemap"],
   },
   {
     name: "check",
     usage:
-      "check [file.fun|file.funx...] [--fix] [--idiomatic] [--json|--sarif] [--warnings-as-errors] [--no-ts] [--no-global-this] [--bare-pipelines]",
+      "check [file.fun|file.funx...] [--fix] [--idiomatic] [--json|--sarif] [--warnings-as-errors] [--no-ts] [--no-global-this] [--bare-pipelines] [--no-deep-destructure]",
     description:
       "Statically type-check files with the TypeScript API, optionally fix formatting and pipeline styles, and emit machine-readable diagnostics.",
     examples: [
@@ -139,7 +143,7 @@ export const CLI_COMMANDS: readonly CliCommand[] = [
   {
     name: "run",
     usage:
-      "run <file.fun|file.funx> [--no-check] [--no-ts] [--no-global-this] [--bare-pipelines] [-- arg... ]",
+      "run <file.fun|file.funx> [--no-check] [--no-ts] [--no-global-this] [--bare-pipelines] [--no-deep-destructure] [--engine <auto|bun|esbuild>] [--fast] [-- arg... ]",
     description:
       "Bundle and run a FunScript program and its local imports with Node.js.",
     examples: [
@@ -149,7 +153,8 @@ export const CLI_COMMANDS: readonly CliCommand[] = [
   },
   {
     name: "test",
-    usage: "test [filters...] [--watch] [--engine <vitest|bun>]",
+    usage:
+      "test [filters...] [--watch] [--run] [--engine <vitest|bun>] [--coverage] [--ui] [--reporter <name>] [--no-check] [--fast]",
     description:
       "Run unit and integration tests across FunScript (.fun/.funx) and TypeScript modules.",
     examples: [
@@ -217,7 +222,7 @@ export const CLI_COMMANDS: readonly CliCommand[] = [
   {
     name: "doc",
     usage:
-      "doc [files or directories...] [--outDir <dir>] [--format <html|markdown|json>] [--open]",
+      "doc [files or directories...] [--outDir <dir>] [--format <html|markdown|json>] [--open] [--json]",
     description:
       "Generate documentation and interactive API reference from FunScript source files and doc comments.",
     examples: [

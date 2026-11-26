@@ -590,6 +590,12 @@ export function parseTaggedUnionSchema(
       if (!ctx.check(TokenType.RPAREN)) {
         do {
           const fName = ctx.parseIdentifier();
+          if (ctx.match(TokenType.QUESTION)) {
+            throw new ParseError(
+              "Optional '?' variant field syntax is disabled in FunScript; use 'Option<T>'",
+              ctx.previous().span,
+            );
+          }
           ctx.consume(TokenType.COLON, "Expected ':' after variant field name");
           const fType = ctx.parseTypeNode();
           fields.push({
@@ -639,6 +645,12 @@ export function parseErrorDeclaration(
     if (!ctx.check(TokenType.RPAREN)) {
       do {
         const fName = ctx.parseIdentifier();
+        if (ctx.match(TokenType.QUESTION)) {
+          throw new ParseError(
+            "Optional '?' error field syntax is disabled in FunScript; use 'Option<T>'",
+            ctx.previous().span,
+          );
+        }
         ctx.consume(TokenType.COLON, "Expected ':' after error field name");
         const fType = ctx.parseTypeNode();
         fields.push({

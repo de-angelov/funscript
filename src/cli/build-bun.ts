@@ -16,6 +16,7 @@ export interface BunExecutableOptions {
   barePipelines?: boolean;
   noDeepDestructure?: boolean;
   maxDestructureDepth?: number;
+  allowEarlyReturns?: boolean;
   /**
    * Bundler engine to use:
    * - "auto": Use native Bun.build if Bun is available, otherwise fall back to esbuild.
@@ -68,6 +69,10 @@ async function buildWithNativeBun(
           barePipelines: options.barePipelines,
           noDeepDestructure: options.noDeepDestructure,
           maxDestructureDepth: options.maxDestructureDepth,
+          allowEarlyReturns: options.allowEarlyReturns,
+          runMain: options.runMain,
+          executable: options.executable,
+          entryFile: entry,
         }) as unknown as NonNullable<
           Parameters<typeof Bun.build>[0]["plugins"]
         >[number],
@@ -107,6 +112,7 @@ const result = await Bun.build({
       barePipelines: ${Boolean(options.barePipelines)},
       noDeepDestructure: ${Boolean(options.noDeepDestructure)},
       maxDestructureDepth: ${typeof options.maxDestructureDepth === "number" ? options.maxDestructureDepth : "undefined"},
+      allowEarlyReturns: ${Boolean(options.allowEarlyReturns)},
       runMain: ${Boolean(options.runMain)},
       executable: ${Boolean(options.executable)},
       entryFile: ${JSON.stringify(entry)},
@@ -174,6 +180,7 @@ async function buildWithEsbuild(
         barePipelines: options.barePipelines,
         noDeepDestructure: options.noDeepDestructure,
         maxDestructureDepth: options.maxDestructureDepth,
+        allowEarlyReturns: options.allowEarlyReturns,
         runMain: options.runMain,
         executable: options.executable,
         entryFile: entry,

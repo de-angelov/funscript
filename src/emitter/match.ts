@@ -224,7 +224,7 @@ export class MatchEmitter {
       }
       try {
         if (
-          arm.pattern.kind === "WildcardPattern" ||
+          (arm.pattern.kind === "WildcardPattern" && !arm.guard) ||
           (isExhaustiveBooleanMatch && isLastArm)
         ) {
           const body = this.emitArmHandler(
@@ -855,10 +855,17 @@ export class MatchEmitter {
       let code = "";
       for (let i = 0; i < arms.length; i++) {
         const arm = arms[i];
-        const isDefault = arm.pattern.kind === "WildcardPattern" && !arm.guard;
+        const isDefault =
+          (arm.pattern.kind === "WildcardPattern" ||
+            arm.pattern.kind === "VariablePattern") &&
+          !arm.guard;
         const body = this.context.emitExpression(arm.body as Expression);
-        if (isDefault || i === arms.length - 1) {
+        if (isDefault) {
           code += body;
+          break;
+        }
+        if (i === arms.length - 1) {
+          code += `${getCondition(arm)} ? ${body} : (() => { throw new Error("Non-exhaustive match"); })()`;
           break;
         }
         code += `${getCondition(arm)} ? ${body} : `;
@@ -867,27 +874,34 @@ export class MatchEmitter {
     }
 
     const branches: string[] = [];
+    let hasDefault = false;
     for (let i = 0; i < arms.length; i++) {
       const arm = arms[i];
       const isDefault =
-        (arm.pattern.kind === "WildcardPattern" && !arm.guard) ||
-        i === arms.length - 1;
+        (arm.pattern.kind === "WildcardPattern" ||
+          arm.pattern.kind === "VariablePattern") &&
+        !arm.guard;
       const inner =
         arm.body.kind === "BlockStatement"
           ? this.context.emitFunctionBody(arm.body)
           : `  return ${this.context.emitExpression(arm.body)};`;
       if (i === 0) {
         if (isDefault) {
+          hasDefault = true;
           branches.push(inner);
           break;
         }
         branches.push(`if (${getCondition(arm)}) {\n${inner}\n}`);
       } else if (isDefault) {
+        hasDefault = true;
         branches.push(`else {\n${inner}\n}`);
         break;
       } else {
         branches.push(`else if (${getCondition(arm)}) {\n${inner}\n}`);
       }
+    }
+    if (!hasDefault) {
+      branches.push(`else {\n  throw new Error("Non-exhaustive match");\n}`);
     }
     return `(() => {\n  ${branches.join(" ")}\n})()`;
   }
@@ -901,7 +915,10 @@ export class MatchEmitter {
         : `const $jsOpt = ${this.context.emitExpression(scrutinee)};\n  `;
 
     const hasWildcard = arms.some(
-      (a) => a.pattern.kind === "WildcardPattern" && !a.guard,
+      (a) =>
+        (a.pattern.kind === "WildcardPattern" ||
+          a.pattern.kind === "VariablePattern") &&
+        !a.guard,
     );
     const hasSome = arms.some(
       (a) =>
@@ -944,7 +961,9 @@ export class MatchEmitter {
     for (let i = 0; i < arms.length; i++) {
       const arm = arms[i];
       const pat = arm.pattern;
-      const isWildcard = pat.kind === "WildcardPattern" && !arm.guard;
+      const isWildcard =
+        (pat.kind === "WildcardPattern" || pat.kind === "VariablePattern") &&
+        !arm.guard;
       const bindings: string[] = [];
       let cond = "true";
 

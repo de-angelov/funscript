@@ -543,5 +543,21 @@ arr = [<li />, <li />]
         ),
       ).toBe(true);
     });
+
+    it("disambiguates '<' as comparison after interpolated strings and templates", () => {
+      for (const expr of [`"{x}" < b`, "`a` < b", "`{x}` < b"]) {
+        const tokens = new Lexer(expr, "test.funx").tokenize();
+        expect(tokens.some((t) => t.type === TokenType.LT)).toBe(true);
+        expect(tokens.some((t) => t.type === TokenType.JSX_TAG_OPEN)).toBe(
+          false,
+        );
+      }
+    });
+
+    it("reports '</' in error for invalid closing tag name", () => {
+      expect(() => new Lexer(`<div></1>`, "test.funx").tokenize()).toThrow(
+        /Expected tag name after '<\/', found '1'/,
+      );
+    });
   });
 });

@@ -121,6 +121,7 @@ function parsePrimaryPattern(ctx: PatternParserContext): Pattern {
       if (ctx.check(TokenType.RBRACE) || ctx.check(TokenType.DEDENT)) break;
 
       const isRest = ctx.match(TokenType.DOTDOTDOT);
+      const restStart = isRest ? ctx.previous().span.start : undefined;
       const key = ctx.parseIdentifier();
       let pattern: Pattern | undefined;
       if (!isRest && ctx.match(TokenType.COLON)) {
@@ -132,7 +133,7 @@ function parsePrimaryPattern(ctx: PatternParserContext): Pattern {
         pattern,
         isRest: isRest || undefined,
         span: {
-          start: isRest ? ctx.previous().span.start : key.span.start,
+          start: restStart ?? key.span.start,
           end: pattern ? pattern.span.end : key.span.end,
         },
       });

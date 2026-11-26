@@ -266,7 +266,7 @@ export function renameInterop(
     }
     if (!name.startsWith(".")) return undefined;
     const base = resolve(dirname(containingFile), name);
-    const stem = base.endsWith(".js") ? base.slice(0, -3) : base;
+    const stem = base.replace(/\.(?:js|jsx)$/, "");
     const candidates = [
       base,
       ...[".fun", ".funx", ".funs"].map((ext) => stem + ext),

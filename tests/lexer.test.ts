@@ -1,6 +1,10 @@
 import { describe, it, expect } from "vitest";
 import { Lexer, LexerError } from "../src/lexer/lexer.js";
-import { TokenType, BANNED_KEYWORDS, BANNED_SYMBOLS } from "../src/lexer/tokens.js";
+import {
+  TokenType,
+  BANNED_KEYWORDS,
+  BANNED_SYMBOLS,
+} from "../src/lexer/tokens.js";
 
 describe("FunScript Lexer", () => {
   describe("Basic tokenization & literals", () => {
@@ -24,20 +28,34 @@ describe("FunScript Lexer", () => {
     });
 
     it("accepts TypeScript-style numeric separators", () => {
-      const tokens = new Lexer("whole = 110_110\ndecimal = 1_024.5_0").tokenize();
-      expect(tokens.filter((token) => token.type === TokenType.NUMBER).map((token) => token.value))
-        .toEqual(["110_110", "1_024.5_0"]);
+      const tokens = new Lexer(
+        "whole = 110_110\ndecimal = 1_024.5_0",
+      ).tokenize();
+      expect(
+        tokens
+          .filter((token) => token.type === TokenType.NUMBER)
+          .map((token) => token.value),
+      ).toEqual(["110_110", "1_024.5_0"]);
     });
 
     it("tokenizes native ordering operators", () => {
       const tokens = new Lexer("a < b\nc <= d\ne > f\ng >= h").tokenize();
-      expect(tokens.filter((token) => [TokenType.LT, TokenType.LTE, TokenType.GT, TokenType.GTE].includes(token.type)).map((token) => token.type))
-        .toEqual([TokenType.LT, TokenType.LTE, TokenType.GT, TokenType.GTE]);
+      expect(
+        tokens
+          .filter((token) =>
+            [TokenType.LT, TokenType.LTE, TokenType.GT, TokenType.GTE].includes(
+              token.type,
+            ),
+          )
+          .map((token) => token.type),
+      ).toEqual([TokenType.LT, TokenType.LTE, TokenType.GT, TokenType.GTE]);
     });
 
     it("rejects numeric separators outside digit groups", () => {
       for (const source of ["value = 1_", "value = 1__0", "value = 1._0"]) {
-        expect(() => new Lexer(source).tokenize()).toThrow(/Numeric separator must appear between two digits/);
+        expect(() => new Lexer(source).tokenize()).toThrow(
+          /Numeric separator must appear between two digits/,
+        );
       }
     });
 
@@ -162,7 +180,9 @@ first
       // Stack: [0, 4]. 3 spaces does not match 4 or 0.
       const badCode = `first\n    sub\n   bad`;
       expect(() => new Lexer(badCode).tokenize()).toThrow(LexerError);
-      expect(() => new Lexer(badCode).tokenize()).toThrow(/Inconsistent indentation/);
+      expect(() => new Lexer(badCode).tokenize()).toThrow(
+        /Inconsistent indentation/,
+      );
     });
   });
 
@@ -206,8 +226,12 @@ first
       const lexer = new Lexer(code);
       const tokens = lexer.tokenize();
 
-      expect(tokens.filter((t) => t.type === TokenType.INTERPOLATION_START).length).toBe(3);
-      expect(tokens.filter((t) => t.type === TokenType.INTERPOLATION_END).length).toBe(3);
+      expect(
+        tokens.filter((t) => t.type === TokenType.INTERPOLATION_START).length,
+      ).toBe(3);
+      expect(
+        tokens.filter((t) => t.type === TokenType.INTERPOLATION_END).length,
+      ).toBe(3);
     });
 
     it("handles escape sequences in strings", () => {
@@ -217,7 +241,9 @@ first
 
       const strToken = tokens.find((t) => t.type === TokenType.STRING);
       expect(strToken).toBeDefined();
-      expect(strToken?.value).toBe('Line 1\nLine 2\tTabbed "Quotes" \\ {notInterpolated}');
+      expect(strToken?.value).toBe(
+        'Line 1\nLine 2\tTabbed "Quotes" \\ {notInterpolated}',
+      );
     });
 
     it("throws on unclosed string at newline", () => {
@@ -229,7 +255,9 @@ first
     it("throws on unclosed string at EOF", () => {
       const code = `x = "unterminated`;
       expect(() => new Lexer(code).tokenize()).toThrow(LexerError);
-      expect(() => new Lexer(code).tokenize()).toThrow(/Unterminated string literal/);
+      expect(() => new Lexer(code).tokenize()).toThrow(
+        /Unterminated string literal/,
+      );
     });
   });
 
@@ -298,12 +326,16 @@ block
 
   describe("Operators and Delimiters", () => {
     it("rejects legacy equality syntax with a migration hint", () => {
-      expect(() => new Lexer("a == b").tokenize()).toThrow(/'#=' for value equality or '@=' for reference identity/);
+      expect(() => new Lexer("a == b").tokenize()).toThrow(
+        /'#=' for value equality or '@=' for reference identity/,
+      );
       expect(() => new Lexer("a !== b").tokenize()).toThrow(/'@!'/);
     });
 
     it("rejects nullish coalescing in favor of Option", () => {
-      expect(() => new Lexer("value ?? fallback").tokenize()).toThrow(/model absence with Option/);
+      expect(() => new Lexer("value ?? fallback").tokenize()).toThrow(
+        /model absence with Option/,
+      );
     });
 
     it("tokenizes all multi-character operators", () => {
@@ -450,6 +482,26 @@ block
     it("throws on unexpected character", () => {
       expect(() => new Lexer(`@`).tokenize()).toThrow(LexerError);
       expect(() => new Lexer(`$`).tokenize()).toThrow(LexerError);
+    });
+
+    it("tracks line and column across newlines in template literals", () => {
+      const code = "`line1\n${x}\nline3`\ny";
+      const tokens = new Lexer(code).tokenize();
+      const yToken = tokens.find(
+        (t) => t.type === TokenType.IDENTIFIER && t.value === "y",
+      );
+      expect(yToken).toBeDefined();
+      expect(yToken!.span.start.line).toBe(4);
+      expect(yToken!.span.start.column).toBe(1);
+    });
+
+    it("throws on unterminated interpolated string literal", () => {
+      expect(() => new Lexer(`"hello {x}\n"`).tokenize()).toThrow(
+        /Unterminated string literal/,
+      );
+      expect(() => new Lexer(`"hello {x}`).tokenize()).toThrow(
+        /Unterminated string literal/,
+      );
     });
   });
 });

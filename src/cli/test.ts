@@ -23,6 +23,7 @@ export const testCommand = (args: string[]) =>
         arg !== "--watch" &&
         arg !== "--engine" &&
         arg !== "--fast" &&
+        arg !== "--no-check" &&
         (engineIndex === -1 || i !== engineIndex + 1),
     );
 

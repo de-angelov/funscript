@@ -379,6 +379,7 @@ export function parseEffectBlock(
     TokenType.LBRACE,
     "Expected '{' after 'effect' (effect blocks require braces)",
   );
+  const prevParsingBraceEffect = ctx.parsingBraceEffect;
   ctx.parsingBraceEffect = true;
   ctx.enterScope();
 
@@ -543,7 +544,6 @@ export function parseEffectBlock(
     }
 
     ctx.consume(TokenType.RBRACE, "Expected '}' to close effect block");
-    ctx.parsingBraceEffect = false;
 
     if (!finalExpression) {
       throw new ParseError(EFFECT_RETURN_DIAGNOSTIC, {
@@ -560,6 +560,7 @@ export function parseEffectBlock(
       span: { start, end: finalExpression.span.end },
     };
   } finally {
+    ctx.parsingBraceEffect = prevParsingBraceEffect;
     ctx.exitScope();
   }
 }

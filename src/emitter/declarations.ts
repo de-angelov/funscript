@@ -22,7 +22,7 @@ export interface DeclarationEmitterContext {
   emitExpression(expr: Expression): string;
   emitStatement(stmt: Statement): string;
   emitTypeNode(typeNode: TypeNode): string;
-  emitSchemaTypeField(typeNode: TypeNode, rawRecordFields?: boolean): string;
+  emitSchemaTypeField(typeNode: TypeNode): string;
   emitBindingTarget(target: BindingTarget | Pattern): string;
   emitSchemaDeclaration(decl: SchemaDeclaration, isExport: boolean): string;
   emitWhenStatement(stmt: WhenStatement): string;
@@ -387,7 +387,7 @@ export function emitBindingDeclaration(
               ];
             }
             return [
-              `  ${paramName} = Schema.decodeUnknownSync(${ctx.emitSchemaTypeField(typeAnn, true)})(${paramName});`,
+              `  ${paramName} = Schema.decodeUnknownSync(${ctx.emitSchemaTypeField(typeAnn)})(${paramName});`,
             ];
           }
           if (p.name.kind === "RecordPattern") {
@@ -413,7 +413,7 @@ export function emitBindingDeclaration(
               ctx.recordContracts.has(typeAnn.name.name);
             const decodeStmt = isContract
               ? `  const ${decodedVar} = ${typeAnn.name.name}DecodeChecked(${rawParam});`
-              : `  const ${decodedVar} = Schema.decodeUnknownSync(${ctx.emitSchemaTypeField(typeAnn, true)})(${rawParam});`;
+              : `  const ${decodedVar} = Schema.decodeUnknownSync(${ctx.emitSchemaTypeField(typeAnn)})(${rawParam});`;
             const recFields =
               recType?.kind === "RecordTypeNode"
                 ? extractRecordFields(recType, lookup)
@@ -500,10 +500,9 @@ export function emitBindingDeclaration(
                 }
               }
             };
-            const sourceRef =
-              decl.isJs && p.typeAnnotation
-                ? `$funscriptDecoded${index}`
-                : `$funscriptParam${index}`;
+            const sourceRef = p.typeAnnotation
+              ? `$funscriptDecoded${index}`
+              : `$funscriptParam${index}`;
             unpackPatternFields(p.name, sourceRef, recFields);
             return bindings;
           }
@@ -524,22 +523,7 @@ export function emitBindingDeclaration(
           const rest = p.isRest ? "..." : "";
           let name = ctx.emitBindingTarget(p.name);
           if (p.name.kind === "RecordPattern") {
-            const lookup = (name: string): RecordTypeNode | undefined => {
-              const res =
-                ctx.getRecordTypeNode?.(name) ?? ctx.recordContracts.get(name);
-              return res?.kind === "RecordTypeNode" ? res : undefined;
-            };
-            let recType: TypeNode | undefined = p.typeAnnotation;
-            if (recType?.kind === "TypeReferenceNode") {
-              recType = lookup(recType.name.name);
-            }
-            const recFields =
-              recType?.kind === "RecordTypeNode"
-                ? extractRecordFields(recType, lookup)
-                : undefined;
-            if (decl.isJs || patternHasOptionalField(p.name, recFields)) {
-              name = `$funscriptParam${index}`;
-            }
+            name = `$funscriptParam${index}`;
           }
           const t = p.typeAnnotation
             ? `: ${ctx.emitTypeNode(p.typeAnnotation)}`
@@ -666,6 +650,7 @@ export function emitBindingDeclaration(
               }
             };
             collectParamsFromPattern(p.name, recFields, recType);
+            continue;
           }
         }
         for (const n of collectBindingNames(p.name)) {

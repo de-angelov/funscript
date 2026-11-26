@@ -212,7 +212,7 @@ export function funscriptPlugin(options: FunscriptPluginOptions = {}): Plugin {
         return null;
       }
 
-      if (!filter(cleanId) && !filter(id)) {
+      if (!filter(cleanId)) {
         return null;
       }
 

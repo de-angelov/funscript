@@ -33,14 +33,15 @@ export const runCommand = (
     const engine =
       engineIndex !== -1 ? commandArgs[engineIndex + 1] : undefined;
     const filePath = commandArgs.find(
-      (arg) =>
+      (arg, i) =>
         arg !== "--no-check" &&
         arg !== "--no-ts" &&
         arg !== "--no-global-this" &&
         arg !== "--bare-pipelines" &&
+        arg !== "--no-deep-destructure" &&
         arg !== "--fast" &&
         arg !== "--engine" &&
-        (engineIndex === -1 || arg !== engine),
+        (engineIndex === -1 || i !== engineIndex + 1),
     );
     if (!filePath) {
       process.exitCode = 1;
@@ -83,16 +84,14 @@ export const runCommand = (
         noDeepDestructurePaths: Array.isArray(projectPolicy.noDeepDestructure)
           ? projectPolicy.noDeepDestructure
           : undefined,
-        allowHoles: isPathPolicyEnabled(
-          projectPolicy.allowHoles,
-          process.cwd(),
-          filePath,
-        ),
-        allowEarlyReturns: isPathPolicyEnabled(
-          projectPolicy.allowEarlyReturns,
-          process.cwd(),
-          filePath,
-        ),
+        allowHoles: projectPolicy.allowHoles === true,
+        allowHolesPaths: Array.isArray(projectPolicy.allowHoles)
+          ? projectPolicy.allowHoles
+          : undefined,
+        allowEarlyReturns: projectPolicy.allowEarlyReturns === true,
+        allowEarlyReturnsPaths: Array.isArray(projectPolicy.allowEarlyReturns)
+          ? projectPolicy.allowEarlyReturns
+          : undefined,
       }))
     )
       return;
@@ -114,8 +113,15 @@ export const runCommand = (
               noTs: commandArgs.includes("--no-ts"),
               noGlobalThis: commandArgs.includes("--no-global-this"),
               barePipelines: commandArgs.includes("--bare-pipelines"),
-              noDeepDestructure: commandArgs.includes("--no-deep-destructure"),
+              noDeepDestructure:
+                commandArgs.includes("--no-deep-destructure") ||
+                projectPolicy.noDeepDestructure === true,
               maxDestructureDepth: projectPolicy.maxDestructureDepth,
+              allowEarlyReturns: isPathPolicyEnabled(
+                projectPolicy.allowEarlyReturns,
+                process.cwd(),
+                filePath,
+              ),
             }) as unknown as { name: string; setup: (build: unknown) => void },
           );
           const fullPath = path.resolve(filePath);
@@ -160,8 +166,9 @@ plugin(funscriptBunPlugin({
   noTs: ${Boolean(commandArgs.includes("--no-ts"))},
   noGlobalThis: ${Boolean(commandArgs.includes("--no-global-this"))},
   barePipelines: ${Boolean(commandArgs.includes("--bare-pipelines"))},
-  noDeepDestructure: ${Boolean(commandArgs.includes("--no-deep-destructure"))},
+  noDeepDestructure: ${Boolean(commandArgs.includes("--no-deep-destructure") || projectPolicy.noDeepDestructure === true)},
   maxDestructureDepth: ${typeof projectPolicy.maxDestructureDepth === "number" ? projectPolicy.maxDestructureDepth : "undefined"},
+  allowEarlyReturns: ${Boolean(isPathPolicyEnabled(projectPolicy.allowEarlyReturns, process.cwd(), filePath))},
 }));
 
 process.argv = [process.argv[0], ${JSON.stringify(fullPath)}, ...${JSON.stringify(programArgs)}];
@@ -199,8 +206,15 @@ if (mod && mod.main) {
           noTs: commandArgs.includes("--no-ts"),
           noGlobalThis: commandArgs.includes("--no-global-this"),
           barePipelines: commandArgs.includes("--bare-pipelines"),
-          noDeepDestructure: commandArgs.includes("--no-deep-destructure"),
+          noDeepDestructure:
+            commandArgs.includes("--no-deep-destructure") ||
+            projectPolicy.noDeepDestructure === true,
           maxDestructureDepth: projectPolicy.maxDestructureDepth,
+          allowEarlyReturns: isPathPolicyEnabled(
+            projectPolicy.allowEarlyReturns,
+            process.cwd(),
+            filePath,
+          ),
           engine: isFast ? "bun" : undefined,
         }),
       catch: (error) =>

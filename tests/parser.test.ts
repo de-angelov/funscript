@@ -1057,4 +1057,57 @@ increment = (value) =>
       }
     });
   });
+
+  describe("Span & Error Recovery Fixes", () => {
+    it("captures operator start span for UnaryExpression", () => {
+      const prog = parse(`a = -x`);
+      const bind = prog.body[0] as BindingDeclaration;
+      const expr = bind.init as UnaryExpression;
+      expect(expr.kind).toBe("UnaryExpression");
+      expect(expr.span.start.offset).toBe(4);
+    });
+
+    it("captures '...' start span for SpreadEntry in record literals", () => {
+      const prog = parse(`a = { ...base }`);
+      const bind = prog.body[0] as BindingDeclaration;
+      const expr = bind.init as RecordExpression;
+      expect(expr.entries[0].kind).toBe("SpreadEntry");
+      expect(expr.entries[0].span.start.offset).toBe(6);
+    });
+
+    it("captures '...' start span for RecordPatternField rest", () => {
+      const prog = parse(`{ ...rest } = obj`);
+      const bind = prog.body[0] as BindingDeclaration;
+      const pattern = bind.id as any;
+      expect(pattern.kind).toBe("RecordPattern");
+      expect(pattern.fields[0].isRest).toBe(true);
+      expect(pattern.fields[0].span.start.offset).toBe(2);
+    });
+
+    it("strips underscores in numeric literal types", () => {
+      const prog = parse(`schema Port = 1_000`);
+      const schema = prog.body[0] as SchemaDeclaration;
+      const body = schema.body as TypeSignatureSchema;
+      expect(body.signature).toMatchObject({
+        kind: "LiteralTypeNode",
+        value: 1000,
+      });
+    });
+
+    it("rejects optional '?' syntax in variant and error fields", () => {
+      expect(() => parse(`schema Opt = | Some(val?: Number)`)).toThrowError(
+        /Optional '\?' variant field syntax is disabled in FunScript/,
+      );
+      expect(() => parse(`error Bad(code?: Number)`)).toThrowError(
+        /Optional '\?' error field syntax is disabled in FunScript/,
+      );
+    });
+
+    it("resets parsingBraceEffect on effect block parse error", () => {
+      const tokens = new Lexer(`effect { 1 }`).tokenize();
+      const parser = new Parser(tokens);
+      expect(() => parser.parse()).toThrow(ParseError);
+      expect(parser.parsingBraceEffect).toBe(false);
+    });
+  });
 });

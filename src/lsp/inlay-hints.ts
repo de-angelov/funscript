@@ -48,9 +48,13 @@ function cleanTypeString(typeStr: string): string {
 }
 
 function shouldSkipType(typeStr: string): boolean {
-  if (!typeStr || typeStr === "any" || typeStr === "never") return true;
-  if (typeStr.includes("error") || typeStr.includes("unknown")) return true;
-  return false;
+  return (
+    !typeStr ||
+    typeStr === "unknown" ||
+    typeStr === "any" ||
+    typeStr === "never" ||
+    typeStr === "void"
+  );
 }
 
 export function findInlayHints(

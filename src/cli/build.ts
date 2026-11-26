@@ -272,6 +272,14 @@ export const buildCommand = (
           noDeepDestructurePaths: Array.isArray(projectPolicy.noDeepDestructure)
             ? projectPolicy.noDeepDestructure
             : undefined,
+          allowHoles: projectPolicy.allowHoles === true,
+          allowHolesPaths: Array.isArray(projectPolicy.allowHoles)
+            ? projectPolicy.allowHoles
+            : undefined,
+          allowEarlyReturns: projectPolicy.allowEarlyReturns === true,
+          allowEarlyReturnsPaths: Array.isArray(projectPolicy.allowEarlyReturns)
+            ? projectPolicy.allowEarlyReturns
+            : undefined,
         }))
       )
         return;
@@ -282,6 +290,11 @@ export const buildCommand = (
             noTs: args.includes("--no-ts"),
             noGlobalThis: args.includes("--no-global-this"),
             barePipelines: args.includes("--bare-pipelines"),
+            noDeepDestructure:
+              args.includes("--no-deep-destructure") ||
+              projectPolicy.noDeepDestructure === true,
+            maxDestructureDepth: projectPolicy.maxDestructureDepth,
+            allowEarlyReturns: projectPolicy.allowEarlyReturns === true,
             engine: isFast ? "bun" : engine,
           }),
         catch: (error) =>
@@ -375,6 +388,14 @@ export const buildCommand = (
           : undefined,
         noDeepDestructurePaths: Array.isArray(projectPolicy.noDeepDestructure)
           ? projectPolicy.noDeepDestructure
+          : undefined,
+        allowHoles: projectPolicy.allowHoles === true,
+        allowHolesPaths: Array.isArray(projectPolicy.allowHoles)
+          ? projectPolicy.allowHoles
+          : undefined,
+        allowEarlyReturns: projectPolicy.allowEarlyReturns === true,
+        allowEarlyReturnsPaths: Array.isArray(projectPolicy.allowEarlyReturns)
+          ? projectPolicy.allowEarlyReturns
           : undefined,
       }))
     )

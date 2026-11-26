@@ -78,8 +78,13 @@ export function funscriptEsbuildPlugin(
 
   const ensureTypeView = async () => {
     if (options.types && !typeView) {
-      typeView = new TypeView(cwd, options.types);
-      typeViewInitPromise = typeView.generate();
+      const tv = new TypeView(cwd, options.types);
+      typeView = tv;
+      typeViewInitPromise = tv.generate().catch((err) => {
+        typeView = undefined;
+        typeViewInitPromise = undefined;
+        throw err;
+      });
     }
     if (typeViewInitPromise) {
       await typeViewInitPromise;
@@ -150,7 +155,7 @@ export function funscriptEsbuildPlugin(
           : path.resolve(resolveDir, specifier);
 
         // If direct .fun / .funx
-        if (/\.funx?$/.test(target)) {
+        if (/\.funx?$/.test(target) && filter.test(target)) {
           return { path: target };
         }
 
