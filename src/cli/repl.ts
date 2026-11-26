@@ -299,7 +299,11 @@ export async function evaluateReplLine(
     value = await Effect.runPromise(
       value as Effect.Effect<unknown, unknown, never>,
     );
-  } else if (value != null && typeof value.then === "function") {
+  } else if (
+    value !== null &&
+    value !== undefined &&
+    typeof (value as { then?: unknown }).then === "function"
+  ) {
     value = await value;
   }
 

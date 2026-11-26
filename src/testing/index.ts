@@ -25,9 +25,16 @@ function createUniversalProxy(name: string): unknown {
     {
       get(_target, prop, receiver) {
         const g = getGlobal(name);
-        if (g != null && typeof g === "object" && prop in g) {
-          const val = Reflect.get(g, prop, receiver);
-          return typeof val === "function" ? val.bind(g) : val;
+        if (
+          g !== null &&
+          g !== undefined &&
+          typeof g === "object" &&
+          prop in g
+        ) {
+          const val: unknown = Reflect.get(g, prop, receiver);
+          return typeof val === "function"
+            ? (val as (...args: unknown[]) => unknown).bind(g)
+            : val;
         }
         return undefined;
       },

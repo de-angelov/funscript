@@ -34,6 +34,7 @@ export default tseslint.config(
       "prefer-const": "error",
       "no-useless-escape": "error",
       "no-case-declarations": "off",
+      eqeqeq: ["error", "always"],
 
       // Effect rules
       "@effect/no-import-from-barrel-package": [
@@ -60,19 +61,19 @@ export default tseslint.config(
         "error",
         { allowedNames: ["self", "receiver"] },
       ],
-      "@typescript-eslint/no-unnecessary-type-assertion": "warn",
+      "@typescript-eslint/no-unnecessary-type-assertion": "error",
       "@typescript-eslint/no-duplicate-enum-values": "off", // Intentional compatibility aliases in TokenType
       "@typescript-eslint/unbound-method": "off",
-      "@typescript-eslint/no-explicit-any": "warn",
+      "@typescript-eslint/no-explicit-any": "error",
       "@typescript-eslint/no-unused-vars": [
-        "warn",
+        "error",
         { argsIgnorePattern: "^_", varsIgnorePattern: "^_" },
       ],
 
       // Compiler & AST data-structure pragmatism
       "@typescript-eslint/no-unsafe-assignment": "off",
       "@typescript-eslint/no-unsafe-member-access": "off",
-      "@typescript-eslint/no-unsafe-call": "off",
+      "@typescript-eslint/no-unsafe-call": "error",
       "@typescript-eslint/no-unsafe-return": "off",
       "@typescript-eslint/no-unsafe-argument": "off",
     },

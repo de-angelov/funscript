@@ -122,12 +122,14 @@ export const runCommand = (
           const originalArgv = process.argv;
           process.argv = [process.argv[0], fullPath, ...programArgs];
           try {
-            const mod = await import(fullPath);
+            const mod = (await import(fullPath)) as { main?: unknown };
             if (mod && mod.main) {
               if (Effect.isEffect(mod.main)) {
-                await Effect.runPromise(mod.main);
+                await Effect.runPromise(
+                  mod.main as Effect.Effect<unknown, unknown, never>,
+                );
               } else if (typeof mod.main === "function") {
-                await mod.main();
+                await (mod.main as () => unknown)();
               }
             }
           } finally {

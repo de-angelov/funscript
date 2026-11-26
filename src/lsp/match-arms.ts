@@ -95,16 +95,13 @@ export function findFillMatchArmsCodeActions(
       decl.kind === "SchemaDeclaration" &&
       decl.body.kind === "TaggedUnionSchema"
     ) {
-      const sdecl = decl;
-      const variants: VariantInfo[] = (sdecl.body as any).variants.map(
-        (v: any) => ({
-          name: v.name.name,
-          fields: v.fields.map((f: any) => f.name.name),
-        }),
-      );
-      schemas.set(sdecl.id.name, variants);
+      const variants: VariantInfo[] = decl.body.variants.map((v) => ({
+        name: v.name.name,
+        fields: v.fields.map((f) => f.name.name),
+      }));
+      schemas.set(decl.id.name, variants);
       for (const v of variants) {
-        variantToSchema.set(v.name, sdecl.id.name);
+        variantToSchema.set(v.name, decl.id.name);
       }
     }
   }
