@@ -20,6 +20,7 @@ export default defineConfig({
             { label: "Overview", slug: "guides/overview" },
             { label: "Language Overview", slug: "guides/language-overview" },
             { label: "Syntax", slug: "guides/syntax" },
+            { label: "Pipelines", slug: "guides/pipelines" },
             { label: "Tooling", slug: "guides/tooling" },
             { label: "Compatibility", slug: "guides/compatibility" },
           ],
