@@ -55,9 +55,11 @@ export addTask = (manager: TaskManager, title: String, tag: String) =>
   }
 
   // Mutative draft scope updating task collection
-  updatedTasks = manager.tasks |> mut (draft) =>
-    draft.push(newTask)
-    draft
+  updatedTasks =
+    manager.tasks
+    |> mut (draft) =>
+      draft.push(newTask)
+      draft
 
   updated = {
     ...manager
@@ -73,15 +75,22 @@ export completeTask = (manager: TaskManager, targetId: Number) =>
   // Early return when collection is empty
   when (manager.tasks.length #= 0) => manager
 
-  updatedTasks = manager.tasks |> mut (draft) =>
-    idx = draft.findIndex((t) => t.id #= targetId)
+  updatedTasks =
+    manager.tasks
+    |> mut (draft) =>
+      idx = draft.findIndex((t) => t.id #= targetId)
 
-    when (idx #! -1) {
-      existing = Option.getOrElse(draft[idx], () => { id: 0, title: "", tag: "", completed: false })
-      updatedItem = { ...existing, completed: true }
-      draft.splice(idx, 1, updatedItem)
-    }
-    draft
+      when (idx #! -1) {
+        existing = Option.getOrElse(draft[idx], () => {
+          id: 0
+          title: ""
+          tag: ""
+          completed: false
+        })
+        updatedItem = { ...existing, completed: true }
+        draft.splice(idx, 1, updatedItem)
+      }
+      draft
 
   // Conditional block execution form
 
@@ -92,12 +101,14 @@ export completeTask = (manager: TaskManager, targetId: Number) =>
 export removeTask = (manager: TaskManager, targetId: Number) =>
   when (manager.tasks.length #= 0) => manager
 
-  updatedTasks = manager.tasks |> mut (draft) =>
-    idx = draft.findIndex((t) => t.id #= targetId)
-    when (idx #! -1) {
-      draft.splice(idx, 1)
-    }
-    draft
+  updatedTasks =
+    manager.tasks
+    |> mut (draft) =>
+      idx = draft.findIndex((t) => t.id #= targetId)
+      when (idx #! -1) {
+        draft.splice(idx, 1)
+      }
+      draft
 
   updated = { ...manager, tasks: updatedTasks }
   => updated

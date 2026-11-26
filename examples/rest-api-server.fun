@@ -26,9 +26,15 @@ createItem = HttpRouter.schemaJson(Schema.Struct({ body: Schema.Struct({ name: S
 
 createItemResponse = Effect.flatMap(createItem, (request) => HttpServerResponse.json({ id: 1, name: request.body.name }, { status: 201 }))
 
-postItems = HttpRouter.add("POST", "/items", Effect.catchCause(createItemResponse, (_) => HttpServerResponse.json({ error: "ValidationError", message: "Request body must contain a string name" }, { status: 400 })))
+postItems = HttpRouter.add("POST", "/items", Effect.catchCause(createItemResponse, (_) => HttpServerResponse.json({
+  "error": "ValidationError"
+  message: "Request body must contain a string name"
+}, { status: 400 })))
 
-notFound = HttpRouter.add("*", "/*", HttpServerResponse.json({ error: "NotFoundError", message: "No route for this path" }, { status: 404 }))
+notFound = HttpRouter.add("*", "/*", HttpServerResponse.json({
+  "error": "NotFoundError"
+  message: "No route for this path"
+}, { status: 404 }))
 
 export routes = Layer.mergeAll(getItems, postItems, notFound)
 

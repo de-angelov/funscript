@@ -1317,6 +1317,8 @@ export class Formatter {
       lastArg.kind === "FunctionExpression" &&
       (lastArg.body.kind === "BlockStatement" ||
         lastArg.body.kind === "MatchExpression" ||
+        lastArg.body.kind === "EffectBlockExpression" ||
+        lastArg.body.kind === "ParBlockExpression" ||
         (lastArg.body.kind === "PipelineExpression" &&
           this.shouldExpandPipeline(
             this.unrollPipeline(lastArg.body),
@@ -1325,9 +1327,11 @@ export class Formatter {
 
     if (isMultilineBlock) {
       const formattedLast = this.formatExpression(lastArg, indent);
-      const close = formattedLast.endsWith("}")
-        ? ")"
-        : `\n${this.spaces(indent)})`;
+      const firstLine = formattedLast.split("\n")[0] ?? "";
+      const close =
+        formattedLast.endsWith("}") && firstLine.includes("{")
+          ? ")"
+          : `\n${this.spaces(indent)})`;
       if (expr.args.length === 1) {
         return `${callee}(${formattedLast}${close}`;
       }

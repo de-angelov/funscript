@@ -17,9 +17,16 @@ export schema Action =
 export reduceTodos = (todos: Array<Todo>, action: Action): Array<Todo> =>
   match action
     | AddTodo(title, priority) =>
-        todos |> append({ id: todos.length + 1, title, priority, completed: false })
+        todos
+        |> append({
+          id: todos.length + 1
+          title
+          priority
+          completed: false
+        })
     | ToggleTodo(id) =>
-        todos |> map((t) => match | t.id #= id => { ...t, completed: not t.completed } | _ => t
+        todos
+        |> map((t) => match | t.id #= id => { ...t, completed: not t.completed } | _ => t
         )
     | RemoveTodo(id) =>
         todos |> filter((t) => t.id #! id)
@@ -37,8 +44,18 @@ export fetchInitialTodos =
   effect {
     _ <- Console.log("[FunScript API] Fetching initial todos...")
     todos: Array<Todo> = [
-      { id: 1, title: "Learn SolidJS fine-grained reactivity", completed: true, priority: "high" },
-      { id: 2, title: "Design FunScript state machine", completed: true, priority: "high" },
+      {
+        id: 1
+        title: "Learn SolidJS fine-grained reactivity"
+        completed: true
+        priority: "high"
+      },
+      {
+        id: 2
+        title: "Design FunScript state machine"
+        completed: true
+        priority: "high"
+      },
       {
         id: 3
         title: "Dogfood SolidJS + FunScript integration"

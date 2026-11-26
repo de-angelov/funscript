@@ -796,6 +796,126 @@ export checkLock = (pid: Number) => {
       expect(nested?.suggestedAction).toContain("Flatten the match");
     });
 
+    it("supports multi-value tuple matching match (a, b) with tuple patterns", async () => {
+      const result = await Effect.runPromise(
+        typeCheckSource(
+          `
+export classifyPair = (a: Boolean, b: Boolean): String =>
+  match (a, b)
+  | (true, true) => "both"
+  | (true, false) => "first"
+  | (false, _) => "not-first"
+
+export combineOpts = (x: Option<Number>, y: Option<Number>): Number =>
+  match (x, y)
+  | (Some(n), Some(m)) => n + m
+  | (Some(n), None) => n
+  | (None, Some(m)) => m
+  | (None, None) => 0
+`.trim(),
+          "tuple_match.fun",
+        ),
+      );
+
+      expect(result.diagnostics.filter((d) => d.category === "error")).toEqual(
+        [],
+      );
+    });
+
+    it("narrows Unknown types using type guards in match arms and flags Reflect.* as UNSAFE_REFLECT", async () => {
+      const result = await Effect.runPromise(
+        typeCheckSource(
+          `
+import { Predicate, Option } from "effect"
+
+export describeUnknown = (x: Unknown): Number =>
+  match x
+  | _ when Predicate.isString(x) => x.length
+  | _ when Predicate.isNumber(x) => x + 1
+  | _ => 0
+
+export readBlockGuard = (x: Unknown): Number =>
+  match
+  | Predicate.isString(x) => {
+      len = x.length
+      => len + 1
+  }
+  | Option.isOption(x) => {
+      hasVal = Option.isSome(x)
+      => match hasVal
+        | true => 1
+        | false => 0
+  }
+  | _ => 0
+
+export unsafeReflectCall = (obj: Record<String, Unknown>): Unknown =>
+  Reflect.get(obj, "key")
+`.trim(),
+          "narrow_guard.fun",
+        ),
+      );
+
+      const errors = result.diagnostics.filter(
+        (d) => d.category === "error" && d.code !== "NESTED_MATCH",
+      );
+      expect(errors).toEqual([]);
+      const reflectWarn = result.diagnostics.find(
+        (d) => d.code === "UNSAFE_REFLECT",
+      );
+      expect(reflectWarn).toBeDefined();
+      expect(reflectWarn?.category).toBe("warning");
+    });
+
+    it("supports JSOptional<T> with fromNullishOr and match Some / None / None(null) / None(undefined)", async () => {
+      const result = await Effect.runPromise(
+        typeCheckSource(
+          `
+export toLenViaPipe = (x: JSOptional<String>): Number =>
+  x
+  |> fromNullishOr
+  |> Option.map((s) => s.length)
+  |> Option.getOrElse(() => 0)
+
+export matchJSOptional = (x: JSOptional<String>): Number =>
+  match x
+  | Some(s) => s.length
+  | None => 0
+
+export matchJSOptionalVariants = (x: JSOptional<String>): String =>
+  match x
+  | Some(s) => s
+  | None(Null) => "null"
+  | None(Undefined) => "undefined"
+`.trim(),
+          "js_optional.fun",
+        ),
+      );
+
+      expect(result.diagnostics.filter((d) => d.category === "error")).toEqual(
+        [],
+      );
+    });
+
+    it("enforces exhaustive JSOptional match and rejects redundant Option wrapping", async () => {
+      const result = await Effect.runPromise(
+        typeCheckSource(
+          `
+export missingNone = (x: JSOptional<String>): Number =>
+  match x
+  | Some(s) => s.length
+
+export doubleWrap = (o: Option<String>) =>
+  Option.fromNullishOr(o)
+`.trim(),
+          "js_optional_safe.fun",
+        ),
+      );
+
+      const errors = result.diagnostics.filter((d) => d.category === "error");
+      expect(errors.length).toBeGreaterThanOrEqual(2);
+      expect(errors.some((d) => d.code === "REDUNDANT_OPTION_WRAP")).toBe(true);
+    });
+
     it("reports FS_CAPTURED_MUT when outer mut variables are captured in effect or par blocks", async () => {
       // 1. Top-level mut variable captured in effect block
       const res1 = await Effect.runPromise(
@@ -1635,6 +1755,22 @@ export calculateTax = (amount: Number): Number => ???
       );
       expect(resultGood.success).toBe(true);
       expect(resultGood.errorCount).toBe(0);
+    });
+
+    it("supports bare fromNullishOrElse in pipelines and direct calls with optional params", async () => {
+      const code = `
+export greetWithFallback = (name?: String): String =>
+  name |> fromNullishOrElse("stranger")
+
+export greetDirect = (name?: String): String =>
+  fromNullishOrElse(name, "stranger")
+`.trim();
+
+      const result = await Effect.runPromise(
+        typeCheckSource(code, "src/greet.fun"),
+      );
+      expect(result.success).toBe(true);
+      expect(result.errorCount).toBe(0);
     });
   });
 });

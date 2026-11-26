@@ -2,6 +2,7 @@ import type {
   ArrayPattern,
   BindingTarget,
   Pattern,
+  Position,
   RecordPattern,
   RecordPatternField,
   UpperIdentifier,
@@ -156,36 +157,27 @@ export function parsePrimaryPattern(ctx: PatternParserContext): Pattern {
   }
   if (ctx.match(TokenType.LBRACKET)) {
     const start = ctx.previous().span.start;
-    const elements: Pattern[] = [];
-    ctx.skipNewlines();
-    while (!ctx.check(TokenType.RBRACKET) && !ctx.isAtEnd()) {
-      ctx.skipNewlines();
-      if (ctx.check(TokenType.RBRACKET)) break;
-      if (ctx.match(TokenType.COMMA)) {
-        elements.push({
-          kind: "WildcardPattern",
-          span: ctx.previous().span,
-        });
-        continue;
-      }
-      if (ctx.match(TokenType.DOTDOTDOT)) {
-        const restStart = ctx.previous().span.start;
-        const arg = parsePattern(ctx);
-        elements.push({
-          kind: "RestPattern",
-          argument: arg,
-          span: { start: restStart, end: arg.span.end },
-        });
-      } else {
-        elements.push(parsePattern(ctx));
-      }
-      ctx.match(TokenType.COMMA);
-      ctx.skipNewlines();
-    }
-    const end = ctx.consume(
+    const { elements, end } = parseDelimitedPatternElements(
+      ctx,
       TokenType.RBRACKET,
       "Expected ']' after array pattern",
-    ).span.end;
+    );
+    return {
+      kind: "ArrayPattern",
+      elements,
+      span: { start, end },
+    };
+  }
+  if (ctx.match(TokenType.LPAREN)) {
+    const start = ctx.previous().span.start;
+    const { elements, sawComma, end } = parseDelimitedPatternElements(
+      ctx,
+      TokenType.RPAREN,
+      "Expected ')' after tuple pattern",
+    );
+    if (!sawComma && elements.length === 1) {
+      return elements[0];
+    }
     return {
       kind: "ArrayPattern",
       elements,
@@ -197,6 +189,45 @@ export function parsePrimaryPattern(ctx: PatternParserContext): Pattern {
     `Unexpected pattern token '${ctx.peek().value}'`,
     ctx.peek().span,
   );
+}
+
+function parseDelimitedPatternElements(
+  ctx: PatternParserContext,
+  closeToken: TokenType,
+  closeMessage: string,
+): { elements: Pattern[]; sawComma: boolean; end: Position } {
+  const elements: Pattern[] = [];
+  let sawComma = false;
+  ctx.skipNewlines();
+  while (!ctx.check(closeToken) && !ctx.isAtEnd()) {
+    ctx.skipNewlines();
+    if (ctx.check(closeToken)) break;
+    if (ctx.match(TokenType.COMMA)) {
+      sawComma = true;
+      elements.push({
+        kind: "WildcardPattern",
+        span: ctx.previous().span,
+      });
+      continue;
+    }
+    if (ctx.match(TokenType.DOTDOTDOT)) {
+      const restStart = ctx.previous().span.start;
+      const arg = parsePattern(ctx);
+      elements.push({
+        kind: "RestPattern",
+        argument: arg,
+        span: { start: restStart, end: arg.span.end },
+      });
+    } else {
+      elements.push(parsePattern(ctx));
+    }
+    if (ctx.match(TokenType.COMMA)) {
+      sawComma = true;
+    }
+    ctx.skipNewlines();
+  }
+  const end = ctx.consume(closeToken, closeMessage).span.end;
+  return { elements, sawComma, end };
 }
 
 export function parseBindingPattern(

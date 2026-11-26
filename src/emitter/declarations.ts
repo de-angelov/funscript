@@ -512,25 +512,7 @@ export function emitBindingDeclaration(
           }
           return [];
         }
-        ctx.addEffectImport("Option");
-        const targetName = ctx.emitBindingTarget(p.name);
-        const rawName = `$funscriptOptional${index}`;
-        if (p.typeAnnotation && p.name.kind === "Identifier") {
-          const typeAnn = p.typeAnnotation;
-          if (
-            typeAnn.kind === "TypeReferenceNode" &&
-            ctx.recordContracts.has(typeAnn.name.name)
-          ) {
-            return [
-              `  const ${targetName} = ${rawName} !== undefined ? Option.some(${typeAnn.name.name}DecodeChecked(${rawName})) : Option.none();`,
-            ];
-          }
-          ctx.addEffectImport("Schema");
-          return [
-            `  const ${targetName} = ${rawName} !== undefined ? Option.some(Schema.decodeUnknownSync(${ctx.emitSchemaTypeField(p.typeAnnotation, true)})(${rawName})) : Option.none();`,
-          ];
-        }
-        return [`  const ${targetName} = Option.fromUndefinedOr(${rawName});`];
+        return [];
       });
       if (validations || optionalBindings.length > 0)
         ctx.addEffectImport("Schema");
@@ -545,9 +527,7 @@ export function emitBindingDeclaration(
         .map((p, index) => {
           const rest = p.isRest ? "..." : "";
           let name = ctx.emitBindingTarget(p.name);
-          if (p.optional) {
-            name = `$funscriptOptional${index}`;
-          } else if (p.name.kind === "RecordPattern") {
+          if (p.name.kind === "RecordPattern") {
             const lookup = (name: string): RecordTypeNode | undefined => {
               const res =
                 ctx.getRecordTypeNode?.(name) ?? ctx.recordContracts.get(name);

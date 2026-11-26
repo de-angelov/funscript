@@ -1783,6 +1783,26 @@ export class Emitter {
 
     if (
       expr.callee.kind === "Identifier" &&
+      expr.callee.name === "fromNullishOr" &&
+      !this.isUserBinding("fromNullishOr")
+    ) {
+      this.needsFromNullishOr = true;
+      this.effectImports.add("Option");
+      return `fromNullishOr(${expr.args.map((a) => this.emitExpression(a)).join(", ")})`;
+    }
+
+    if (
+      expr.callee.kind === "Identifier" &&
+      expr.callee.name === "fromNullishOrElse" &&
+      !this.isUserBinding("fromNullishOrElse")
+    ) {
+      this.needsFromNullishOrElse = true;
+      this.effectImports.add("Option");
+      return `fromNullishOrElse(${expr.args.map((a) => this.emitExpression(a)).join(", ")})`;
+    }
+
+    if (
+      expr.callee.kind === "Identifier" &&
       (expr.callee.name === "parseInt" || expr.callee.name === "parseFloat")
     ) {
       throw new FunScriptError(
@@ -2049,6 +2069,26 @@ export class Emitter {
         if (s.kind === "MutBlockExpression") {
           this.needsMutative = true;
           return `(__mutInput) => create(__mutInput, ${this.emitMutativeRecipe(s)})`;
+        }
+
+        if (!this.isUserBinding("fromNullishOr")) {
+          if (s.kind === "Identifier" && s.name === "fromNullishOr") {
+            this.needsFromNullishOr = true;
+            this.effectImports.add("Option");
+            return `fromNullishOr`;
+          }
+        }
+
+        if (!this.isUserBinding("fromNullishOrElse")) {
+          if (
+            s.kind === "CallExpression" &&
+            s.callee.kind === "Identifier" &&
+            s.callee.name === "fromNullishOrElse"
+          ) {
+            this.needsFromNullishOrElse = true;
+            this.effectImports.add("Option");
+            return `fromNullishOrElse(${s.args.map((a) => this.emitExpression(a)).join(", ")})`;
+          }
         }
 
         if (!this.isUserBinding("dbg")) {
@@ -2374,9 +2414,7 @@ export class Emitter {
       .map((p, index) => {
         const rest = p.isRest ? "..." : "";
         let name = this.emitBindingTarget(p.name);
-        if (p.optional) {
-          name = `$funscriptOptional${index}`;
-        } else if (p.name.kind === "RecordPattern") {
+        if (p.name.kind === "RecordPattern") {
           let recType: TypeNode | undefined = p.typeAnnotation;
           if (recType?.kind === "TypeReferenceNode") {
             recType = this.getRecordTypeNode(recType.name.name);
@@ -2406,13 +2444,7 @@ export class Emitter {
     const retType = expr.returnType
       ? `: ${this.emitTypeNode(expr.returnType)}`
       : "";
-    const optionalBindings = expr.params.flatMap((p, index) => {
-      if (!p.optional) return [];
-      this.effectImports.add("Option");
-      return [
-        `  const ${this.emitBindingTarget(p.name)} = Option.fromUndefinedOr($funscriptOptional${index});`,
-      ];
-    });
+    const optionalBindings: string[] = [];
 
     const records = new Map<string, Map<string, RecordFieldInfo> | undefined>();
     const recordDefaults: string[] = [];
@@ -2703,7 +2735,7 @@ export class Emitter {
         }
       }
       for (const n of this.collectBindingNames(p.name)) {
-        paramScopeEntries.push([n, Boolean(p.optional)]);
+        paramScopeEntries.push([n, false]);
         varTypeEntries.push([n, p.typeAnnotation]);
       }
     }

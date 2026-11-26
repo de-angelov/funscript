@@ -27,7 +27,8 @@ export schema VoteHandler = {
 export createVoteHandler = (foreign: (request: VoteRequest) => Effect<Unknown, VoteError>): VoteHandler =>
   checked = checkedEffect(foreign, Schema.Tuple([VoteRequest]), VoteResult)
   submit = (request: VoteRequest) =>
-    checked(request) |> Effect.mapError((failure) => { code: "vote_failed", cause: failure })
+    checked(request)
+    |> Effect.mapError((failure) => { code: "vote_failed", cause: failure })
   => { submit: submit }
 
 export castVote = (handler: VoteHandler, request: VoteRequest) =>

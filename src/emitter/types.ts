@@ -201,6 +201,12 @@ export function emitTypeNode(ctx: TypeEmitterContext, node: TypeNode): string {
           node.span,
         );
       }
+      if (name === "JSOptional") {
+        if (node.typeArgs && node.typeArgs.length === 1) {
+          return `(${ctx.emitTypeNode(node.typeArgs[0])} | null | undefined)`;
+        }
+        return "unknown";
+      }
       if (PRIMITIVE_TYPES[name]) return PRIMITIVE_TYPES[name];
       if (name === "Array" && !ctx.declaredTypeNames.has(name))
         name = "ReadonlyArray";

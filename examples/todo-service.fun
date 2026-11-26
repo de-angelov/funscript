@@ -25,7 +25,11 @@ export TodoRepoLive =
         effect {
           items <- Ref.get(store)
           id = items.length + 1
-          newTodo: Todo = { id, title, completed: false }
+          newTodo: Todo = {
+            id
+            title
+            completed: false
+          }
           _ <- Ref.update(store, (curr) => curr |> Array.append(newTodo))
           => newTodo
         }
@@ -36,13 +40,15 @@ export TodoRepoLive =
           idxOpt = items |> Array.findFirstIndex((t) => t.id #= id)
           res <- match idxOpt
             | Some(idx) =>
-                items[idx] |> Option.match({
+                items[idx]
+                |> Option.match({
                   onNone: () => Effect.fail(TodoNotFound({ id }))
                   onSome: (todo) =>
                     effect {
                       updated = { ...todo, completed: true }
                       _ <- Ref.update(store, (curr) =>
-                        curr |> mut (draft) =>
+                        curr
+                        |> mut (draft) =>
                           draft[idx] = updated
                           draft
                       )

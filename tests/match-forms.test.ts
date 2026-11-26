@@ -390,7 +390,7 @@ export unwrap = (opt: Option) =>
 
       const formatted = format(unformatted);
       expect(formatted).toContain(
-        "  opt |> match\n    | Some(x) => x\n    | None => 0\n",
+        "  opt\n  |> match\n    | Some(x) => x\n    | None => 0\n",
       );
       expect(format(formatted)).toBe(formatted);
     });

@@ -2048,6 +2048,15 @@ export const typeCheckVirtualFiles = (
                       "Unmanaged native APIs bypass Effect cancellation and tracing.",
                       "Use Effect services ('Effect.sleep', '@effect/platform' HttpClient).",
                     );
+                  } else if (o === "Reflect") {
+                    addAstDiag(
+                      node.span,
+                      "UNSAFE_REFLECT",
+                      `\`Reflect.${p}\` is an unsafe reflection escape hatch that bypasses static type safety.`,
+                      "warning",
+                      "Reflective property access and dynamic invocation bypass FunScript's static type and schema guarantees.",
+                      "Use `Schema.decodeUnknownOption`, `Record.*`, or type-guard narrowing in `match` instead.",
+                    );
                   } else if (
                     !isEntry &&
                     o === "console" &&
@@ -2685,6 +2694,29 @@ export const typeCheckVirtualFiles = (
               node.name?.text === "JsInteropError"
             )
               return;
+            if (ts.isCallExpression(node) && node.arguments.length >= 1) {
+              const calleeText = node.expression.getText(sf);
+              if (
+                calleeText === "fromNullishOr" ||
+                calleeText === "Option.fromNullishOr" ||
+                calleeText === "Option.fromUndefinedOr"
+              ) {
+                const argType = checker.getTypeAtLocation(node.arguments[0]);
+                const argTypeStr = checker.typeToString(argType);
+                if (
+                  /^Option</.test(argTypeStr) ||
+                  /^Option\.Option</.test(argTypeStr)
+                ) {
+                  addCustomDiag(
+                    node,
+                    "REDUNDANT_OPTION_WRAP",
+                    `Value is already an '${argTypeStr}'; calling '${calleeText}' again double-wraps it into 'Option<Option<...>>'.`,
+                    "Wrapping an existing Option with fromNullishOr/fromUndefinedOr creates Option<Option<T>>, which breaks downstream Option.getOrElse and pattern matching.",
+                    "Use the Option value directly without calling fromNullishOr/fromUndefinedOr again.",
+                  );
+                }
+              }
+            }
             if (ts.isReturnStatement(node) && node.expression) {
               let enc: ts.Node | undefined = node.parent;
               while (

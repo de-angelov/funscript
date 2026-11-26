@@ -1303,6 +1303,40 @@ export class Parser {
 
   // --- Match & Patterns ---
 
+  private tryParseTupleScrutinee(): Expression | undefined {
+    if (!this.check(TokenType.LPAREN)) return undefined;
+    const saved = this.current;
+    const start = this.advance().span.start;
+    if (this.check(TokenType.RPAREN)) {
+      this.current = saved;
+      return undefined;
+    }
+    this.skipNewlines();
+    const first = this.parseExpression();
+    this.skipNewlines();
+    if (!this.match(TokenType.COMMA)) {
+      this.current = saved;
+      return undefined;
+    }
+    const elements: Expression[] = [first];
+    this.skipNewlines();
+    while (!this.check(TokenType.RPAREN) && !this.isAtEnd()) {
+      elements.push(this.parseExpression());
+      this.skipNewlines();
+      if (!this.match(TokenType.COMMA)) break;
+      this.skipNewlines();
+    }
+    const end = this.consume(
+      TokenType.RPAREN,
+      "Expected ')' after tuple match expression",
+    ).span.end;
+    return {
+      kind: "ArrayExpression",
+      elements,
+      span: { start, end },
+    };
+  }
+
   private parseMatchExpression(isPipeline = false): MatchExpression {
     const start = this.previous().span.start;
     let scrutinee: Expression | undefined;
@@ -1314,7 +1348,7 @@ export class Parser {
       !this.check(TokenType.NEWLINE) &&
       !this.check(TokenType.INDENT)
     ) {
-      scrutinee = this.parseExpression();
+      scrutinee = this.tryParseTupleScrutinee() ?? this.parseExpression();
     }
 
     this.skipNewlines();

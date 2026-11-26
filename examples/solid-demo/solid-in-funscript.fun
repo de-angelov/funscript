@@ -2,7 +2,7 @@ import { createSignal, createMemo, createComputed, createRoot } from "solid-js"
 
 export main = () =>
   console.log("Starting SolidJS in FunScript test...")
-  => createRoot((dispose) =>
+  => createRoot((dispose) => {
     [count, setCount] = createSignal(10)
 
     doubled = createMemo(() => count() * 2)
@@ -16,4 +16,4 @@ export main = () =>
     console.log("Updating signal to 50:")
     setCount(50)
     => dispose()
-  )
+  })

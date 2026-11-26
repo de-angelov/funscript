@@ -26,7 +26,11 @@ export schema Todo = {
 export addTodo = (todos: Array<Todo>, title: String): Array<Todo> =>
   todos
   |> mut (draft) =>
-    draft.push({ id: "new-task", title, completed: false })
+    draft.push({
+      id: "new-task"
+      title
+      completed: false
+    })
     draft
 
 export schema TodoFilter =
@@ -99,11 +103,27 @@ export js handleAdd = (todos: Array<Todo>, title: String) => Effect.succeed(addT
 export main =
   effect {
     todos: Array<Todo> = [
-      { id: "write", title: "Write project brief", completed: true },
-      { id: "review", title: "Review pull request", completed: false },
-      { id: "ship", title: "Ship dashboard", completed: false }
+      {
+        id: "write"
+        title: "Write project brief"
+        completed: true
+      },
+      {
+        id: "review"
+        title: "Review pull request"
+        completed: false
+      },
+      {
+        id: "ship"
+        title: "Ship dashboard"
+        completed: false
+      }
     ]
-    props: DashboardProps = { todos: todos, filter: "Active", draft: "Prepare release notes" }
+    props: DashboardProps = {
+      todos: todos
+      filter: "Active"
+      draft: "Prepare release notes"
+    }
     view = TodoDashboard(props)
     _ <- Console.log("[Todo] Root tag: <main>")
     _ <- Console.log("[Todo] Dashboard view rendered")

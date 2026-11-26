@@ -270,6 +270,12 @@ export function resolveOptionalArguments(
           const isOptional =
             isFunscriptOptional || declaredOptional || includesUndefined;
           if (!isOptional && !includesNull) return;
+          const targetAcceptsOption = target.isUnion()
+            ? target.types.some((t) =>
+                Boolean(checker.getPropertyOfType(t, "~effect/Option")),
+              )
+            : Boolean(checker.getPropertyOfType(target, "~effect/Option"));
+          if (targetAcceptsOption) return;
           const value = argument.arguments[1];
           const type = checker.getTypeAtLocation(value);
           if (!checker.getPropertyOfType(type, "~effect/Option")) return;

@@ -106,19 +106,18 @@ export testFn = (raw: Unknown, opt: Option<String>) =>
     expect(res.typescript).toContain('fromNullishOrElse(opt, "fallback")');
   });
 
-  it("forwards an Option into an optional parameter explicitly", () => {
+  it("emits optional parameters directly without hidden Option wrapping", () => {
     const src = `
 export f = (x?: String) =>
   => x
 
 export g = (x?: String) =>
-  => f(Option.getOrUndefined(x))
+  => f(x)
 `;
     const res = Effect.runSync(compileString(src));
-    expect(res.typescript).toContain("($funscriptOptional0?: string)");
-    expect(res.typescript).toContain(
-      "Option.fromUndefinedOr($funscriptOptional0)",
-    );
+    expect(res.typescript).toContain("(x?: string)");
+    expect(res.typescript).not.toContain("$funscriptOptional0");
+    expect(res.typescript).not.toContain("Option.fromUndefinedOr");
   });
 
   it("supports default values on record contract schemas and defaulted record parameter", () => {
@@ -256,11 +255,12 @@ export describeList = (list: Array<Number>) =>
     | [head, ...tail] => head
 `;
     const res = Effect.runSync(compileString(src));
-    expect(res.typescript).toContain(".with([], ($matched: any) => {");
+    expect(res.typescript).toContain(".with([], ($matched) => {");
     expect(res.typescript).toContain(
-      ".with([P._, ...P.array()], ($matched: any) => {",
+      ".with([P._, ...P.array()], ($matched) => {",
     );
-    expect(res.typescript).toContain("const [head, ...tail] = $matched;");
+    expect(res.typescript).toContain("const head = $matched[0];");
+    expect(res.typescript).toContain("const tail = $matched.slice(1);");
   });
 
   it("executes safe indexing and list pattern matching at runtime correctly", () => {
@@ -843,15 +843,15 @@ export manageCollections = (map: Object, set: Object) =>
   it("supports optional parameters on export js entry bindings", async () => {
     const src = `
 export js greet = (name?: String) => effect {
-  => match name
+  => match (fromNullishOr(name))
     | Some(n) => "Hello, " + n
     | None => "Hello, stranger"
 }
 `;
     const res = Effect.runSync(compileString(src));
-    expect(res.typescript).toContain("($funscriptOptional0?: string)");
-    expect(res.typescript).toContain("Option.some");
-    expect(res.typescript).toContain("Option.none");
+    expect(res.typescript).toContain("(name?: string)");
+    expect(res.typescript).not.toContain("$funscriptOptional0");
+    expect(res.typescript).toContain("fromNullishOr(name)");
 
     const greet = evaluateTsFunction(res.typescript, "greet");
     expect(await greet("Ada")).toBe("Hello, Ada");

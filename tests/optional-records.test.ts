@@ -14,19 +14,19 @@ import ts from "typescript";
 describe("optional fields in inline parameter records", () => {
   it("forwards Options into known optional record fields without creating absent properties", async () => {
     const source =
-      "ts { declare function observe(value: { label?: string }): { label?: string } }\nexport forward = (name?: String) => observe({ label: name })";
+      'import { Option } from "effect"\nts { declare function observe(value: { label?: string }): { label?: string } }\nexport forward = (name: Option<String>) => observe({ label: name })';
     const checked = await typeCheck(source, "optional-record-forward.fun");
     expect(checked.success, checked.formattedOutput).toBe(true);
     const { forward } = await execute(source, {
       scope: { observe: (value: unknown) => value },
     });
-    expect(Object.hasOwn(forward(), "label")).toBe(false);
-    expect(forward("Ada")).toEqual({ label: "Ada" });
+    expect(Object.hasOwn(forward(Option.none()), "label")).toBe(false);
+    expect(forward(Option.some("Ada"))).toEqual({ label: "Ada" });
   });
 
   it("forwards Options to known JSX optional props", async () => {
     const source =
-      "export View = (props: { label?: String }) => <div />\nexport Wrapper = (name?: String) => <View label={name} />";
+      'import { Option } from "effect"\nexport View = (props: { label?: String }) => <div />\nexport Wrapper = (name: Option<String>) => <View label={name} />';
     const checked = await typeCheck(source, "optional-jsx-forward.funx");
     expect(checked.success, checked.formattedOutput).toBe(true);
     expect(
@@ -48,8 +48,8 @@ describe("optional fields in inline parameter records", () => {
       Option,
       (_type: unknown, props: unknown) => props,
     );
-    expect(Object.hasOwn(wrapper(), "label")).toBe(false);
-    expect(wrapper("Ada")).toEqual({ label: "Ada" });
+    expect(Object.hasOwn(wrapper(Option.none()), "label")).toBe(false);
+    expect(wrapper(Option.some("Ada"))).toEqual({ label: "Ada" });
   });
 
   it("preserves Some(undefined) and evaluates an optional field expression once", async () => {

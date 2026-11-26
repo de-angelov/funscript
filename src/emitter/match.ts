@@ -1,4 +1,5 @@
 import type {
+  ArrayPattern,
   BindingTarget,
   BooleanLiteral,
   ConstructorPattern,
@@ -70,25 +71,40 @@ export class MatchEmitter {
 
   public emitMatchExpression(expr: MatchExpression): string {
     if (!expr.scrutinee && !expr.isPipeline) {
-      // Subjectless boolean match => ? : ternary or if / else
-      let code = "";
-      for (let i = 0; i < expr.arms.length; i++) {
-        const arm = expr.arms[i];
-        const isDefault = arm.pattern.kind === "WildcardPattern";
-        const body =
-          arm.body.kind === "BlockStatement"
-            ? `(() => {\n${this.context.emitFunctionBody(arm.body)}\n})()`
-            : this.context.emitExpression(arm.body);
+      return this.emitIfElseMatch(expr.arms, (arm) =>
+        this.emitPatternAsCondition(arm.pattern),
+      );
+    }
 
-        if (isDefault || i === expr.arms.length - 1) {
-          code += body;
-          break;
-        } else {
-          const cond = this.emitPatternAsCondition(arm.pattern);
-          code += `${cond} ? ${body} : `;
-        }
-      }
-      return `(${code})`;
+    const scrutineeId =
+      expr.scrutinee?.kind === "Identifier" ? expr.scrutinee.name : undefined;
+    const isGuardOnlyNarrowingMatch =
+      Boolean(expr.scrutinee) &&
+      !expr.isPipeline &&
+      expr.arms.some((a) => Boolean(a.guard)) &&
+      expr.arms.every(
+        (a) =>
+          a.pattern.kind === "WildcardPattern" ||
+          (scrutineeId !== undefined &&
+            a.pattern.kind === "VariablePattern" &&
+            a.pattern.name.name === scrutineeId),
+      );
+
+    if (isGuardOnlyNarrowingMatch) {
+      return this.emitIfElseMatch(expr.arms, (arm) =>
+        arm.guard ? this.context.emitExpression(arm.guard) : "true",
+      );
+    }
+
+    const scrutineeType =
+      expr.scrutinee && !expr.isPipeline
+        ? this.context.getTypeNodeForExpression?.(expr.scrutinee)
+        : undefined;
+    if (
+      scrutineeType?.kind === "TypeReferenceNode" &&
+      scrutineeType.name.name === "JSOptional"
+    ) {
+      return this.emitJSOptionalMatch(expr.scrutinee!, expr.arms);
     }
 
     // Scrutinee match or pipeline match => ts-pattern
@@ -604,19 +620,16 @@ export class MatchEmitter {
     if (pat?.kind === "ArrayPattern") {
       const scrutineeName =
         scrutinee?.kind === "Identifier" ? scrutinee.name : undefined;
-      const bindingStr = this.context.emitBindingTarget(pat);
       const lines: string[] = [];
       if (scrutineeName) {
         lines.push(`const ${scrutineeName} = $matched;`);
       }
-      if (pat.elements.length > 0 && bindingStr !== "[]") {
-        lines.push(`const ${bindingStr} = $matched;`);
-      }
+      lines.push(...this.collectArrayMatchBindings(pat, "$matched"));
       if (lines.length > 0) {
         if (body.kind === "BlockStatement") {
-          return `($matched: any) => {\n    ${lines.join("\n    ")}\n${this.context.emitFunctionBody(body)}\n  }`;
+          return `($matched) => {\n    ${lines.join("\n    ")}\n${this.context.emitFunctionBody(body)}\n  }`;
         }
-        return `($matched: any) => {\n    ${lines.join("\n    ")}\n    return ${this.context.emitExpression(body)};\n  }`;
+        return `($matched) => {\n    ${lines.join("\n    ")}\n    return ${this.context.emitExpression(body)};\n  }`;
       }
       if (body.kind === "BlockStatement") {
         return `() => {\n${this.context.emitFunctionBody(body)}\n}`;
@@ -775,5 +788,241 @@ export class MatchEmitter {
       return this.collectPatternVariables(pat.argument);
     }
     return [];
+  }
+
+  private collectArrayMatchBindings(
+    pat: ArrayPattern,
+    targetExpr: string,
+  ): string[] {
+    const lines: string[] = [];
+    for (let i = 0; i < pat.elements.length; i++) {
+      const el = pat.elements[i];
+      const elemExpr = `${targetExpr}[${i}]`;
+      if (el.kind === "VariablePattern") {
+        lines.push(`const ${el.name.name} = ${elemExpr};`);
+      } else if (el.kind === "RestPattern") {
+        if (el.argument.kind === "VariablePattern") {
+          lines.push(
+            `const ${el.argument.name.name} = ${targetExpr}.slice(${i});`,
+          );
+        }
+      } else if (el.kind === "ArrayPattern") {
+        lines.push(...this.collectArrayMatchBindings(el, elemExpr));
+      } else if (el.kind === "RecordPattern") {
+        const destructParts = this.collectRecordDestructuring(el);
+        if (destructParts.length > 0) {
+          lines.push(`const { ${destructParts.join(", ")} } = ${elemExpr};`);
+        }
+      } else if (el.kind === "ConstructorPattern") {
+        if (el.constructorName.name === "Some" && el.args.length === 1) {
+          const bindingTarget = this.context.emitBindingTarget(el.args[0]);
+          if (
+            bindingTarget &&
+            bindingTarget !== "[]" &&
+            bindingTarget !== "{}" &&
+            bindingTarget !== "_"
+          ) {
+            lines.push(`const { value: ${bindingTarget} } = ${elemExpr};`);
+          }
+        } else {
+          const fieldNames = this.context.getVariantFields?.(
+            el.constructorName.name,
+          );
+          if (fieldNames && fieldNames.length === el.args.length) {
+            const parts: string[] = [];
+            for (let j = 0; j < fieldNames.length; j++) {
+              const arg = el.args[j];
+              if (arg.kind === "VariablePattern") {
+                parts.push(`${fieldNames[j]}: ${arg.name.name}`);
+              }
+            }
+            if (parts.length > 0) {
+              lines.push(`const { ${parts.join(", ")} } = ${elemExpr};`);
+            }
+          }
+        }
+      }
+    }
+    return lines;
+  }
+
+  private emitIfElseMatch(
+    arms: MatchArm[],
+    getCondition: (arm: MatchArm) => string,
+  ): string {
+    const hasBlockArm = arms.some((a) => a.body.kind === "BlockStatement");
+    if (!hasBlockArm) {
+      let code = "";
+      for (let i = 0; i < arms.length; i++) {
+        const arm = arms[i];
+        const isDefault = arm.pattern.kind === "WildcardPattern" && !arm.guard;
+        const body = this.context.emitExpression(arm.body as Expression);
+        if (isDefault || i === arms.length - 1) {
+          code += body;
+          break;
+        }
+        code += `${getCondition(arm)} ? ${body} : `;
+      }
+      return `(${code})`;
+    }
+
+    const branches: string[] = [];
+    for (let i = 0; i < arms.length; i++) {
+      const arm = arms[i];
+      const isDefault =
+        (arm.pattern.kind === "WildcardPattern" && !arm.guard) ||
+        i === arms.length - 1;
+      const inner =
+        arm.body.kind === "BlockStatement"
+          ? this.context.emitFunctionBody(arm.body)
+          : `  return ${this.context.emitExpression(arm.body)};`;
+      if (i === 0) {
+        if (isDefault) {
+          branches.push(inner);
+          break;
+        }
+        branches.push(`if (${getCondition(arm)}) {\n${inner}\n}`);
+      } else if (isDefault) {
+        branches.push(`else {\n${inner}\n}`);
+        break;
+      } else {
+        branches.push(`else if (${getCondition(arm)}) {\n${inner}\n}`);
+      }
+    }
+    return `(() => {\n  ${branches.join(" ")}\n})()`;
+  }
+
+  private emitJSOptionalMatch(scrutinee: Expression, arms: MatchArm[]): string {
+    const scrutineeId =
+      scrutinee.kind === "Identifier" ? scrutinee.name : "$jsOpt";
+    const preamble =
+      scrutinee.kind === "Identifier"
+        ? ""
+        : `const $jsOpt = ${this.context.emitExpression(scrutinee)};\n  `;
+
+    const hasWildcard = arms.some(
+      (a) => a.pattern.kind === "WildcardPattern" && !a.guard,
+    );
+    const hasSome = arms.some(
+      (a) =>
+        a.pattern.kind === "ConstructorPattern" &&
+        a.pattern.constructorName.name === "Some" &&
+        !a.guard,
+    );
+    const hasFullNone = arms.some(
+      (a) =>
+        a.pattern.kind === "ConstructorPattern" &&
+        a.pattern.constructorName.name === "None" &&
+        !a.guard &&
+        ((a.pattern.args ?? []).length === 0 ||
+          a.pattern.args[0]?.kind === "WildcardPattern"),
+    );
+    const hasNull = arms.some(
+      (a) =>
+        a.pattern.kind === "ConstructorPattern" &&
+        a.pattern.constructorName.name === "None" &&
+        !a.guard &&
+        ((a.pattern.args?.[0]?.kind === "VariablePattern" &&
+          a.pattern.args[0].name.name === "null") ||
+          (a.pattern.args?.[0]?.kind === "ConstructorPattern" &&
+            a.pattern.args[0].constructorName.name === "Null")),
+    );
+    const hasUndefined = arms.some(
+      (a) =>
+        a.pattern.kind === "ConstructorPattern" &&
+        a.pattern.constructorName.name === "None" &&
+        !a.guard &&
+        ((a.pattern.args?.[0]?.kind === "VariablePattern" &&
+          a.pattern.args[0].name.name === "undefined") ||
+          (a.pattern.args?.[0]?.kind === "ConstructorPattern" &&
+            a.pattern.args[0].constructorName.name === "Undefined")),
+    );
+    const isExhaustive =
+      hasWildcard || (hasSome && (hasFullNone || (hasNull && hasUndefined)));
+
+    const branches: string[] = [];
+    for (let i = 0; i < arms.length; i++) {
+      const arm = arms[i];
+      const pat = arm.pattern;
+      const isWildcard = pat.kind === "WildcardPattern" && !arm.guard;
+      const bindings: string[] = [];
+      let cond = "true";
+
+      if (pat.kind === "ConstructorPattern") {
+        if (pat.constructorName.name === "Some") {
+          cond = `(${scrutineeId} !== null && ${scrutineeId} !== undefined)`;
+          if (pat.args.length === 1 && pat.args[0].kind === "VariablePattern") {
+            bindings.push(`const ${pat.args[0].name.name} = ${scrutineeId};`);
+          }
+        } else if (pat.constructorName.name === "None") {
+          const arg = pat.args[0];
+          if (
+            (arg?.kind === "VariablePattern" &&
+              arg.name.name === "undefined") ||
+            (arg?.kind === "ConstructorPattern" &&
+              arg.constructorName.name === "Undefined")
+          ) {
+            cond = `(${scrutineeId} === undefined)`;
+          } else if (
+            (arg?.kind === "VariablePattern" && arg.name.name === "null") ||
+            (arg?.kind === "ConstructorPattern" &&
+              arg.constructorName.name === "Null")
+          ) {
+            cond = `(${scrutineeId} === null)`;
+          } else {
+            cond = `(${scrutineeId} === null || ${scrutineeId} === undefined)`;
+          }
+        }
+      } else if (pat.kind === "VariablePattern") {
+        bindings.push(`const ${pat.name.name} = ${scrutineeId};`);
+      }
+
+      if (arm.guard) {
+        const g = this.context.emitExpression(arm.guard);
+        cond = cond === "true" ? g : `(${cond} && (${g}))`;
+      }
+
+      const bodyCode =
+        arm.body.kind === "BlockStatement"
+          ? this.context.emitFunctionBody(arm.body)
+          : `  return ${this.context.emitExpression(arm.body)};`;
+      const inner =
+        bindings.length > 0
+          ? `  ${bindings.join("\n  ")}\n${bodyCode}`
+          : bodyCode;
+
+      const isLast = i === arms.length - 1;
+      if (i === 0) {
+        if (isWildcard) {
+          branches.push(inner);
+          break;
+        }
+        branches.push(`if (${cond}) {\n${inner}\n}`);
+      } else if (
+        isWildcard ||
+        (isLast && !arm.guard && pat.kind !== "ConstructorPattern")
+      ) {
+        branches.push(`else {\n${inner}\n}`);
+        break;
+      } else if (
+        isExhaustive &&
+        isLast &&
+        !arm.guard &&
+        pat.kind === "ConstructorPattern"
+      ) {
+        branches.push(`else {\n${inner}\n}`);
+        break;
+      } else {
+        branches.push(`else if (${cond}) {\n${inner}\n}`);
+      }
+    }
+
+    if (!isExhaustive) {
+      branches.push(
+        `else {\n  const __nonExhaustive: never = ${scrutineeId};\n  return __nonExhaustive;\n}`,
+      );
+    }
+
+    return `(() => {\n  ${preamble}${branches.join(" ")}\n})()`;
   }
 }
