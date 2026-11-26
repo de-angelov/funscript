@@ -22,6 +22,11 @@ import {
 import { Parser } from "../parser/parser.js";
 import { spanToRange } from "./definition.js";
 import { getHoverDocumentation } from "./docs.js";
+import { FunScriptError } from "../errors.js";
+
+function isExpectedHoverError(error: unknown): boolean {
+  return error instanceof FunScriptError || error instanceof URIError;
+}
 
 function symbolHover(source: string, uri: string, token: Token): Hover | null {
   if (
@@ -36,7 +41,8 @@ function symbolHover(source: string, uri: string, token: Token): Hover | null {
       compileString(source, filename, { context, sourcemap: false }),
     );
     return symbolHoverFromResult(source, token, context, result);
-  } catch {
+  } catch (error) {
+    if (!isExpectedHoverError(error)) throw error;
     return null;
   }
 }
@@ -158,7 +164,8 @@ function symbolHoverFromResult(
       },
       range: spanToRange(token.span),
     };
-  } catch {
+  } catch (error) {
+    if (!isExpectedHoverError(error)) throw error;
     return null;
   }
 }
@@ -234,7 +241,8 @@ function importedSchemaHover(
       },
       range: spanToRange(target.id.span),
     };
-  } catch {
+  } catch (error) {
+    if (!isExpectedHoverError(error)) throw error;
     return null;
   }
 }
@@ -408,8 +416,9 @@ function findHoverInTokens(
             range: spanToRange(token.span),
           };
         }
-      } catch {
+      } catch (error) {
         // Incomplete or ambiguous documents still get the candidate guidance.
+        if (!isExpectedHoverError(error)) throw error;
       }
       return {
         contents: {
@@ -669,7 +678,8 @@ export function findHover(
   try {
     const lexer = new Lexer(source, uri);
     tokens = lexer.tokenize();
-  } catch {
+  } catch (error) {
+    if (!isExpectedHoverError(error)) throw error;
     tokens = null;
   }
 
@@ -724,7 +734,8 @@ export async function findHoverAsync(
       compileString(source, filename, { context, sourcemap: false }),
     );
     return symbolHoverFromResult(source, token, context, result);
-  } catch {
+  } catch (error) {
+    if (!isExpectedHoverError(error)) throw error;
     return null;
   }
 }

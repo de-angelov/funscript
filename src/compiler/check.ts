@@ -5,11 +5,14 @@ import * as fs from "node:fs/promises";
 import * as syncFs from "node:fs";
 import * as Effect from "effect/Effect";
 import { TraceMap, originalPositionFor } from "@jridgewell/trace-mapping";
-import { codeFrameColumns } from "@babel/code-frame";
 import { compileString, CompilerError, type SourceMap } from "../compiler.js";
 import { incrementalDependencyKeys } from "./incremental-dependencies.js";
 import { ImportedSchemaError } from "./imported-schemas.js";
-import { toErrorMessage } from "../errors.js";
+import {
+  isFileNotFoundError,
+  safeCodeFrame,
+  toErrorMessage,
+} from "../errors.js";
 import type { ASTNode, Program, Span } from "../ast/types.js";
 import {
   TS_RESET_DECLARATION,
@@ -401,7 +404,11 @@ export function isEntryModule(
         }
       }
     }
-  } catch {}
+  } catch (error) {
+    if (!isFileNotFoundError(error) && !(error instanceof SyntaxError)) {
+      throw error;
+    }
+  }
 
   return false;
 }
@@ -1080,19 +1087,14 @@ export const typeCheckVirtualFiles = (
               errCol = compErr.error.span.start.column;
             }
 
-            let frame: string | undefined;
-            try {
-              frame = codeFrameColumns(
-                source,
-                { start: { line: errLine, column: errCol } },
-                {
-                  message: compErr.message,
-                  highlightCode: options?.highlightCode ?? false,
-                },
-              );
-            } catch {
-              frame = undefined;
-            }
+            const frame = safeCodeFrame(
+              source,
+              { start: { line: errLine, column: errCol } },
+              {
+                message: compErr.message,
+                highlightCode: options?.highlightCode ?? false,
+              },
+            );
 
             const schemaError =
               compErr.error instanceof ImportedSchemaError
@@ -1287,8 +1289,9 @@ export const typeCheckVirtualFiles = (
                 const stat = syncFs.statSync(fileName, { bigint: true });
                 const stamp = `${stat.dev}:${stat.ino}:${stat.size}:${stat.mtimeNs}:${stat.ctimeNs}`;
                 if (cached.stamp === stamp) return cached.sourceFile;
-              } catch {
+              } catch (error) {
                 // A removed file must not reuse its old source.
+                if (!isFileNotFoundError(error)) throw error;
               }
             }
 
@@ -1303,8 +1306,9 @@ export const typeCheckVirtualFiles = (
               try {
                 const stat = syncFs.statSync(fileName, { bigint: true });
                 stamp = `${stat.dev}:${stat.ino}:${stat.size}:${stat.mtimeNs}:${stat.ctimeNs}`;
-              } catch {
+              } catch (error) {
                 /* Missing files are never reused. */
+                if (!isFileNotFoundError(error)) throw error;
               }
               cache.sourceFiles.set(norm, { sourceFile: sf, stamp });
             }
@@ -1450,24 +1454,19 @@ export const typeCheckVirtualFiles = (
             message = `Pattern match is not exhaustive.${missingInfo} In FunScript, all variants must be handled or guarded with a fallback '| _ =>'.`;
           }
 
-          let frame: string | undefined;
-          try {
-            frame = codeFrameColumns(
-              meta.funSource,
-              {
-                start: { line: loc.line, column: loc.column },
-                end: loc.endColumn
-                  ? { line: loc.line, column: loc.endColumn }
-                  : undefined,
-              },
-              {
-                message,
-                highlightCode: options?.highlightCode ?? false,
-              },
-            );
-          } catch {
-            frame = undefined;
-          }
+          const frame = safeCodeFrame(
+            meta.funSource,
+            {
+              start: { line: loc.line, column: loc.column },
+              end: loc.endColumn
+                ? { line: loc.line, column: loc.endColumn }
+                : undefined,
+            },
+            {
+              message,
+              highlightCode: options?.highlightCode ?? false,
+            },
+          );
 
           const codePrefix = typeof code === "number" ? `TS${code}` : code;
           const header = `${loc.file}:${loc.line}:${loc.column} - ${category} ${codePrefix}: ${message}`;
@@ -1604,24 +1603,19 @@ export const typeCheckVirtualFiles = (
               meta.traceMap,
               meta.tsCode,
             );
-            let frame: string | undefined;
-            try {
-              frame = codeFrameColumns(
-                meta.funSource,
-                {
-                  start: { line: loc.line, column: loc.column },
-                  end: loc.endColumn
-                    ? { line: loc.line, column: loc.endColumn }
-                    : undefined,
-                },
-                {
-                  message: customMsg,
-                  highlightCode: options?.highlightCode ?? false,
-                },
-              );
-            } catch {
-              frame = undefined;
-            }
+            const frame = safeCodeFrame(
+              meta.funSource,
+              {
+                start: { line: loc.line, column: loc.column },
+                end: loc.endColumn
+                  ? { line: loc.line, column: loc.endColumn }
+                  : undefined,
+              },
+              {
+                message: customMsg,
+                highlightCode: options?.highlightCode ?? false,
+              },
+            );
             const header = `${loc.file}:${loc.line}:${loc.column} - error ${code}: ${customMsg}`;
             tsDiagnostics.push({
               file: loc.file,
@@ -1659,22 +1653,17 @@ export const typeCheckVirtualFiles = (
             if (reportedSpans.has(key)) return;
             reportedSpans.add(key);
 
-            let frame: string | undefined;
-            try {
-              frame = codeFrameColumns(
-                meta.funSource,
-                {
-                  start: { line: span.start.line, column: span.start.column },
-                  end: { line: span.end.line, column: span.end.column },
-                },
-                {
-                  message: customMsg,
-                  highlightCode: options?.highlightCode ?? false,
-                },
-              );
-            } catch {
-              frame = undefined;
-            }
+            const frame = safeCodeFrame(
+              meta.funSource,
+              {
+                start: { line: span.start.line, column: span.start.column },
+                end: { line: span.end.line, column: span.end.column },
+              },
+              {
+                message: customMsg,
+                highlightCode: options?.highlightCode ?? false,
+              },
+            );
             const header = `${meta.funPath}:${span.start.line}:${span.start.column} - ${category} ${code}: ${customMsg}`;
             tsDiagnostics.push({
               file: meta.funPath,

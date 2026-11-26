@@ -12,6 +12,28 @@ import type { Readable, Writable } from "node:stream";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { Worker } from "node:worker_threads";
 import {
+  FunScriptError,
+  isFileNotFoundError,
+  toErrorMessage,
+} from "../errors.js";
+
+function isExpectedUriError(error: unknown): boolean {
+  return error instanceof URIError || error instanceof TypeError;
+}
+
+function isExpectedSyntaxError(error: unknown): boolean {
+  return error instanceof FunScriptError || isExpectedUriError(error);
+}
+
+function isExpectedFsAccessError(error: unknown): boolean {
+  if (isFileNotFoundError(error)) return true;
+  if (typeof error !== "object" || error === null || !("code" in error)) {
+    return false;
+  }
+  const code = (error as { code?: unknown }).code;
+  return code === "EACCES" || code === "EPERM" || code === "ENOSYS";
+}
+import {
   createConnection,
   CodeActionKind,
   ErrorCodes,
@@ -233,9 +255,11 @@ export class FunScriptLspServer extends EventEmitter {
       params?.workspaceFolders?.map((folder) => folder.uri) ??
       (params?.rootUri ? [params.rootUri] : []);
     this.workspaceRoots = roots.flatMap((uri) => {
+      if (!uri.startsWith("file:")) return [];
       try {
         return [resolve(fileURLToPath(uri))];
-      } catch {
+      } catch (error) {
+        if (!isExpectedUriError(error)) throw error;
         return [];
       }
     });
@@ -388,7 +412,8 @@ export class FunScriptLspServer extends EventEmitter {
       };
 
       return [edit];
-    } catch {
+    } catch (error) {
+      if (!isExpectedSyntaxError(error)) throw error;
       return null;
     }
   }
@@ -428,7 +453,10 @@ export class FunScriptLspServer extends EventEmitter {
         };
         worker.on("error", failed);
         worker.on("exit", failed);
-      } catch {
+      } catch (error) {
+        this.connection?.console.warn(
+          `Failed to start codeActionWorker: ${toErrorMessage(error)}`,
+        );
         return Promise.resolve([]);
       }
     }
@@ -442,7 +470,10 @@ export class FunScriptLspServer extends EventEmitter {
       });
       try {
         this.codeActionWorker!.postMessage({ id, doc, params });
-      } catch {
+      } catch (error) {
+        this.connection?.console.warn(
+          `Failed to post to codeActionWorker: ${toErrorMessage(error)}`,
+        );
         this.pendingCodeActions.delete(id);
         resolve([]);
       }
@@ -494,8 +525,9 @@ export class FunScriptLspServer extends EventEmitter {
             changes: { [uri]: [{ range: wholeRange, newText: formatted }] },
           },
         });
-    } catch {
+    } catch (error) {
       /* Invalid source has no formatting action. */
+      if (!isExpectedSyntaxError(error)) throw error;
     }
 
     try {
@@ -505,8 +537,9 @@ export class FunScriptLspServer extends EventEmitter {
         params.range,
       );
       actions.push(...matchActions);
-    } catch {
+    } catch (error) {
       /* Code actions gracefully decline on invalid syntax. */
+      if (!isExpectedSyntaxError(error)) throw error;
     }
 
     try {
@@ -516,8 +549,9 @@ export class FunScriptLspServer extends EventEmitter {
         params.range,
       );
       actions.push(...autoImportActions);
-    } catch {
+    } catch (error) {
       /* Auto import gracefully declines. */
+      if (!isExpectedSyntaxError(error)) throw error;
     }
 
     try {
@@ -527,8 +561,9 @@ export class FunScriptLspServer extends EventEmitter {
         params.range,
       );
       actions.push(...unusedImportActions);
-    } catch {
+    } catch (error) {
       /* Remove unused imports gracefully declines. */
+      if (!isExpectedSyntaxError(error)) throw error;
     }
 
     if (!doc.text.includes("|>")) return actions;
@@ -555,8 +590,9 @@ export class FunScriptLspServer extends EventEmitter {
             },
           });
         }
-      } catch {
+      } catch (error) {
         /* Incomplete or ambiguous source cannot safely be rewritten. */
+        if (!isExpectedSyntaxError(error)) throw error;
       }
     }
     for (const style of ["bare", "qualified"] as const) {
@@ -576,8 +612,9 @@ export class FunScriptLspServer extends EventEmitter {
               changes: { [uri]: [{ range: wholeRange, newText: result.text }] },
             },
           });
-      } catch {
+      } catch (error) {
         /* Incomplete or ambiguous source cannot safely be rewritten. */
+        if (!isExpectedSyntaxError(error)) throw error;
       }
     }
     return actions;
@@ -776,7 +813,10 @@ export class FunScriptLspServer extends EventEmitter {
         };
         worker.on("error", failed);
         worker.on("exit", failed);
-      } catch {
+      } catch (error) {
+        this.connection?.console.warn(
+          `Failed to start renameWorker: ${toErrorMessage(error)}`,
+        );
         return Promise.resolve(null);
       }
     }
@@ -794,7 +834,10 @@ export class FunScriptLspServer extends EventEmitter {
             ...this.interopDocuments.values(),
           ],
         });
-      } catch {
+      } catch (error) {
+        this.connection?.console.warn(
+          `Failed to post to renameWorker: ${toErrorMessage(error)}`,
+        );
         this.pendingRenames.delete(id);
         resolve(null);
       }
@@ -892,7 +935,8 @@ export class FunScriptLspServer extends EventEmitter {
           this.interopRenameSession,
           this.parsedDocuments,
         );
-      } catch {
+      } catch (error) {
+        if (!isExpectedSyntaxError(error)) throw error;
         return null;
       }
     }
@@ -906,10 +950,12 @@ export class FunScriptLspServer extends EventEmitter {
   }
 
   private inWorkspace(uri: string): boolean {
+    if (!uri.startsWith("file:")) return false;
     let path: string;
     try {
       path = fileURLToPath(uri);
-    } catch {
+    } catch (error) {
+      if (!isExpectedUriError(error)) throw error;
       return false;
     }
     return this.workspaceRoots.some((root) => {
@@ -966,7 +1012,8 @@ export class FunScriptLspServer extends EventEmitter {
     };
     try {
       for (const root of this.workspaceRoots) walk(root);
-    } catch {
+    } catch (error) {
+      if (!isExpectedFsAccessError(error)) throw error;
       return null;
     }
     for (const doc of [
@@ -1310,8 +1357,9 @@ export class FunScriptLspServer extends EventEmitter {
         const policyRoot = loadProjectConfigForFile(filename).root;
         if (existsSync(join(policyRoot, "funscript.config.fun")))
           directories.add(policyRoot);
-      } catch {
+      } catch (error) {
         /* Non-file documents do not have project config files. */
+        if (!isExpectedUriError(error)) throw error;
       }
     }
 
@@ -1333,8 +1381,13 @@ export class FunScriptLspServer extends EventEmitter {
           this.projectConfigWatchers.delete(directory);
         });
         this.projectConfigWatchers.set(directory, watcher);
-      } catch {
+      } catch (error) {
         /* Some virtual or restricted workspaces cannot be watched. */
+        if (!isExpectedFsAccessError(error)) {
+          this.connection?.console.warn(
+            `Failed to watch ${directory}: ${toErrorMessage(error)}`,
+          );
+        }
       }
     }
   }

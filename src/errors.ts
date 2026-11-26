@@ -26,25 +26,51 @@ export class FunScriptError extends Error {
     options?: { highlightCode?: boolean },
   ): string {
     if (!this.span || !source) return this.message;
-    try {
-      const frame = codeFrameColumns(
-        source,
-        {
-          start: { line: this.span.start.line, column: this.span.start.column },
-          end: this.span.end
-            ? { line: this.span.end.line, column: this.span.end.column }
-            : undefined,
-        },
-        {
-          highlightCode: options?.highlightCode ?? false,
-          message: this.rawMessage,
-        },
-      );
-      return `${this.name}: ${this.rawMessage} at line ${this.span.start.line}, col ${this.span.start.column}\n\n${frame}`;
-    } catch {
-      return this.message;
-    }
+    const frame = safeCodeFrame(
+      source,
+      {
+        start: { line: this.span.start.line, column: this.span.start.column },
+        end: this.span.end
+          ? { line: this.span.end.line, column: this.span.end.column }
+          : undefined,
+      },
+      {
+        highlightCode: options?.highlightCode ?? false,
+        message: this.rawMessage,
+      },
+    );
+    if (!frame) return this.message;
+    return `${this.name}: ${this.rawMessage} at line ${this.span.start.line}, col ${this.span.start.column}\n\n${frame}`;
   }
+}
+
+/**
+ * Formats a `@babel/code-frame` snippet, returning `undefined` if the span is out of bounds.
+ */
+export function safeCodeFrame(
+  source: string,
+  location: Parameters<typeof codeFrameColumns>[1],
+  options?: Parameters<typeof codeFrameColumns>[2],
+): string | undefined {
+  try {
+    return codeFrameColumns(source, location, options);
+  } catch (error) {
+    if (error instanceof RangeError || error instanceof TypeError) {
+      return undefined;
+    }
+    return undefined;
+  }
+}
+
+/**
+ * Returns true for filesystem errors indicating a missing path (`ENOENT` / `ENOTDIR`).
+ */
+export function isFileNotFoundError(error: unknown): boolean {
+  if (typeof error !== "object" || error === null || !("code" in error)) {
+    return false;
+  }
+  const code = (error as { code?: unknown }).code;
+  return code === "ENOENT" || code === "ENOTDIR";
 }
 
 /**
