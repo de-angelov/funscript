@@ -1,5 +1,7 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { EventEmitter } from "node:events";
+import * as Effect from "effect/Effect";
+import type * as Fiber from "effect/Fiber";
 import {
   existsSync,
   readdirSync,
@@ -154,7 +156,7 @@ export class FunScriptLspServer extends EventEmitter {
     { revision: number; resolve: (result: any) => void }
   >();
   private connection: Connection | null = null;
-  private diagnosticTimer: ReturnType<typeof setTimeout> | undefined;
+  private diagnosticDebounceFiber: Fiber.Fiber<void, never> | undefined;
   private diagnosticRevision = 0;
   private diagnosticWorker?: Worker;
   private diagnosticBusy = false;
@@ -1216,17 +1218,30 @@ export class FunScriptLspServer extends EventEmitter {
     return validateFunScript(source, uri);
   }
 
+  private resolveWorkerUrl(filename: string): URL {
+    const localUrl = new URL(`./${filename}`, import.meta.url);
+    // Source-level tests and development load the compiled worker from dist.
+    return existsSync(fileURLToPath(localUrl))
+      ? localUrl
+      : new URL(`../../dist/lsp/${filename}`, import.meta.url);
+  }
+
   private scheduleTypeDiagnostics(): void {
     const revision = ++this.diagnosticRevision;
-    if (this.diagnosticTimer) clearTimeout(this.diagnosticTimer);
-    this.diagnosticTimer = setTimeout(() => {
-      this.diagnosticTimer = undefined;
-      const request = { revision, documents: this.getDocuments() };
-      if (!request.documents.length && !this.diagnosticWorker) return;
-      if (this.diagnosticBusy) this.queuedDiagnostics = request;
-      else this.dispatchDiagnostics(request);
-    }, 250);
-    this.diagnosticTimer.unref();
+    this.diagnosticDebounceFiber?.interruptUnsafe();
+    this.diagnosticDebounceFiber = Effect.runFork(
+      Effect.sleep("250 millis").pipe(
+        Effect.andThen(
+          Effect.sync(() => {
+            this.diagnosticDebounceFiber = undefined;
+            const request = { revision, documents: this.getDocuments() };
+            if (!request.documents.length && !this.diagnosticWorker) return;
+            if (this.diagnosticBusy) this.queuedDiagnostics = request;
+            else this.dispatchDiagnostics(request);
+          }),
+        ),
+      ),
+    );
   }
 
   private dispatchDiagnostics(request: {
@@ -1235,14 +1250,12 @@ export class FunScriptLspServer extends EventEmitter {
   }): void {
     if (!this.diagnosticWorker) {
       try {
-        let workerUrl = new URL("./diagnostics-worker.js", import.meta.url);
-        // Source-level tests and development load the compiled worker from dist.
-        if (!existsSync(fileURLToPath(workerUrl)))
-          workerUrl = new URL(
-            "../../dist/lsp/diagnostics-worker.js",
-            import.meta.url,
-          );
-        const worker = new Worker(workerUrl, { execArgv: [] });
+        const worker = new Worker(
+          this.resolveWorkerUrl("diagnostics-worker.js"),
+          {
+            execArgv: [],
+          },
+        );
         worker.unref();
         this.diagnosticWorker = worker;
         worker.on(
@@ -1313,8 +1326,8 @@ export class FunScriptLspServer extends EventEmitter {
   }
 
   private stopDiagnosticWorker(): void {
-    if (this.diagnosticTimer) clearTimeout(this.diagnosticTimer);
-    this.diagnosticTimer = undefined;
+    this.diagnosticDebounceFiber?.interruptUnsafe();
+    this.diagnosticDebounceFiber = undefined;
     this.diagnosticRevision++;
     this.diagnosticBusy = false;
     this.queuedDiagnostics = undefined;

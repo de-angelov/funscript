@@ -1765,6 +1765,73 @@ export const typeCheckVirtualFiles = (
                 }
               }
             }
+            const processPropertySuggestion = (prop: string): string => {
+              switch (prop) {
+                case "argv":
+                  return "Accept `args: Array<String>` explicitly in library functions and pass CLI args from the entrypoint (or use `@effect/cli`).";
+                case "cwd":
+                  return "Use the Effect `Path` / `FileSystem` service or pass the working directory explicitly as a parameter.";
+                case "stdin":
+                case "stdout":
+                case "stderr":
+                  return "Use Effect `Console` or `Terminal` from `@effect/platform-*`.";
+                case "nextTick":
+                  return "Use `Effect.yieldNow` or `Effect.forkScoped`.";
+                default:
+                  return "Use Effect services (`Config`, `Path`, `Terminal`, `Clock`) or isolate runtime-specific access inside an entry module or `ts { ... }` block.";
+              }
+            };
+            const hasUserProcessBinding = (() => {
+              let shadowed = false;
+              const scan = (n: AstInspectNode | null | undefined) => {
+                if (!n || typeof n !== "object" || shadowed) return;
+                if (
+                  n.kind === "BindingDeclaration" &&
+                  n.id?.kind === "Identifier" &&
+                  n.id.name === "process"
+                ) {
+                  shadowed = true;
+                  return;
+                }
+                if (
+                  (n.kind === "VariablePattern" || n.kind === "Parameter") &&
+                  (n.name?.name === "process" || n.id?.name === "process")
+                ) {
+                  shadowed = true;
+                  return;
+                }
+                if (
+                  n.kind === "ImportDeclaration" &&
+                  n.source?.value !== "node:process"
+                ) {
+                  const specs = [
+                    ...(Array.isArray(n.specifiers) ? n.specifiers : []),
+                    ...(n.defaultImport ? [n.defaultImport] : []),
+                    ...(n.namespaceImport ? [n.namespaceImport] : []),
+                  ];
+                  if (
+                    specs.some(
+                      (s) =>
+                        s?.local?.name === "process" || s?.name === "process",
+                    )
+                  ) {
+                    shadowed = true;
+                    return;
+                  }
+                }
+                for (const key of Object.keys(n)) {
+                  if (key === "span" || key === "kind") continue;
+                  const val = n[key];
+                  if (Array.isArray(val)) {
+                    for (const item of val) scan(item);
+                  } else if (val && typeof val === "object" && "kind" in val) {
+                    scan(val);
+                  }
+                }
+              };
+              scan(meta.ast);
+              return shadowed;
+            })();
             const walkAst = (
               node: AstInspectNode | null | undefined,
               parent?: AstInspectNode | null,
@@ -2216,6 +2283,23 @@ export const typeCheckVirtualFiles = (
                     );
                   }
                 }
+                if (
+                  node.object?.kind === "Identifier" &&
+                  (node.object.name === "process" ||
+                    node.object.name === "Bun" ||
+                    node.object.name === "Deno") &&
+                  node.property?.name === "exit" &&
+                  !(node.object.name === "process" && hasUserProcessBinding)
+                ) {
+                  addAstDiag(
+                    node.span,
+                    "PROCESS_EXIT",
+                    `\`${node.object.name}.exit\` aborts the runtime immediately and skips Effect Scope finalizers.`,
+                    "error",
+                    "Calling `.exit()` bypasses structured concurrency cleanup and resource finalizers.",
+                    "Return a typed failure (`Effect.fail(...)`) and run the root program with `BunRuntime.runMain` or `NodeRuntime.runMain`.",
+                  );
+                }
               }
 
               if (!isEntry) {
@@ -2248,7 +2332,7 @@ export const typeCheckVirtualFiles = (
                   );
                 }
 
-                // §1.11: Reading globals for configuration
+                // §1.11: Reading globals for configuration and ambient process state
                 if (node.kind === "MemberExpression") {
                   const obj = node.object;
                   const prop = node.property;
@@ -2257,7 +2341,8 @@ export const typeCheckVirtualFiles = (
                     (obj.name === "process" ||
                       obj.name === "Deno" ||
                       obj.name === "Bun") &&
-                    prop?.name === "env"
+                    prop?.name === "env" &&
+                    !(obj.name === "process" && hasUserProcessBinding)
                   ) {
                     const fullName = `${obj.name}.env`;
                     addAstDiag(
@@ -2268,7 +2353,59 @@ export const typeCheckVirtualFiles = (
                       "Reading global environment variables in library code couples modules to ambient state and makes testing and re-configuration difficult.",
                       "Use Effect 'Config' (e.g. `Config.string('VAR')`) or pass configuration explicitly as arguments.",
                     );
+                  } else if (
+                    obj?.kind === "Identifier" &&
+                    obj.name === "process" &&
+                    !hasUserProcessBinding &&
+                    prop?.name &&
+                    prop.name !== "env" &&
+                    prop.name !== "exit"
+                  ) {
+                    addAstDiag(
+                      node.span,
+                      "PROCESS_GLOBAL",
+                      `\`process.${prop.name}\` reads ambient Node/Bun process state directly. In FunScript, library code should depend on Effect services instead of global \`process\`.`,
+                      "error",
+                      "Direct `process` access in library code couples modules to ambient runtime state and makes testing difficult.",
+                      processPropertySuggestion(prop.name),
+                    );
                   }
+                } else if (
+                  node.kind === "Identifier" &&
+                  node.name === "process" &&
+                  !hasUserProcessBinding &&
+                  !(
+                    parent?.kind === "MemberExpression" &&
+                    (parent?.object === node || parent?.property === node)
+                  ) &&
+                  !(
+                    parent?.kind === "CallExpression" && parent?.callee === node
+                  ) &&
+                  !(
+                    (parent?.kind === "BindingDeclaration" &&
+                      parent?.id === node) ||
+                    parent?.kind === "FunctionDeclaration" ||
+                    parent?.kind === "VariablePattern"
+                  ) &&
+                  !(
+                    parent?.kind === "ImportSpecifier" ||
+                    parent?.kind === "ImportDeclaration"
+                  ) &&
+                  !(
+                    parent?.kind === "TypeReferenceNode" ||
+                    parent?.kind === "QualifiedTypeReferenceNode"
+                  ) &&
+                  !(parent?.kind === "FieldEntry" && parent?.key === node) &&
+                  !(parent?.kind === "Parameter" && parent?.name === node)
+                ) {
+                  addAstDiag(
+                    node.span,
+                    "PROCESS_GLOBAL",
+                    "`process` accesses ambient Node/Bun runtime global state. In FunScript, library code should use Effect services (`Config`, `Console`, `Terminal`, `Path`, `FileSystem`) instead of passing or reflecting on global `process`.",
+                    "error",
+                    "Passing or reflecting on global `process` (e.g. `Reflect.get(process, ...)`) bypasses dependency injection and breaks testability.",
+                    "Use Effect services (`Config`, `Path`, `Terminal`, `Clock`) or isolate runtime access in an entry module / `ts { ... }` block.",
+                  );
                 }
 
                 // §1.13: Detached fibers

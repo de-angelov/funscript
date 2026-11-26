@@ -1200,6 +1200,62 @@ ts {
       expect(resultEscape.errorCount).toBe(0);
     });
 
+    it("rejects direct process access and Reflect bypasses in library modules while allowing user-shadowed process", async () => {
+      const resultArgs = await Effect.runPromise(
+        typeCheckSource(
+          `
+import process from "node:process"
+
+export args = process.argv
+export dir = process.cwd()
+export envVal = Reflect.get(process, "env")
+`.trim(),
+          "lib/runtime.fun",
+        ),
+      );
+
+      expect(resultArgs.success).toBe(false);
+      const codes = resultArgs.diagnostics.map((d) => d.code);
+      expect(codes).toContain("PROCESS_GLOBAL");
+      expect(resultArgs.formattedOutput).toContain("process.argv");
+      expect(resultArgs.formattedOutput).toContain("process.cwd");
+      const argvDiag = resultArgs.diagnostics.find((d) =>
+        d.message.includes("process.argv"),
+      );
+      expect(argvDiag?.suggestedAction).toContain("@effect/cli");
+      const cwdDiag = resultArgs.diagnostics.find((d) =>
+        d.message.includes("process.cwd"),
+      );
+      expect(cwdDiag?.suggestedAction).toContain("FileSystem");
+
+      const resultExit = await Effect.runPromise(
+        typeCheckSource(
+          `
+import process from "node:process"
+
+export main = process.exit(1)
+`.trim(),
+          "server.fun",
+        ),
+      );
+      expect(resultExit.success).toBe(false);
+      expect(resultExit.diagnostics.map((d) => d.code)).toContain(
+        "PROCESS_EXIT",
+      );
+
+      const resultShadowed = await Effect.runPromise(
+        typeCheckSource(
+          `
+process = (x: Number) => x * 2
+export out = process(21)
+`.trim(),
+          "lib/math.fun",
+        ),
+      );
+      expect(resultShadowed.success).toBe(true);
+      expect(resultShadowed.errorCount).toBe(0);
+    });
+
     it("rejects throw keyword and throwing functions (Option.getOrThrow, JSON.parse, Error) with THROW", async () => {
       // 1. Keyword throw
       const resultThrow = await Effect.runPromise(

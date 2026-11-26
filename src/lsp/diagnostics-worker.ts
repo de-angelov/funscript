@@ -1,3 +1,6 @@
+import * as Cause from "effect/Cause";
+import * as Effect from "effect/Effect";
+import * as Exit from "effect/Exit";
 import { fileURLToPath } from "node:url";
 import { parentPort } from "node:worker_threads";
 import {
@@ -15,8 +18,8 @@ type Request = { revision: number; documents: TextDocumentItem[] };
 const caches = new Map<string, TypeCheckCache>();
 let previousFiles = new Set<string>();
 
-parentPort?.on("message", async (request: Request) => {
-  try {
+parentPort?.on("message", (request: Request) => {
+  const program = Effect.gen(function* () {
     const groups = new Map<
       string,
       {
@@ -50,7 +53,7 @@ parentPort?.on("message", async (request: Request) => {
         filenames.set(doc.uri, filename);
       } catch (error) {
         /* Non-file documents still receive semantic diagnostics. */
-        if (!isExpectedUriError(error)) throw error;
+        if (!isExpectedUriError(error)) return yield* Effect.fail(error);
       }
     }
     const currentFiles = new Set(
@@ -80,8 +83,8 @@ parentPort?.on("message", async (request: Request) => {
       TypeCheckResult["diagnostics"]
     >();
     if (currentFiles.size) {
-      const [{ Effect }, { createTypeCheckCache, typeCheckVirtualFiles }] =
-        await Promise.all([import("effect"), import("../compiler/check.js")]);
+      const { createTypeCheckCache, typeCheckVirtualFiles } =
+        yield* Effect.promise(() => import("../compiler/check.js"));
       for (const [root, group] of groups) {
         let cache = caches.get(root);
         if (!cache) {
@@ -89,40 +92,38 @@ parentPort?.on("message", async (request: Request) => {
           caches.set(root, cache);
         }
         const policy = group.config;
-        const checked = await Effect.runPromise(
-          typeCheckVirtualFiles(group.files, {
-            cwd: root,
-            cache,
-            noTs: policy.noTs === true,
-            noGlobalThis: policy.noGlobalThis === true,
-            noOptional: policy.noOptional === true,
-            barePipelines: policy.barePipelines === true,
-            noDeepDestructure: policy.noDeepDestructure === true,
-            maxDestructureDepth: policy.maxDestructureDepth,
-            noTsPaths: Array.isArray(policy.noTs) ? policy.noTs : undefined,
-            noGlobalThisPaths: Array.isArray(policy.noGlobalThis)
-              ? policy.noGlobalThis
-              : undefined,
-            noOptionalPaths: Array.isArray(policy.noOptional)
-              ? policy.noOptional
-              : undefined,
-            barePipelinesPaths: Array.isArray(policy.barePipelines)
-              ? policy.barePipelines
-              : undefined,
-            noDeepDestructurePaths: Array.isArray(policy.noDeepDestructure)
-              ? policy.noDeepDestructure
-              : undefined,
-            allowHoles: policy.allowHoles === true,
-            allowHolesPaths: Array.isArray(policy.allowHoles)
-              ? policy.allowHoles
-              : undefined,
-            allowEarlyReturns: policy.allowEarlyReturns === true,
-            allowEarlyReturnsPaths: Array.isArray(policy.allowEarlyReturns)
-              ? policy.allowEarlyReturns
-              : undefined,
-            effectOnly: policy.effectOnly,
-          }),
-        );
+        const checked = yield* typeCheckVirtualFiles(group.files, {
+          cwd: root,
+          cache,
+          noTs: policy.noTs === true,
+          noGlobalThis: policy.noGlobalThis === true,
+          noOptional: policy.noOptional === true,
+          barePipelines: policy.barePipelines === true,
+          noDeepDestructure: policy.noDeepDestructure === true,
+          maxDestructureDepth: policy.maxDestructureDepth,
+          noTsPaths: Array.isArray(policy.noTs) ? policy.noTs : undefined,
+          noGlobalThisPaths: Array.isArray(policy.noGlobalThis)
+            ? policy.noGlobalThis
+            : undefined,
+          noOptionalPaths: Array.isArray(policy.noOptional)
+            ? policy.noOptional
+            : undefined,
+          barePipelinesPaths: Array.isArray(policy.barePipelines)
+            ? policy.barePipelines
+            : undefined,
+          noDeepDestructurePaths: Array.isArray(policy.noDeepDestructure)
+            ? policy.noDeepDestructure
+            : undefined,
+          allowHoles: policy.allowHoles === true,
+          allowHolesPaths: Array.isArray(policy.allowHoles)
+            ? policy.allowHoles
+            : undefined,
+          allowEarlyReturns: policy.allowEarlyReturns === true,
+          allowEarlyReturnsPaths: Array.isArray(policy.allowEarlyReturns)
+            ? policy.allowEarlyReturns
+            : undefined,
+          effectOnly: policy.effectOnly,
+        });
         for (const filename of Object.keys(group.files))
           checkedDiagnostics.set(
             filename,
@@ -178,15 +179,24 @@ parentPort?.on("message", async (request: Request) => {
           ]
         : [];
     });
-    parentPort?.postMessage({
-      revision: request.revision,
-      diagnostics,
-      pipelineInputs,
+    return { diagnostics, pipelineInputs };
+  });
+
+  void Effect.runPromiseExit(program).then((exit) => {
+    Exit.match(exit, {
+      onSuccess: ({ diagnostics, pipelineInputs }) => {
+        parentPort?.postMessage({
+          revision: request.revision,
+          diagnostics,
+          pipelineInputs,
+        });
+      },
+      onFailure: (cause) => {
+        parentPort?.postMessage({
+          revision: request.revision,
+          error: Cause.pretty(cause),
+        });
+      },
     });
-  } catch (error) {
-    parentPort?.postMessage({
-      revision: request.revision,
-      error: error instanceof Error ? error.message : String(error),
-    });
-  }
+  });
 });
