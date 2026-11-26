@@ -18,9 +18,9 @@ describe("JSX Lexer Tokenization (.funx mode)", () => {
       const tokens = lexer.tokenize();
 
       expect(tokens.map((t) => t.type)).toEqual([
-        TokenType.JsxTagOpen,
+        TokenType.JSX_TAG_OPEN,
         TokenType.IDENTIFIER,
-        TokenType.JsxSlashClose,
+        TokenType.JSX_SLASH_CLOSE,
         TokenType.EOF,
       ]);
       expect(tokens[0].value).toBe("<");
@@ -34,9 +34,9 @@ describe("JSX Lexer Tokenization (.funx mode)", () => {
       const tokens = lexer.tokenize();
 
       expect(tokens.map((t) => t.type)).toEqual([
-        TokenType.JsxTagOpen,
+        TokenType.JSX_TAG_OPEN,
         TokenType.UPPER_IDENTIFIER,
-        TokenType.JsxSlashClose,
+        TokenType.JSX_SLASH_CLOSE,
         TokenType.EOF,
       ]);
       expect(tokens[1].value).toBe("Avatar");
@@ -48,13 +48,13 @@ describe("JSX Lexer Tokenization (.funx mode)", () => {
       const tokens = lexer.tokenize();
 
       expect(tokens.map((t) => t.type)).toEqual([
-        TokenType.JsxTagOpen,
+        TokenType.JSX_TAG_OPEN,
         TokenType.IDENTIFIER,
-        TokenType.JsxTagClose,
-        TokenType.JsxText,
-        TokenType.JsxClosingTagOpen,
+        TokenType.JSX_TAG_CLOSE,
+        TokenType.JSX_TEXT,
+        TokenType.JSX_CLOSING_TAG_OPEN,
         TokenType.IDENTIFIER,
-        TokenType.JsxTagClose,
+        TokenType.JSX_TAG_CLOSE,
         TokenType.EOF,
       ]);
       expect(tokens[0].value).toBe("<");
@@ -72,19 +72,19 @@ describe("JSX Lexer Tokenization (.funx mode)", () => {
       const tokens = lexer.tokenize();
 
       expect(tokens.map((t) => t.type)).toEqual([
-        TokenType.JsxTagOpen,
+        TokenType.JSX_TAG_OPEN,
         TokenType.IDENTIFIER,
-        TokenType.JsxTagClose,
-        TokenType.JsxTagOpen,
+        TokenType.JSX_TAG_CLOSE,
+        TokenType.JSX_TAG_OPEN,
         TokenType.IDENTIFIER,
-        TokenType.JsxTagClose,
-        TokenType.JsxText,
-        TokenType.JsxClosingTagOpen,
+        TokenType.JSX_TAG_CLOSE,
+        TokenType.JSX_TEXT,
+        TokenType.JSX_CLOSING_TAG_OPEN,
         TokenType.IDENTIFIER,
-        TokenType.JsxTagClose,
-        TokenType.JsxClosingTagOpen,
+        TokenType.JSX_TAG_CLOSE,
+        TokenType.JSX_CLOSING_TAG_OPEN,
         TokenType.IDENTIFIER,
-        TokenType.JsxTagClose,
+        TokenType.JSX_TAG_CLOSE,
         TokenType.EOF,
       ]);
       expect(tokens[6].value).toBe("Inner Text");
@@ -96,11 +96,11 @@ describe("JSX Lexer Tokenization (.funx mode)", () => {
       const tokens = lexer.tokenize();
 
       expect(tokens.map((t) => t.type)).toEqual([
-        TokenType.JsxTagOpen,
-        TokenType.JsxTagClose,
-        TokenType.JsxText,
-        TokenType.JsxClosingTagOpen,
-        TokenType.JsxTagClose,
+        TokenType.JSX_TAG_OPEN,
+        TokenType.JSX_TAG_CLOSE,
+        TokenType.JSX_TEXT,
+        TokenType.JSX_CLOSING_TAG_OPEN,
+        TokenType.JSX_TAG_CLOSE,
         TokenType.EOF,
       ]);
       expect(tokens[2].value).toBe("Fragment content");
@@ -112,16 +112,16 @@ describe("JSX Lexer Tokenization (.funx mode)", () => {
       const tokens = lexer.tokenize();
 
       expect(tokens.map((t) => t.type)).toEqual([
-        TokenType.JsxTagOpen,
+        TokenType.JSX_TAG_OPEN,
         TokenType.UPPER_IDENTIFIER,
         TokenType.DOT,
         TokenType.UPPER_IDENTIFIER,
-        TokenType.JsxAttributeName,
+        TokenType.JSX_ATTRIBUTE_NAME,
         TokenType.EQ,
         TokenType.LBRACE,
         TokenType.NUMBER,
         TokenType.RBRACE,
-        TokenType.JsxSlashClose,
+        TokenType.JSX_SLASH_CLOSE,
         TokenType.EOF,
       ]);
       expect(tokens[1].value).toBe("Icons");
@@ -138,11 +138,11 @@ describe("JSX Lexer Tokenization (.funx mode)", () => {
       const tokens = lexer.tokenize();
 
       expect(tokens.map((t) => t.type)).toEqual([
-        TokenType.JsxTagOpen,
+        TokenType.JSX_TAG_OPEN,
         TokenType.IDENTIFIER,
-        TokenType.JsxAttributeName,
-        TokenType.JsxAttributeName,
-        TokenType.JsxSlashClose,
+        TokenType.JSX_ATTRIBUTE_NAME,
+        TokenType.JSX_ATTRIBUTE_NAME,
+        TokenType.JSX_SLASH_CLOSE,
         TokenType.EOF,
       ]);
       expect(tokens[2].value).toBe("disabled");
@@ -155,15 +155,15 @@ describe("JSX Lexer Tokenization (.funx mode)", () => {
       const tokens = lexer.tokenize();
 
       expect(tokens.map((t) => t.type)).toEqual([
-        TokenType.JsxTagOpen,
+        TokenType.JSX_TAG_OPEN,
         TokenType.IDENTIFIER,
-        TokenType.JsxAttributeName,
+        TokenType.JSX_ATTRIBUTE_NAME,
         TokenType.EQ,
         TokenType.STRING,
-        TokenType.JsxAttributeName,
+        TokenType.JSX_ATTRIBUTE_NAME,
         TokenType.EQ,
         TokenType.STRING,
-        TokenType.JsxSlashClose,
+        TokenType.JSX_SLASH_CLOSE,
         TokenType.EOF,
       ]);
       expect(tokens[2].value).toBe("className");
@@ -178,20 +178,20 @@ describe("JSX Lexer Tokenization (.funx mode)", () => {
       const tokens = lexer.tokenize();
 
       expect(tokens.map((t) => t.type)).toEqual([
-        TokenType.JsxTagOpen,
+        TokenType.JSX_TAG_OPEN,
         TokenType.IDENTIFIER,
-        TokenType.JsxAttributeName,
+        TokenType.JSX_ATTRIBUTE_NAME,
         TokenType.EQ,
         TokenType.STRING,
-        TokenType.JsxAttributeName,
+        TokenType.JSX_ATTRIBUTE_NAME,
         TokenType.EQ,
         TokenType.STRING,
-        TokenType.JsxAttributeName,
+        TokenType.JSX_ATTRIBUTE_NAME,
         TokenType.EQ,
         TokenType.LBRACE,
         TokenType.IDENTIFIER,
         TokenType.RBRACE,
-        TokenType.JsxSlashClose,
+        TokenType.JSX_SLASH_CLOSE,
         TokenType.EOF,
       ]);
       expect(tokens[2].value).toBe("data-testid");
@@ -206,25 +206,25 @@ describe("JSX Lexer Tokenization (.funx mode)", () => {
       const tokens = lexer.tokenize();
 
       expect(tokens.map((t) => t.type)).toEqual([
-        TokenType.JsxTagOpen,
+        TokenType.JSX_TAG_OPEN,
         TokenType.IDENTIFIER,
-        TokenType.JsxAttributeName,
+        TokenType.JSX_ATTRIBUTE_NAME,
         TokenType.EQ,
         TokenType.LBRACE,
         TokenType.IDENTIFIER,
         TokenType.PLUS,
         TokenType.NUMBER,
         TokenType.RBRACE,
-        TokenType.JsxAttributeName,
+        TokenType.JSX_ATTRIBUTE_NAME,
         TokenType.EQ,
         TokenType.LBRACE,
         TokenType.IDENTIFIER,
         TokenType.RBRACE,
-        TokenType.JsxTagClose,
-        TokenType.JsxText,
-        TokenType.JsxClosingTagOpen,
+        TokenType.JSX_TAG_CLOSE,
+        TokenType.JSX_TEXT,
+        TokenType.JSX_CLOSING_TAG_OPEN,
         TokenType.IDENTIFIER,
-        TokenType.JsxTagClose,
+        TokenType.JSX_TAG_CLOSE,
         TokenType.EOF,
       ]);
       expect(tokens[2].value).toBe("count");
@@ -242,15 +242,15 @@ describe("JSX Lexer Tokenization (.funx mode)", () => {
       const tokens = lexer.tokenize();
 
       expect(tokens.map((t) => t.type)).toEqual([
-        TokenType.JsxTagOpen,
+        TokenType.JSX_TAG_OPEN,
         TokenType.IDENTIFIER,
-        TokenType.JsxTagClose,
+        TokenType.JSX_TAG_CLOSE,
         TokenType.LBRACE,
         TokenType.IDENTIFIER,
         TokenType.RBRACE,
-        TokenType.JsxClosingTagOpen,
+        TokenType.JSX_CLOSING_TAG_OPEN,
         TokenType.IDENTIFIER,
-        TokenType.JsxTagClose,
+        TokenType.JSX_TAG_CLOSE,
         TokenType.EOF,
       ]);
       expect(tokens[4].value).toBe("count");
@@ -262,20 +262,20 @@ describe("JSX Lexer Tokenization (.funx mode)", () => {
       const tokens = lexer.tokenize();
 
       expect(tokens.map((t) => t.type)).toEqual([
-        TokenType.JsxTagOpen,
+        TokenType.JSX_TAG_OPEN,
         TokenType.IDENTIFIER,
-        TokenType.JsxTagClose,
-        TokenType.JsxText,
+        TokenType.JSX_TAG_CLOSE,
+        TokenType.JSX_TEXT,
         TokenType.LBRACE,
         TokenType.IDENTIFIER,
         TokenType.RBRACE,
-        TokenType.JsxText,
+        TokenType.JSX_TEXT,
         TokenType.LBRACE,
         TokenType.IDENTIFIER,
         TokenType.RBRACE,
-        TokenType.JsxClosingTagOpen,
+        TokenType.JSX_CLOSING_TAG_OPEN,
         TokenType.IDENTIFIER,
-        TokenType.JsxTagClose,
+        TokenType.JSX_TAG_CLOSE,
         TokenType.EOF,
       ]);
       expect(tokens[3].value).toBe("Hello, ");
@@ -290,9 +290,9 @@ describe("JSX Lexer Tokenization (.funx mode)", () => {
       const tokens = lexer.tokenize();
 
       expect(tokens.map((t) => t.type)).toEqual([
-        TokenType.JsxTagOpen,
+        TokenType.JSX_TAG_OPEN,
         TokenType.IDENTIFIER,
-        TokenType.JsxTagClose,
+        TokenType.JSX_TAG_CLOSE,
         TokenType.LBRACE,
         TokenType.IDENTIFIER,
         TokenType.PIPE,
@@ -303,9 +303,9 @@ describe("JSX Lexer Tokenization (.funx mode)", () => {
         TokenType.IDENTIFIER,
         TokenType.RPAREN,
         TokenType.RBRACE,
-        TokenType.JsxClosingTagOpen,
+        TokenType.JSX_CLOSING_TAG_OPEN,
         TokenType.IDENTIFIER,
-        TokenType.JsxTagClose,
+        TokenType.JSX_TAG_CLOSE,
         TokenType.EOF,
       ]);
       expect(tokens[5].type).toBe(TokenType.PIPE);
@@ -318,23 +318,23 @@ describe("JSX Lexer Tokenization (.funx mode)", () => {
       const tokens = lexer.tokenize();
 
       expect(tokens.map((t) => t.type)).toEqual([
-        TokenType.JsxTagOpen,
+        TokenType.JSX_TAG_OPEN,
         TokenType.IDENTIFIER,
-        TokenType.JsxTagClose,
+        TokenType.JSX_TAG_CLOSE,
         TokenType.LBRACE,
         TokenType.IDENTIFIER,
         TokenType.AND,
-        TokenType.JsxTagOpen,
+        TokenType.JSX_TAG_OPEN,
         TokenType.IDENTIFIER,
-        TokenType.JsxTagClose,
-        TokenType.JsxText,
-        TokenType.JsxClosingTagOpen,
+        TokenType.JSX_TAG_CLOSE,
+        TokenType.JSX_TEXT,
+        TokenType.JSX_CLOSING_TAG_OPEN,
         TokenType.IDENTIFIER,
-        TokenType.JsxTagClose,
+        TokenType.JSX_TAG_CLOSE,
         TokenType.RBRACE,
-        TokenType.JsxClosingTagOpen,
+        TokenType.JSX_CLOSING_TAG_OPEN,
         TokenType.IDENTIFIER,
-        TokenType.JsxTagClose,
+        TokenType.JSX_TAG_CLOSE,
         TokenType.EOF,
       ]);
       expect(tokens[9].value).toBe("Active");
@@ -368,10 +368,10 @@ describe("JSX Lexer Tokenization (.funx mode)", () => {
       // Line 3: view = <div />
       expect(tokens[12].value).toBe("view");
       expect(tokens[13].type).toBe(TokenType.EQ);
-      expect(tokens[14].type).toBe(TokenType.JsxTagOpen);
+      expect(tokens[14].type).toBe(TokenType.JSX_TAG_OPEN);
       expect(tokens[14].value).toBe("<");
       expect(tokens[15].value).toBe("div");
-      expect(tokens[16].type).toBe(TokenType.JsxSlashClose);
+      expect(tokens[16].type).toBe(TokenType.JSX_SLASH_CLOSE);
     });
 
     it("correctly tokenizes comparison operators inside JSX attribute expressions", () => {
@@ -380,16 +380,16 @@ describe("JSX Lexer Tokenization (.funx mode)", () => {
       const tokens = lexer.tokenize();
 
       expect(tokens.map((t) => t.type)).toEqual([
-        TokenType.JsxTagOpen,
+        TokenType.JSX_TAG_OPEN,
         TokenType.IDENTIFIER,
-        TokenType.JsxAttributeName,
+        TokenType.JSX_ATTRIBUTE_NAME,
         TokenType.EQ,
         TokenType.LBRACE,
         TokenType.IDENTIFIER,
         TokenType.LT,
         TokenType.NUMBER,
         TokenType.RBRACE,
-        TokenType.JsxSlashClose,
+        TokenType.JSX_SLASH_CLOSE,
         TokenType.EOF,
       ]);
       expect(tokens[6].type).toBe(TokenType.LT);
@@ -402,9 +402,9 @@ describe("JSX Lexer Tokenization (.funx mode)", () => {
       const tokens = lexer.tokenize();
 
       expect(tokens.map((t) => t.type)).toEqual([
-        TokenType.JsxTagOpen,
+        TokenType.JSX_TAG_OPEN,
         TokenType.IDENTIFIER,
-        TokenType.JsxTagClose,
+        TokenType.JSX_TAG_CLOSE,
         TokenType.LBRACE,
         TokenType.IDENTIFIER,
         TokenType.GT,
@@ -414,9 +414,9 @@ describe("JSX Lexer Tokenization (.funx mode)", () => {
         TokenType.LT,
         TokenType.NUMBER,
         TokenType.RBRACE,
-        TokenType.JsxClosingTagOpen,
+        TokenType.JSX_CLOSING_TAG_OPEN,
         TokenType.IDENTIFIER,
-        TokenType.JsxTagClose,
+        TokenType.JSX_TAG_CLOSE,
         TokenType.EOF,
       ]);
       expect(tokens[5].type).toBe(TokenType.GT);
@@ -431,9 +431,9 @@ describe("JSX Lexer Tokenization (.funx mode)", () => {
       expect(tokens[1].type).toBe(TokenType.PIPE);
       expect(tokens[3].type).toBe(TokenType.PIPE);
       expect(tokens[4].type).toBe(TokenType.LPAREN);
-      expect(tokens[5].type).toBe(TokenType.JsxTagOpen);
+      expect(tokens[5].type).toBe(TokenType.JSX_TAG_OPEN);
       expect(tokens[6].value).toBe("div");
-      expect(tokens[7].type).toBe(TokenType.JsxSlashClose);
+      expect(tokens[7].type).toBe(TokenType.JSX_SLASH_CLOSE);
       expect(tokens[8].type).toBe(TokenType.RPAREN);
     });
 
@@ -462,7 +462,7 @@ arr = [<li />, <li />]
       const lexer = new Lexer(code.trim(), "test.funx");
       const tokens = lexer.tokenize();
 
-      const jsxOpens = tokens.filter((t) => t.type === TokenType.JsxTagOpen);
+      const jsxOpens = tokens.filter((t) => t.type === TokenType.JSX_TAG_OPEN);
       expect(jsxOpens.length).toBe(4);
     });
   });
@@ -471,19 +471,19 @@ arr = [<li />, <li />]
     it("enables JSX tokenization with filename ending in .funx", () => {
       const code = `x = <div />`;
       const tokens = new Lexer(code, "App.funx").tokenize();
-      expect(tokens[2].type).toBe(TokenType.JsxTagOpen);
+      expect(tokens[2].type).toBe(TokenType.JSX_TAG_OPEN);
     });
 
     it("enables JSX tokenization with options { jsx: true }", () => {
       const code = `x = <div />`;
       const tokens = new Lexer(code, "App.fun", { jsx: true }).tokenize();
-      expect(tokens[2].type).toBe(TokenType.JsxTagOpen);
+      expect(tokens[2].type).toBe(TokenType.JSX_TAG_OPEN);
     });
 
     it("enables JSX tokenization with boolean true option", () => {
       const code = `x = <div />`;
       const tokens = new Lexer(code, "<anonymous>", true).tokenize();
-      expect(tokens[2].type).toBe(TokenType.JsxTagOpen);
+      expect(tokens[2].type).toBe(TokenType.JSX_TAG_OPEN);
     });
 
     it("does NOT tokenize JSX in standard .fun mode (treats < as LT)", () => {
@@ -493,12 +493,12 @@ arr = [<li />, <li />]
     });
 
     it("exports direct token constants matching TokenType values", () => {
-      expect(JsxTagOpen).toBe(TokenType.JsxTagOpen);
-      expect(JsxTagClose).toBe(TokenType.JsxTagClose);
-      expect(JsxSlashClose).toBe(TokenType.JsxSlashClose);
-      expect(JsxClosingTagOpen).toBe(TokenType.JsxClosingTagOpen);
-      expect(JsxAttributeName).toBe(TokenType.JsxAttributeName);
-      expect(JsxText).toBe(TokenType.JsxText);
+      expect(JsxTagOpen).toBe(TokenType.JSX_TAG_OPEN);
+      expect(JsxTagClose).toBe(TokenType.JSX_TAG_CLOSE);
+      expect(JsxSlashClose).toBe(TokenType.JSX_SLASH_CLOSE);
+      expect(JsxClosingTagOpen).toBe(TokenType.JSX_CLOSING_TAG_OPEN);
+      expect(JsxAttributeName).toBe(TokenType.JSX_ATTRIBUTE_NAME);
+      expect(JsxText).toBe(TokenType.JSX_TEXT);
     });
   });
 
@@ -519,7 +519,7 @@ arr = [<li />, <li />]
       expect(newlines.length).toBe(0);
 
       const attrNames = tokens
-        .filter((t) => t.type === TokenType.JsxAttributeName)
+        .filter((t) => t.type === TokenType.JSX_ATTRIBUTE_NAME)
         .map((t) => t.value);
       expect(attrNames).toEqual(["className", "disabled", "onClick"]);
     });
@@ -534,8 +534,14 @@ arr = [<li />, <li />]
       const lexer = new Lexer(code, "test.funx");
       const tokens = lexer.tokenize();
 
-      expect(tokens.some((t) => t.type === TokenType.NUMBER && t.value === "42")).toBe(true);
-      expect(tokens.some((t) => t.type === TokenType.JSX_TEXT && t.value.includes("Hello"))).toBe(true);
+      expect(
+        tokens.some((t) => t.type === TokenType.NUMBER && t.value === "42"),
+      ).toBe(true);
+      expect(
+        tokens.some(
+          (t) => t.type === TokenType.JSX_TEXT && t.value.includes("Hello"),
+        ),
+      ).toBe(true);
     });
   });
 });

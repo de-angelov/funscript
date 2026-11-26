@@ -81,19 +81,12 @@ export enum TokenType {
 
   // JSX Tokens
   JSX_TAG_OPEN = "JSX_TAG_OPEN",
-  JsxTagOpen = "JSX_TAG_OPEN",
   JSX_TAG_CLOSE = "JSX_TAG_CLOSE",
-  JsxTagClose = "JSX_TAG_CLOSE",
   JSX_SLASH_CLOSE = "JSX_SLASH_CLOSE",
-  JsxSlashClose = "JSX_SLASH_CLOSE",
   JSX_CLOSING_TAG_OPEN = "JSX_CLOSING_TAG_OPEN",
-  JsxClosingTagOpen = "JSX_CLOSING_TAG_OPEN",
   JSX_ATTRIBUTE_NAME = "JSX_ATTRIBUTE_NAME",
-  JsxAttributeName = "JSX_ATTRIBUTE_NAME",
   JSX_TEXT = "JSX_TEXT",
-  JsxText = "JSX_TEXT",
   JSX_TAG_NAME = "JSX_TAG_NAME",
-  JsxTagName = "JSX_TAG_NAME",
 }
 
 export interface Token {
@@ -173,10 +166,10 @@ export const BANNED_SYMBOLS: Record<string, string> = {
 };
 
 // JSX token constants for direct imports
-export const JsxTagOpen = TokenType.JsxTagOpen;
-export const JsxTagClose = TokenType.JsxTagClose;
-export const JsxSlashClose = TokenType.JsxSlashClose;
-export const JsxClosingTagOpen = TokenType.JsxClosingTagOpen;
-export const JsxAttributeName = TokenType.JsxAttributeName;
-export const JsxText = TokenType.JsxText;
-export const JsxTagName = TokenType.JsxTagName;
+export const JsxTagOpen = TokenType.JSX_TAG_OPEN;
+export const JsxTagClose = TokenType.JSX_TAG_CLOSE;
+export const JsxSlashClose = TokenType.JSX_SLASH_CLOSE;
+export const JsxClosingTagOpen = TokenType.JSX_CLOSING_TAG_OPEN;
+export const JsxAttributeName = TokenType.JSX_ATTRIBUTE_NAME;
+export const JsxText = TokenType.JSX_TEXT;
+export const JsxTagName = TokenType.JSX_TAG_NAME;

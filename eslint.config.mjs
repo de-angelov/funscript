@@ -62,7 +62,6 @@ export default tseslint.config(
         { allowedNames: ["self", "receiver"] },
       ],
       "@typescript-eslint/no-unnecessary-type-assertion": "error",
-      "@typescript-eslint/no-duplicate-enum-values": "off", // Intentional compatibility aliases in TokenType
       "@typescript-eslint/unbound-method": "off",
       "@typescript-eslint/no-explicit-any": "error",
       "@typescript-eslint/no-unused-vars": [
