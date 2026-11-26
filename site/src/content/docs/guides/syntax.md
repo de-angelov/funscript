@@ -77,7 +77,7 @@ greet = (name: String) =>
 
 - `function`, method shorthand, classes, and `new` are not part of the surface.
 - Generic parameters precede the parameter list: `<A>(value: A) => ...`.
-- An explicit return type goes before a braced body: `(x: Number): Number => ...`.
+- An explicit return type goes before an indented body: `(x: Number): Number =>\n  ...`.
 - Calls always require parentheses: `add(1, 2)`. There is no implicit call syntax.
 
 ## Pipelines

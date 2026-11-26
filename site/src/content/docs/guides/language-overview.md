@@ -405,7 +405,7 @@ greet = (name: String) =>
 
 ### Explicit returns
 
-An inline expression is the concise return form. A braced or indented function block must end
+An inline expression is the concise return form. An indented function block must end
 with an explicit `=> value`:
 
 ```funscript

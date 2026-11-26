@@ -43,15 +43,13 @@ The same applies to fiber forking: use `forkChild`, not `fork`.
 Multi-statement function blocks and `effect` blocks must end with an explicit `=> value`. A trailing bare expression is a parse error.
 
 ```funscript
-# Rejected: Function block must end with an explicit '=> returnValue'
-sum = (a: Number, b: Number) => {
-  a + b
-}
-
-# Canonical
+# Rejected: braced regular function bodies are no longer supported
 sum = (a: Number, b: Number) => {
   => a + b
 }
+
+# Canonical
+sum = (a: Number, b: Number) => a + b
 ```
 
 Single-expression lambdas such as `(a, b) => a + b` are unaffected.
@@ -108,10 +106,9 @@ export processArray = (data) => data |> Array.map((x) => x + 1)
 # B. Prove the receiver type
 export processArray = (data: Array<Number>) => data |> map((x) => x + 1)
 
-export processOption = () => {
+export processOption = () =>
   item = Option.some(10)
   => item |> map((x) => x + 1)
-}
 ```
 
 The LSP helps here: hover over an ambiguous stage lists the candidate companions, and completions suggest explicit qualified forms.
