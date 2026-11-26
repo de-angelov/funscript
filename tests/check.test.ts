@@ -1865,6 +1865,66 @@ export run = () =>
       expect(goodResult.errorCount).toBe(0);
     });
 
+    it("enforces UNHANDLED_NULLISH when returning nullable JS/TS values without lifting", async () => {
+      const badBlockReturn = `
+ts {
+  declare function lookup(key: string): string | null;
+}
+
+export run = () =>
+  => lookup("a")
+`.trim();
+
+      const badBlockRes = await Effect.runPromise(
+        typeCheckSource(badBlockReturn, "src/nullish-return.fun"),
+      );
+      expect(badBlockRes.success).toBe(false);
+      expect(
+        badBlockRes.diagnostics.some((d) => d.code === "UNHANDLED_NULLISH"),
+      ).toBe(true);
+
+      const badEffectReturn = `
+ts {
+  declare function lookup(key: string): string | null;
+}
+
+export run = () => effect {
+  => lookup("a")
+}
+`.trim();
+
+      const badEffectRes = await Effect.runPromise(
+        typeCheckSource(badEffectReturn, "src/nullish-effect-return.fun"),
+      );
+      expect(badEffectRes.success).toBe(false);
+      expect(
+        badEffectRes.diagnostics.some((d) => d.code === "UNHANDLED_NULLISH"),
+      ).toBe(true);
+
+      const goodReturn = `
+ts {
+  declare function lookup(key: string): string | null;
+  function rawHelper(): string | null { return null; }
+}
+
+export run = () =>
+  => lookup("a") |> fromNullishOr
+
+export runDefault = () => effect {
+  => lookup("a") |> fromNullishOrElse("fallback")
+}
+
+export runExplicit = (): JSOptional<String> =>
+  => lookup("a")
+`.trim();
+
+      const goodRes = await Effect.runPromise(
+        typeCheckSource(goodReturn, "src/nullish-return-good.fun"),
+      );
+      expect(goodRes.success, goodRes.formattedOutput).toBe(true);
+      expect(goodRes.errorCount).toBe(0);
+    });
+
     it("rejects raw null and undefined literals in FunScript expressions while allowing ts escapes", async () => {
       const nullRes = await Effect.runPromise(
         typeCheckSource("export x = null", "src/null-lit.fun"),

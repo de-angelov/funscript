@@ -1545,6 +1545,41 @@ export const typeCheckVirtualFiles = (
           return names;
         };
 
+        const getFunScriptTsEscapeRanges = (
+          ast: Program | undefined,
+          tsCode: string,
+        ): Array<{ start: number; end: number }> => {
+          const ranges: Array<{ start: number; end: number }> = [];
+          let searchFrom = 0;
+          const walk = (node: unknown) => {
+            if (!node || typeof node !== "object") return;
+            const n = node as Record<string, unknown>;
+            if (
+              (n.kind === "TsEscapeDeclaration" ||
+                n.kind === "TsEscapeExpression") &&
+              typeof n.code === "string"
+            ) {
+              const idx = tsCode.indexOf(n.code, searchFrom);
+              if (idx !== -1) {
+                ranges.push({ start: idx, end: idx + n.code.length });
+                searchFrom = idx + n.code.length;
+              }
+              return;
+            }
+            for (const key of Object.keys(n)) {
+              if (key === "span") continue;
+              const child = n[key];
+              if (Array.isArray(child)) {
+                for (const c of child) walk(c);
+              } else if (child && typeof child === "object") {
+                walk(child);
+              }
+            }
+          };
+          walk(ast);
+          return ranges;
+        };
+
         const checker = program.getTypeChecker();
         for (const [normFile, meta] of virtualSourceMap) {
           const sf = program.getSourceFile(normFile);
@@ -1552,6 +1587,44 @@ export const typeCheckVirtualFiles = (
 
           const unannotatedBindings = getFunScriptUnannotatedBindings(meta.ast);
           const memberAccesses = getFunScriptMemberAccesses(meta.ast);
+          const tsEscapeRanges = getFunScriptTsEscapeRanges(
+            meta.ast,
+            meta.tsCode,
+          );
+
+          const isOptionType = (t: ts.Type): boolean =>
+            t.isUnion()
+              ? t.types.some((m) =>
+                  Boolean(checker.getPropertyOfType(m, "~effect/Option")),
+                )
+              : Boolean(checker.getPropertyOfType(t, "~effect/Option"));
+
+          const hasNullishMember = (t: ts.Type): boolean => {
+            if (t.isUnion()) {
+              return t.types.some(
+                (m) =>
+                  Boolean(
+                    m.flags & (ts.TypeFlags.Null | ts.TypeFlags.Undefined),
+                  ) && !isOptionType(t),
+              );
+            }
+            const awaited = checker.getAwaitedType(t);
+            if (awaited && awaited !== t && awaited.isUnion()) {
+              return awaited.types.some(
+                (m) =>
+                  Boolean(
+                    m.flags & (ts.TypeFlags.Null | ts.TypeFlags.Undefined),
+                  ) && !isOptionType(awaited),
+              );
+            }
+            return false;
+          };
+
+          const isNodeInTsEscape = (targetNode: ts.Node): boolean => {
+            if (tsEscapeRanges.length === 0) return false;
+            const pos = targetNode.getStart(sf);
+            return tsEscapeRanges.some((r) => pos >= r.start && pos < r.end);
+          };
 
           const isEffectType = (type: ts.Type): boolean => {
             if (!type) return false;
@@ -2873,6 +2946,32 @@ export const typeCheckVirtualFiles = (
                   }
                 }
               }
+              const hasExplicitReturnType =
+                Boolean(enc?.type) ||
+                Boolean(
+                  enc &&
+                  ts.isFunctionExpression(enc) &&
+                  enc.asteriskToken &&
+                  enc.parent &&
+                  ts.isCallExpression(enc.parent) &&
+                  enc.parent.parent &&
+                  (ts.isArrowFunction(enc.parent.parent) ||
+                    ts.isFunctionExpression(enc.parent.parent) ||
+                    ts.isFunctionDeclaration(enc.parent.parent)) &&
+                  enc.parent.parent.type,
+                );
+              if (enc && !hasExplicitReturnType && !isNodeInTsEscape(node)) {
+                const retType = checker.getTypeAtLocation(node.expression);
+                if (hasNullishMember(retType)) {
+                  addCustomDiag(
+                    node.expression,
+                    "UNHANDLED_NULLISH",
+                    `Return value has nullable/optional type '${checker.typeToString(retType)}' from JS/TS interop.`,
+                    "Raw 'null' and 'undefined' values cannot flow out of FunScript returns; absence must be lifted to Option<T> at the interop edge.",
+                    `Wrap the returned value at the edge with 'fromNullishOr(...)' or 'fromNullishOrElse(..., fallback)' (or '<- js ...' for Promises).`,
+                  );
+                }
+              }
             } else if (
               ts.isYieldExpression(node) &&
               node.asteriskToken &&
@@ -2908,36 +3007,6 @@ export const typeCheckVirtualFiles = (
                     `Cannot infer untyped 'any' for binding '${node.name.text}'. Values from untyped foreign JavaScript or TypeScript must be explicitly typed as 'Unknown' (e.g. '${node.name.text}: Unknown = ...') or validated with a schema.`,
                   );
                 } else if (node.initializer) {
-                  const isOptionType = (t: ts.Type): boolean =>
-                    t.isUnion()
-                      ? t.types.some((m) =>
-                          Boolean(
-                            checker.getPropertyOfType(m, "~effect/Option"),
-                          ),
-                        )
-                      : Boolean(checker.getPropertyOfType(t, "~effect/Option"));
-                  const hasNullishMember = (t: ts.Type): boolean => {
-                    if (t.isUnion()) {
-                      return t.types.some(
-                        (m) =>
-                          Boolean(
-                            m.flags &
-                            (ts.TypeFlags.Null | ts.TypeFlags.Undefined),
-                          ) && !isOptionType(t),
-                      );
-                    }
-                    const awaited = checker.getAwaitedType(t);
-                    if (awaited && awaited !== t && awaited.isUnion()) {
-                      return awaited.types.some(
-                        (m) =>
-                          Boolean(
-                            m.flags &
-                            (ts.TypeFlags.Null | ts.TypeFlags.Undefined),
-                          ) && !isOptionType(awaited),
-                      );
-                    }
-                    return false;
-                  };
                   if (hasNullishMember(type)) {
                     addCustomDiag(
                       node.name,
