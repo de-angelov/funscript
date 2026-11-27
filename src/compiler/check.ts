@@ -1528,6 +1528,35 @@ export const typeCheckVirtualFiles = (
             continue;
           }
 
+          // Map Effect error-channel mismatches to a clearer FunScript diagnostic.
+          const effectMatches = message.match(/Effect<([^>]*)>/g);
+          if (effectMatches && effectMatches.length >= 2) {
+            const parsed = effectMatches.map((m) => {
+              const inner = m.slice("Effect<".length, -1);
+              return inner.split(",").map((part) => part.trim());
+            });
+            const [actual, expected] = parsed;
+            const neverTargetMismatch =
+              /Effect</.test(message) &&
+              /is not assignable to type 'never'\./.test(message);
+            if (
+              (actual &&
+                expected &&
+                actual.length === 3 &&
+                expected.length === 3 &&
+                actual[2] === expected[2] &&
+                actual[1] !== expected[1]) ||
+              neverTargetMismatch
+            ) {
+              code = "UNHANDLED_ERROR";
+              explanation =
+                "An Effect's typed error channel does not match the expected failure type.";
+              suggestedAction =
+                "Handle the failing error with Effect.catchTag/Effect.catch, or update the declared error type.";
+              message = `Effect error channel mismatch: expected ${expected[1]}, got ${actual[1]}.`;
+            }
+          }
+
           if (diag.code === 2349 && message.includes("NonExhaustiveError")) {
             code = "NON_EXHAUSTIVE_MATCH";
             const tagMatch = message.match(/_tag:\s*["']([^"']+)["']/);
