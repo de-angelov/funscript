@@ -1594,6 +1594,28 @@ export handle = (tier: DeliveryTier) =>
       expect(resultExhaustive.errorCount).toBe(0);
     });
 
+    it("reports FS_UNHANDLED_ERROR for an Effect error-channel mismatch", async () => {
+      const result = await Effect.runPromise(
+        typeCheckSource(
+          `
+export error Boom(message: String)
+
+export foo = (x: Number) => Effect.fail(Boom({ message: "x" }))
+
+export bar = (): Effect<Number, Never, Never> => foo(1)
+`.trim(),
+          "lib/unhandled-error.fun",
+        ),
+      );
+
+      expect(result.success).toBe(false);
+      const diag = result.diagnostics.find(
+        (d) => d.diagnosticCode === "FS_UNHANDLED_ERROR",
+      );
+      expect(diag).toBeDefined();
+      expect(diag?.message).toContain("Effect error channel mismatch");
+    });
+
     it("reports FS_INDEX_OPTION_PROPERTY when chaining property access onto an indexed array element", async () => {
       // 1. Chaining property access onto an indexed array element is rejected
       const resultInvalid = await Effect.runPromise(
