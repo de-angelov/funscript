@@ -9,6 +9,7 @@ import type {
   MatchExpression,
   Pattern,
   Program,
+  RecordSchema,
   TypeNode,
 } from "../ast/types.js";
 import { isExpectedSyntaxError } from "../errors.js";
@@ -90,6 +91,7 @@ export function findFillMatchArmsCodeActions(
 
   // 1. Collect all declared tagged union schemas in the module
   const schemas = new Map<string, VariantInfo[]>(BUILTIN_SCHEMAS);
+  const recordSchemas = new Map<string, RecordSchema>();
   const variantToSchema = new Map<string, string>();
 
   // Register built-in variants
@@ -102,6 +104,12 @@ export function findFillMatchArmsCodeActions(
   // Register local schemas
   for (const entry of program.body) {
     const decl = entry.kind === "ExportDeclaration" ? entry.declaration : entry;
+    if (
+      decl.kind === "SchemaDeclaration" &&
+      decl.body.kind === "RecordSchema"
+    ) {
+      recordSchemas.set(decl.id.name, decl.body);
+    }
     if (
       decl.kind === "SchemaDeclaration" &&
       decl.body.kind === "TaggedUnionSchema"
@@ -119,15 +127,20 @@ export function findFillMatchArmsCodeActions(
 
   // 2. Find MatchExpressions in the AST
   const matchExprs: MatchExpression[] = [];
+  const nullishMatches = new Set<MatchExpression>();
   const functionParams = new Map<string, string>(); // paramName -> typeName
 
-  const visit = (node: unknown): void => {
+  const visit = (node: unknown, scopes: FunctionExpression[] = []): void => {
     if (!node || typeof node !== "object") return;
     if (Array.isArray(node)) {
-      for (const item of node) visit(item);
+      for (const item of node) visit(item, scopes);
       return;
     }
     const n = node as Record<string, unknown>;
+    const currentScopes =
+      n.kind === "FunctionExpression"
+        ? [...scopes, node as FunctionExpression]
+        : scopes;
 
     if (n.kind === "FunctionExpression") {
       const fn = node as FunctionExpression;
@@ -152,12 +165,52 @@ export function findFillMatchArmsCodeActions(
     }
 
     if (n.kind === "MatchExpression" && !n.isCatch) {
-      matchExprs.push(node as MatchExpression);
+      const expr = node as MatchExpression;
+      matchExprs.push(expr);
+      const scrutinee = expr.scrutinee;
+      const receiver =
+        scrutinee?.kind === "Identifier"
+          ? scrutinee
+          : scrutinee?.kind === "MemberExpression" &&
+              scrutinee.object.kind === "Identifier"
+            ? scrutinee.object
+            : undefined;
+      if (receiver) {
+        for (let i = currentScopes.length - 1; i >= 0; i--) {
+          const param = currentScopes[i].params.find(
+            (p) =>
+              p.name.kind === "Identifier" && p.name.name === receiver.name,
+          );
+          if (!param) continue;
+          let type = param.typeAnnotation;
+          if (
+            scrutinee?.kind === "MemberExpression" &&
+            type?.kind === "RecordTypeNode"
+          ) {
+            type = type.fields.find(
+              (field) => field.name.name === scrutinee.property.name,
+            )?.typeAnnotation;
+          } else if (
+            scrutinee?.kind === "MemberExpression" &&
+            type?.kind === "TypeReferenceNode"
+          ) {
+            type = recordSchemas
+              .get(type.name.name)
+              ?.fields.find(
+                (field) => field.name.name === scrutinee.property.name,
+              )?.typeAnnotation;
+          } else if (scrutinee?.kind === "MemberExpression") {
+            type = undefined;
+          }
+          if (getTypeName(type) === "JSNullish") nullishMatches.add(expr);
+          break;
+        }
+      }
     }
 
     for (const key of Object.keys(n)) {
       if (key === "span") continue;
-      visit(n[key]);
+      visit(n[key], currentScopes);
     }
   };
 
@@ -177,7 +230,11 @@ export function findFillMatchArmsCodeActions(
 
     // Check if wildcard arm is already present
     const hasWildcard = matchExpr.arms.some(
-      (arm) => arm.pattern.kind === "WildcardPattern",
+      (arm) =>
+        !arm.guard &&
+        (arm.pattern.kind === "WildcardPattern" ||
+          (nullishMatches.has(matchExpr) &&
+            arm.pattern.kind === "VariablePattern")),
     );
     if (hasWildcard) continue;
 
@@ -210,10 +267,54 @@ export function findFillMatchArmsCodeActions(
       }
     }
 
-    if (!targetSchema || !schemas.has(targetSchema)) continue;
-
-    const allVariants = schemas.get(targetSchema)!;
-    const missing = allVariants.filter((v) => !handledVariants.has(v.name));
+    let missing: VariantInfo[];
+    if (nullishMatches.has(matchExpr)) {
+      let success = false;
+      let nullValue = false;
+      let undefinedValue = false;
+      for (const arm of matchExpr.arms) {
+        if (arm.guard || arm.pattern.kind !== "ConstructorPattern") continue;
+        const pattern = arm.pattern;
+        if (
+          pattern.constructorName.name === "Success" &&
+          pattern.args.length === 1 &&
+          (pattern.args[0].kind === "VariablePattern" ||
+            pattern.args[0].kind === "WildcardPattern")
+        )
+          success = true;
+        if (
+          pattern.constructorName.name !== "Failure" ||
+          pattern.args.length !== 1
+        )
+          continue;
+        const failure = pattern.args[0];
+        if (
+          failure.kind === "VariablePattern" ||
+          failure.kind === "WildcardPattern"
+        ) {
+          nullValue = true;
+          undefinedValue = true;
+        } else if (
+          failure.kind === "ConstructorPattern" &&
+          failure.args.length === 0
+        ) {
+          if (failure.constructorName.name === "Null") nullValue = true;
+          if (failure.constructorName.name === "Undefined")
+            undefinedValue = true;
+        }
+      }
+      missing = [
+        ...(!success ? [{ name: "Success", fields: ["value"] }] : []),
+        ...(!nullValue ? [{ name: "Failure(Null)", fields: [] }] : []),
+        ...(!undefinedValue
+          ? [{ name: "Failure(Undefined)", fields: [] }]
+          : []),
+      ];
+    } else {
+      if (!targetSchema || !schemas.has(targetSchema)) continue;
+      const allVariants = schemas.get(targetSchema)!;
+      missing = allVariants.filter((v) => !handledVariants.has(v.name));
+    }
 
     if (missing.length === 0) continue;
 

@@ -166,6 +166,10 @@ export function inferPipelineCompanions(
   importedIdentitySchemas?: ReadonlySet<string>,
   importedDataSchemas?: ReadonlySet<string>,
   tolerateUnresolvedStages = false,
+  importedNullishSchemas?: ReadonlyMap<
+    string,
+    ReadonlyMap<string, import("../ast/types.js").TypeNode>
+  >,
 ): PipelineCompanionMap {
   const schemaNames = new Set<string>();
   const localBindings = new Set<string>();
@@ -200,6 +204,7 @@ export function inferPipelineCompanions(
     importedGenericDataSchemas,
     importedIdentitySchemas,
     importedDataSchemas,
+    importedNullishSchemas,
   }).emit();
 
   const emptyResult = new Map<number, PipelineCompanionModule>() as Map<

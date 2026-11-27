@@ -23,6 +23,7 @@ export function resolveImportedRecordFunctions(
   importedIdentitySchemas?: Set<string>,
   importedGenericDataSchemas?: Map<string, number>,
   importedDataSchemas?: Set<string>,
+  importedNullishSchemas?: Map<string, Map<string, TypeNode>>,
 ): Map<string, ReadonlySet<number>> {
   const result = new Map<string, ReadonlySet<number>>();
   const programs = new Map<string, Program | undefined>();
@@ -123,6 +124,80 @@ export function resolveImportedRecordFunctions(
     return declaration.body.fields.every(
       (field) => !field.defaultValue && identity(field.typeAnnotation),
     );
+  };
+  // A schema's decoded nullish fields retain the raw JS representation. Keep
+  // this metadata separate from record contracts: schemas still require their
+  // own decoding and must not acquire record-forwarding semantics.
+  const resolveNullishSchemaExport = (
+    file: string,
+    name: string,
+    seen: Set<string>,
+  ): Map<string, TypeNode> | undefined => {
+    const key = `${file}\0${name}`;
+    if (seen.has(key)) return undefined;
+    const program = programAt(file);
+    if (!program) return undefined;
+    const found: Array<
+      | {
+          kind: "schema";
+          declaration: import("../ast/types.js").SchemaDeclaration;
+        }
+      | {
+          kind: "reexport";
+          declaration: ExportFromDeclaration;
+          spec: import("../ast/types.js").ImportSpecifier;
+        }
+      | { kind: "other" }
+    > = [];
+    for (const item of program.body) {
+      if (
+        item.kind === "ExportDeclaration" &&
+        "id" in item.declaration &&
+        "name" in item.declaration.id &&
+        item.declaration.id.name === name
+      ) {
+        found.push(
+          item.declaration.kind === "SchemaDeclaration"
+            ? { kind: "schema", declaration: item.declaration }
+            : { kind: "other" },
+        );
+      } else if (item.kind === "ExportFromDeclaration") {
+        for (const spec of item.specifiers)
+          if (spec.local.name === name)
+            found.push({ kind: "reexport", declaration: item, spec });
+      }
+    }
+    if (found.length !== 1) return undefined;
+    const candidate = found[0];
+    if (candidate.kind === "other") return undefined;
+    if (candidate.kind === "reexport") {
+      const target = targetOf(candidate.declaration, file);
+      return target
+        ? resolveNullishSchemaExport(
+            target,
+            candidate.spec.imported.name,
+            new Set(seen).add(key),
+          )
+        : undefined;
+    }
+    const decl = candidate.declaration;
+    if (
+      decl.body.kind !== "RecordSchema" ||
+      decl.typeParams?.length ||
+      isRecordContract(decl.body)
+    )
+      return undefined;
+    const fields = new Map<string, TypeNode>();
+    for (const field of decl.body.fields) {
+      const type = field.typeAnnotation;
+      if (
+        type.kind === "TypeReferenceNode" &&
+        type.name.name === "JSNullish" &&
+        type.typeArgs?.length === 1
+      )
+        fields.set(field.name.name, type);
+    }
+    return fields.size ? fields : undefined;
   };
   const resolveIdentityExport = (
     file: string,
@@ -708,6 +783,14 @@ export function resolveImportedRecordFunctions(
     const target = targetOf(item, filename);
     if (!target) continue;
     for (const spec of item.specifiers) {
+      if (importedNullishSchemas) {
+        const fields = resolveNullishSchemaExport(
+          target,
+          spec.imported.name,
+          new Set(),
+        );
+        if (fields) importedNullishSchemas.set(spec.local.name, fields);
+      }
       const imported = programAt(target);
       const entry = imported?.body.find(
         (part) =>

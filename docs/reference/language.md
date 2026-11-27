@@ -132,6 +132,20 @@ Untrusted dictionaries and payloads can be safely decoded directly using `payloa
 
 See also: `pipe`, `Effect.map`, `Effect.timeout`.
 
+## `|>>`
+
+Pass a deferred expression to a function.
+
+```funscript
+expression |>> thunkFunction
+```
+
+Wraps the expression and earlier pipeline stages in a zero-argument function. The receiving function decides when and how often to evaluate it.
+
+
+
+See also: `|>`, `Effect.sync`.
+
 ## `and`
 
 Logical short-circuit conjunction operator (&&).
@@ -840,6 +854,20 @@ fetchData = (url: String) => effect {
 
 See also: `ts`, `effect`, `export`.
 
+## `JSNullish`
+
+A raw JavaScript value that can be null or undefined.
+
+```funscript
+type JSNullish<A> = A | null | undefined
+```
+
+Use at JavaScript boundaries where null and undefined must remain distinct. Matching uses Success(value), Failure(Null), and Failure(Undefined); generated JavaScript retains its raw representation. It is not an Effect Result and does not validate input.
+
+
+
+See also: `Option`, `Result`.
+
 ## `Layer`
 
 Recipes for constructing, composing, and providing services.
@@ -1055,7 +1083,7 @@ Data type modeling the presence or absence of a value.
 type Option<A> = Some<A> | None
 ```
 
-FunScript disallows `null` and `undefined`. Optional values are represented strictly with `Option<A>` from Effect, containing either `Some(value)` or `None`. Eliminates null pointer exceptions.
+Domain absence can be represented with Effect `Option<A>`, containing `Some(value)` or `None`. At JavaScript boundaries, `JSOptional<A>` and `JSNullish<A>` represent raw nullish values; convert explicitly when an Option is needed.
 
 
 

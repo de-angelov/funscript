@@ -16,4 +16,4 @@ export main =
     _ <- Console.log(message)
     => message
   }
-  |> Effect.provide(GreeterLive)
+  |> provide(GreeterLive)

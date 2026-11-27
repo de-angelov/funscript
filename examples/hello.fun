@@ -8,6 +8,6 @@ export greet = (name: String) =>
 
 export main =
   ["Ada", "Grace", "Alan"]
-  |> Array.map(greet)
-  |> Array.join(", ")
+  |> map(greet)
+  |> join(", ")
   |> Console.log

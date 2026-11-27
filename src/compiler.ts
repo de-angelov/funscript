@@ -106,6 +106,33 @@ export class CompilerError extends FunScriptError {
 /** Reject authored raw TypeScript escapes and banned legacy/unsafe types. */
 function validateNoBannedTypes(ast: Program): void {
   walkAst(ast, (node) => {
+    if (
+      (node.kind === "SchemaDeclaration" ||
+        node.kind === "ErrorDeclaration" ||
+        node.kind === "ServiceDeclaration") &&
+      (node.id as { name?: string })?.name === "JSNullish"
+    ) {
+      throw new FunScriptError(
+        "'JSNullish' is a built-in interop type and cannot be redeclared",
+        node.span as Span | undefined,
+      );
+    }
+    if (node.kind === "ImportDeclaration") {
+      const decl =
+        node as unknown as import("./ast/types.js").ImportDeclaration;
+      if (
+        decl.defaultBinding?.name === "JSNullish" ||
+        decl.namespaceBinding?.name === "JSNullish" ||
+        decl.specifiers.some(
+          (specifier) => specifier.local.name === "JSNullish",
+        )
+      ) {
+        throw new FunScriptError(
+          "'JSNullish' is a built-in interop type and cannot be imported as a local name",
+          node.span as Span | undefined,
+        );
+      }
+    }
     if (node.kind === "TypeReferenceNode") {
       const typeName = (node.name as { name?: string })?.name;
       if (typeName === "Any") {
@@ -629,6 +656,10 @@ export const compileString = (
           const importedIdentitySchemas = new Set<string>();
           const importedGenericDataSchemas = new Map<string, number>();
           const importedDataSchemas = new Set<string>();
+          const importedNullishSchemas = new Map<
+            string,
+            Map<string, import("./ast/types.js").TypeNode>
+          >();
           const importedRecordFunctions = resolveImportedRecordFunctions(
             ast,
             options?.sourcePath ?? filename,
@@ -637,6 +668,7 @@ export const compileString = (
             importedIdentitySchemas,
             importedGenericDataSchemas,
             importedDataSchemas,
+            importedNullishSchemas,
           );
           for (const [name, contract] of resolvePackageRecordContracts(
             ast,
@@ -654,6 +686,7 @@ export const compileString = (
               importedGenericDataSchemas,
               importedIdentitySchemas,
               importedDataSchemas,
+              importedNullishSchemas,
             );
           }
           const {
@@ -671,6 +704,7 @@ export const compileString = (
             importedIdentitySchemas,
             importedDataSchemas,
             options?.pipelineAnalysisOnly,
+            importedNullishSchemas,
           );
           if (options?.pipelineAnalysisOnly) {
             return {
@@ -694,6 +728,7 @@ export const compileString = (
             importedIdentitySchemas,
             importedGenericDataSchemas,
             importedDataSchemas,
+            importedNullishSchemas,
             isJsx: filename.endsWith(".funx"),
             modularEffectImports: options?.modularEffectImports,
             context,

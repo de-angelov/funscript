@@ -201,6 +201,16 @@ export function emitTypeNode(ctx: TypeEmitterContext, node: TypeNode): string {
           node.span,
         );
       }
+      if (name === "JSNullish") {
+        if (!node.typeArgs || node.typeArgs.length !== 1) {
+          throw new FunScriptError(
+            "JSNullish requires exactly one type argument",
+            node.span,
+          );
+        }
+        const inner = ctx.emitTypeNode(node.typeArgs[0]);
+        return `(${node.typeArgs[0].kind === "FunctionTypeNode" ? `(${inner})` : inner} | null | undefined)`;
+      }
       if (name === "JSOptional") {
         if (node.typeArgs && node.typeArgs.length === 1) {
           return `(${ctx.emitTypeNode(node.typeArgs[0])} | null | undefined)`;

@@ -94,6 +94,7 @@ import {
 import { findInlayHints } from "./inlay-hints.js";
 import { InteropRenameSession, renameInterop } from "./interop-rename.js";
 import { findFillMatchArmsCodeActions } from "./match-arms.js";
+import { findThunkPipelineCodeActions } from "./thunk-pipeline.js";
 import {
   documentSymbols,
   findWorkspaceDefinition,
@@ -578,6 +579,8 @@ export class FunScriptLspServer extends EventEmitter {
       /* Remove unused imports gracefully declines. */
       if (!isExpectedSyntaxError(error)) throw error;
     }
+
+    actions.push(...findThunkPipelineCodeActions(doc.text, uri, params.range));
 
     if (!doc.text.includes("|>")) return actions;
     const filename = uri.startsWith("file:") ? fileURLToPath(uri) : uri;

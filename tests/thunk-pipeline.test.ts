@@ -7,7 +7,7 @@ describe("deferred pipeline", () => {
   it("defers the complete preceding pipeline and runs it on every execution", async () => {
     const source = `ts { declare function next(): number }
 addOne = (value: Number) => value + 1
-export program = next() |> addOne |>> sync |> Effect.map((value) => value * 2)`;
+export program = next() |> addOne |>> sync |> map((value) => value * 2)`;
     const checked = await typeCheck(source, "thunk-pipe.fun");
     expect(checked.success, checked.formattedOutput).toBe(true);
     let count = 0;
@@ -58,12 +58,20 @@ export program = load() |>> promise`;
     expect(checked.success, checked.formattedOutput).toBe(true);
     let count = 0;
     const { program } = await execute(source, {
-      scope: { load: () => { count++; return Promise.resolve("ok"); } },
+      scope: {
+        load: () => {
+          count++;
+          return Promise.resolve("ok");
+        },
+      },
     });
     expect(count).toBe(0);
     expect(await Effect.runPromise(program)).toBe("ok");
     expect(count).toBe(1);
-    const invalid = await typeCheck("f = (n: Number) => n\nexport invalid = 1 |>> f", "thunk-invalid.fun");
+    const invalid = await typeCheck(
+      "f = (n: Number) => n\nexport invalid = 1 |>> f",
+      "thunk-invalid.fun",
+    );
     expect(invalid.success).toBe(false);
   });
 

@@ -1405,6 +1405,14 @@ export const typeCheckVirtualFiles = (
           if (resolveVirtualContent(fileName) !== undefined) return true;
           return defaultHost.fileExists(fileName);
         },
+        directoryExists: (dirName) => {
+          const norm = path.normalize(dirName);
+          for (const file of virtualTsFiles.keys()) {
+            const dir = path.dirname(file);
+            if (dir === norm || dir.startsWith(norm + path.sep)) return true;
+          }
+          return defaultHost.directoryExists?.(dirName) ?? true;
+        },
         readFile: (fileName) => {
           const content = resolveVirtualContent(fileName);
           if (content !== undefined) return content;

@@ -20,6 +20,7 @@ examples/
 │   ├── hello.fun                 # Basic bindings, string interpolation, pipelines, Effect entrypoint
 │   ├── http-forms-cookies.fun    # Form decoding, validation, cookies, redirects, HTML error responses
 │   ├── js-ts-interop.fun         # TypeScript type escapes, foreign Promise interop, fibers
+│   ├── js-nullish.fun            # Match raw JavaScript null and undefined distinctly
 │   ├── markdown-task-manager.fun # Mutative draft updates, `when` early returns, file I/O
 │   ├── order-fulfillment.fun     # Full e-commerce workflow: concurrency, retry, fibers, ts-pattern
 │   ├── pipeline-helpers.fun      # es-toolkit helpers: string slug/casing, math clamp/round, timing
@@ -54,27 +55,28 @@ examples/
 
 ## Example Catalog
 
-| File | Features & Demonstrations |
-| --- | --- |
-| `bank-account.fun` | Tagged union actions (`Deposit`, `Withdraw`, `Freeze`), pattern matching with numeric guards, immutable record updates |
-| `fibonacci.fun` | Recursive functions with pattern matching, numeric comparison helpers, pipeline chaining with `\|>` |
-| `github-api-client.fun` | REST API client with foreign `js` Promise interop, runtime `Schema.Struct` decoding, Effect tagged error classes, exhaustive pattern matching |
-| `greeter-service.fun` | Canonical showcase: Effect service definitions, context tags, layer creation (`Layer.succeed`), dependency injection |
-| `hello.fun` | Canonical showcase: Variable bindings, string template interpolation (`"Hello {name}"`), pipeline transformations, Effect entry point |
-| `js-ts-interop.fun` | Raw TypeScript type escapes (`ts { ... }`), foreign JS Promise lifting (`js promiseFn`), async Effect fibers |
-| `markdown-task-manager.fun` | CLI state management using Mutative copy-on-write `draft` blocks, `when` early returns, conditional execution, Effect file I/O |
-| `order-fulfillment.fun` | End-to-end e-commerce showcase combining Effect concurrency (`Effect.all`), retry schedules, fiber forking, ts-pattern matching, and Mutative drafts |
-| `pipeline-helpers.fun` | Pipeline data-last helpers powered by `es-toolkit`: string utilities (`slug`, `camelCase`, `snakeCase`), math operations (`clamp`, `round`), and timing helpers |
-| `reactive-widget.funx` | Native `.funx` JSX component emitting `.tsx`, typed props, tagged union view states, template literals in attributes (`className="btn-${variant}"`) |
-| `rest-api-server.fun` | Effect HTTP routes with schema-checked request bodies and structured errors |
-| `shapes.fun` | Canonical showcase: Tagged-union `schema` definitions (`Circle`, `Rect`, `Point`), guard conditions, exhaustive `match` expressions |
-| `sqlite-repository.fun` | Persistent repository API using Node built-in SQLite, schema decoding, and create/update/delete operations (requires Node.js 22+) |
-| `solid-demo/` | Multi-file Solid.js framework integration showing how compiled FunScript modules interoperate seamlessly with modern TypeScript ecosystems |
-| `todo-dashboard.funx` | Interactive multi-component JSX dashboard featuring stat cards, filter buttons, item rows, and Mutative state draft updates |
-| `todo-http.fun` | Canonical showcase: Service simulation with `effect` blocks, runtime schema parsing, retry policies with backoff, layer provision |
-| `todo-service.fun` | Repository service pattern using Effect services, layers, and TypeScript helper escape hatches |
-| `http-forms-cookies.fun` | Form decoding, cookies, and typed HTTP error recovery with pipeline `catch` |
-| `ts-schema-validation.fun` | Importing external TypeScript type definitions using `from ts<Type>`, Schema decoding, validation error reporting |
+| File                        | Features & Demonstrations                                                                                                                                       |
+| --------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `bank-account.fun`          | Tagged union actions (`Deposit`, `Withdraw`, `Freeze`), pattern matching with numeric guards, immutable record updates                                          |
+| `fibonacci.fun`             | Recursive functions with pattern matching, numeric comparison helpers, pipeline chaining with `\|>`                                                             |
+| `github-api-client.fun`     | REST API client with foreign `js` Promise interop, runtime `Schema.Struct` decoding, Effect tagged error classes, exhaustive pattern matching                   |
+| `greeter-service.fun`       | Canonical showcase: Effect service definitions, context tags, layer creation (`Layer.succeed`), dependency injection                                            |
+| `hello.fun`                 | Canonical showcase: Variable bindings, string template interpolation (`"Hello {name}"`), pipeline transformations, Effect entry point                           |
+| `js-ts-interop.fun`         | Raw TypeScript type escapes (`ts { ... }`), foreign JS Promise lifting (`js promiseFn`), async Effect fibers                                                    |
+| `js-nullish.fun`            | `JSNullish<T>` JavaScript interop and distinct success, null, and undefined patterns                                                                            |
+| `markdown-task-manager.fun` | CLI state management using Mutative copy-on-write `draft` blocks, `when` early returns, conditional execution, Effect file I/O                                  |
+| `order-fulfillment.fun`     | End-to-end e-commerce showcase combining Effect concurrency (`Effect.all`), retry schedules, fiber forking, ts-pattern matching, and Mutative drafts            |
+| `pipeline-helpers.fun`      | Pipeline data-last helpers powered by `es-toolkit`: string utilities (`slug`, `camelCase`, `snakeCase`), math operations (`clamp`, `round`), and timing helpers |
+| `reactive-widget.funx`      | Native `.funx` JSX component emitting `.tsx`, typed props, tagged union view states, template literals in attributes (`className="btn-${variant}"`)             |
+| `rest-api-server.fun`       | Effect HTTP routes with schema-checked request bodies and structured errors                                                                                     |
+| `shapes.fun`                | Canonical showcase: Tagged-union `schema` definitions (`Circle`, `Rect`, `Point`), guard conditions, exhaustive `match` expressions                             |
+| `sqlite-repository.fun`     | Persistent repository API using Node built-in SQLite, schema decoding, and create/update/delete operations (requires Node.js 22+)                               |
+| `solid-demo/`               | Multi-file Solid.js framework integration showing how compiled FunScript modules interoperate seamlessly with modern TypeScript ecosystems                      |
+| `todo-dashboard.funx`       | Interactive multi-component JSX dashboard featuring stat cards, filter buttons, item rows, and Mutative state draft updates                                     |
+| `todo-http.fun`             | Canonical showcase: Service simulation with `effect` blocks, runtime schema parsing, retry policies with backoff, layer provision                               |
+| `todo-service.fun`          | Repository service pattern using Effect services, layers, and TypeScript helper escape hatches                                                                  |
+| `http-forms-cookies.fun`    | Form decoding, cookies, and typed HTTP error recovery with pipeline `catch`                                                                                     |
+| `ts-schema-validation.fun`  | Importing external TypeScript type definitions using `from ts<Type>`, Schema decoding, validation error reporting                                               |
 
 ## Running and Verifying Examples
 
@@ -111,6 +113,7 @@ node ./dist/cli/index.js run examples/todo-dashboard.funx
 node ./dist/cli/index.js run examples/raw-strings.fun
 node ./dist/cli/index.js run examples/crypto-password.fun
 node ./dist/cli/index.js run examples/service-shape.fun
+node ./dist/cli/index.js run examples/js-nullish.fun
 node ./dist/cli/index.js run examples/sql-tagged-templates.fun # requires Node.js 22+
 PORT=4317 node ./dist/cli/index.js run examples/rest-api-server.fun  # starts HTTP server on port 4317 (default 3000)
 PORT=3101 node ./dist/cli/index.js run examples/http-forms-cookies.fun # starts form-login server on port 3101 (default 3100)

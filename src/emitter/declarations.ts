@@ -459,7 +459,23 @@ export function emitBindingDeclaration(
     if (scope) scope.set(idName, ctx.isOptionalValue(decl.init));
     const aliasedFields = extractRecordFieldsForBinding(ctx, decl);
     ctx.recordScopes.at(-1)?.set(idName, aliasedFields);
-    ctx.variableTypeScopes.at(-1)?.set(idName, decl.typeAnnotation);
+    const inferred = !decl.typeAnnotation
+      ? ctx.getTypeNodeForExpression?.(decl.init)
+      : undefined;
+    const inferredNullish =
+      inferred?.kind === "TypeReferenceNode" &&
+      inferred.name.name === "JSNullish";
+    const inferredNullishFunction =
+      inferred?.kind === "FunctionTypeNode" &&
+      inferred.returnType.kind === "TypeReferenceNode" &&
+      inferred.returnType.name.name === "JSNullish";
+    ctx.variableTypeScopes
+      .at(-1)
+      ?.set(
+        idName,
+        decl.typeAnnotation ??
+          (inferredNullish || inferredNullishFunction ? inferred : undefined),
+      );
     if (isPrimitiveType(decl.typeAnnotation) || ctx.isPrimitive(decl.init)) {
       ctx.primitiveIdentifiers.add(idName);
     } else {

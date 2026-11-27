@@ -242,11 +242,13 @@ The compiler enforces the convention for declarations it generates. Imported Jav
 values may have any casing; they are only relevant in expression position.
 
 <!-- GENERATED: keywords -->
+
 ### 1.5 Keywords (20 total)
 
 ```text
 and catch default effect error export false from import js match mut not or par schema service true ts when
 ```
+
 <!-- /GENERATED: keywords -->
 
 `_` is a special token (wildcard in patterns, discard in `_ <-`, and call-argument
@@ -399,7 +401,7 @@ Canonical pipeline style puts each stage on its own line:
 names =
   users
   |> Array.map((u) => u.name)
-  |> Array.join(", ")
+  |> join(", ")
 ```
 
 ---
@@ -511,7 +513,7 @@ identity = <A>(value: A): A =>
   value
 
 greet = (name: String) =>
-  trimmed = name |> String.trim()
+  trimmed = name |> trim()
   => "Hello, {trimmed}!"
 
 answer = () => 42
@@ -552,7 +554,7 @@ const answer = () => 42;
 - Functions use `name = (params) => ...`. Neither `fn` nor `function` is supported; there is no second function keyword, no method
   shorthand, and no class method syntax. An object field that holds a function uses the
   same lambda: `{ greet: (name) => ... }`.
-- Optionality in FunScript is modeled explicitly with `Option<T>` (for FunScript values and schemas) or `JSOptional<T>` (at foreign JS/TS boundaries). The `?` optional parameter/field syntax is disabled.
+- Optionality in FunScript is modeled explicitly with `Option<T>` (for FunScript values and schemas) or `JSOptional<T>` / `JSNullish<T>` (at foreign JS/TS boundaries). The `?` optional parameter/field syntax is disabled.
 - A defaulted parameter, such as `(count: Number = 5)`, accepts omission or
   `undefined` and is a plain `Number` inside the function. Its default is evaluated
   only when needed, and does not replace `false`, `0`, empty strings, or `null`.
@@ -867,8 +869,8 @@ There is one conditional and branching form (`match`) to read, format, and teach
 names =
   users
   |> Array.filter((u) => u.active)
-  |> Array.map((u) => u.name)
-  |> Array.join(", ")
+  |> map((u) => u.name)
+  |> join(", ")
 ```
 
 ```ts
@@ -902,7 +904,7 @@ Semantics:
 result =
   value
   |> Effect.map(normalize)
-  |> Effect.flatMap(save)
+  |> flatMap(save)
 
 // Uncurried functions (user-defined or npm) use `_` for the piped slot:
 score =
@@ -920,8 +922,14 @@ same precedence as `|>` and pipelines associate left to right, so all preceding
 stages are deferred:
 
 ```funscript
-result = readFile(path) |>> try |> orDie
-response = makePage() |> render |>> sync
+result =
+  readFile(path)
+  |>> try
+  |> orDie
+response =
+  makePage()
+  |> render
+  |>> sync
 ```
 
 These correspond to `Effect.try(() => readFile(path)) |> Effect.orDie` and
@@ -1155,7 +1163,7 @@ There is no loop syntax. There is no comprehension syntax. There is one way per 
 squares =
   numbers
   |> Array.filter((n) => n > 0)
-  |> Array.map((n) => n * n)
+  |> map((n) => n * n)
 ```
 
 ```ts
@@ -1408,8 +1416,51 @@ Capitalization matters: lowercase names bind, uppercase names are constructors. 
 the syntax's main pattern-disambiguation rule. To compare against a variable value, use a
 guard: `| value when value #= expected => ...`.
 
-There is no `null` or `undefined` pattern. A nullable interop value is converted with
-`Option.fromNullable` and matched as `Some`/`None`.
+### Matching JavaScript nullish values
+
+`JSNullish<T>` describes a raw JavaScript `T | null | undefined` value. It does not
+construct an Effect `Result`: JavaScript callers and components receive and return
+the original values. Use it at an interop boundary when the two absence cases matter:
+
+```funscript
+describe = (value: JSNullish<String>) =>
+  match value
+    | Success(text) => "Hello, {text}!"
+    | Failure(Null) => "Explicitly empty"
+    | Failure(Undefined) => "Not provided"
+```
+
+The same annotation can describe a component prop. In a `.funx` file with React
+available, `Label` accepts a raw `string | null | undefined` prop from TypeScript:
+
+```funscript
+export Label = (props: { text: JSNullish<String> }) =>
+  match props.text
+    | Success(text) => <span>{text}</span>
+    | Failure(Null) => <span>Explicitly empty</span>
+    | Failure(Undefined) => <span>Not provided</span>
+```
+
+On `JSNullish` values these patterns inspect the raw value, rather than matching
+the `_tag` of an Effect `Result`. `Failure(Null)` matches only `null`, and
+`Failure(Undefined)` matches only `undefined`; the success binding is narrowed
+to the non-nullish part of `T`.
+Ordinary `Result` values continue to use their Effect representation. `Null` and
+`Undefined` here are match patterns, not JavaScript expression literals.
+
+The matcher must be able to identify the scrutinee as `JSNullish<T>` from its
+FunScript type annotation. A directly annotated parameter or an annotated field
+works; for an inferred value or an imported function result, add a local
+`JSNullish<T>` annotation before matching if its type is not recognized.
+
+Reading a missing property yields `undefined`, so these patterns alone cannot
+distinguish a missing property from an own property set to `undefined`. Use a
+presence-preserving interop helper when that distinction matters. A type annotation
+does not validate untrusted JavaScript input; decode it separately when needed.
+See `examples/js-nullish.fun` for a runnable example.
+
+If both absence cases should be treated alike, `JSOptional<T>` and
+`fromNullishOr` convert them to `Option<T>` for `Some`/`None` matching.
 
 ---
 
@@ -1593,7 +1644,7 @@ export schema Country = {
 }
 
 export countryPageSchema = Page(Country)
-export names = (page: Page<Country>) => page.items |> Array.map((country) => country.name)
+export names = (page: Page<Country>) => page.items |> map((country) => country.name)
 ```
 
 Decode untrusted values with an Effect Schema decoder applied to `countryPageSchema`.
@@ -2151,7 +2202,7 @@ export findUser = (id: String) =>
     user <- UserRepo.find(id)
     => user
   }
-  |> Effect.catchTag("NotFound", (e) => Effect.succeed({ id: e.id, name: "anonymous" }))
+  |> catchTag("NotFound", (e) => Effect.succeed({ id: e.id, name: "anonymous" }))
 ```
 
 #### Automatic error union tracking
@@ -2386,7 +2437,7 @@ import { Effect, Queue, Schedule } from "effect"
 producer = (jobs: Queue<Job>) =>
   pollNewJobs
   |> Effect.flatMap((batch) => Queue.offerAll(jobs, batch))
-  |> Effect.repeat(Schedule.spaced("1 second"))
+  |> repeat(Schedule.spaced("1 second"))
 
 worker = (jobs: Queue<Job>, id: Number) =>
   effect {
@@ -2394,7 +2445,7 @@ worker = (jobs: Queue<Job>, id: Number) =>
     result <- process(job) |> Effect.withSpan("worker.process", { attributes: { id } })
     => result
   }
-  |> Effect.forever
+  |> forever
 
 export pipeline =
   effect {
@@ -2404,7 +2455,7 @@ export pipeline =
     |> Effect.forEach((i) => Effect.forkScoped(worker(jobs, i)))
     => Effect.Never
   }
-  |> Effect.scoped  // closing the scope interrupts every fiber
+  |> scoped  // closing the scope interrupts every fiber
 ```
 
 Rules:
@@ -2456,7 +2507,7 @@ export main =
     _ <- Console.log(message)
     => message
   }
-  |> Effect.provide(GreeterLive)
+  |> provide(GreeterLive)
 ```
 
 ```ts
@@ -2937,7 +2988,7 @@ export error NotFound(id: String)
 
 export findUser = (users: Array<User>, id: String) =>
   users
-  |> Array.findFirst((u) => u.id #= id)
+  |> findFirst((u) => u.id #= id)
   |> Effect.fromOption(() => NotFound(id))
 
 export recordLogin = (user: User) =>
@@ -3157,7 +3208,7 @@ These are the choices that came out of checking the surface for ambiguity:
 | No bitwise operators                                                          | `\|` already has a language meaning; bitwise is rare and explicit via raw TS.                                                                                                                                                                            |
 | Capitalization is semantic                                                    | Pattern bindings vs. constructors need no guessing.                                                                                                                                                                                                      |
 | `_tag` reserved                                                               | The Effect/ts-pattern discriminant cannot be accidentally shadowed.                                                                                                                                                                                      |
-| No `throw` or exception-style `try`/`catch`                                    | Errors are values in Effect's `E` channel.                                                                                                                                                                                                               |
+| No `throw` or exception-style `try`/`catch`                                   | Errors are values in Effect's `E` channel.                                                                                                                                                                                                               |
 | No `await`/`async`/`Promise`                                                  | One concurrency model: Effect. Promise is interop only.                                                                                                                                                                                                  |
 | No `let`, `var`, `:=`, or unannotated reassignment                            | `=` declares an immutable binding unless preceded by `mut` or targeting a `mut` binding / `mut (d) =>` draft; `Effect.Ref` handles concurrent state.                                                                                                     |
 | No loops or comprehensions                                                    | Pure iteration is Effect `Array`/`Record`; effectful iteration is `Effect.forEach`.                                                                                                                                                                      |

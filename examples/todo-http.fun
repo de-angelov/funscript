@@ -18,8 +18,8 @@ export fetchTodo = (id: Number) =>
     todo <- response |> HttpClientResponse.schemaBodyJson(Todo)
     => completeTodo(todo)
   }
-  |> Effect.retry(Schedule.exponential("100 millis"))
-  |> Effect.provide(FetchHttpClient.layer)
+  |> retry(Schedule.exponential("100 millis"))
+  |> provide(FetchHttpClient.layer)
 
 export main =
   effect {

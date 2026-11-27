@@ -10,12 +10,13 @@ matching, and immutable updates less ceremonial.
 **Status:** experimental compiler and tooling under active development.
 
 <!-- GENERATED: project-facts -->
+
 ## Generated project facts
 
 - Package: `funscript` `0.2.3`
 - Runtime: Effect `^4.1.2`
 - Source extensions: `.fun`, `.funx`
-- Runnable checked examples: 27
+- Runnable checked examples: 28
 
 The exact command surface is generated from the implementation in the [CLI reference](docs/reference/cli.md). The language catalogue used by editor hover help is generated in the [language reference](docs/reference/language.md).
 <!-- /GENERATED: project-facts -->
@@ -87,6 +88,7 @@ For the current, verified contract and runnable source examples, read the
 ## Examples
 
 <!-- GENERATED: example-inventory -->
+
 | [`examples/assemblyscript-numeric.fun`](examples/assemblyscript-numeric.fun) | `FunScript` |
 | [`examples/assemblyscript-primes.fun`](examples/assemblyscript-primes.fun) | `FunScript` |
 | [`examples/bank-account.fun`](examples/bank-account.fun) | `FunScript` |
@@ -96,6 +98,7 @@ For the current, verified contract and runnable source examples, read the
 | [`examples/greeter-service.fun`](examples/greeter-service.fun) | `FunScript` |
 | [`examples/hello.fun`](examples/hello.fun) | `FunScript` |
 | [`examples/http-forms-cookies.fun`](examples/http-forms-cookies.fun) | `FunScript` |
+| [`examples/js-nullish.fun`](examples/js-nullish.fun) | `FunScript` |
 | [`examples/js-ts-interop.fun`](examples/js-ts-interop.fun) | `FunScript` |
 | [`examples/markdown-task-manager.fun`](examples/markdown-task-manager.fun) | `FunScript` |
 | [`examples/order-fulfillment.fun`](examples/order-fulfillment.fun) | `FunScript` |
@@ -162,9 +165,7 @@ tests/            Compiler, CLI, formatter, LSP, and integration coverage
 A top-level `as { ... }` block embeds high-performance WebAssembly routines written in [AssemblyScript](https://www.assemblyscript.org/). Exported functions are compiled to WebAssembly at FunScript compile time and exposed locally as typed TypeScript functions:
 
 ```funscript
-as {
-  export function square(value: f64): f64 { return value * value; }
-}
+as { export function square(value: f64): f64 { return value * value; } }
 
 export result = square(12)
 export safeResult = square.effect(12)

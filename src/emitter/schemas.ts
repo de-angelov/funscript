@@ -341,8 +341,8 @@ export function emitSchemaDeclaration(
 
       ctx.addEffectImport("Schema");
       const baseSchema = emitSchemaTypeField(ctx, decl.body.baseType);
-      const refinementStages = flattenPipelineStages(decl.body.refinement).map((stage) =>
-        emitRefinementStage(ctx, stage),
+      const refinementStages = flattenPipelineStages(decl.body.refinement).map(
+        (stage) => emitRefinementStage(ctx, stage),
       );
       return `${exp}const ${name} = ${baseSchema}.pipe(${refinementStages.join(", ")});\n${exp}type ${name} = typeof ${name}.Type;\n${exp}const ${name}FromUnknown = (input: unknown): ${name} => Schema.decodeUnknownSync(${name})(input);`;
     }
@@ -862,8 +862,17 @@ export function emitSchemaTypeField(
     if (tName === "Option" && typeNode.typeArgs) {
       return `Schema.Option(${emitSchemaTypeField(ctx, typeNode.typeArgs[0])})`;
     }
-    if (tName === "JSOptional" && typeNode.typeArgs?.length === 1) {
+    if (
+      (tName === "JSOptional" || tName === "JSNullish") &&
+      typeNode.typeArgs?.length === 1
+    ) {
       return `Schema.NullishOr(${emitSchemaTypeField(ctx, typeNode.typeArgs[0])})`;
+    }
+    if (tName === "JSNullish") {
+      throw new FunScriptError(
+        "JSNullish requires exactly one type argument",
+        typeNode.span,
+      );
     }
     if (tName === "Array" && typeNode.typeArgs?.length === 1) {
       return `Schema.Array(${emitSchemaTypeField(ctx, typeNode.typeArgs[0])})`;

@@ -143,6 +143,10 @@ export function validateNumericComparisons(
   importedGenericDataSchemas?: ReadonlyMap<string, number>,
   importedIdentitySchemas?: ReadonlySet<string>,
   importedDataSchemas?: ReadonlySet<string>,
+  importedNullishSchemas?: ReadonlyMap<
+    string,
+    ReadonlyMap<string, import("../ast/types.js").TypeNode>
+  >,
 ): void {
   const marked = new Emitter(ast, undefined, {
     allowAmbiguousPipeline: true,
@@ -152,6 +156,7 @@ export function validateNumericComparisons(
     importedGenericDataSchemas,
     importedIdentitySchemas,
     importedDataSchemas,
+    importedNullishSchemas,
   }).emit();
   if (!marked.includes("__funscriptNumericOperand(")) return;
 

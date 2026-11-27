@@ -43,6 +43,7 @@ import { Lexer } from "../lexer/lexer.js";
 import { KEYWORDS, BANNED_KEYWORDS } from "../lexer/tokens.js";
 import { Parser } from "../parser/parser.js";
 import { walkAst } from "../ast/walk.js";
+import { convertPipelineStyle } from "../tooling/pipeline-style.js";
 import { ASSOCIATIVITY, PRECEDENCE } from "./operator-precedence.js";
 
 const RESERVED_IDENTIFIERS = new Set<string>([
@@ -1172,6 +1173,13 @@ export class Formatter {
       const body = this.formatBlockStatement(arm.body, bodyIndent);
       return `${leading}${armIndent}| ${pat}${guard} =>\n${body}${trailing}`;
     } else {
+      if (arm.body.kind === "PipelineExpression") {
+        const bodyIndent = indent + this.indentSize;
+        const body = this.formatExpression(arm.body, bodyIndent);
+        if (body.includes("\n")) {
+          return `${leading}${armIndent}| ${pat}${guard} =>\n${this.spaces(bodyIndent)}${body}${trailing}`;
+        }
+      }
       const body = this.formatExpression(arm.body, indent);
       return `${leading}${armIndent}| ${pat}${guard} => ${body}${trailing}`;
     }
@@ -1752,11 +1760,19 @@ export class Formatter {
 
 export function format(source: string, options?: FormatOptions): string {
   const filename = options?.filename ?? "<anonymous>";
-  const lexer = new Lexer(source, filename);
+  // Type-aware shortening is optional for incomplete or unresolvable source;
+  // formatting itself must remain available while editing.
+  let input = source;
+  try {
+    input = convertPipelineStyle(source, filename, "bare").text;
+  } catch {
+    // Preserve the original stage whenever its resolution cannot be proven.
+  }
+  const lexer = new Lexer(input, filename);
   const tokens = lexer.tokenize();
   const parser = new Parser(tokens, filename);
   const ast = parser.parse();
-  const formatter = new Formatter(source, ast, options);
+  const formatter = new Formatter(input, ast, options);
   return formatter.format();
 }
 

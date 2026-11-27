@@ -7,6 +7,7 @@ import {
   pipelineCompanionCandidates,
 } from "../emitter/pipeline-catalog.js";
 import { Lexer } from "../lexer/lexer.js";
+import { BANNED_KEYWORDS, KEYWORDS } from "../lexer/tokens.js";
 import { Parser } from "../parser/parser.js";
 
 export type PipelineStyle = "bare" | "qualified";
@@ -17,6 +18,26 @@ type Edit = {
   module: string;
   method: string;
 };
+
+const DEFERRED_CONSTRUCTORS = new Set([
+  "sync",
+  "try",
+  "suspend",
+  "promise",
+  "tryPromise",
+  "failSync",
+]);
+
+function isDeferredConstructor(node: PipelineExpression): boolean {
+  const stage = node.right;
+  return (
+    node.deferred === true &&
+    stage.kind === "MemberExpression" &&
+    stage.object.kind === "UpperIdentifier" &&
+    stage.object.name === "Effect" &&
+    DEFERRED_CONSTRUCTORS.has(stage.property.name)
+  );
+}
 
 function isPipelineExpression(node: unknown): node is PipelineExpression {
   return (
@@ -60,11 +81,12 @@ export function convertPipelineStyle(
         selected &&
         (style === "qualified"
           ? target.kind === "Identifier"
-          : target.kind === "MemberExpression" &&
-            target.object.kind === "UpperIdentifier" &&
-            PIPELINE_COMPANION_CATALOG[
-              target.object.name as keyof typeof PIPELINE_COMPANION_CATALOG
-            ]?.includes(target.property.name))
+          : isDeferredConstructor(node) ||
+            (target.kind === "MemberExpression" &&
+              target.object.kind === "UpperIdentifier" &&
+              PIPELINE_COMPANION_CATALOG[
+                target.object.name as keyof typeof PIPELINE_COMPANION_CATALOG
+              ]?.includes(target.property.name)))
       ) {
         hasCandidate = true;
         return;
@@ -94,6 +116,7 @@ export function convertPipelineStyle(
       ? compiled.barePipelineStageResolutions
       : compiled.pipelineStageResolutions;
   const edits: Edit[] = [];
+  const deferredEdits: Edit[] = [];
   let candidateCount = 0;
   const visit = (node: unknown): void => {
     if (!node || typeof node !== "object") return;
@@ -116,11 +139,23 @@ export function convertPipelineStyle(
         const module = target.object
           .name as keyof typeof PIPELINE_COMPANION_CATALOG;
         const method = target.property.name;
+        if (isDeferredConstructor(node)) {
+          candidateCount++;
+          deferredEdits.push({
+            start,
+            end: target.property.span.start.offset,
+            text: "",
+            module,
+            method,
+          });
+        }
         if (PIPELINE_COMPANION_CATALOG[module]?.includes(method))
           candidateCount++;
         const resolution = resolutions.get(stage.span.start.offset);
         if (
           PIPELINE_COMPANION_CATALOG[module]?.includes(method) &&
+          !(method in KEYWORDS) &&
+          !(method in BANNED_KEYWORDS) &&
           resolution?.module === module &&
           resolution.method === method
         ) {
@@ -164,6 +199,43 @@ export function convertPipelineStyle(
     }
   };
   visit(parsed);
+  // Constructors are not in the data-last companion catalog. Compare complete
+  // generated programs so shadowed names or changed overloads cannot be rewritten.
+  if (style === "bare" && deferredEdits.length) {
+    const emit = (text: string): string =>
+      Effect.runSync(
+        compileString(text, filename, {
+          context: new TypeScriptCompilationContext(filename),
+          sourcePath: filename,
+          sourcemap: false,
+        }),
+      ).typescript;
+    const original = emit(source);
+    const allDeferred = [...deferredEdits]
+      .sort((a, b) => b.start - a.start)
+      .reduce(
+        (text, edit) => text.slice(0, edit.start) + text.slice(edit.end),
+        source,
+      );
+    let allSafe = false;
+    try {
+      allSafe = emit(allDeferred) === original;
+    } catch {
+      // Check candidates separately below.
+    }
+    if (allSafe) {
+      edits.push(...deferredEdits);
+    } else {
+      for (const edit of deferredEdits) {
+        const candidate = source.slice(0, edit.start) + source.slice(edit.end);
+        try {
+          if (emit(candidate) === original) edits.push(edit);
+        } catch {
+          // A candidate that cannot be compiled is not safe to rewrite.
+        }
+      }
+    }
+  }
   let result = source;
   for (const edit of [...edits].sort((a, b) => b.start - a.start)) {
     result = result.slice(0, edit.start) + edit.text + result.slice(edit.end);

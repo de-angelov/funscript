@@ -1,5 +1,10 @@
 # Optional arguments and Effect Option
 
+For a raw JavaScript value where `null` and `undefined` must be handled
+separately, use `JSNullish<T>` and its `Success`, `Failure(Null)`, and
+`Failure(Undefined)` match patterns; see [Matching JavaScript nullish values](syntax.md#matching-javascript-nullish-values).
+`JSNullish<T>` emits `T | null | undefined`, not a tagged Effect `Result`.
+
 Use `?` when omission matters, a default when the callee should always receive
 one concrete value, and `Option<T>` when absence is itself a value in the domain.
 

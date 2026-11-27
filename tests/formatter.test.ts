@@ -427,7 +427,7 @@ export main =
 `.trim();
     const formatted = format(unformatted);
     expect(formatted).toBe(
-      `export main =\n  [1, 2, 3]\n  |> Array.map((x) => x * 2)\n  |> Array.join(", ")\n  |> Console.log\n`,
+      `export main =\n  [1, 2, 3]\n  |> map((x) => x * 2)\n  |> join(", ")\n  |> Console.log\n`,
     );
     expect(format(formatted)).toBe(formatted);
   });

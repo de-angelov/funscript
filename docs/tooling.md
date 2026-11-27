@@ -324,7 +324,15 @@ These are source-level discipline checks, not a proof of purity or a security bo
 
 ### Pipeline style conversion
 
-Use `funscript pipeline-style bare src/` to shorten eligible companion stages in files or directories, or `funscript pipeline-style qualified src/` to make inferred companion stages explicit. The command reports converted and skipped stages per file. The language server also offers **Use bare pipeline stages** and **Qualify pipeline stages** as refactoring actions for the stage at the cursor or stages in a selection. The conversion checks generated TypeScript and leaves ambiguous, shadowed, or otherwise behavior-changing stages untouched. Files that cannot compile are reported and left unchanged.
+The default formatter shortens qualified `|>` and `|>>` stages when the compiler can prove the bare stage preserves their meaning. It retains ambiguous, shadowed, reserved, or unresolvable names. When analysis cannot run, formatting still proceeds without shortening those stages.
+
+Use `funscript pipeline-style bare src/` to shorten eligible companion stages in files or directories, or `funscript pipeline-style qualified src/` to make inferred companion stages explicit. The command reports converted and skipped stages per file. The language server also offers **Use bare pipeline stages** and **Qualify pipeline stages** as refactoring actions for the stage at the cursor or stages in a selection. The conversion checks generated TypeScript and leaves ambiguous, shadowed, or otherwise behavior-changing stages untouched. Files that cannot compile are reported and left unchanged. A later format can shorten a safely resolved stage again.
+
+The language server also offers **Convert to deferred pipeline (|>>)** on a
+single-expression, zero-argument thunk passed to a directly named function or a
+supported `Effect` constructor. The action retains parentheses and the qualified
+callee to preserve the surrounding expression and name resolution. Multi-statement
+thunks, record overloads, and other member calls are left unchanged.
 
 Formatter preferences can be set in `funscript.config.fun`:
 

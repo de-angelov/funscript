@@ -27,12 +27,12 @@ formFields = HttpServerRequest.schemaBodyUrlParams(Schema.Struct({
 
 readCredentials =
   effect {
-    fields <- formFields |> Effect.mapError(toValidationError)
+    fields <- formFields |> mapError(toValidationError)
     credentials <- Schema.decodeUnknownEffect(Credentials)({
       username: fields.username or ""
       password: fields.password or ""
     })
-    |> Effect.mapError(toValidationError)
+    |> mapError(toValidationError)
     => credentials
   }
 
@@ -57,7 +57,9 @@ loginHandler =
     => response
   }
   |> catch
-    | ValidationError(cause) => Effect.sync(() => HttpServerResponse.setStatus(html(page("Error: {cause.message}")), 400))
+    | ValidationError(cause) =>
+        HttpServerResponse.setStatus(html(page("Error: {cause.message}")), 400)
+        |>> sync
 
 protectedHandler =
   effect {
@@ -84,5 +86,5 @@ serverConfig = Config.all({
 
 export main =
   Layer.launch(HttpRouter.serve(routes)
-  |> Layer.provide(NodeHttpServer.layerConfig(createServer, serverConfig)))
+  |> provide(NodeHttpServer.layerConfig(createServer, serverConfig)))
   |> NodeRuntime.runMain

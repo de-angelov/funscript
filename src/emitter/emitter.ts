@@ -142,6 +142,7 @@ export interface EmitterOptions {
   importedIdentitySchemas?: ReadonlySet<string>;
   importedGenericDataSchemas?: ReadonlyMap<string, number>;
   importedDataSchemas?: ReadonlySet<string>;
+  importedNullishSchemas?: ReadonlyMap<string, ReadonlyMap<string, TypeNode>>;
   /** Whether the output is `.tsx`; generic arrows need a comma there. */
   isJsx?: boolean;
   context?: import("../compiler/typescript-context.js").TypeScriptCompilationContext;
@@ -643,11 +644,16 @@ export class Emitter {
     string,
     import("../ast/types.js").RecordTypeNode
   >();
+  private readonly nullishSchemaFields = new Map<
+    string,
+    Map<string, TypeNode>
+  >();
   public needsCheckedRecordDecoder = false;
   public checkedCallbackKinds = new Set<"sync" | "void" | "effect">();
   public identityRecordSchemas = new Set<string>();
   public checkedTaggedSchemas = new Map<string, TaggedUnionSchema>();
   public variantFields = new Map<string, string[]>();
+  private taggedUnionVariants = new Map<string, Set<string>>();
   public modularEffectImports: boolean;
 
   public getRecordTypeNode(
@@ -668,6 +674,8 @@ export class Emitter {
     this.modularEffectImports = options.modularEffectImports ?? false;
     for (const [name, contract] of options.importedRecordContracts ?? [])
       this.recordContracts.set(name, contract);
+    for (const [name, fields] of options.importedNullishSchemas ?? [])
+      this.nullishSchemaFields.set(name, new Map(fields));
     // Source-map emission renders declarations individually, but resolution
     // still needs the bindings from the complete source program.
     let unsafeSchemaBinding = false;
@@ -740,6 +748,22 @@ export class Emitter {
       const decl = item.kind === "ExportDeclaration" ? item.declaration : item;
       if (
         decl.kind === "SchemaDeclaration" &&
+        decl.body.kind === "RecordSchema" &&
+        !decl.typeParams?.length
+      ) {
+        const fields = new Map<string, TypeNode>();
+        for (const field of decl.body.fields) {
+          if (
+            field.typeAnnotation.kind === "TypeReferenceNode" &&
+            field.typeAnnotation.name.name === "JSNullish"
+          ) {
+            fields.set(field.name.name, field.typeAnnotation);
+          }
+        }
+        if (fields.size) this.nullishSchemaFields.set(decl.id.name, fields);
+      }
+      if (
+        decl.kind === "SchemaDeclaration" &&
         decl.body.kind === "TypeSignatureSchema"
       ) {
         staticTypeNames.add(decl.id.name);
@@ -791,6 +815,10 @@ export class Emitter {
         decl.kind === "SchemaDeclaration" &&
         decl.body.kind === "TaggedUnionSchema"
       ) {
+        this.taggedUnionVariants.set(
+          decl.id.name,
+          new Set(decl.body.variants.map((variant) => variant.name.name)),
+        );
         for (const variant of decl.body.variants) {
           this.variantFields.set(
             variant.name.name,
@@ -1073,14 +1101,47 @@ export class Emitter {
   }
 
   public getTypeNodeForExpression(expr: Expression): TypeNode | undefined {
+    return this.resolveExpressionTypeNode(expr, new Set());
+  }
+
+  private resolveExpressionTypeNode(
+    expr: Expression,
+    visited: Set<string>,
+  ): TypeNode | undefined {
     if (expr.kind === "Identifier") {
-      return this.getTypeNodeForIdentifier(expr.name);
+      for (let i = this.variableTypeScopes.length - 1; i >= 0; i--) {
+        if (this.variableTypeScopes[i].has(expr.name))
+          return this.variableTypeScopes[i].get(expr.name);
+      }
+      if (visited.has(expr.name)) return undefined;
+      const binding = this.bindings.get(expr.name);
+      if (!binding) return undefined;
+      if (binding.typeAnnotation) return binding.typeAnnotation;
+      visited.add(expr.name);
+      return this.resolveExpressionTypeNode(binding.init, visited);
+    }
+    if (expr.kind === "FunctionExpression" && expr.returnType) {
+      return {
+        kind: "FunctionTypeNode",
+        params: expr.params,
+        typeParams: expr.typeParams,
+        returnType: expr.returnType,
+        span: expr.span,
+      };
+    }
+    if (expr.kind === "CallExpression") {
+      const callee = this.resolveExpressionTypeNode(expr.callee, visited);
+      if (callee?.kind === "FunctionTypeNode") return callee.returnType;
     }
     if (expr.kind === "MemberExpression") {
-      const objType = this.getTypeNodeForExpression(expr.object);
+      const objType = this.resolveExpressionTypeNode(expr.object, visited);
       if (!objType) return undefined;
       let recordType: TypeNode | undefined = objType;
       if (recordType.kind === "TypeReferenceNode") {
+        const nullishField = this.nullishSchemaFields
+          .get(recordType.name.name)
+          ?.get(expr.property.name);
+        if (nullishField) return nullishField;
         if (
           recordType.name.name === "Option" &&
           recordType.typeArgs?.length === 1
@@ -2716,6 +2777,8 @@ export class Emitter {
       recordFields: (name) => this.recordFields(name),
       getRecordTypeNode: (name) => this.getRecordTypeNode(name),
       getVariantFields: (name) => this.variantFields.get(name),
+      isTaggedUnionVariant: (type, variant) =>
+        this.taggedUnionVariants.get(type)?.has(variant) ?? false,
       recordContracts: this.recordContracts,
       isOptionalParameter: (name) => this.isOptionalParameter(name),
       isOptionalValue: (expression) => this.isOptionalValue(expression),

@@ -45,6 +45,7 @@ interface MatchEmitterContext {
   recordFields?(name: string): Map<string, RecordFieldInfo> | undefined;
   getRecordTypeNode?(name: string): RecordTypeNode | undefined;
   getVariantFields?(name: string): string[] | undefined;
+  isTaggedUnionVariant?(type: string, variant: string): boolean;
   recordContracts?: Map<string, RecordTypeNode>;
   getTypeNodeForExpression?(expression: Expression): TypeNode | undefined;
   isOptionalParameter(name: string): boolean;
@@ -102,6 +103,39 @@ export class MatchEmitter {
       expr.scrutinee && !expr.isPipeline
         ? this.context.getTypeNodeForExpression?.(expr.scrutinee)
         : undefined;
+    if (
+      scrutineeType?.kind === "TypeReferenceNode" &&
+      scrutineeType.name.name === "JSNullish"
+    ) {
+      return this.emitJSNullishMatch(expr.scrutinee!, expr.arms);
+    }
+    const hasNullishFailurePattern = expr.arms.some((arm) => {
+      const p = arm.pattern;
+      return (
+        p.kind === "ConstructorPattern" &&
+        p.constructorName.name === "Failure" &&
+        p.args.some(
+          (arg) =>
+            arg.kind === "ConstructorPattern" &&
+            (arg.constructorName.name === "Null" ||
+              arg.constructorName.name === "Undefined"),
+        )
+      );
+    });
+    const isKnownTaggedFailure =
+      scrutineeType?.kind === "TypeReferenceNode" &&
+      (scrutineeType.name.name === "Result" ||
+        (this.context.isTaggedUnionVariant?.(
+          scrutineeType.name.name,
+          "Failure",
+        ) ??
+          false));
+    if (hasNullishFailurePattern && !isKnownTaggedFailure) {
+      throw new FunScriptError(
+        "Failure(Null) and Failure(Undefined) require a statically known JSNullish<T> scrutinee; add a JSNullish annotation before matching",
+        expr.span,
+      );
+    }
     if (
       scrutineeType?.kind === "TypeReferenceNode" &&
       scrutineeType.name.name === "JSOptional"
@@ -1184,6 +1218,149 @@ export class MatchEmitter {
       branches.push(`else {\n  throw new Error("Non-exhaustive match");\n}`);
     }
     return `(() => {\n  ${branches.join(" ")}\n})()`;
+  }
+
+  private emitJSNullishMatch(scrutinee: Expression, arms: MatchArm[]): string {
+    if (!arms.length)
+      throw new FunScriptError(
+        "JSNullish match requires at least one arm",
+        scrutinee.span,
+      );
+    // Always capture once: a property getter or foreign expression may be effectful.
+    const value = "$jsNullish";
+    const preamble = `const ${value} = ${this.context.emitExpression(scrutinee)};`;
+    const branches: string[] = [];
+    let coversSuccess = false;
+    let coversNull = false;
+    let coversUndefined = false;
+    let coversAll = false;
+    let terminated = false;
+
+    for (const arm of arms) {
+      const pat = arm.pattern;
+      let condition: string;
+      let binding: string | undefined;
+      let caseKind: "success" | "null" | "undefined" | "failure" | "all";
+      if (pat.kind === "WildcardPattern" || pat.kind === "VariablePattern") {
+        condition = "true";
+        caseKind = "all";
+        if (pat.kind === "VariablePattern") binding = pat.name.name;
+      } else if (
+        pat.kind === "ConstructorPattern" &&
+        pat.constructorName.name === "Success"
+      ) {
+        const arg = pat.args[0];
+        if (
+          pat.args.length !== 1 ||
+          (arg.kind !== "VariablePattern" && arg.kind !== "WildcardPattern")
+        ) {
+          throw new FunScriptError(
+            "JSNullish Success expects one variable or '_' pattern",
+            pat.span,
+          );
+        }
+        condition = `(${value} !== null && ${value} !== undefined)`;
+        caseKind = "success";
+        if (arg.kind === "VariablePattern") binding = arg.name.name;
+      } else if (
+        pat.kind === "ConstructorPattern" &&
+        pat.constructorName.name === "Failure"
+      ) {
+        const arg = pat.args[0];
+        if (pat.args.length !== 1) {
+          throw new FunScriptError(
+            "JSNullish Failure expects Null, Undefined, a variable, or '_'",
+            pat.span,
+          );
+        }
+        if (
+          arg.kind === "ConstructorPattern" &&
+          arg.args.length === 0 &&
+          arg.constructorName.name === "Null"
+        ) {
+          condition = `(${value} === null)`;
+          caseKind = "null";
+        } else if (
+          arg.kind === "ConstructorPattern" &&
+          arg.args.length === 0 &&
+          arg.constructorName.name === "Undefined"
+        ) {
+          condition = `(${value} === undefined)`;
+          caseKind = "undefined";
+        } else if (
+          arg.kind === "VariablePattern" ||
+          arg.kind === "WildcardPattern"
+        ) {
+          condition = `(${value} === null || ${value} === undefined)`;
+          caseKind = "failure";
+          if (arg.kind === "VariablePattern") binding = arg.name.name;
+        } else {
+          throw new FunScriptError(
+            "JSNullish Failure expects Null, Undefined, a variable, or '_'",
+            pat.span,
+          );
+        }
+      } else {
+        throw new FunScriptError(
+          "Match JSNullish using Success(value), Failure(Null), Failure(Undefined), or '_'",
+          pat.span,
+        );
+      }
+
+      if (arm.guard) {
+        const guard = this.context.emitExpression(arm.guard);
+        // Bind the narrowed value inside an IIFE so TypeScript preserves its
+        // narrowed type without triggering TS7006 on an unannotated arrow param.
+        const guardExpr = binding
+          ? `(() => {\n  const ${binding} = ${value};\n  return (${guard});\n})()`
+          : `(${guard})`;
+        condition =
+          condition === "true" ? guardExpr : `${condition} && ${guardExpr}`;
+      } else {
+        coversSuccess ||= caseKind === "success" || caseKind === "all";
+        coversNull ||=
+          caseKind === "null" || caseKind === "failure" || caseKind === "all";
+        coversUndefined ||=
+          caseKind === "undefined" ||
+          caseKind === "failure" ||
+          caseKind === "all";
+        coversAll ||= caseKind === "all";
+      }
+      const body = this.context.emitFunctionBody(arm.body);
+      const complete =
+        !arm.guard && coversSuccess && coversNull && coversUndefined;
+      const bindingValue =
+        complete && caseKind === "failure"
+          ? `${value} as null | undefined`
+          : value;
+      const bindingLine = binding
+        ? `  const ${binding} = ${bindingValue};\n`
+        : "";
+      if ((caseKind === "all" || complete) && !arm.guard) {
+        branches.push(
+          `${branches.length ? "else " : ""}{\n${bindingLine}${body}\n}`,
+        );
+        terminated = true;
+        break;
+      }
+      branches.push(
+        `${branches.length ? "else " : ""}if (${condition}) {\n${bindingLine}${body}\n}`,
+      );
+    }
+    if (terminated || coversAll) {
+      // A wildcard arm emitted an unconditional final branch.
+    } else if (!(coversSuccess && coversNull && coversUndefined)) {
+      branches.push(
+        `else {\n  const __nonExhaustive: never = ${value};\n  void __nonExhaustive;\n  throw new Error("Non-exhaustive JSNullish match");\n}`,
+      );
+    } else {
+      // Even with all cases covered, retain a final assertion so TypeScript can
+      // infer a non-optional return type for separately tested conditions.
+      branches.push(
+        `else {\n  const __exhaustive: never = ${value};\n  return __exhaustive;\n}`,
+      );
+    }
+    return `(() => {\n  ${preamble}\n  ${branches.join(" ")}\n})()`;
   }
 
   private emitJSOptionalMatch(scrutinee: Expression, arms: MatchArm[]): string {
