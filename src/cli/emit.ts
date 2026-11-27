@@ -17,6 +17,7 @@ export const emitCommand = (
 ) =>
   Effect.gen(function* () {
     const isSourcemap = args.includes("--sourcemap");
+    const isPrettier = args.includes("--prettier");
     const isBin = args.includes("--bin");
     const outIndex = args.indexOf("--out");
     const outPath = outIndex !== -1 ? args[outIndex + 1] : undefined;
@@ -27,7 +28,8 @@ export const emitCommand = (
         a === "--no-global-this" ||
         a === "--bare-pipelines" ||
         a === "--no-deep-destructure" ||
-        a === "--bin"
+        a === "--bin" ||
+        a === "--prettier"
       )
         return false;
       if (a === "--out" || (outIndex !== -1 && idx === outIndex + 1))
@@ -46,6 +48,12 @@ export const emitCommand = (
       process.exitCode = 1;
       return yield* Console.error(
         "funscript emit --sourcemap requires --out <file.ts|file.tsx>.",
+      );
+    }
+    if (isPrettier && isSourcemap) {
+      process.exitCode = 1;
+      return yield* Console.error(
+        "funscript emit --prettier cannot be combined with --sourcemap.",
       );
     }
 
@@ -112,6 +120,20 @@ export const emitCommand = (
     const isExecutable = isBin || source.startsWith("#!");
     if (isBin && !tsCode.startsWith("#!")) {
       tsCode = `#!/usr/bin/env bun\n${tsCode}`;
+    }
+    if (isPrettier) {
+      const prettier = yield* Effect.tryPromise({
+        try: () => import("prettier"),
+        catch: (error: unknown) =>
+          new Error(`Failed to load prettier: ${toErrorMessage(error)}`),
+      });
+      tsCode = yield* Effect.tryPromise({
+        try: () => prettier.format(tsCode, { parser: "typescript" }),
+        catch: (error: unknown) =>
+          new Error(
+            `Failed to format emitted TypeScript: ${toErrorMessage(error)}`,
+          ),
+      });
     }
     if (outPath) {
       if (isSourcemap && result.map) {
