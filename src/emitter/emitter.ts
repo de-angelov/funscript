@@ -549,22 +549,9 @@ export function isEffectModule(moduleName: string): boolean {
   return EFFECT_MODULE_NAMES.has(moduleName);
 }
 
-const AUTO_NEW_CONSTRUCTORS = new Set([
-  "Set",
-  "Map",
-  "WeakSet",
-  "WeakMap",
-  "Date",
-  "URL",
-  "URLSearchParams",
-  "FormData",
-  "Headers",
-  "Request",
-  "Response",
-  "AbortController",
-  "Blob",
-  "File",
-]);
+// `Date` has both a call signature and a construct signature in TypeScript, so
+// type-directed `constructorCalls` skips it; `Map`/`WeakMap` keep the 1-arg cast.
+const AUTO_NEW_CONSTRUCTORS = new Set(["Date"]);
 
 const NATIVE_CONSTRUCTOR_NAMES = new Set([
   "Number",
@@ -1927,6 +1914,17 @@ export class Emitter {
       }
     }
 
+    if (
+      (expr.callee.kind === "UpperIdentifier" ||
+        expr.callee.kind === "Identifier") &&
+      (expr.callee.name === "Map" || expr.callee.name === "WeakMap") &&
+      expr.args.length === 1 &&
+      !this.bindings.has(expr.callee.name) &&
+      !this.declaredTypeNames.has(expr.callee.name)
+    ) {
+      return `new ${expr.callee.name}(${this.emitExpression(expr.args[0])} as any)`;
+    }
+
     if (this.options.constructorCalls?.has(expr.callee.span.end.offset)) {
       return `new ${this.emitExpression(expr.callee)}(${expr.args.map((a) => this.emitExpression(a)).join(", ")})`;
     }
@@ -1938,12 +1936,6 @@ export class Emitter {
       !this.bindings.has(expr.callee.name) &&
       !this.declaredTypeNames.has(expr.callee.name)
     ) {
-      if (
-        (expr.callee.name === "Map" || expr.callee.name === "WeakMap") &&
-        expr.args.length === 1
-      ) {
-        return `new ${expr.callee.name}(${this.emitExpression(expr.args[0])} as any)`;
-      }
       return `new ${expr.callee.name}(${expr.args.map((a) => this.emitExpression(a)).join(", ")})`;
     }
 
