@@ -95,6 +95,7 @@ import { findInlayHints } from "./inlay-hints.js";
 import { InteropRenameSession, renameInterop } from "./interop-rename.js";
 import { findFillMatchArmsCodeActions } from "./match-arms.js";
 import { findThunkPipelineCodeActions } from "./thunk-pipeline.js";
+import { findErrorChannelCodeActions } from "./error-channel.js";
 import {
   documentSymbols,
   findWorkspaceDefinition,
@@ -581,6 +582,18 @@ export class FunScriptLspServer extends EventEmitter {
     }
 
     actions.push(...findThunkPipelineCodeActions(doc.text, uri, params.range));
+
+    try {
+      const errorChannelActions = findErrorChannelCodeActions(
+        doc.text,
+        uri,
+        params.range,
+        params.context?.diagnostics,
+      );
+      actions.push(...errorChannelActions);
+    } catch (error) {
+      if (!isExpectedSyntaxError(error)) throw error;
+    }
 
     if (!doc.text.includes("|>")) return actions;
     const filename = uri.startsWith("file:") ? fileURLToPath(uri) : uri;
