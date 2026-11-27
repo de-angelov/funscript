@@ -103,4 +103,54 @@ ts {
     expect(formatted).toContain("|> catch");
     expect(format(formatted)).toBe(formatted);
   });
+
+  it("supports standalone catch (eff) and catch eff with Tag(_) and OrPattern tags", async () => {
+    const standalone = `import { Effect } from "effect"
+error Missing(message: String)
+error Offline(message: String)
+export recoverParen = (value: Effect<String, Missing | Offline>) =>
+  catch (value)
+    | Missing(cause) => Effect.succeed(cause.message)
+    | Offline(_) => Effect.succeed("offline")
+export recoverBoth = (value: Effect<String, Missing | Offline>) =>
+  catch value
+    | Missing(cause) | Offline(cause) => Effect.succeed(cause.message)`;
+    const checked = await typeCheck(standalone, "catch-standalone.fun");
+    expect(checked.success, checked.formattedOutput).toBe(true);
+    const { recoverParen, recoverBoth } = await execute(standalone);
+    expect(
+      Effect.runSync(
+        recoverParen(Effect.fail({ _tag: "Missing", message: "m" })),
+      ),
+    ).toBe("m");
+    expect(
+      Effect.runSync(
+        recoverParen(Effect.fail({ _tag: "Offline", message: "o" })),
+      ),
+    ).toBe("offline");
+    expect(
+      Effect.runSync(
+        recoverBoth(Effect.fail({ _tag: "Offline", message: "down" })),
+      ),
+    ).toBe("down");
+    const formatted = format(standalone);
+    expect(formatted).toContain("catch value");
+    expect(formatted).toContain("| Missing(cause) | Offline(cause) =>");
+    expect(format(formatted)).toBe(formatted);
+  });
+
+  it("rejects standalone catch without scrutinee, duplicate tags in OrPattern, and when guards", async () => {
+    await expectCompileError(
+      "x = catch\n  | Missing => Effect.void",
+      /Expected Effect expression after 'catch'/,
+    );
+    await expectCompileError(
+      "x = Effect.void |> catch\n  | Missing | Missing => Effect.void",
+      /Duplicate tag/,
+    );
+    await expectCompileError(
+      'x = Effect.void |> catch\n  | Missing(e) when e.message #= "x" => Effect.void',
+      /guards are not supported/,
+    );
+  });
 });

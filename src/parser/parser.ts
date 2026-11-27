@@ -4,6 +4,7 @@ import {
   type BindingDeclaration,
   type BindingTarget,
   type BlockStatement,
+  type ConstructorPattern,
   type DotPathExpression,
   type EffectBlockExpression,
   type EffectTypeNode,
@@ -1119,9 +1120,12 @@ export class Parser {
       return this.parseArrayLiteral();
     }
 
-    // 9. Match Expression: match ...
+    // 9. Match / Catch Expression: match ... / catch ...
     if (this.match(TokenType.MATCH)) {
       return this.parseMatchExpression();
+    }
+    if (this.match(TokenType.CATCH)) {
+      return this.parseMatchExpression(false, true);
     }
 
     // 10. Effect Block: effect ...
@@ -1342,9 +1346,36 @@ export class Parser {
       scrutinee = this.tryParseTupleScrutinee() ?? this.parseExpression();
     }
 
+    if (isCatch && !isPipeline && scrutinee === undefined) {
+      throw new ParseError(
+        "Expected Effect expression after 'catch'",
+        this.peek().span,
+      );
+    }
+
     this.skipNewlines();
     const hasIndent = this.match(TokenType.INDENT);
     const arms: MatchArm[] = [];
+    const seenCatchTags = new Set<string>();
+
+    const extractCatchPatterns = (pat: Pattern): ConstructorPattern[] => {
+      if (pat.kind === "OrPattern") {
+        return pat.patterns.flatMap(extractCatchPatterns);
+      }
+      if (
+        pat.kind !== "ConstructorPattern" ||
+        pat.args.length > 1 ||
+        (pat.args.length === 1 &&
+          pat.args[0].kind !== "VariablePattern" &&
+          pat.args[0].kind !== "WildcardPattern")
+      ) {
+        throw new ParseError(
+          "Catch arms require a tag, optionally followed by a single error binding or '_'; guards are not supported",
+          pat.span,
+        );
+      }
+      return [pat];
+    };
 
     const isSubjectless = !isPipeline && scrutinee === undefined;
     while (this.match(TokenType.BAR)) {
@@ -1377,30 +1408,21 @@ export class Parser {
         guard = this.parseExpression();
       }
 
-      if (
-        isCatch &&
-        (pattern.kind !== "ConstructorPattern" ||
-          pattern.args.length > 1 ||
-          (pattern.args.length === 1 &&
-            (pattern.args[0].kind !== "VariablePattern" ||
-              pattern.args[0].name.kind !== "Identifier")) ||
-          guard)
-      ) {
-        throw new ParseError(
-          "Catch arms require a tag, optionally followed by a single error binding; guards are not supported",
-          pattern.span,
-        );
-      }
-      if (
-        isCatch &&
-        arms.some(
-          (arm) =>
-            arm.pattern.kind === "ConstructorPattern" &&
-            pattern.kind === "ConstructorPattern" &&
-            arm.pattern.constructorName.name === pattern.constructorName.name,
-        )
-      ) {
-        throw new ParseError("Duplicate tag in catch arms", pattern.span);
+      if (isCatch) {
+        if (guard) {
+          throw new ParseError(
+            "Catch arms require a tag, optionally followed by a single error binding or '_'; guards are not supported",
+            guard.span,
+          );
+        }
+        const catchPatterns = extractCatchPatterns(pattern);
+        for (const catchPat of catchPatterns) {
+          const tagName = catchPat.constructorName.name;
+          if (seenCatchTags.has(tagName)) {
+            throw new ParseError("Duplicate tag in catch arms", catchPat.span);
+          }
+          seenCatchTags.add(tagName);
+        }
       }
 
       if (!this.match(TokenType.ARROW)) {

@@ -76,6 +76,9 @@ export class MatchEmitter {
     expr: MatchExpression,
     pipelineScrutineeType?: TypeNode,
   ): string {
+    if (expr.isCatch) {
+      return this.emitCatchExpression(expr);
+    }
     if (!expr.scrutinee && !expr.isPipeline) {
       return this.emitIfElseMatch(expr.arms, (arm) =>
         this.emitPatternAsCondition(arm.pattern),
@@ -1221,6 +1224,31 @@ export class MatchEmitter {
       branches.push(`else {\n  throw new Error("Non-exhaustive match");\n}`);
     }
     return `(() => {\n  ${branches.join(" ")}\n})()`;
+  }
+
+  private emitCatchExpression(expr: MatchExpression): string {
+    this.context.addEffectImport?.("Effect");
+    const collectCases = (pattern: Pattern, body: string): string[] => {
+      if (pattern.kind === "OrPattern") {
+        return pattern.patterns.flatMap((part) => collectCases(part, body));
+      }
+      if (pattern.kind !== "ConstructorPattern") {
+        throw new Error("Invalid catch arm");
+      }
+      const arg = pattern.args[0];
+      const binding = arg?.kind === "VariablePattern" ? arg.name.name : "";
+      return [
+        `${JSON.stringify(pattern.constructorName.name)}: (${binding}) => {\n${body}\n}`,
+      ];
+    };
+    const cases = expr.arms.flatMap((arm) =>
+      collectCases(arm.pattern, this.context.emitFunctionBody(arm.body)),
+    );
+    const handlers = `{\n${cases.join(",\n")}\n}`;
+    if (expr.isPipeline || !expr.scrutinee) {
+      return `(__catchInput) => Effect.catchTags(__catchInput, ${handlers})`;
+    }
+    return `Effect.catchTags(${this.context.emitExpression(expr.scrutinee)}, ${handlers})`;
   }
 
   private emitJSNullishMatch(

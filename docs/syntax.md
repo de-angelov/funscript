@@ -926,6 +926,7 @@ result =
   readFile(path)
   |>> try
   |> orDie
+
 response =
   makePage()
   |> render
@@ -2185,14 +2186,15 @@ findUser = (id: String) =>
     | DatabaseError => Effect.fail(ServiceUnavailable())
 ```
 
-Pipeline `catch` handles tagged failures from the effect to its left and compiles to
-`Effect.catchTags`. Each arm names a tag and returns an Effect. The optional single
-lowercase binding names the **whole error**, not its first field. Tags must be unique;
-guards, wildcard arms, grouped tags, and field-destructuring patterns are not supported.
-Unmatched failures remain in the error channel, and failures and service requirements
-introduced by a handler are tracked. Defects and interruptions are not handled. Pipeline
-order determines scope: stages before `catch` are handled, stages after it are not.
-`catch` is only valid as a pipeline stage; it is not exception-style `try`/`catch`.
+`catch` handles tagged failures from an Effect—either in a pipeline (`eff |> catch`) or
+standalone (`catch eff` / `catch (eff)`)—and compiles to `Effect.catchTags`. Each arm
+names one or more tags (including `Tag1(e) | Tag2(e)` or-patterns) and returns an
+Effect. The optional single lowercase binding (or `_`) names the **whole error**, not
+its first field. Tags must be unique; `when` guards, catch-all `_` arms, and
+field-destructuring patterns are not supported. Unmatched failures remain in the error
+channel, and failures and service requirements introduced by a handler are tracked.
+Defects and interruptions are not handled. Pipeline order determines scope: stages before
+`catch` are handled, stages after it are not. `catch` is not exception-style `try`/`catch`.
 
 The ordinary Effect combinators remain available:
 

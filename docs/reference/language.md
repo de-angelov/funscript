@@ -249,14 +249,17 @@ See also: `schema`, `Int`, `String`.
 
 ## `catch`
 
-Recover selected tagged Effect failures in a pipeline.
+Recover selected tagged Effect failures standalone or in a pipeline.
 
 ```funscript
-effectValue |> catch
+catch effectValue
   | ErrorTag(cause) => recoveryEffect
+
+effectValue |> catch
+  | TagA(_) | TagB(_) => fallbackEffect
 ```
 
-Handles typed failures by tag. The optional binding is the whole error; unmatched failures propagate. Each arm returns an Effect. Defects and interruptions are not caught.
+Handles typed failures by tag (including `|` or-patterns of tags). The optional binding (or `_`) is the whole error; unmatched failures propagate. Each arm returns an Effect. Defects and interruptions are not caught.
 
 
 

@@ -70,10 +70,10 @@ export const DOC_MAP: Record<string, DocDef> = {
   ],
   catch: [
     "keyword",
-    "effectValue |> catch\n  | ErrorTag(cause) => recoveryEffect",
-    "Recover selected tagged Effect failures in a pipeline.",
-    "Handles typed failures by tag. The optional binding is the whole error; unmatched failures propagate. Each arm returns an Effect. Defects and interruptions are not caught.",
-    "loadUser(id) |> catch\n  | NotFound(cause) => Effect.succeed(anonymous(cause.id))",
+    "catch effectValue\n  | ErrorTag(cause) => recoveryEffect\n# or in pipeline:\neffectValue |> catch\n  | TagA(_) | TagB(_) => fallbackEffect",
+    "Recover selected tagged Effect failures standalone or in a pipeline.",
+    "Handles typed failures by tag (including `|` or-patterns of tags). The optional binding (or `_`) is the whole error; unmatched failures propagate. Each arm returns an Effect. Defects and interruptions are not caught.",
+    "catch loadUser(id)\n  | NotFound(cause) => Effect.succeed(anonymous(cause.id))\n  | Timeout(_) | Offline(_) => Effect.succeed(guest)",
     ["effect", "error", "match"],
   ],
   mut: [

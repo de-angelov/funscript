@@ -2082,16 +2082,7 @@ export class Emitter {
           return `(__thunk) => Effect.${s.property.name}(__thunk)`;
         }
         if (s.kind === "MatchExpression" && s.isCatch) {
-          this.effectImports.add("Effect");
-          const cases = s.arms.map((arm) => {
-            if (arm.pattern.kind !== "ConstructorPattern")
-              throw new Error("Invalid catch arm");
-            const arg = arm.pattern.args[0];
-            const binding =
-              arg?.kind === "VariablePattern" ? arg.name.name : "";
-            return `${JSON.stringify(arm.pattern.constructorName.name)}: (${binding}) => {\n${this.emitFunctionBody(arm.body)}\n}`;
-          });
-          return `(__catchInput) => Effect.catchTags(__catchInput, {\n${cases.join(",\n")}\n})`;
+          return this.emitMatchExpression(s);
         }
         if (s.kind === "MutBlockExpression") {
           this.needsMutative = true;
