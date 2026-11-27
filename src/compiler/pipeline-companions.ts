@@ -70,6 +70,7 @@ export interface PipelineCompanionMap extends ReadonlyMap<
   readonly stageInputCompanions: ReadonlyMap<number, string>;
   readonly bareStageResolutions: ReadonlyMap<number, StageResolution>;
   readonly directCallResolutions: ReadonlyMap<number, StageResolution>;
+  readonly constructorCalls: ReadonlySet<number>;
 }
 
 function unrollPipeline(expr: PipelineExpression): Expression[] {
@@ -201,6 +202,7 @@ export function inferPipelineCompanions(
   const marked = new Emitter(ast, undefined, {
     allowAmbiguousPipeline: true,
     markPipelineSources: true,
+    markCallCallees: true,
     importedRecordFunctions,
     importedRecordContracts,
     importedGenericDataSchemas,
@@ -219,16 +221,19 @@ export function inferPipelineCompanions(
     stageInputCompanions: ReadonlyMap<number, string>;
     bareStageResolutions: ReadonlyMap<number, StageResolution>;
     directCallResolutions: ReadonlyMap<number, StageResolution>;
+    constructorCalls: ReadonlySet<number>;
   };
   emptyResult.pipelineCompanions = emptyResult;
   emptyResult.stageResolutions = new Map();
   emptyResult.stageInputCompanions = new Map();
   emptyResult.bareStageResolutions = new Map();
   emptyResult.directCallResolutions = new Map();
+  emptyResult.constructorCalls = new Set();
 
   if (
     !marked.includes("__funscriptPipelineSource(") &&
-    !marked.includes("__funscriptDirectCall(")
+    !marked.includes("__funscriptDirectCall(") &&
+    !marked.includes("__funscriptCallCallee(")
   ) {
     return emptyResult;
   }
@@ -273,7 +278,7 @@ export function inferPipelineCompanions(
       return namespaces.join("\n");
     },
   );
-  const source = `declare const decode: any;\nconst __funscriptPipelineSource = <T,>(_id: number, value: T): T => value;\nconst __funscriptPipelineStageInput = <T,>(_id: number, value: T): T => value;\nconst __funscriptDirectCall = <T,>(_id: number, value: T): T => value;\n${checkerMarked}`;
+  const source = `declare const decode: any;\nconst __funscriptPipelineSource = <T,>(_id: number, value: T): T => value;\nconst __funscriptPipelineStageInput = <T,>(_id: number, value: T): T => value;\nconst __funscriptDirectCall = <T,>(_id: number, value: T): T => value;\nconst __funscriptCallCallee = <T,>(_id: number, value: T): T => value;\n${checkerMarked}`;
   const checked = context.check(source);
   if (!checked) return emptyResult;
   const { sourceFile, checker } = checked;
@@ -283,6 +288,7 @@ export function inferPipelineCompanions(
   const stageInputCompanions = new Map<number, string>();
   const bareStageResolutions = new Map<number, StageResolution>();
   const directCallResolutions = new Map<number, StageResolution>();
+  const constructorCalls = new Set<number>();
 
   const isSchemaType = (type: ts.Type): boolean => {
     if (type.getProperty("ast") && type.getProperty("Type")) return true;
@@ -382,6 +388,7 @@ export function inferPipelineCompanions(
   const pipelineSourceNodes = new Map<number, ts.CallExpression>();
   const pipelineStageInputNodes = new Map<number, ts.CallExpression>();
   const directCallNodes = new Map<number, ts.CallExpression>();
+  const callCalleeNodes = new Map<number, ts.CallExpression>();
 
   // Some curried Effect APIs have TypeScript signatures whose first stage can
   // infer `never` when the predicate callback is typed before the receiver is
@@ -580,6 +587,12 @@ export function inferPipelineCompanions(
         ts.isNumericLiteral(node.arguments[0])
       ) {
         directCallNodes.set(Number(node.arguments[0].text), node);
+      } else if (
+        node.expression.text === "__funscriptCallCallee" &&
+        node.arguments.length === 2 &&
+        ts.isNumericLiteral(node.arguments[0])
+      ) {
+        callCalleeNodes.set(Number(node.arguments[0].text), node);
       }
     }
     ts.forEachChild(node, visitNodes);
@@ -1233,17 +1246,34 @@ export function inferPipelineCompanions(
     }
   }
 
+  for (const [offset, node] of callCalleeNodes) {
+    const type = checker.getTypeAtLocation(node.arguments[1]);
+    if (
+      type.flags &
+      (ts.TypeFlags.Any | ts.TypeFlags.Unknown | ts.TypeFlags.Never)
+    )
+      continue;
+    if (
+      type.getConstructSignatures().length > 0 &&
+      type.getCallSignatures().length === 0
+    ) {
+      constructorCalls.add(offset);
+    }
+  }
+
   const result = companions as Map<number, PipelineCompanionModule> & {
     pipelineCompanions: ReadonlyMap<number, PipelineCompanionModule>;
     stageResolutions: ReadonlyMap<number, StageResolution>;
     stageInputCompanions: ReadonlyMap<number, string>;
     bareStageResolutions: ReadonlyMap<number, StageResolution>;
     directCallResolutions: ReadonlyMap<number, StageResolution>;
+    constructorCalls: ReadonlySet<number>;
   };
   result.pipelineCompanions = companions;
   result.stageResolutions = stageResolutions;
   result.stageInputCompanions = stageInputCompanions;
   result.bareStageResolutions = bareStageResolutions;
   result.directCallResolutions = directCallResolutions;
+  result.constructorCalls = constructorCalls;
   return result;
 }

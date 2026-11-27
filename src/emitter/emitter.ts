@@ -130,6 +130,10 @@ export interface EmitterOptions {
   markNumericComparisonOperands?: boolean;
   /** Wrap logical `and`/`or` operands so the checker can enforce boolean-only use. */
   markBooleanOperands?: boolean;
+  /** Wrap call callees so the checker can detect construct-only JS/TS classes. */
+  markCallCallees?: boolean;
+  /** Call offsets resolved as `new Callee(...)` via TypeScript construct signatures. */
+  constructorCalls?: ReadonlySet<number>;
   /** Preserve source locations of ordinary call arguments during checker analysis. */
   markCallArguments?: boolean;
   forwardOptionalArguments?: ReadonlySet<number>;
@@ -1923,6 +1927,10 @@ export class Emitter {
       }
     }
 
+    if (this.options.constructorCalls?.has(expr.callee.span.end.offset)) {
+      return `new ${this.emitExpression(expr.callee)}(${expr.args.map((a) => this.emitExpression(a)).join(", ")})`;
+    }
+
     if (
       (expr.callee.kind === "UpperIdentifier" ||
         expr.callee.kind === "Identifier") &&
@@ -1999,7 +2007,12 @@ export class Emitter {
         this.esToolkitImports.add(expr.callee.name);
       }
 
-      return `${this.emitExpression(expr.callee)}(${expr.args
+      const emittedCallee = this.emitExpression(expr.callee);
+      const calleeCode =
+        this.options.markCallCallees && !isPipelineStageCall
+          ? `__funscriptCallCallee(${expr.callee.span.end.offset}, ${emittedCallee})`
+          : emittedCallee;
+      return `${calleeCode}(${expr.args
         .map((a) => {
           const emitted = this.emitExpression(a);
           if (this.options.forwardNullArguments?.has(a.span.start.offset)) {

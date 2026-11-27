@@ -711,6 +711,7 @@ export const compileString = (
             stageInputCompanions,
             bareStageResolutions,
             directCallResolutions,
+            constructorCalls,
           } = inferPipelineCompanions(
             ast,
             context,
@@ -739,6 +740,7 @@ export const compileString = (
             pipelineCompanions,
             stageResolutions,
             directCallResolutions,
+            constructorCalls,
             importedSchemas,
             importedRecordFunctions,
             importedRecordContracts,
