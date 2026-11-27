@@ -155,8 +155,8 @@ export NotificationServiceLive =
 
 export AppLive =
   InventoryServiceLive
-  |> Layer.merge(PaymentGatewayLive)
-  |> Layer.merge(NotificationServiceLive)
+  |> merge(PaymentGatewayLive)
+  |> merge(NotificationServiceLive)
 
 // Helper for service call wrapped in effect
 export checkSku = (sku: String) =>
@@ -207,7 +207,7 @@ export processOrderWorkflow = (order: Order, method: PaymentMethod, tier: Delive
     // 4. Process payment with automatic retry on transient failure
     _ <- Console.log("Step 3: Processing payment with retry policy...")
     txId <- executePayment(discountedOrder.id, discountedOrder.total, method)
-    |> Effect.retry(Schedule.recurs(2))
+    |> retry(Schedule.recurs(2))
 
     // 5. Mutative update of shipping record
     _ <- Console.log("Step 4: Dispatching package and updating tracking info...")
@@ -293,4 +293,4 @@ export program =
 
 export main =
   program
-  |> Effect.provide(AppLive)
+  |> provide(AppLive)

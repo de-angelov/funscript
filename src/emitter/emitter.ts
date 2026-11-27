@@ -160,7 +160,9 @@ export const EFFECT_MODULE_NAMES = new Set([
   ...Object.keys(PIPELINE_COMPANION_CATALOG),
   "Context",
   "Data",
+  "Duration",
   "Equal",
+  "Number",
   "pipe",
 ]);
 

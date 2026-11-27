@@ -34,8 +34,8 @@ export main =
     _ <- Option.some("Grace")
     |> Option.match({
       onNone: () => Effect.void
-      onSome: (name) => greeter.greet(name) |> Effect.flatMap((line) => Console.log(line))
+      onSome: (name) => greeter.greet(name) |> flatMap((line) => Console.log(line))
     })
     => twice
   }
-  |> Effect.provide(GreeterLive)
+  |> provide(GreeterLive)

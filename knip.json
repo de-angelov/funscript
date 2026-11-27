@@ -9,6 +9,7 @@
     "docs/prototypes/**",
     "examples/**",
     "scripts/benchmark-*.mjs",
+    "site/**",
     "tests/fixtures/**",
     "tests/helpers/**"
   ],

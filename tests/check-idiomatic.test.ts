@@ -33,7 +33,7 @@ describe("Audit Showcase Examples and Restrict Unjustified 'ts { }' Blocks (TASK
       );
       expect(content).not.toContain("ts {");
       expect(content).toContain("store <- Ref.make(initialStore)");
-      expect(content).toContain("Array.append(newTodo)");
+      expect(content).toContain("append(newTodo)");
     });
 
     it("verifies examples/markdown-task-manager.fun uses native TaskManager schema and zero ts blocks", async () => {

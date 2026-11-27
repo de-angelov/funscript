@@ -1123,6 +1123,7 @@ export function inferPipelineCompanions(
           currentCompanion = "Effect";
           continue;
         }
+        if (fnName in COMPARISON_METHOD_MAP) continue;
         const candidates = pipelineCompanionCandidates(fnName);
         if (candidates.length > 1) {
           if (tolerateUnresolvedStages) continue;

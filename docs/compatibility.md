@@ -144,7 +144,7 @@ isSame = (a: Number, b: Number) => a #= b
 FunScript pipelines (`value |> stage(...)`) allow bare stage names to resolve to companion module methods based on the inferred type of the receiver expression:
 
 1. **Type Inference Pass:** In `inferPipelineCompanions`, the compiler analyzes the pipeline input expression within the TypeScript compilation context.
-2. **Proven Receivers:** If the receiver expression has a proven type corresponding to an Effect or `effect/http` companion module (100 modules in [`PIPELINE_COMPANION_CATALOG`](../src/emitter/pipeline-catalog.ts), including `Array`, `Option`, `Result`, `Effect`, `Stream`, `Chunk`, `Layer`, `Schedule`, `Schema`, `Record`, `String`, `DateTime`, `Duration`, `Config`, `Cause`, `HttpClientRequest`, `HttpServerResponse`, `HashMap`, `HashSet`), bare operations are automatically dispatched to that companion module.
+2. **Proven Receivers:** If the receiver expression has a proven type corresponding to an Effect or `effect/http` companion module (`Array`, `Option`, `Result`, `Effect`, `Stream`, `Chunk`, `Layer`, `Schedule`, `Schema`, `Record`, `String`, `DateTime`, `Config`, `Cause`, `Exit`, `Redacted`, `Deferred`, `Queue`, `PubSub`, `Fiber`, `HashMap`, `HashSet`, `HttpClient`, `HttpClientRequest`, `HttpClientResponse`, `HttpServerResponse`, `Headers`, `Cookies`, `UrlParams`), bare operations in [`PIPELINE_COMPANION_CATALOG`](../src/emitter/pipeline-catalog.ts) are automatically dispatched to that companion module.
 
 For example, when the receiver is a proven array:
 

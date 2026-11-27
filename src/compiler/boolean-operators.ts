@@ -1,5 +1,6 @@
 import ts from "typescript";
 import type { Program, RecordTypeNode, TypeNode } from "../ast/types.js";
+import { walkAst } from "../ast/walk.js";
 import { Emitter } from "../emitter/emitter.js";
 import { FunScriptError } from "../errors.js";
 import type { TypeScriptCompilationContext } from "./typescript-context.js";
@@ -35,6 +36,17 @@ export function validateBooleanOperators(
   importedNullishSchemas?: ReadonlyMap<string, ReadonlyMap<string, TypeNode>>,
   importedTaggedUnionVariants?: ReadonlyMap<string, ReadonlySet<string>>,
 ): void {
+  let hasBoolOp = false;
+  walkAst(ast, (node) => {
+    if (
+      node.kind === "BinaryExpression" &&
+      (node.operator === "and" || node.operator === "or")
+    ) {
+      hasBoolOp = true;
+    }
+  });
+  if (!hasBoolOp) return;
+
   const marked = new Emitter(ast, undefined, {
     allowAmbiguousPipeline: true,
     markBooleanOperands: true,

@@ -614,13 +614,18 @@ export class PipelineResolver {
       this.isCompanionOperation(preferredCompanion, name)
     )
       return preferredCompanion;
+    if (!preferredCompanion && NUMBER_COMPANION_METHODS.has(name))
+      return "Number";
     const candidates = pipelineCompanionCandidates(name).filter(
       (module) =>
         module !== "Schema" ||
         name === "decode" ||
         preferredCompanion === "Schema",
     );
-    if (preferredCompanion && candidates.includes(preferredCompanion))
+    if (
+      preferredCompanion &&
+      (candidates as readonly string[]).includes(preferredCompanion)
+    )
       return preferredCompanion;
     if (candidates.length === 1) return candidates[0];
     // The caller turns an ambiguous core companion into a source diagnostic.

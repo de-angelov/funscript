@@ -30,14 +30,14 @@ export TodoRepoLive =
             title
             completed: false
           }
-          _ <- Ref.update(store, (curr) => curr |> Array.append(newTodo))
+          _ <- Ref.update(store, (curr) => curr |> append(newTodo))
           => newTodo
         }
 
       complete: (id) =>
         effect {
           items <- Ref.get(store)
-          idxOpt = items |> Array.findFirstIndex((t) => t.id #= id)
+          idxOpt = items |> findFirstIndex((t) => t.id #= id)
           res <- match idxOpt
             | Some(idx) =>
                 items[idx]
@@ -90,4 +90,4 @@ export program =
 
 export main =
   program
-  |> Effect.provide(TodoRepoLive)
+  |> provide(TodoRepoLive)

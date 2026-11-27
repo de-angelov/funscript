@@ -17,8 +17,8 @@ encodeUtf8 = (value: String) => ts { new TextEncoder().encode(value) }
 
 decodeHex = (value: String) =>
   Hex.decode(value)
-  |> Result.getSuccess
-  |> Option.getOrElse(() => Uint8Array.of())
+  |> getSuccess
+  |> getOrElse(() => Uint8Array.of())
 
 export service PasswordHasher
   hash: (password: String) => Effect<HashedPassword, CryptoFailure>
@@ -35,20 +35,20 @@ PasswordHasherLive = Layer.effect(PasswordHasher, effect {
         derived <- kdf.derive(pbkdf2, secret, { salt, length: 32 })
         => HashedPasswordFromUnknown("{Hex.encode(salt)}:{Hex.encode(derived)}")
       }
-      |> Effect.mapError(() => CryptoFailure({ message: "Could not hash the password." }))
+      |> mapError(() => CryptoFailure({ message: "Could not hash the password." }))
     verify: (password: String, stored: HashedPassword) =>
       effect {
         parts = stored |> String.split(":")
         salt =
           parts[0]
-          |> Option.getOrElse(() => "")
+          |> getOrElse(() => "")
           |> decodeHex
-        expected = parts[1] |> Option.getOrElse(() => "")
+        expected = parts[1] |> getOrElse(() => "")
         secret = encodeUtf8(password)
         derived <- kdf.derive(pbkdf2, secret, { salt, length: 32 })
         => (derived |> Hex.encode) #= expected
       }
-      |> Effect.mapError(() => CryptoFailure({ message: "Could not verify the password." }))
+      |> mapError(() => CryptoFailure({ message: "Could not verify the password." }))
   }
 })
 
@@ -62,4 +62,4 @@ export main =
     _ <- Console.log("wrong password: {bad}")
     => good
   }
-  |> Effect.provide(Layer.provide(PasswordHasherLive, NodeCrypto.layer))
+  |> provide(Layer.provide(PasswordHasherLive, NodeCrypto.layer))

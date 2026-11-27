@@ -11,6 +11,6 @@ export area = (shape: Shape) =>
 
 export evaluateScore = (score: Number, isPro: Boolean) =>
   match
-    | (score |> Number.isGreaterThanOrEqualTo(90)) and isPro => "champion"
-    | score |> Number.isGreaterThanOrEqualTo(60) => "passed"
+    | (score |> isGreaterThanOrEqualTo(90)) and isPro => "champion"
+    | score |> isGreaterThanOrEqualTo(60) => "passed"
     | _ => "failed"

@@ -33,7 +33,7 @@ getUser = (name: String) =>
     rows <- select |> Effect.mapError(toDbFailure)
     row <- Option.match(rows[0], {
       onNone: () => Effect.fail(DbFailure({ message: "No user found." }))
-      onSome: (raw) => Schema.decodeUnknownEffect(Row)(raw) |> Effect.mapError(toDbFailure)
+      onSome: (raw) => Schema.decodeUnknownEffect(Row)(raw) |> mapError(toDbFailure)
     })
     => row
   }
@@ -44,5 +44,5 @@ export main =
     _ <- Console.log("id: {row.id}, name: {row.name}")
     => row.id
   }
-  |> Effect.provide(SqliteClient.layer({ filename: ":memory:" }))
+  |> provide(SqliteClient.layer({ filename: ":memory:" }))
   |> NodeRuntime.runMain

@@ -254,7 +254,7 @@ Recover selected tagged Effect failures standalone or in a pipeline.
 ```funscript
 catch effectValue
   | ErrorTag(cause) => recoveryEffect
-
+# or in pipeline:
 effectValue |> catch
   | TagA(_) | TagB(_) => fallbackEffect
 ```
@@ -1053,7 +1053,7 @@ Logical negation operator (!).
 not expression
 ```
 
-Inverts a boolean expression. Evaluates to `true` if the expression is falsy, and `false` otherwise. FunScript uses `not` instead of `!`.
+Inverts a `Boolean` expression. Evaluates to `true` if the expression is `false`, and `false` otherwise. FunScript uses `not` instead of `!`.
 
 ### Syntax-checked example
 

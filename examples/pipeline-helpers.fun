@@ -2,6 +2,7 @@
 // Demonstrating pure string, math, and timing utilities in data-last pipelines.
 
 import { Console } from "effect"
+import { clamp } from "es-toolkit"
 
 // Pure string transformations in pipelines
 export formatPostSlug = (title: String): String =>

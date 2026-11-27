@@ -1,19 +1,20 @@
 import { createSignal, createMemo, createComputed, createRoot } from "solid-js"
 
+runRoot = (dispose: () => Void) =>
+  [count, setCount] = createSignal(10)
+
+  doubled = createMemo(() => count() * 2)
+
+  createComputed(() =>
+    console.log("Solid createComputed triggered => count: {count()}, doubled: {doubled()}")
+  )
+
+  console.log("Updating signal to 20:")
+  setCount(20)
+  console.log("Updating signal to 50:")
+  setCount(50)
+  => dispose()
+
 export main = () =>
   console.log("Starting SolidJS in FunScript test...")
-  => createRoot((dispose) => {
-    [count, setCount] = createSignal(10)
-
-    doubled = createMemo(() => count() * 2)
-
-    createComputed(() =>
-      console.log("Solid createComputed triggered => count: {count()}, doubled: {doubled()}")
-    )
-
-    console.log("Updating signal to 20:")
-    setCount(20)
-    console.log("Updating signal to 50:")
-    setCount(50)
-    => dispose()
-  })
+  => createRoot(runRoot)

@@ -976,24 +976,39 @@ const topActive = pipe(
 
 #### Companion module registry
 
-Representative core companions (the full [`PIPELINE_COMPANION_CATALOG`](../src/emitter/pipeline-catalog.ts) covers 100 `effect` and `effect/http` modules, including `Config`, `Duration`, `Cause`, `Exit`, `Deferred`, `Queue`, `PubSub`, `Fiber`, `HttpClientRequest`, `HttpServerResponse`, `Headers`, `Cookies`, and `UrlParams`):
+Representative core companions (the full [`PIPELINE_COMPANION_CATALOG`](../src/emitter/pipeline-catalog.ts) covers 29 `effect` and `effect/http` modules, including `Config`, `Cause`, `Exit`, `Deferred`, `Queue`, `PubSub`, `Fiber`, `HttpClientRequest`, `HttpServerResponse`, `Headers`, `Cookies`, and `UrlParams`):
 
-| Piped type                      | Companion module  | Examples of auto-resolved functions                                    |
-| ------------------------------- | ----------------- | ---------------------------------------------------------------------- |
-| `Array<T>` / `ReadonlyArray<T>` | `effect/Array`    | `map`, `filter`, `sort`, `sortBy`, `take`, `drop`, `join`, `findFirst` |
-| `Option<T>`                     | `effect/Option`   | `map`, `flatMap`, `getOrElse`, `andThen`, `filter`                     |
-| `Result<A, E>`                  | `effect/Result`   | `map`, `flatMap`, `mapError`, `getOrElse`, `match`                     |
-| `Chunk<T>`                      | `effect/Chunk`    | `map`, `filter`, `take`, `drop`, `head`, `tail`                        |
-| `Effect<A, E, R>`               | `effect/Effect`   | `map`, `flatMap`, `retry`, `timeout`, `catchTag`, `provide`            |
-| `Schedule<Env, In, Out>`        | `effect/Schedule` | `map`, `addDelay`, `modifyDelay`, `jittered`, `upTo`                   |
-| `Layer<ROut, E, RIn>`           | `effect/Layer`    | `provide`, `merge`, `fresh`, `launch`, `orDie`                         |
-| `Stream<A, E, R>`               | `effect/Stream`   | `map`, `filter`, `take`, `drop`, `timeout`                             |
-| `Schema<A, I, R>`               | `effect/Schema`   | `annotate`, `optional`, `mutable`, `brand`, `check`                    |
-| `Record<K, V>`                  | `effect/Record`   | `map`, `filter`, `keys`, `values`, `pop`, `has`                        |
-| `String`                        | `effect/String`   | `toLowerCase`, `toUpperCase`, `trim`, `split`, `includes`              |
-| `DateTime`                      | `effect/DateTime` | `format`, `setZone`, `addDuration`, `isAfter`, `isBefore`              |
-| `HashMap<K, V>`                 | `effect/HashMap`  | `get`, `set`, `has`, `remove`, `size`, `isEmpty`                       |
-| `HashSet<T>`                    | `effect/HashSet`  | `has`, `add`, `remove`, `size`, `difference`, `union`                  |
+| Piped type                      | Companion module            | Examples of auto-resolved functions                                    |
+| ------------------------------- | --------------------------- | ---------------------------------------------------------------------- |
+| `Array<T>` / `ReadonlyArray<T>` | `effect/Array`              | `map`, `filter`, `sort`, `sortBy`, `take`, `drop`, `join`, `findFirst` |
+| `Option<T>`                     | `effect/Option`             | `map`, `flatMap`, `getOrElse`, `andThen`, `filter`                     |
+| `Result<A, E>`                  | `effect/Result`             | `map`, `flatMap`, `mapError`, `getOrElse`, `match`                     |
+| `Chunk<T>`                      | `effect/Chunk`              | `map`, `filter`, `take`, `drop`, `head`, `tail`                        |
+| `Effect<A, E, R>`               | `effect/Effect`             | `map`, `flatMap`, `retry`, `timeout`, `catchTag`, `provide`            |
+| `Schedule<Env, In, Out>`        | `effect/Schedule`           | `map`, `addDelay`, `modifyDelay`, `jittered`, `upTo`                   |
+| `Layer<ROut, E, RIn>`           | `effect/Layer`              | `provide`, `merge`, `fresh`, `launch`, `orDie`                         |
+| `Stream<A, E, R>`               | `effect/Stream`             | `map`, `filter`, `take`, `drop`, `timeout`                             |
+| `Schema<A, I, R>`               | `effect/Schema`             | `annotate`, `optional`, `mutable`, `brand`, `check`                    |
+| `Record<K, V>`                  | `effect/Record`             | `map`, `filter`, `keys`, `values`, `pop`, `has`                        |
+| `String`                        | `effect/String`             | `toLowerCase`, `toUpperCase`, `trim`, `split`, `includes`              |
+| `DateTime`                      | `effect/DateTime`           | `format`, `setZone`, `addDuration`, `isAfter`, `isBefore`              |
+| `HashMap<K, V>`                 | `effect/HashMap`            | `get`, `set`, `has`, `remove`, `size`, `isEmpty`                       |
+| `HashSet<T>`                    | `effect/HashSet`            | `has`, `add`, `remove`, `size`, `difference`, `union`                  |
+| `Config<A>`                     | `effect/Config`             | `withDefault`, `map`, `mapOrFail`, `orElse`, `validate`                |
+| `Cause<E>`                      | `effect/Cause`              | `map`, `pretty`, `squash`, `findError`, `hasFail`                      |
+| `Exit<A, E>`                    | `effect/Exit`               | `map`, `mapError`, `match`, `isSuccess`, `isFailure`                   |
+| `Redacted<A>`                   | `effect/Redacted`           | `value`, `isRedacted`                                                  |
+| `Deferred<A, E>`                | `effect/Deferred`           | `succeed`, `fail`, `complete`, `await`                                 |
+| `Queue<A, E>`                   | `effect/Queue`              | `offer`, `take`, `takeAll`, `size`, `shutdown`                         |
+| `PubSub<A>`                     | `effect/PubSub`             | `publish`, `publishAll`, `subscribe`, `size`                           |
+| `Fiber<A, E>`                   | `effect/Fiber`              | `join`, `await`, `interrupt`                                           |
+| `HttpClient`                    | `effect/HttpClient`         | `execute`, `filterStatusOk`, `retryTransient`, `followRedirects`       |
+| `HttpClientRequest`             | `effect/HttpClientRequest`  | `setHeader`, `setHeaders`, `bearerToken`, `bodyJson`, `setUrlParams`   |
+| `HttpClientResponse`            | `effect/HttpClientResponse` | `filterStatusOk`, `matchStatus`, `schemaBodyJson`                      |
+| `HttpServerResponse`            | `effect/HttpServerResponse` | `setHeader`, `setHeaders`, `setStatus`, `setCookie`, `removeCookie`    |
+| `Headers`                       | `effect/Headers`            | `get`, `set`, `has`, `remove`, `merge`                                 |
+| `Cookies`                       | `effect/Cookies`            | `get`, `set`, `remove`, `merge`, `toSetCookieHeaders`                  |
+| `UrlParams`                     | `effect/UrlParams`          | `getAll`, `getFirst`, `append`, `set`, `remove`                        |
 
 #### Resolution and shadowing rules
 
