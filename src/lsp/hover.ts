@@ -190,11 +190,18 @@ function symbolHoverFromResult(
           `@${tag.name}${tag.text ? ` ${ts.displayPartsToString(tag.text)}` : ""}`,
       )
       .join("\n");
+    const effectMatch = type.match(
+      /Effect(?:\.Effect)?<[^,]*,\s*([^,>]+),\s*[^>]*>/,
+    );
+    const errorChannel = effectMatch ? effectMatch[1].trim() : null;
+    const errorLine = errorChannel
+      ? `\n\n**Effect error channel:** \`${errorChannel}\``
+      : "";
     const details = [docs, tags].filter(Boolean).join("\n\n");
     return {
       contents: {
         kind: MarkupKind.Markdown,
-        value: `\`\`\`ts\n${token.value}: ${type}\n\`\`\`${details ? `\n\n${details}` : ""}`,
+        value: `\`\`\`ts\n${token.value}: ${type}\n\`\`\`${details ? `\n\n${details}` : ""}${errorLine}`,
       },
       range: spanToRange(token.span),
     };
