@@ -380,7 +380,7 @@ export class MatchEmitter {
                   arm.pattern.kind === "ConstructorPattern" &&
                   JS_ERROR_NAMES.has(arm.pattern.constructorName.name)
                 ) {
-                  unpack = `const { ${vars.join(", ")} } = $matched as any;`;
+                  unpack = `const { ${vars.join(", ")} } = $matched;`;
                 } else {
                   unpack = this.emitPatternUnpackLines(
                     arm.pattern,
@@ -703,7 +703,7 @@ export class MatchEmitter {
       JS_ERROR_NAMES.has(pat.constructorName.name)
     ) {
       if (vars.length > 0) {
-        const unpack = `const { ${vars.join(", ")} } = $matched as any;`;
+        const unpack = `const { ${vars.join(", ")} } = $matched;`;
         if (body.kind === "BlockStatement") {
           return `($matched) => {\n    ${unpack}\n${this.context.emitFunctionBody(body)}\n  }`;
         }
@@ -773,7 +773,7 @@ export class MatchEmitter {
     if (vars.length > 0 && pat) {
       const unpack =
         pat.kind === "VariablePattern"
-          ? `const { ${vars[0]} } = $matched as any;`
+          ? `const { ${vars[0]} } = $matched;`
           : this.emitPatternUnpackLines(pat, "$matched", {
               isOptionalScrutinee: isOptional,
               payloadFields,
@@ -1041,13 +1041,13 @@ export class MatchEmitter {
         })
         .join("\n    ");
       return [
-        `const { ${uniqueVars.join(", ")} } = match(${targetExpr} as any)\n    ${branches}\n    .otherwise(() => ({}) as any);`,
+        `const { ${uniqueVars.join(", ")} } = match(${targetExpr})\n    ${branches}\n    .otherwise(() => ({}));`,
       ];
     }
 
     if (pat.kind === "ConstructorPattern") {
       if (JS_ERROR_NAMES.has(pat.constructorName.name)) {
-        return [`const { ${vars.join(", ")} } = ${targetExpr} as any;`];
+        return [`const { ${vars.join(", ")} } = ${targetExpr};`];
       }
 
       if (pat.constructorName.name === "Some" && pat.args.length === 1) {
@@ -1133,7 +1133,7 @@ export class MatchEmitter {
         }
         if (parts.length > 0) {
           return [
-            `const { ${parts.join(", ")} } = ${targetExpr} as any;`,
+            `const { ${parts.join(", ")} } = ${targetExpr};`,
             ...nestedLines,
           ];
         }
@@ -1157,8 +1157,8 @@ export class MatchEmitter {
         }
       }
       return [
-        `const { _tag: _, ...${fieldsVar} } = ${targetExpr} as any;`,
-        `const [${argTargets.join(", ")}] = Object.values(${fieldsVar}) as any[];`,
+        `const { _tag: _, ...${fieldsVar} } = ${targetExpr};`,
+        `const [${argTargets.join(", ")}] = Object.values(${fieldsVar});`,
         ...nestedLines,
       ];
     }
