@@ -56,7 +56,7 @@ export const DOC_MAP: Record<string, DocDef> = {
     "keyword",
     "effect {\n  result <- effectfulCall\n  _ <- logCall\n  => result\n}",
     "Introduces an effectful computation block with generator semantics.",
-    "Delimits an Effect workflow that compiles to `Effect.gen(function* () { ... })`. Bind effects with `<-`, discard results with `_ <-`, and finish with `=> value`. Early exits and errors use typed Effect operations.",
+    "Delimits an Effect workflow that compiles to `Effect.gen(function* () { ... })`. Named effect bindings are automatically wrapped in `Effect.fn(name)` for tracing. Bind effects with `<-`, discard results with `_ <-`, and finish with `=> value`. Early exits and errors use typed Effect operations.",
     'getUserProfile = (id: String) => effect {\n  user <- UserRepo.find(id)\n  _ <- Console.log("Found: " + user.name)\n  => user.name\n}',
     ["Effect", "service", "fail", "<-"],
   ],

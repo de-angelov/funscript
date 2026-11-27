@@ -2038,7 +2038,7 @@ interop, wrapped with `Effect.tryPromise` or an Effect platform module.
 
 ### 9.1 `effect` blocks (scoped by default)
 
-The canonical form uses braces with one statement per line. In FunScript, `effect` blocks are **scoped by default**, lowering to `Effect.scoped(Effect.gen(...))` to guarantee that resources acquired with `Effect.acquireRelease` are safely closed at the block boundary:
+The canonical form uses braces with one statement per line. In FunScript, `effect` blocks are **scoped by default**, lowering to `Effect.scoped(Effect.gen(...))` to guarantee that resources acquired with `Effect.acquireRelease` are safely closed at the block boundary. Named effect bindings are automatically wrapped in `Effect.fn(name)` so the generated effect carries a tracing span:
 
 ```funscript
 export getUser = (id: String) =>

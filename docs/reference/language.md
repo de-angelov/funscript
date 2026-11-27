@@ -349,7 +349,7 @@ effect {
 }
 ```
 
-Delimits an Effect workflow that compiles to `Effect.gen(function* () { ... })`. Bind effects with `<-`, discard results with `_ <-`, and finish with `=> value`. Early exits and errors use typed Effect operations.
+Delimits an Effect workflow that compiles to `Effect.gen(function* () { ... })`. Named effect bindings are automatically wrapped in `Effect.fn(name)` for tracing. Bind effects with `<-`, discard results with `_ <-`, and finish with `=> value`. Early exits and errors use typed Effect operations.
 
 ### Syntax-checked example
 
