@@ -80,8 +80,8 @@ logoutHandler =
 routes = Layer.mergeAll(HttpRouter.add("GET", "/login", loginForm), HttpRouter.add("POST", "/login", loginHandler), HttpRouter.add("GET", "/protected", protectedHandler), HttpRouter.add("POST", "/logout", logoutHandler))
 
 serverConfig = Config.all({
-  host: Config.String("HOST") |> Config.withDefault("127.0.0.1")
-  port: Config.Port("PORT") |> Config.withDefault(3100)
+  host: Config.String("HOST") |> withDefault("127.0.0.1")
+  port: Config.Port("PORT") |> withDefault(3100)
 })
 
 export main =

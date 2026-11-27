@@ -25,6 +25,7 @@ import {
   STRING_COMPANION_METHODS,
 } from "../emitter/pipeline-resolution.js";
 import {
+  COMPANION_IMPORT_SOURCE,
   type PipelineCompanionModule,
   PIPELINE_COMPANION_CATALOG,
   pipelineCompanionCandidates,
@@ -254,9 +255,18 @@ export function inferPipelineCompanions(
           continue;
         }
         const [, typeOnly, imported, local = imported] = parsed;
-        namespaces.push(
-          `import ${typeOnly ?? ""}* as ${local} from "effect/${imported}";`,
-        );
+        const subpath = COMPANION_IMPORT_SOURCE[imported];
+        if (subpath) {
+          const spec =
+            local === imported ? imported : `${imported} as ${local}`;
+          namespaces.push(
+            `import ${typeOnly ?? ""}{ ${spec} } from ${JSON.stringify(subpath)};`,
+          );
+        } else {
+          namespaces.push(
+            `import ${typeOnly ?? ""}* as ${local} from "effect/${imported}";`,
+          );
+        }
       }
       if (remaining.length)
         namespaces.push(`import { ${remaining.join(", ")} } from "effect";`);

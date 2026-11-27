@@ -10,19 +10,10 @@ import {
   type PipelineCompanionModule,
 } from "./pipeline-catalog.js";
 
-const ARRAY_COMPANION_METHODS = new Set(PIPELINE_COMPANION_CATALOG.Array);
-const EFFECT_COMPANION_METHODS = new Set(PIPELINE_COMPANION_CATALOG.Effect);
-const OPTION_COMPANION_METHODS = new Set(PIPELINE_COMPANION_CATALOG.Option);
-const RESULT_COMPANION_METHODS = new Set(PIPELINE_COMPANION_CATALOG.Result);
-const CHUNK_COMPANION_METHODS = new Set(PIPELINE_COMPANION_CATALOG.Chunk);
 export const STRING_COMPANION_METHODS = new Set([
   ...PIPELINE_COMPANION_CATALOG.String,
   "lines",
 ]);
-const RECORD_COMPANION_METHODS = new Set(PIPELINE_COMPANION_CATALOG.Record);
-const HASHMAP_COMPANION_METHODS = new Set(PIPELINE_COMPANION_CATALOG.HashMap);
-const HASHSET_COMPANION_METHODS = new Set(PIPELINE_COMPANION_CATALOG.HashSet);
-const DATETIME_COMPANION_METHODS = new Set(PIPELINE_COMPANION_CATALOG.DateTime);
 
 type CompanionModule =
   PipelineCompanionModule | "Number" | "Duration" | "Struct" | "DateTime";
@@ -139,17 +130,8 @@ export class PipelineResolver {
         if (binding.typeAnnotation.kind === "ArrayTypeNode") return "Array";
         if (binding.typeAnnotation.kind === "TypeReferenceNode") {
           const module = binding.typeAnnotation.name.name;
-          if (
-            module === "Option" ||
-            module === "Result" ||
-            module === "Chunk" ||
-            module === "Array" ||
-            module === "Schedule" ||
-            module === "Layer" ||
-            module === "Stream" ||
-            module === "Schema"
-          )
-            return module;
+          if (module in PIPELINE_COMPANION_CATALOG)
+            return module as CompanionModule;
         }
       }
       // Local bindings preserve enough AST to prove ordinary initializers even
@@ -168,18 +150,8 @@ export class PipelineResolver {
           : undefined;
     if (companionSource) {
       const module = companionSource.name;
-      if (
-        module === "Effect" ||
-        module === "Option" ||
-        module === "Result" ||
-        module === "Chunk" ||
-        module === "Array" ||
-        module === "Schedule" ||
-        module === "Layer" ||
-        module === "Stream" ||
-        module === "Schema"
-      )
-        return module;
+      if (module in PIPELINE_COMPANION_CATALOG)
+        return module as CompanionModule;
     }
     return undefined;
   }
@@ -642,23 +614,12 @@ export class PipelineResolver {
       this.isCompanionOperation(preferredCompanion, name)
     )
       return preferredCompanion;
-    const candidates: CompanionModule[] = [];
-    if (ARRAY_COMPANION_METHODS.has(name)) candidates.push("Array");
-    if (EFFECT_COMPANION_METHODS.has(name)) candidates.push("Effect");
-    if (OPTION_COMPANION_METHODS.has(name)) candidates.push("Option");
-    if (RESULT_COMPANION_METHODS.has(name)) candidates.push("Result");
-    if (CHUNK_COMPANION_METHODS.has(name)) candidates.push("Chunk");
-    if (STRING_COMPANION_METHODS.has(name)) candidates.push("String");
-    if (RECORD_COMPANION_METHODS.has(name)) candidates.push("Record");
-    if (HASHMAP_COMPANION_METHODS.has(name)) candidates.push("HashMap");
-    if (HASHSET_COMPANION_METHODS.has(name)) candidates.push("HashSet");
-    if (DATETIME_COMPANION_METHODS.has(name)) candidates.push("DateTime");
-    if (
-      name === "decode" ||
-      (preferredCompanion === "Schema" &&
-        this.isCompanionOperation("Schema", name))
-    )
-      candidates.push("Schema");
+    const candidates = pipelineCompanionCandidates(name).filter(
+      (module) =>
+        module !== "Schema" ||
+        name === "decode" ||
+        preferredCompanion === "Schema",
+    );
     if (preferredCompanion && candidates.includes(preferredCompanion))
       return preferredCompanion;
     if (candidates.length === 1) return candidates[0];

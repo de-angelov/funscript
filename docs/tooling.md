@@ -86,6 +86,13 @@ Hover also explains language constructs and resolved pipeline operations. When
 the server cannot safely distinguish shadowed symbols or compile an incomplete
 document, type information may be unavailable.
 
+## Pipeline and deferred completions
+
+Typing `|>` or `|>>` triggers pipeline completions:
+
+- After `|>`, when the input type is known, the server suggests bare operations from the resolved `effect` or `effect/http` companion module with their signatures and descriptions; when unknown, it suggests unambiguous bare stages and `Module.operation` disambiguations.
+- After `|>>`, the server suggests the six deferred Effect constructors (`sync`, `try`, `promise`, `tryPromise`, `suspend`, `failSync`).
+
 ## Minimal command-line project
 
 In FunScript source, use brace-delimited `effect { ... }` as the canonical form for Effect sequencing.

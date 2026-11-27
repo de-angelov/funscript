@@ -840,7 +840,8 @@ match
 ```
 
 `&&`, `||`, and `!` are rejected. There is one spelling for each operator, and it reads
-like the logic it represents.
+like the logic it represents. Both `and` and `or` require `Boolean` operands (no JavaScript
+truthiness fallbacks like `x or ""`; use `match`, `Option`, or `Schema` defaults instead).
 
 ### 4.4 No bitwise operators
 
@@ -974,6 +975,8 @@ const topActive = pipe(
 ```
 
 #### Companion module registry
+
+Representative core companions (the full [`PIPELINE_COMPANION_CATALOG`](../src/emitter/pipeline-catalog.ts) covers 100 `effect` and `effect/http` modules, including `Config`, `Duration`, `Cause`, `Exit`, `Deferred`, `Queue`, `PubSub`, `Fiber`, `HttpClientRequest`, `HttpServerResponse`, `Headers`, `Cookies`, and `UrlParams`):
 
 | Piped type                      | Companion module  | Examples of auto-resolved functions                                    |
 | ------------------------------- | ----------------- | ---------------------------------------------------------------------- |

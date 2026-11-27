@@ -10,6 +10,7 @@ import type {
   Program,
 } from "../ast/types.js";
 import { isExpectedSyntaxError } from "../errors.js";
+import { COMPANION_IMPORT_SOURCE } from "../emitter/pipeline-catalog.js";
 import { Lexer } from "../lexer/lexer.js";
 import { TokenType, type Token } from "../lexer/tokens.js";
 import { Parser } from "../parser/parser.js";
@@ -160,9 +161,14 @@ export function findAutoImportCodeActions(
     }
   }
 
+  const targetSource = COMPANION_IMPORT_SOURCE[symbolName] ?? "effect";
   const actions: CodeAction[] = [];
 
-  if (existingEffectImport && existingEffectImport.specifiers.length > 0) {
+  if (
+    targetSource === "effect" &&
+    existingEffectImport &&
+    existingEffectImport.specifiers.length > 0
+  ) {
     // Add to existing import { ... } from "effect"
     const currentSpecs = existingEffectImport.specifiers.map(
       formatImportSpecifier,
@@ -212,10 +218,10 @@ export function findAutoImportCodeActions(
       insertLine = lastImportLine + 1;
     }
 
-    const newText = `import { ${symbolName} } from "effect"\n`;
+    const newText = `import { ${symbolName} } from ${JSON.stringify(targetSource)}\n`;
 
     actions.push({
-      title: `Add import { ${symbolName} } from "effect"`,
+      title: `Add import { ${symbolName} } from ${JSON.stringify(targetSource)}`,
       kind: CodeActionKind.QuickFix,
       isPreferred: true,
       edit: {
