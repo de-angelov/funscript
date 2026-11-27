@@ -188,4 +188,4 @@ development, Vitest for tests, and npm/pnpm/Bun for packages. The planned `new`,
 
 ## License
 
-License selection is pending.
+FunScript is licensed under the [MIT License](LICENSE).
