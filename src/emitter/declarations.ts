@@ -837,7 +837,33 @@ export function emitBindingDeclaration(
     return `${exp}${keyword} ${target}${typeAnn} = Effect.runPromise(${ctx.emitExpression(decl.init)});`;
   }
 
-  return `${exp}${keyword} ${target}${typeAnn} = ${ctx.emitExpression(decl.init)};`;
+  let initExpr = ctx.emitExpression(decl.init);
+  const bindingName =
+    decl.id.kind === "Identifier" || decl.id.kind === "UpperIdentifier"
+      ? decl.id.name
+      : undefined;
+  const fnBody =
+    decl.init.kind === "FunctionExpression" ? decl.init.body : undefined;
+  const finalExpr =
+    fnBody?.kind === "BlockStatement" ? fnBody.finalExpression : fnBody;
+  const returnsEffectCall =
+    finalExpr?.kind === "CallExpression" &&
+    finalExpr.callee.kind === "MemberExpression" &&
+    finalExpr.callee.object.kind === "UpperIdentifier" &&
+    finalExpr.callee.object.name === "Effect";
+  const isEffectFunction =
+    bindingName !== undefined &&
+    decl.init.kind === "FunctionExpression" &&
+    (decl.init.returnType?.kind === "EffectTypeNode" ||
+      decl.init.body.kind === "EffectBlockExpression" ||
+      (decl.init.body.kind === "BlockStatement" &&
+        decl.init.body.finalExpression?.kind === "EffectBlockExpression") ||
+      returnsEffectCall);
+  if (isEffectFunction) {
+    ctx.addEffectImport("Effect");
+    initExpr = `Effect.fn(${JSON.stringify(bindingName)})(${initExpr})`;
+  }
+  return `${exp}${keyword} ${target}${typeAnn} = ${initExpr};`;
 }
 
 export function emitTopLevelDeclaration(
