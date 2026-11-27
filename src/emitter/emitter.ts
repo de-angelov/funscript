@@ -70,7 +70,11 @@ import {
   emitJsxText,
 } from "./jsx.js";
 import { MatchEmitter, type RecordFieldInfo } from "./match.js";
-import { type PipelineCompanionModule } from "./pipeline-catalog.js";
+import {
+  COMPANION_IMPORT_SOURCE,
+  PIPELINE_COMPANION_CATALOG,
+  type PipelineCompanionModule,
+} from "./pipeline-catalog.js";
 import {
   COMPARISON_METHOD_MAP,
   ES_TOOLKIT_METHODS,
@@ -153,26 +157,10 @@ export interface EmitterOptions {
 }
 
 export const EFFECT_MODULE_NAMES = new Set([
-  "Array",
-  "Chunk",
+  ...Object.keys(PIPELINE_COMPANION_CATALOG),
   "Context",
   "Data",
-  "DateTime",
-  "Duration",
-  "Effect",
   "Equal",
-  "HashMap",
-  "HashSet",
-  "Layer",
-  "Number",
-  "Option",
-  "Order",
-  "Record",
-  "Result",
-  "Schedule",
-  "Schema",
-  "Stream",
-  "String",
   "pipe",
 ]);
 
@@ -942,6 +930,8 @@ export class Emitter {
       (name) => {
         const asMatch = /^(.+?)\s+as\s+(.+)$/.exec(name);
         const localName = asMatch ? asMatch[2] : name;
+        const source = COMPANION_IMPORT_SOURCE[asMatch ? asMatch[1] : name];
+        if (source) return !this.userImportBindings.has(localName);
         return !this.userEffectBindings.has(localName);
       },
     );
@@ -951,17 +941,35 @@ export class Emitter {
           const asMatch = /^(.+?)\s+as\s+(.+)$/.exec(name);
           const moduleName = asMatch ? asMatch[1] : name;
           const localName = asMatch ? asMatch[2] : name;
+          const source = COMPANION_IMPORT_SOURCE[moduleName];
           if (moduleName === "pipe") {
             const spec =
               localName === moduleName ? "pipe" : `pipe as ${localName}`;
             header += `import { ${spec} } from "effect/Function";\n`;
+          } else if (source) {
+            const spec =
+              localName === moduleName
+                ? moduleName
+                : `${moduleName} as ${localName}`;
+            header += `import { ${spec} } from ${JSON.stringify(source)};\n`;
           } else {
             header += `import * as ${localName} from "effect/${moduleName}";\n`;
           }
         }
       } else {
-        const sorted = generatedEffectImports.sort().join(", ");
-        header += `import { ${sorted} } from "effect";\n`;
+        const bySource = new Map<string, string[]>();
+        for (const name of generatedEffectImports.sort()) {
+          const asMatch = /^(.+?)\s+as\s+(.+)$/.exec(name);
+          const moduleName = asMatch ? asMatch[1] : name;
+          const source = COMPANION_IMPORT_SOURCE[moduleName] ?? "effect";
+          const list = bySource.get(source) ?? [];
+          list.push(name);
+          bySource.set(source, list);
+        }
+        for (const source of [...bySource.keys()].sort()) {
+          const sorted = bySource.get(source)!.join(", ");
+          header += `import { ${sorted} } from ${JSON.stringify(source)};\n`;
+        }
       }
     }
     const generatedEsToolkitImports = Array.from(this.esToolkitImports)

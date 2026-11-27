@@ -291,7 +291,7 @@ export class FunScriptLspServer extends EventEmitter {
         hoverProvider: true,
         completionProvider: {
           resolveProvider: false,
-          triggerCharacters: [".", "<"],
+          triggerCharacters: [".", "<", ">"],
         },
         codeActionProvider: true,
         inlayHintProvider: { resolveProvider: false },

@@ -279,6 +279,51 @@ describe("FunScript LSP Server", () => {
       });
       expect(importedItems.map((item) => item.label)).toContain("helper");
     });
+
+    it("provides deferred constructor completions after |>> and unique bare operations after |>", () => {
+      const server = new FunScriptLspServer();
+      const uri = "file:///pipeline.fun";
+      server.onDidOpenHandler({
+        textDocument: {
+          uri,
+          languageId: "funscript",
+          version: 1,
+          text: "a = 1 |>> \nb = 1 |>> tr\nc = unknownInput |> ",
+        },
+      });
+      const deferredAll = server.onCompletionHandler({
+        textDocument: { uri },
+        position: { line: 0, character: 10 },
+      });
+      const deferredLabels = deferredAll.map((i) => i.label);
+      expect(deferredLabels).toContain("sync");
+      expect(deferredLabels).toContain("try");
+      expect(deferredLabels).toContain("promise");
+      expect(deferredLabels).toContain("tryPromise");
+      expect(deferredLabels).toContain("suspend");
+      expect(deferredLabels).toContain("failSync");
+      expect(deferredAll.find((i) => i.label === "sync")?.detail).toContain(
+        "Deferred Effect.sync",
+      );
+
+      const deferredFiltered = server.onCompletionHandler({
+        textDocument: { uri },
+        position: { line: 1, character: 12 },
+      });
+      expect(deferredFiltered.map((i) => i.label)).toEqual([
+        "try",
+        "tryPromise",
+      ]);
+
+      const bareFallback = server.onCompletionHandler({
+        textDocument: { uri },
+        position: { line: 2, character: 20 },
+      });
+      expect(
+        bareFallback.find((i) => i.label === "mapErrorEager")?.detail,
+      ).toContain("Effect pipeline operation");
+      expect(bareFallback.map((i) => i.label)).toContain("Array.map");
+    });
   });
   describe("Lifecycle Handling", () => {
     it("returns capabilities and serverInfo on initialize request", async () => {
@@ -310,7 +355,7 @@ describe("FunScript LSP Server", () => {
           hoverProvider: true,
           completionProvider: {
             resolveProvider: false,
-            triggerCharacters: [".", "<"],
+            triggerCharacters: [".", "<", ">"],
           },
           codeActionProvider: true,
           inlayHintProvider: {

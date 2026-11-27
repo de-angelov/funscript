@@ -350,6 +350,19 @@ export function inferPipelineCompanions(
 
     const symbol = type.aliasSymbol ?? type.getSymbol();
     const symName = symbol?.getName();
+    if (symName && symName in PIPELINE_COMPANION_CATALOG) {
+      return symName;
+    }
+    const declFile = symbol?.declarations?.[0]?.getSourceFile().fileName;
+    if (declFile) {
+      const effectMatch =
+        /[/\\]effect[/\\]dist[/\\](?:http[/\\])?([A-Za-z0-9_]+)\.d\.ts$/.exec(
+          declFile,
+        );
+      if (effectMatch && effectMatch[1] in PIPELINE_COMPANION_CATALOG) {
+        return effectMatch[1];
+      }
+    }
     if (symName && !symName.startsWith("__")) {
       return symName;
     }

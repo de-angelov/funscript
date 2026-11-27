@@ -15,6 +15,67 @@ export interface IndexedDocument {
   text: string;
 }
 
+const PRIMARY_DISAMBIGUATION_MODULES = new Set([
+  "Array",
+  "Config",
+  "DateTime",
+  "Duration",
+  "Effect",
+  "HttpClientRequest",
+  "HttpServerResponse",
+  "Layer",
+  "Option",
+  "Record",
+  "Result",
+  "Schedule",
+  "Schema",
+  "Stream",
+  "String",
+]);
+
+const DEFERRED_PIPELINE_CONSTRUCTORS: ReadonlyArray<{
+  readonly name: string;
+  readonly detail: string;
+  readonly documentation: string;
+}> = [
+  {
+    name: "sync",
+    detail: "Deferred Effect.sync(() => expr)",
+    documentation:
+      "Wraps a synchronous expression in a lazy Effect thunk (`Effect<A>`).",
+  },
+  {
+    name: "try",
+    detail: "Deferred Effect.try(() => expr)",
+    documentation:
+      "Wraps a throwing synchronous expression in a lazy Effect (`Effect<A, UnknownException>`).",
+  },
+  {
+    name: "promise",
+    detail: "Deferred Effect.promise(() => expr)",
+    documentation:
+      "Wraps an infallible Promise-returning expression in a lazy Effect (`Effect<A>`).",
+  },
+  {
+    name: "tryPromise",
+    detail: "Deferred Effect.tryPromise(() => expr)",
+    documentation:
+      "Wraps a Promise-returning expression in a lazy Effect (`Effect<A, UnknownException>`).",
+  },
+  {
+    name: "suspend",
+    detail: "Deferred Effect.suspend(() => expr)",
+    documentation:
+      "Lazily evaluates and flattens an Effect-returning expression (`Effect<A, E, R>`).",
+  },
+  {
+    name: "failSync",
+    detail: "Deferred Effect.failSync(() => expr)",
+    documentation:
+      "Lazily computes an error value and fails on the Effect error channel (`Effect<never, E>`).",
+  },
+];
+
 function escapeRegExp(value: string): string {
   return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
@@ -126,23 +187,47 @@ export function complete(
         }
       }
     }
-    for (const name of visible)
-      add(name, CompletionItemKind.Variable, "Workspace symbol");
-    const pipelineContext = /\|>\s*(?:[\w.]*)$/.test(before);
+    const deferredPipelineContext = /\|>>\s*(?:[\w.]*)$/.test(before);
+    const pipelineContext =
+      !deferredPipelineContext && /\|>\s*(?:[\w.]*)$/.test(before);
     const jsxContext = /<\s*[A-Za-z_$\w]*$/.test(before);
-    add("Effect", CompletionItemKind.Module, "Effect API namespace");
-    for (const [name, doc] of Object.entries(DOC_CATALOG)) {
-      if (doc.category === "effect" && !pipelineContext) continue;
-      add(
-        name,
-        doc.category === "keyword"
-          ? CompletionItemKind.Keyword
-          : doc.category === "effect"
-            ? CompletionItemKind.Function
-            : CompletionItemKind.Class,
-        doc.signature,
-        doc.summary,
-      );
+    if (!deferredPipelineContext) {
+      for (const name of visible)
+        add(name, CompletionItemKind.Variable, "Workspace symbol");
+      add("Effect", CompletionItemKind.Module, "Effect API namespace");
+      for (const [name, doc] of Object.entries(DOC_CATALOG)) {
+        if (doc.category === "effect" && !pipelineContext) continue;
+        add(
+          name,
+          doc.category === "keyword"
+            ? CompletionItemKind.Keyword
+            : doc.category === "effect"
+              ? CompletionItemKind.Function
+              : CompletionItemKind.Class,
+          doc.signature,
+          doc.summary,
+        );
+      }
+    }
+    if (deferredPipelineContext) {
+      for (const ctor of DEFERRED_PIPELINE_CONSTRUCTORS) {
+        const label = typedPrefix.startsWith("Effect.")
+          ? `Effect.${ctor.name}`
+          : ctor.name;
+        if (
+          typedPrefix &&
+          !label.toLowerCase().startsWith(typedPrefix.toLowerCase())
+        )
+          continue;
+        items.set(label, {
+          label,
+          kind: CompletionItemKind.Function,
+          detail: ctor.detail,
+          documentation: ctor.documentation,
+          textEdit: { range, newText: label },
+          sortText: `0-${label.toLowerCase()}`,
+        });
+      }
     }
     if (pipelineContext) {
       const pipeOffset = priorSource.lastIndexOf("|>");
@@ -170,11 +255,16 @@ export function complete(
             !operation.toLowerCase().startsWith(typedPrefix.toLowerCase())
           )
             continue;
+          const doc = DOC_CATALOG[`${inputCompanion}.${operation}`];
           items.set(operation, {
             label: operation,
             kind: CompletionItemKind.Function,
-            detail: `${inputCompanion} pipeline operation`,
-            documentation: `This stage is selected from the pipeline input type (${inputCompanion}).`,
+            detail: doc
+              ? `${inputCompanion} pipeline operation — ${doc.signature}`
+              : `${inputCompanion} pipeline operation`,
+            documentation: doc
+              ? `${doc.summary}\n\nSelected from pipeline input type (${inputCompanion}); compiles to \`${inputCompanion}.${operation}\`.`
+              : `Selected from the pipeline input type (${inputCompanion}); compiles to \`${inputCompanion}.${operation}\`.`,
             textEdit: { range, newText: operation },
             sortText: `0-${operation.toLowerCase()}`,
           });
@@ -190,9 +280,29 @@ export function complete(
           )
             continue;
           const candidates = pipelineCompanionCandidates(operation);
+          if (candidates.length === 1) {
+            const module = candidates[0];
+            items.set(operation, {
+              label: operation,
+              kind: CompletionItemKind.Function,
+              detail: `${module} pipeline operation`,
+              documentation: `Unambiguous bare pipeline stage; compiles to \`${module}.${operation}\`.`,
+              textEdit: { range, newText: operation },
+              sortText: `0-${operation.toLowerCase()}`,
+            });
+            continue;
+          }
           if (candidates.length < 2) continue;
           for (const module of candidates) {
             const label = `${module}.${operation}`;
+            if (!typedPrefix && !PRIMARY_DISAMBIGUATION_MODULES.has(module))
+              continue;
+            if (
+              typedPrefix &&
+              !label.toLowerCase().startsWith(typedPrefix.toLowerCase()) &&
+              !operation.toLowerCase().startsWith(typedPrefix.toLowerCase())
+            )
+              continue;
             items.set(label, {
               label,
               kind: CompletionItemKind.Function,

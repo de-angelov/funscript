@@ -1,8 +1,13 @@
 import { readFile } from "node:fs/promises";
 import ts from "typescript";
 import { describe, expect, it } from "vitest";
+import { Effect } from "effect";
 import * as EffectPackage from "effect";
+import * as HttpPackage from "effect/http";
+import { compileString } from "../src/compiler.js";
+import { typeCheckSource } from "../src/compiler/check.js";
 import {
+  COMPANION_IMPORT_SOURCE,
   EFFECT_PIPELINE_CATALOG_VERSION,
   PIPELINE_COMPANION_CATALOG,
   pipelineCompanionCandidates,
@@ -18,10 +23,14 @@ describe("pipeline companion catalog", () => {
     for (const [module, operations] of Object.entries(
       PIPELINE_COMPANION_CATALOG,
     )) {
-      const namespace = EffectPackage[
-        module as keyof typeof EffectPackage
-      ] as Record<string, unknown>;
-      const declarationPath = `node_modules/effect/dist/${module}.d.ts`;
+      const importSource = COMPANION_IMPORT_SOURCE[module] ?? "effect";
+      const namespace = (
+        importSource === "effect/http" ? HttpPackage : EffectPackage
+      )[module as keyof typeof EffectPackage] as Record<string, unknown>;
+      const declarationPath =
+        importSource === "effect/http"
+          ? `node_modules/effect/dist/http/${module}.d.ts`
+          : `node_modules/effect/dist/${module}.d.ts`;
       const declarations = await readFile(declarationPath, "utf8");
       const declarationFile = ts.createSourceFile(
         declarationPath,
@@ -102,6 +111,31 @@ describe("pipeline companion catalog", () => {
   it("registers decode as an auto-resolving Schema pipeline companion", () => {
     expect(PIPELINE_COMPANION_CATALOG.Schema).toContain("decode");
     expect(pipelineCompanionCandidates("decode")).toEqual(["Schema"]);
+  });
+
+  it("resolves bare pipeline stages for Config and effect/http companions", async () => {
+    const configSource = `import { Config } from "effect"
+export host = Config.String("HOST") |> withDefault("127.0.0.1")
+export port = Config.Port("PORT") |> withDefault(3000)`;
+    const configCompiled = await Effect.runPromise(
+      compileString(configSource, "config-pipe.fun"),
+    );
+    expect(configCompiled.typescript).toContain("Config.withDefault");
+    const configChecked = await Effect.runPromise(
+      typeCheckSource(configSource, "config-pipe.fun"),
+    );
+    expect(configChecked.success, configChecked.formattedOutput).toBe(true);
+
+    const httpSource = `import { HttpClientRequest } from "effect/http"
+export req = HttpClientRequest.get("/users") |> setHeader("accept", "application/json")`;
+    const httpCompiled = await Effect.runPromise(
+      compileString(httpSource, "http-pipe.fun"),
+    );
+    expect(httpCompiled.typescript).toContain("HttpClientRequest.setHeader");
+    const httpChecked = await Effect.runPromise(
+      typeCheckSource(httpSource, "http-pipe.fun"),
+    );
+    expect(httpChecked.success, httpChecked.formattedOutput).toBe(true);
   });
 });
 
