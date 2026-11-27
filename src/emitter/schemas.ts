@@ -519,7 +519,7 @@ function emitGenericDataSchema(
     if (names.has(name)) return !type.typeArgs?.length;
     if (["String", "Number", "Boolean"].includes(name))
       return !type.typeArgs?.length && !ctx.declaredTypeNames.has(name);
-    if (name === "Array" || name === "Option")
+    if (name === "Array" || name === "Option" || name === "JSNullish")
       return type.typeArgs?.length === 1 && supports(type.typeArgs[0]);
     const arity =
       ctx.genericDataSchemas.get(name) ??

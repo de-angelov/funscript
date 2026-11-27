@@ -56,4 +56,18 @@ export show = (value: Unknown) =>
     | Failure(reason) => "missing"`;
     expect(findFillMatchArmsCodeActions(source, uri, range)).toEqual([]);
   });
+
+  it("tracks BindingDeclaration annotations and OrPattern arms for JSNullish", () => {
+    const source = `export out = () =>
+  value: JSNullish<String> = "hi"
+  => match value
+    | Failure(Null) | Failure(Undefined) => "missing"`;
+    const inserted = findFillMatchArmsCodeActions(source, uri, {
+      start: { line: 2, character: 5 },
+      end: { line: 2, character: 5 },
+    })[0].edit!.changes![uri][0].newText;
+    expect(inserted).toContain("| Success(value) => ???");
+    expect(inserted).not.toContain("Failure(Null)");
+    expect(inserted).not.toContain("Failure(Undefined)");
+  });
 });

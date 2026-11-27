@@ -129,6 +129,7 @@ export function findFillMatchArmsCodeActions(
   const matchExprs: MatchExpression[] = [];
   const nullishMatches = new Set<MatchExpression>();
   const functionParams = new Map<string, string>(); // paramName -> typeName
+  const bindingTypes = new Map<string, TypeNode>();
 
   const visit = (node: unknown, scopes: FunctionExpression[] = []): void => {
     if (!node || typeof node !== "object") return;
@@ -157,6 +158,7 @@ export function findFillMatchArmsCodeActions(
     if (n.kind === "BindingDeclaration") {
       const b = node as BindingDeclaration;
       if (b.id.kind === "Identifier" && b.typeAnnotation) {
+        bindingTypes.set(b.id.name, b.typeAnnotation);
         const tName = getTypeName(b.typeAnnotation);
         if (tName) {
           functionParams.set(b.id.name, tName);
@@ -176,23 +178,29 @@ export function findFillMatchArmsCodeActions(
             ? scrutinee.object
             : undefined;
       if (receiver) {
+        let type: TypeNode | undefined;
         for (let i = currentScopes.length - 1; i >= 0; i--) {
           const param = currentScopes[i].params.find(
             (p) =>
               p.name.kind === "Identifier" && p.name.name === receiver.name,
           );
-          if (!param) continue;
-          let type = param.typeAnnotation;
+          if (param) {
+            type = param.typeAnnotation;
+            break;
+          }
+        }
+        if (!type) type = bindingTypes.get(receiver.name);
+        if (type) {
           if (
             scrutinee?.kind === "MemberExpression" &&
-            type?.kind === "RecordTypeNode"
+            type.kind === "RecordTypeNode"
           ) {
             type = type.fields.find(
               (field) => field.name.name === scrutinee.property.name,
             )?.typeAnnotation;
           } else if (
             scrutinee?.kind === "MemberExpression" &&
-            type?.kind === "TypeReferenceNode"
+            type.kind === "TypeReferenceNode"
           ) {
             type = recordSchemas
               .get(type.name.name)
@@ -203,7 +211,6 @@ export function findFillMatchArmsCodeActions(
             type = undefined;
           }
           if (getTypeName(type) === "JSNullish") nullishMatches.add(expr);
-          break;
         }
       }
     }
@@ -272,9 +279,12 @@ export function findFillMatchArmsCodeActions(
       let success = false;
       let nullValue = false;
       let undefinedValue = false;
-      for (const arm of matchExpr.arms) {
-        if (arm.guard || arm.pattern.kind !== "ConstructorPattern") continue;
-        const pattern = arm.pattern;
+      const markNullishPattern = (pattern: Pattern): void => {
+        if (pattern.kind === "OrPattern") {
+          for (const sub of pattern.patterns) markNullishPattern(sub);
+          return;
+        }
+        if (pattern.kind !== "ConstructorPattern") return;
         if (
           pattern.constructorName.name === "Success" &&
           pattern.args.length === 1 &&
@@ -286,7 +296,7 @@ export function findFillMatchArmsCodeActions(
           pattern.constructorName.name !== "Failure" ||
           pattern.args.length !== 1
         )
-          continue;
+          return;
         const failure = pattern.args[0];
         if (
           failure.kind === "VariablePattern" ||
@@ -302,6 +312,10 @@ export function findFillMatchArmsCodeActions(
           if (failure.constructorName.name === "Undefined")
             undefinedValue = true;
         }
+      };
+      for (const arm of matchExpr.arms) {
+        if (arm.guard) continue;
+        markNullishPattern(arm.pattern);
       }
       missing = [
         ...(!success ? [{ name: "Success", fields: ["value"] }] : []),

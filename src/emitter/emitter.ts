@@ -143,6 +143,7 @@ export interface EmitterOptions {
   importedGenericDataSchemas?: ReadonlyMap<string, number>;
   importedDataSchemas?: ReadonlySet<string>;
   importedNullishSchemas?: ReadonlyMap<string, ReadonlyMap<string, TypeNode>>;
+  importedTaggedUnionVariants?: ReadonlyMap<string, ReadonlySet<string>>;
   /** Whether the output is `.tsx`; generic arrows need a comma there. */
   isJsx?: boolean;
   context?: import("../compiler/typescript-context.js").TypeScriptCompilationContext;
@@ -648,6 +649,7 @@ export class Emitter {
     string,
     Map<string, TypeNode>
   >();
+  private readonly typeSignatureSchemas = new Map<string, TypeNode>();
   public needsCheckedRecordDecoder = false;
   public checkedCallbackKinds = new Set<"sync" | "void" | "effect">();
   public identityRecordSchemas = new Set<string>();
@@ -676,6 +678,8 @@ export class Emitter {
       this.recordContracts.set(name, contract);
     for (const [name, fields] of options.importedNullishSchemas ?? [])
       this.nullishSchemaFields.set(name, new Map(fields));
+    for (const [name, variants] of options.importedTaggedUnionVariants ?? [])
+      this.taggedUnionVariants.set(name, new Set(variants));
     // Source-map emission renders declarations individually, but resolution
     // still needs the bindings from the complete source program.
     let unsafeSchemaBinding = false;
@@ -748,25 +752,31 @@ export class Emitter {
       const decl = item.kind === "ExportDeclaration" ? item.declaration : item;
       if (
         decl.kind === "SchemaDeclaration" &&
-        decl.body.kind === "RecordSchema" &&
-        !decl.typeParams?.length
-      ) {
-        const fields = new Map<string, TypeNode>();
-        for (const field of decl.body.fields) {
-          if (
-            field.typeAnnotation.kind === "TypeReferenceNode" &&
-            field.typeAnnotation.name.name === "JSNullish"
-          ) {
-            fields.set(field.name.name, field.typeAnnotation);
-          }
-        }
-        if (fields.size) this.nullishSchemaFields.set(decl.id.name, fields);
-      }
-      if (
-        decl.kind === "SchemaDeclaration" &&
         decl.body.kind === "TypeSignatureSchema"
       ) {
         staticTypeNames.add(decl.id.name);
+        if (!decl.typeParams?.length) {
+          this.typeSignatureSchemas.set(decl.id.name, decl.body.signature);
+        }
+      }
+    }
+    for (const item of allItems) {
+      const decl = item.kind === "ExportDeclaration" ? item.declaration : item;
+      if (
+        decl.kind === "SchemaDeclaration" &&
+        decl.body.kind === "RecordSchema"
+      ) {
+        const fields = new Map<string, TypeNode>();
+        for (const field of decl.body.fields) {
+          const resolvedFieldType = this.unwrapTypeAlias(field.typeAnnotation);
+          if (
+            resolvedFieldType?.kind === "TypeReferenceNode" &&
+            resolvedFieldType.name.name === "JSNullish"
+          ) {
+            fields.set(field.name.name, resolvedFieldType);
+          }
+        }
+        if (fields.size) this.nullishSchemaFields.set(decl.id.name, fields);
       }
     }
     // Conservative whitelist: only local, non-transforming record codecs are used
@@ -1100,8 +1110,27 @@ export class Emitter {
     return this.bindings.get(name)?.typeAnnotation;
   }
 
+  private unwrapTypeAlias(
+    type: TypeNode | undefined,
+    visited: Set<string> = new Set(),
+  ): TypeNode | undefined {
+    let curr = type;
+    while (
+      curr?.kind === "TypeReferenceNode" &&
+      !curr.typeArgs?.length &&
+      this.typeSignatureSchemas.has(curr.name.name) &&
+      !visited.has(curr.name.name)
+    ) {
+      visited.add(curr.name.name);
+      curr = this.typeSignatureSchemas.get(curr.name.name);
+    }
+    return curr;
+  }
+
   public getTypeNodeForExpression(expr: Expression): TypeNode | undefined {
-    return this.resolveExpressionTypeNode(expr, new Set());
+    return this.unwrapTypeAlias(
+      this.resolveExpressionTypeNode(expr, new Set()),
+    );
   }
 
   private resolveExpressionTypeNode(
@@ -2193,6 +2222,13 @@ export class Emitter {
           );
         }
 
+        if (idx === 1 && s.kind === "MatchExpression" && !s.isCatch) {
+          return this.emitMatchExpression(
+            s,
+            this.getTypeNodeForExpression(stages[0]),
+          );
+        }
+
         return this.emitExpression(resolvedStage);
       });
     });
@@ -2766,7 +2802,10 @@ export class Emitter {
     return emitWhenStatement(this, stmt, insideEffect);
   }
 
-  private emitMatchExpression(expr: MatchExpression): string {
+  private emitMatchExpression(
+    expr: MatchExpression,
+    pipelineScrutineeType?: TypeNode,
+  ): string {
     return new MatchEmitter({
       emitExpression: (expression) => this.emitExpression(expression),
       emitFunctionBody: (body) => this.emitFunctionBody(body),
@@ -2885,7 +2924,7 @@ export class Emitter {
         this.parameterScopes.pop();
         this.recordScopes.pop();
       },
-    }).emitMatchExpression(expr);
+    }).emitMatchExpression(expr, pipelineScrutineeType);
   }
 
   public emitEffectBlockExpression(expr: EffectBlockExpression): string {

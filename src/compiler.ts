@@ -660,6 +660,7 @@ export const compileString = (
             string,
             Map<string, import("./ast/types.js").TypeNode>
           >();
+          const importedTaggedUnionVariants = new Map<string, Set<string>>();
           const importedRecordFunctions = resolveImportedRecordFunctions(
             ast,
             options?.sourcePath ?? filename,
@@ -669,6 +670,7 @@ export const compileString = (
             importedGenericDataSchemas,
             importedDataSchemas,
             importedNullishSchemas,
+            importedTaggedUnionVariants,
           );
           for (const [name, contract] of resolvePackageRecordContracts(
             ast,
@@ -687,6 +689,7 @@ export const compileString = (
               importedIdentitySchemas,
               importedDataSchemas,
               importedNullishSchemas,
+              importedTaggedUnionVariants,
             );
           }
           const {
@@ -705,6 +708,7 @@ export const compileString = (
             importedDataSchemas,
             options?.pipelineAnalysisOnly,
             importedNullishSchemas,
+            importedTaggedUnionVariants,
           );
           if (options?.pipelineAnalysisOnly) {
             return {
@@ -729,6 +733,7 @@ export const compileString = (
             importedGenericDataSchemas,
             importedDataSchemas,
             importedNullishSchemas,
+            importedTaggedUnionVariants,
             isJsx: filename.endsWith(".funx"),
             modularEffectImports: options?.modularEffectImports,
             context,

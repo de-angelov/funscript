@@ -72,7 +72,10 @@ interface MatchEmitterContext {
 export class MatchEmitter {
   constructor(private readonly context: MatchEmitterContext) {}
 
-  public emitMatchExpression(expr: MatchExpression): string {
+  public emitMatchExpression(
+    expr: MatchExpression,
+    pipelineScrutineeType?: TypeNode,
+  ): string {
     if (!expr.scrutinee && !expr.isPipeline) {
       return this.emitIfElseMatch(expr.arms, (arm) =>
         this.emitPatternAsCondition(arm.pattern),
@@ -102,12 +105,12 @@ export class MatchEmitter {
     const scrutineeType =
       expr.scrutinee && !expr.isPipeline
         ? this.context.getTypeNodeForExpression?.(expr.scrutinee)
-        : undefined;
+        : pipelineScrutineeType;
     if (
       scrutineeType?.kind === "TypeReferenceNode" &&
       scrutineeType.name.name === "JSNullish"
     ) {
-      return this.emitJSNullishMatch(expr.scrutinee!, expr.arms);
+      return this.emitJSNullishMatch(expr.scrutinee, expr.arms);
     }
     const hasNullishFailurePattern = expr.arms.some((arm) => {
       const p = arm.pattern;
@@ -1220,15 +1223,23 @@ export class MatchEmitter {
     return `(() => {\n  ${branches.join(" ")}\n})()`;
   }
 
-  private emitJSNullishMatch(scrutinee: Expression, arms: MatchArm[]): string {
+  private emitJSNullishMatch(
+    scrutinee: Expression | undefined,
+    arms: MatchArm[],
+  ): string {
     if (!arms.length)
       throw new FunScriptError(
         "JSNullish match requires at least one arm",
-        scrutinee.span,
+        scrutinee?.span ?? {
+          start: { line: 1, column: 1, offset: 0 },
+          end: { line: 1, column: 1, offset: 0 },
+        },
       );
     // Always capture once: a property getter or foreign expression may be effectful.
     const value = "$jsNullish";
-    const preamble = `const ${value} = ${this.context.emitExpression(scrutinee)};`;
+    const preamble = scrutinee
+      ? `const ${value} = ${this.context.emitExpression(scrutinee)};`
+      : "";
     const branches: string[] = [];
     let coversSuccess = false;
     let coversNull = false;
@@ -1360,7 +1371,12 @@ export class MatchEmitter {
         `else {\n  const __exhaustive: never = ${value};\n  return __exhaustive;\n}`,
       );
     }
-    return `(() => {\n  ${preamble}\n  ${branches.join(" ")}\n})()`;
+    const bodyLines = preamble
+      ? `  ${preamble}\n  ${branches.join(" ")}`
+      : `  ${branches.join(" ")}`;
+    return scrutinee
+      ? `(() => {\n${bodyLines}\n})()`
+      : `(${value}) => {\n${bodyLines}\n}`;
   }
 
   private emitJSOptionalMatch(scrutinee: Expression, arms: MatchArm[]): string {

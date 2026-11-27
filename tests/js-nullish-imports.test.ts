@@ -60,4 +60,23 @@ export show = (props: LocalProps) =>
     );
     expect(result.success, result.formattedOutput).toBe(true);
   });
+
+  it("allows imported tagged unions with Failure(Null) and Failure(Undefined)", async () => {
+    const unionFile = path.join(base, "union.fun");
+    const consumerFile = path.join(base, "consumer.fun");
+    const unionCode = `export schema Reason = | Null | Undefined
+export schema Outcome = | Success(value: String) | Failure(reason: Reason)`;
+    const consumerCode = `import { Outcome } from "./union.js"
+export show = (outcome: Outcome) =>
+  match outcome
+    | Success(value) => value
+    | Failure(Null) => "null"`;
+    const result = await Effect.runPromise(
+      typeCheckVirtualFiles(
+        { [unionFile]: unionCode, [consumerFile]: consumerCode },
+        { compilerOptions: { rootDir: process.cwd() } },
+      ),
+    );
+    expect(result.success, result.formattedOutput).toBe(true);
+  });
 });

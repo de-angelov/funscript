@@ -147,6 +147,7 @@ export function validateNumericComparisons(
     string,
     ReadonlyMap<string, import("../ast/types.js").TypeNode>
   >,
+  importedTaggedUnionVariants?: ReadonlyMap<string, ReadonlySet<string>>,
 ): void {
   const marked = new Emitter(ast, undefined, {
     allowAmbiguousPipeline: true,
@@ -157,6 +158,7 @@ export function validateNumericComparisons(
     importedIdentitySchemas,
     importedDataSchemas,
     importedNullishSchemas,
+    importedTaggedUnionVariants,
   }).emit();
   if (!marked.includes("__funscriptNumericOperand(")) return;
 

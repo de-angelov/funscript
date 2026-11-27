@@ -24,6 +24,7 @@ export function resolveImportedRecordFunctions(
   importedGenericDataSchemas?: Map<string, number>,
   importedDataSchemas?: Set<string>,
   importedNullishSchemas?: Map<string, Map<string, TypeNode>>,
+  importedTaggedUnionVariants?: Map<string, Set<string>>,
 ): Map<string, ReadonlySet<number>> {
   const result = new Map<string, ReadonlySet<number>>();
   const programs = new Map<string, Program | undefined>();
@@ -181,11 +182,7 @@ export function resolveImportedRecordFunctions(
         : undefined;
     }
     const decl = candidate.declaration;
-    if (
-      decl.body.kind !== "RecordSchema" ||
-      decl.typeParams?.length ||
-      isRecordContract(decl.body)
-    )
+    if (decl.body.kind !== "RecordSchema" || isRecordContract(decl.body))
       return undefined;
     const fields = new Map<string, TypeNode>();
     for (const field of decl.body.fields) {
@@ -198,6 +195,64 @@ export function resolveImportedRecordFunctions(
         fields.set(field.name.name, type);
     }
     return fields.size ? fields : undefined;
+  };
+  const resolveTaggedUnionExport = (
+    file: string,
+    name: string,
+    seen: Set<string>,
+  ): Set<string> | undefined => {
+    const key = `${file}\0tagged\0${name}`;
+    if (seen.has(key)) return undefined;
+    const program = programAt(file);
+    if (!program) return undefined;
+    const found: Array<
+      | {
+          kind: "schema";
+          declaration: import("../ast/types.js").SchemaDeclaration;
+        }
+      | {
+          kind: "reexport";
+          declaration: ExportFromDeclaration;
+          spec: import("../ast/types.js").ImportSpecifier;
+        }
+      | { kind: "other" }
+    > = [];
+    for (const item of program.body) {
+      if (
+        item.kind === "ExportDeclaration" &&
+        "id" in item.declaration &&
+        "name" in item.declaration.id &&
+        item.declaration.id.name === name
+      ) {
+        found.push(
+          item.declaration.kind === "SchemaDeclaration"
+            ? { kind: "schema", declaration: item.declaration }
+            : { kind: "other" },
+        );
+      } else if (item.kind === "ExportFromDeclaration") {
+        for (const spec of item.specifiers)
+          if (spec.local.name === name)
+            found.push({ kind: "reexport", declaration: item, spec });
+      }
+    }
+    if (found.length !== 1) return undefined;
+    const candidate = found[0];
+    if (candidate.kind === "other") return undefined;
+    if (candidate.kind === "reexport") {
+      const target = targetOf(candidate.declaration, file);
+      return target
+        ? resolveTaggedUnionExport(
+            target,
+            candidate.spec.imported.name,
+            new Set(seen).add(key),
+          )
+        : undefined;
+    }
+    if (candidate.declaration.body.kind !== "TaggedUnionSchema")
+      return undefined;
+    return new Set(
+      candidate.declaration.body.variants.map((variant) => variant.name.name),
+    );
   };
   const resolveIdentityExport = (
     file: string,
@@ -820,6 +875,13 @@ export function resolveImportedRecordFunctions(
       const arity = resolveGenericExport(target, spec.imported.name, new Set());
       if (arity !== undefined)
         importedGenericDataSchemas?.set(spec.local.name, arity);
+      const taggedVariants = resolveTaggedUnionExport(
+        target,
+        spec.imported.name,
+        new Set(),
+      );
+      if (taggedVariants)
+        importedTaggedUnionVariants?.set(spec.local.name, taggedVariants);
       const positions = resolveExport(target, spec.imported.name, new Set());
       if (positions) result.set(spec.local.name, positions);
     }

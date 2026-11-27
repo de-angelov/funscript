@@ -192,4 +192,40 @@ export show = (get: () => Unknown) =>
     expect(show(null)).toBe("null");
     expect(show(undefined)).toBe("undefined");
   });
+
+  it("matches through TypeSignatureSchema aliases and generic record schemas", async () => {
+    const code = `schema NullishStr = JSNullish<String>
+schema Box<T> = { value: JSNullish<T> }
+export showAlias = (value: NullishStr) =>
+  match value
+    | Success(text) => text
+    | Failure(Null) => "null"
+    | Failure(Undefined) => "undefined"
+export showBox = (box: Box<String>) =>
+  match box.value
+    | Success(text) => text
+    | Failure(Null) => "null"
+    | Failure(Undefined) => "undefined"`;
+    const checked = await typeCheck(code, "js-nullish-alias-generic.fun");
+    expect(checked.success, checked.formattedOutput).toBe(true);
+    const { showAlias, showBox } = await execute(code);
+    expect(showAlias("ok")).toBe("ok");
+    expect(showAlias(null)).toBe("null");
+    expect(showBox({ value: undefined })).toBe("undefined");
+  });
+
+  it("matches JSNullish values in a pipeline", async () => {
+    const code = `export show = (value: JSNullish<String>) =>
+  value
+  |> match
+    | Success(text) => text
+    | Failure(Null) => "null"
+    | Failure(Undefined) => "undefined"`;
+    const checked = await typeCheck(code, "js-nullish-pipeline.fun");
+    expect(checked.success, checked.formattedOutput).toBe(true);
+    const { show } = await execute(code);
+    expect(show("hi")).toBe("hi");
+    expect(show(null)).toBe("null");
+    expect(show(undefined)).toBe("undefined");
+  });
 });
