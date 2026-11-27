@@ -25,7 +25,7 @@ funscript build src/cli/bin.fun --target bun --out dist/cli/bin.js
 ### `funscript emit`
 
 ```text
-funscript emit <file.fun|file.funx> [--out <file.ts|file.tsx>] [--sourcemap] [--no-ts] [--no-global-this] [--bare-pipelines] [--no-deep-destructure] [--bin] [--prettier]
+funscript emit <file.fun|file.funx> [--out <file.ts|file.tsx>] [--sourcemap] [--no-ts] [--no-global-this] [--bare-pipelines] [--no-deep-destructure] [--bin]
 ```
 
 Compile one FunScript file to TypeScript or TSX.

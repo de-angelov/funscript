@@ -30,7 +30,6 @@ const commandOptions: Record<string, ReadonlySet<string>> = {
     "--bare-pipelines",
     "--no-deep-destructure",
     "--bin",
-    "--prettier",
   ]),
   check: new Set([
     "--idiomatic",
@@ -118,7 +117,7 @@ export const CLI_COMMANDS: readonly CliCommand[] = [
   {
     name: "emit",
     usage:
-      "emit <file.fun|file.funx> [--out <file.ts|file.tsx>] [--sourcemap] [--no-ts] [--no-global-this] [--bare-pipelines] [--no-deep-destructure] [--bin] [--prettier]",
+      "emit <file.fun|file.funx> [--out <file.ts|file.tsx>] [--sourcemap] [--no-ts] [--no-global-this] [--bare-pipelines] [--no-deep-destructure] [--bin]",
     description: "Compile one FunScript file to TypeScript or TSX.",
     examples: ["funscript emit src/main.fun --out src/main.ts --sourcemap"],
   },
