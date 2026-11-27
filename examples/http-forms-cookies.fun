@@ -21,16 +21,16 @@ page = (body: String) =>
 html = (body: String) => HttpServerResponse.text(body, { contentType: "text/html; charset=utf-8" })
 
 formFields = HttpServerRequest.schemaBodyUrlParams(Schema.Struct({
-  username: Schema.optional(Schema.String)
-  password: Schema.optional(Schema.String)
+  username: Schema.String |> withDecodingDefault(Effect.succeed(""))
+  password: Schema.String |> withDecodingDefault(Effect.succeed(""))
 }))
 
 readCredentials =
   effect {
     fields <- formFields |> mapError(toValidationError)
     credentials <- Schema.decodeUnknownEffect(Credentials)({
-      username: fields.username or ""
-      password: fields.password or ""
+      username: fields.username
+      password: fields.password
     })
     |> mapError(toValidationError)
     => credentials

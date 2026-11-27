@@ -154,7 +154,7 @@ Logical short-circuit conjunction operator (&&).
 expr1 and expr2
 ```
 
-Evaluates to `true` if both operands are truthy. Short-circuits if the left operand is falsy. FunScript uses the English word `and` instead of `&&`.
+Evaluates to `true` if both `Boolean` operands are `true`. Short-circuits if the left operand is `false`. FunScript requires `Boolean` operands for `and` and uses the English word `and` instead of `&&`.
 
 ### Syntax-checked example
 
@@ -1097,7 +1097,7 @@ Logical short-circuit disjunction operator (||).
 expr1 or expr2
 ```
 
-Evaluates to `true` if either operand is truthy. Short-circuits if the left operand is truthy. FunScript uses the English word `or` instead of `||`.
+Evaluates to `true` if either `Boolean` operand is `true`. Short-circuits if the left operand is `true`. FunScript requires `Boolean` operands for `or` and uses the English word `or` instead of `||`.
 
 
 

@@ -40,6 +40,10 @@ export routes = Layer.mergeAll(getItems, postItems, notFound)
 
 export serverLayer = (port: Number) => HttpRouter.serve(routes).pipe(Layer.provide(NodeHttpServer.layer(createServer, { port })))
 
-port = Number(process.env.PORT) or 3000
+port =
+  Option.fromUndefinedOr(process.env.PORT)
+  |> map(Number)
+  |> filter(Number.isFinite)
+  |> getOrElse(() => 3000)
 
 export main = Layer.launch(serverLayer(port)) |> NodeRuntime.runMain

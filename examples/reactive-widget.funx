@@ -59,6 +59,16 @@ export renderStatusBadge = (state: WidgetState) =>
         // --- Reactive Widget Component ---
         <span className="badge badge-limit">Warning: Max Limit {limit} Reached</span>
 
+maxAlert = (props: WidgetProps) =>
+  match props.initialCount #= props.max
+    | true => <p className="alert alert-warning">Maximum boundary reached!</p>
+    | false => ""
+
+minAlert = (props: WidgetProps) =>
+  match props.initialCount #= props.min
+    | true => <p className="alert alert-info">Minimum boundary reached.</p>
+    | false => ""
+
 export CounterWidget = (props: WidgetProps) =>
   <div className="widget-card variant-${props.variant}">
     <header className="widget-header">
@@ -101,8 +111,8 @@ export CounterWidget = (props: WidgetProps) =>
         </button>
       </div>
 
-      {props.initialCount #= props.max and <p className="alert alert-warning">Maximum boundary reached!</p>}
-      {props.initialCount #= props.min and <p className="alert alert-info">Minimum boundary reached.</p>}
+      {maxAlert(props)}
+      {minAlert(props)}
     </div>
 
     <footer className="widget-footer">

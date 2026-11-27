@@ -124,6 +124,8 @@ export interface EmitterOptions {
   markPipelineSources?: boolean;
   /** Wrap native comparison operands so the checker can enforce number-only use. */
   markNumericComparisonOperands?: boolean;
+  /** Wrap logical `and`/`or` operands so the checker can enforce boolean-only use. */
+  markBooleanOperands?: boolean;
   /** Preserve source locations of ordinary call arguments during checker analysis. */
   markCallArguments?: boolean;
   forwardOptionalArguments?: ReadonlySet<number>;
@@ -2261,11 +2263,15 @@ export class Emitter {
     };
     const left = emitOperand(expr.left);
     const right = emitOperand(expr.right);
+    const markBoolean = (operand: Expression, emitted: string) =>
+      this.options.markBooleanOperands
+        ? `__funscriptBooleanOperand(${operand.span.start.offset}, ${JSON.stringify(expr.operator)}, ${emitted})`
+        : emitted;
     switch (expr.operator) {
       case "and":
-        return `(${left} && ${right})`;
+        return `(${markBoolean(expr.left, left)} && ${markBoolean(expr.right, right)})`;
       case "or":
-        return `(${left} || ${right})`;
+        return `(${markBoolean(expr.left, left)} || ${markBoolean(expr.right, right)})`;
       case "@=":
         if (this.isPrimitive(expr.left) || this.isPrimitive(expr.right)) {
           throw new Error(

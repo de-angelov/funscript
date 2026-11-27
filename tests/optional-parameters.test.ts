@@ -256,13 +256,11 @@ export forward = (value: Option<String>): JSOptional<String> => read(value)`;
     expect(typescript).toContain("n: number = 5");
   });
 
-  it("emits a valid function expression as a boolean fallback", async () => {
-    const source =
-      "export choose = (value: Unknown) => value or ((name: String) => name)";
-    const { choose } = await execute(source);
-    expect(choose(false)("Ada")).toBe("Ada");
-    const existing = (name: string) => name.toUpperCase();
-    expect(choose(existing)).toBe(existing);
+  it("rejects non-boolean fallback with 'or' on function expressions", async () => {
+    await expectCompileError(
+      "export choose = (value: Unknown) => value or ((name: String) => name)",
+      /Logical 'or' requires boolean operands/,
+    );
   });
 
   it("rejects ambiguous and unsupported parameter forms", async () => {

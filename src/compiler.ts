@@ -14,6 +14,7 @@ import { walkAst } from "./ast/walk.js";
 import { resolveImportedRecordFunctions } from "./compiler/imported-record-functions.js";
 import { resolveImportedSchemas } from "./compiler/imported-schemas.js";
 import { applyJsInteropNullability } from "./compiler/js-interop-nullability.js";
+import { validateBooleanOperators } from "./compiler/boolean-operators.js";
 import { validateNumericComparisons } from "./compiler/numeric-comparisons.js";
 import { resolveOptionalArguments } from "./compiler/optional-arguments.js";
 import { resolvePackageRecordContracts } from "./compiler/package-record-contracts.js";
@@ -680,6 +681,18 @@ export const compileString = (
             importedRecordContracts.set(name, contract);
           if (!options?.pipelineAnalysisOnly) {
             validateNumericComparisons(
+              ast,
+              source,
+              context,
+              importedRecordFunctions,
+              importedRecordContracts,
+              importedGenericDataSchemas,
+              importedIdentitySchemas,
+              importedDataSchemas,
+              importedNullishSchemas,
+              importedTaggedUnionVariants,
+            );
+            validateBooleanOperators(
               ast,
               source,
               context,

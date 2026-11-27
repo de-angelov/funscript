@@ -1169,7 +1169,7 @@ export host = process.env["HOST"]
           `
 import process from "node:process"
 
-port = Number(process.env.PORT) or 3000
+port = Number(process.env.PORT)
 export main = port
 `.trim(),
           "server.fun",

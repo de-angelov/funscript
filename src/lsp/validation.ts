@@ -8,6 +8,7 @@ import {
   ImportedSchemaError,
   resolveImportedSchemas,
 } from "../compiler/imported-schemas.js";
+import { validateBooleanOperators } from "../compiler/boolean-operators.js";
 import { validateNumericComparisons } from "../compiler/numeric-comparisons.js";
 import { TypeScriptCompilationContext } from "../compiler/typescript-context.js";
 import { Lexer } from "../lexer/lexer.js";
@@ -136,6 +137,7 @@ export function validateFunScript(
       const context = new TypeScriptCompilationContext(uri);
       if (!ast.body.some((decl) => decl.kind === "AsDeclaration"))
         validateNumericComparisons(ast, source, context);
+      validateBooleanOperators(ast, source, context);
       resolveImportedSchemas(ast, context);
     } catch (error: unknown) {
       diagnostics.push(toDiagnostic(error));

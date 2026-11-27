@@ -53,12 +53,12 @@ export StatCard = (label: String, value: Number) =>
   </div>
 
 export FilterButton = (label: String, selected: Boolean) =>
-  <button className={selected and "filter selected" or "filter"} aria-pressed={selected}>
+  <button className={match selected | true => "filter selected" | false => "filter"} aria-pressed={selected}>
     {label}
   </button>
 
 export TodoItemRow = (todo: Todo) =>
-  <li className={todo.completed and "todo completed" or "todo"} data-id={todo.id}>
+  <li className={match todo.completed | true => "todo completed" | false => "todo"} data-id={todo.id}>
     <input type="checkbox" checked={todo.completed} />
     <span>{todo.title}</span>
   </li>
@@ -66,8 +66,8 @@ export TodoItemRow = (todo: Todo) =>
 export visibleTodos = (props: DashboardProps) =>
   match props.filter
     | "All" => props.todos
-    | "Active" => props.todos |> Array.filter((todo) => not todo.completed)
-    | "Completed" => props.todos |> Array.filter((todo) => todo.completed)
+    | "Active" => props.todos |> filter((todo) => not todo.completed)
+    | "Completed" => props.todos |> filter((todo) => todo.completed)
     | _ => props.todos
 
 export TodoDashboard = (props: DashboardProps) =>
@@ -78,8 +78,8 @@ export TodoDashboard = (props: DashboardProps) =>
     </header>
     <section className="stats" aria-label="Task statistics">
       {StatCard("All tasks", props.todos.length)}
-      {StatCard("Active", props.todos |> Array.filter((todo) => not todo.completed) |> Array.length)}
-      {StatCard("Completed", props.todos |> Array.filter((todo) => todo.completed) |> Array.length)}
+      {StatCard("Active", props.todos |> filter((todo) => not todo.completed) |> length)}
+      {StatCard("Completed", props.todos |> filter((todo) => todo.completed) |> length)}
     </section>
     <form className="todo-form">
       <input name="title" value={props.draft} placeholder="Add a task" />
@@ -91,7 +91,7 @@ export TodoDashboard = (props: DashboardProps) =>
       {FilterButton("Completed", props.filter #= "Completed")}
     </nav>
     <ul className="todo-list">
-      {visibleTodos(props) |> Array.map((todo) => TodoItemRow(todo))}
+      {visibleTodos(props) |> map((todo) => TodoItemRow(todo))}
     </ul>
   </main>
 
@@ -127,7 +127,7 @@ export main =
     view = TodoDashboard(props)
     _ <- Console.log("[Todo] Root tag: <main>")
     _ <- Console.log("[Todo] Dashboard view rendered")
-    _ <- Console.log("[Todo] Visible rows: " + (visibleTodos(props) |> Array.length))
+    _ <- Console.log("[Todo] Visible rows: " + (visibleTodos(props) |> length))
     _ <- Console.log("[Todo] Added task handler: ready")
     => 0
   }
