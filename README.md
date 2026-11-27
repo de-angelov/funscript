@@ -10,7 +10,6 @@ matching, and immutable updates less ceremonial.
 **Status:** experimental compiler and tooling under active development.
 
 <!-- GENERATED: project-facts -->
-
 ## Generated project facts
 
 - Package: `funscript` `0.2.3`
@@ -88,7 +87,6 @@ For the current, verified contract and runnable source examples, read the
 ## Examples
 
 <!-- GENERATED: example-inventory -->
-
 | [`examples/assemblyscript-numeric.fun`](examples/assemblyscript-numeric.fun) | `FunScript` |
 | [`examples/assemblyscript-primes.fun`](examples/assemblyscript-primes.fun) | `FunScript` |
 | [`examples/bank-account.fun`](examples/bank-account.fun) | `FunScript` |

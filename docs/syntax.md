@@ -242,13 +242,11 @@ The compiler enforces the convention for declarations it generates. Imported Jav
 values may have any casing; they are only relevant in expression position.
 
 <!-- GENERATED: keywords -->
-
 ### 1.5 Keywords (20 total)
 
 ```text
 and catch default effect error export false from import js match mut not or par schema service true ts when
 ```
-
 <!-- /GENERATED: keywords -->
 
 `_` is a special token (wildcard in patterns, discard in `_ <-`, and call-argument
@@ -1466,6 +1464,32 @@ the `_tag` of an Effect `Result`. `Failure(Null)` matches only `null`, and
 to the non-nullish part of `T`.
 Ordinary `Result` values continue to use their Effect representation. `Null` and
 `Undefined` here are match patterns, not JavaScript expression literals.
+
+When a JavaScript API requires an explicit `null` or `undefined` value, use a
+`ts` escape at that boundary. This makes the interop workaround visible in
+FunScript. For example, a patch object with a computed key can be returned from
+a TypeScript expression:
+
+```funscript
+export clearField = (field: String) =>
+  ts { ({ [field]: null }) }
+```
+
+The same approach works for API arguments:
+
+```funscript
+ts { declare function updateField(field: string, value: string | null | undefined): void; }
+
+export clearFieldInApi = (field: String) => effect {
+  _ <- js updateField(field, ts { null })
+  _ <- js updateField(field, ts { undefined })
+  => Void
+}
+```
+
+`null` and `undefined` are passed literally here; `JSNullish<T>` describes and
+matches raw values but does not construct them. An explicitly undefined object
+property is still present, which can differ from omitting the property.
 
 The matcher must be able to identify the scrutinee as `JSNullish<T>` from its
 FunScript type annotation. A directly annotated parameter or an annotated field

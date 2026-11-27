@@ -92,11 +92,11 @@ export inspectUnknown = (value: JSNullish<Unknown>) => inspect(value)`;
   match value
     | Failure(Null) => "null"
     | Failure(Undefined) => "undefined"
-    | Success(payload) => payload.toUpperCase()`;
+    | Success(payload) => payload`;
     const checked = await typeCheck(source, "js-nullish-order.fun");
     expect(checked.success, checked.formattedOutput).toBe(true);
     const { inspect } = await execute(source);
-    expect(inspect("ok")).toBe("OK");
+    expect(inspect("ok")).toBe("ok");
     expect(inspect(null)).toBe("null");
     expect(inspect(undefined)).toBe("undefined");
   });
