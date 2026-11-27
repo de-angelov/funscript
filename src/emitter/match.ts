@@ -375,7 +375,7 @@ export class MatchEmitter {
                   unpack =
                     directOptional || isOptional
                       ? `const { value: ${target} } = $matched;`
-                      : `const { value: ${target} } = $matched as unknown as { value: typeof $matched extends import("effect").Option.Some<infer V> ? V : any };`;
+                      : `const { value: ${target} } = $matched;`;
                 } else if (
                   arm.pattern.kind === "ConstructorPattern" &&
                   JS_ERROR_NAMES.has(arm.pattern.constructorName.name)
@@ -581,13 +581,11 @@ export class MatchEmitter {
   private emitSomeRecordUnpack(
     pat: RecordPattern,
     payloadFields?: Map<string, RecordFieldInfo>,
-    isOptional?: boolean,
+    _isOptional?: boolean,
   ): string {
     if (patternHasOptionalField(pat, payloadFields)) {
       this.context.addEffectImport?.("Option");
-      const cast = isOptional
-        ? ""
-        : ` as unknown as { value: typeof $matched extends import("effect").Option.Some<infer V> ? V : any }`;
+      const cast = "";
       const lines: string[] = [
         `const { value: $funscriptSomeInner } = $matched${cast};`,
         ...emitUnpackedRecordPattern({
@@ -602,9 +600,7 @@ export class MatchEmitter {
     }
     const destructParts = this.collectRecordDestructuring(pat);
     if (destructParts.length === 0) return "";
-    const cast = isOptional
-      ? ""
-      : ` as unknown as { value: typeof $matched extends import("effect").Option.Some<infer V> ? V : any }`;
+    const cast = "";
     return `const { value: { ${destructParts.join(", ")} } } = $matched${cast};`;
   }
 
@@ -752,7 +748,7 @@ export class MatchEmitter {
         if (bindingTarget && bindingTarget !== "[]" && bindingTarget !== "{}") {
           const unpack = isOptional
             ? `const { value: ${bindingTarget} } = $matched;`
-            : `const { value: ${bindingTarget} } = $matched as unknown as { value: typeof $matched extends import("effect").Option.Some<infer V> ? V : any };`;
+            : `const { value: ${bindingTarget} } = $matched;`;
           if (body.kind === "BlockStatement")
             return `($matched) => {\n    ${unpack}\n${this.context.emitFunctionBody(body)}\n  }`;
           return `($matched) => {\n    ${unpack}\n    return ${this.context.emitExpression(body)};\n  }`;
@@ -1052,11 +1048,7 @@ export class MatchEmitter {
 
       if (pat.constructorName.name === "Some" && pat.args.length === 1) {
         const arg = pat.args[0];
-        const useTypedSomeCast =
-          targetExpr !== "$matched" || !options?.isOptionalScrutinee;
-        const cast = useTypedSomeCast
-          ? ` as unknown as { value: Extract<typeof ${targetExpr}, { readonly _tag: "Some" }> extends import("effect").Option.Some<infer V> ? V : any }`
-          : "";
+        const cast = "";
         if (
           arg.kind === "RecordPattern" &&
           targetExpr === "$matched" &&
