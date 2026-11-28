@@ -14,7 +14,11 @@ const TMP_DIR = path.resolve("/tmp/opencode/test-sourcemap-" + Date.now());
 describe("Source Map Generation (.map) using magic-string", () => {
   beforeEach(async () => {
     await fs.mkdir(TMP_DIR, { recursive: true });
-    await fs.symlink(path.resolve("node_modules"), path.join(TMP_DIR, "node_modules"), "dir");
+    await fs.symlink(
+      path.resolve("node_modules"),
+      path.join(TMP_DIR, "node_modules"),
+      "dir",
+    );
   });
 
   afterEach(async () => {
@@ -22,6 +26,28 @@ describe("Source Map Generation (.map) using magic-string", () => {
   });
 
   describe("compileString source map emission", () => {
+    it("maps declarations after a merged generated import", async () => {
+      const code = `import { Console } from "effect"
+export clean = (name: String) => name |> String.trim
+export answer = 42`;
+      const result = await Effect.runPromise(compileString(code, "merged.fun"));
+      expect(result.typescript).toContain(
+        'import { Console, String, pipe } from "effect";',
+      );
+      const tracer = new TraceMap(result.map!.toString());
+      const lines = result.typescript.split("\n");
+      for (const [fragment, line] of [
+        ["import { Console", 1],
+        ["export const clean", 2],
+        ["export const answer", 3],
+      ] as const) {
+        const index = lines.findIndex((text) => text.includes(fragment));
+        expect(index).toBeGreaterThanOrEqual(0);
+        expect(
+          originalPositionFor(tracer, { line: index + 1, column: 0 }).line,
+        ).toBe(line);
+      }
+    });
     it("generates a valid v3 source map for simple variable bindings", async () => {
       const code = `
 export name = "Ada"
@@ -43,7 +69,9 @@ export age = 36
 
       // Verify generated line for `export const name = "Ada";`
       const tsLines = res.typescript.split("\n");
-      const nameLineIndex = tsLines.findIndex((l) => l.includes("const name ="));
+      const nameLineIndex = tsLines.findIndex((l) =>
+        l.includes("const name ="),
+      );
       expect(nameLineIndex).toBeGreaterThanOrEqual(0);
 
       const pos = originalPositionFor(tracer, {
@@ -80,7 +108,9 @@ export res = 5 |> add(10, _)
       const tsLines = res.typescript.split("\n");
 
       // Header import line should not map to source
-      const importLineIndex = tsLines.findIndex((l) => l.includes('import { pipe } from "effect";'));
+      const importLineIndex = tsLines.findIndex((l) =>
+        l.includes('import { pipe } from "effect";'),
+      );
       expect(importLineIndex).toBeGreaterThanOrEqual(0);
       const importPos = originalPositionFor(tracer, {
         line: importLineIndex + 1,
@@ -89,7 +119,9 @@ export res = 5 |> add(10, _)
       expect(importPos.source).toBeNull();
 
       // Find the add function line in emitted TypeScript
-      const addLineIndex = tsLines.findIndex((l) => l.includes("export const add ="));
+      const addLineIndex = tsLines.findIndex((l) =>
+        l.includes("export const add ="),
+      );
       expect(addLineIndex).toBeGreaterThan(importLineIndex); // must be after header
 
       const addPos = originalPositionFor(tracer, {
@@ -100,7 +132,9 @@ export res = 5 |> add(10, _)
       expect(addPos.line).toBe(1);
 
       // Find the pipeline expression line
-      const resLineIndex = tsLines.findIndex((l) => l.includes("export const res ="));
+      const resLineIndex = tsLines.findIndex((l) =>
+        l.includes("export const res ="),
+      );
       const resPos = originalPositionFor(tracer, {
         line: resLineIndex + 1,
         column: 0,
@@ -123,7 +157,9 @@ export compute = (x: Number) =>
       const tracer = new TraceMap(res.map!.toString());
       const tsLines = res.typescript.split("\n");
 
-      const computeLine = tsLines.findIndex((l) => l.includes("export const compute ="));
+      const computeLine = tsLines.findIndex((l) =>
+        l.includes("export const compute ="),
+      );
       expect(computeLine).toBeGreaterThanOrEqual(0);
 
       const pos = originalPositionFor(tracer, {
@@ -148,7 +184,9 @@ export main = effect {
       const tracer = new TraceMap(res.map!.toString());
       const tsLines = res.typescript.split("\n");
 
-      const mainLine = tsLines.findIndex((l) => l.includes("export const main = Effect.scoped(Effect.gen"));
+      const mainLine = tsLines.findIndex((l) =>
+        l.includes("export const main = Effect.scoped(Effect.gen"),
+      );
       expect(mainLine).toBeGreaterThanOrEqual(0);
 
       const mainPos = originalPositionFor(tracer, {
@@ -178,7 +216,9 @@ export schema Shape =
       const tsLines = res.typescript.split("\n");
 
       // User schema
-      const userLine = tsLines.findIndex((l) => l.includes("const User = Schema.Struct"));
+      const userLine = tsLines.findIndex((l) =>
+        l.includes("const User = Schema.Struct"),
+      );
       expect(userLine).toBeGreaterThanOrEqual(0);
       const userPos = originalPositionFor(tracer, {
         line: userLine + 1,
@@ -188,7 +228,9 @@ export schema Shape =
       expect(userPos.line).toBe(1);
 
       // Shape schema
-      const shapeLine = tsLines.findIndex((l) => l.includes("type Shape = Data.TaggedEnum"));
+      const shapeLine = tsLines.findIndex((l) =>
+        l.includes("type Shape = Data.TaggedEnum"),
+      );
       expect(shapeLine).toBeGreaterThanOrEqual(0);
       const shapePos = originalPositionFor(tracer, {
         line: shapeLine + 1,
@@ -200,7 +242,9 @@ export schema Shape =
 
     it("does not generate map when options.sourcemap is false", async () => {
       const code = `export a = 1`;
-      const res = await Effect.runPromise(compileString(code, "no-map.fun", { sourcemap: false }));
+      const res = await Effect.runPromise(
+        compileString(code, "no-map.fun", { sourcemap: false }),
+      );
       expect(res.map).toBeUndefined();
     });
   });
@@ -263,7 +307,14 @@ export start = (port: Number) => port + 1
       const defaultMapFile = path.join(TMP_DIR, "service.ts.map");
 
       await fs.writeFile(defaultFunFile, `export val = 42\n`, "utf-8");
-      await execFileAsync("node", [CLI_PATH, "build", defaultFunFile, "--out", defaultTsFile, "--sourcemap"]);
+      await execFileAsync("node", [
+        CLI_PATH,
+        "build",
+        defaultFunFile,
+        "--out",
+        defaultTsFile,
+        "--sourcemap",
+      ]);
 
       const defaultTsContent = await fs.readFile(defaultTsFile, "utf-8");
       const defaultMapContent = await fs.readFile(defaultMapFile, "utf-8");

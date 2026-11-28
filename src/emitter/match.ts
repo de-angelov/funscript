@@ -14,6 +14,7 @@ import type {
   TypeNode,
 } from "../ast/types.js";
 import { FunScriptError } from "../errors.js";
+import { indentContinuation } from "./indent.js";
 import {
   emitUnpackedRecordPattern,
   patternHasOptionalField,
@@ -301,7 +302,7 @@ export class MatchEmitter {
                     ? [`const ${scrutineeName} = $matched;`]
                     : []),
                   ...unpackLines,
-                  `return ${this.context.emitExpression(arm.guard)};`,
+                  `return ${indentContinuation(this.context.emitExpression(arm.guard), 4)};`,
                 ];
                 guardFn = `($matched) => {\n    ${lines.join("\n    ")}\n  }`;
               } else if (scrutineeName) {
@@ -327,7 +328,7 @@ export class MatchEmitter {
                     ? [`const ${scrutineeName} = $matched;`]
                     : []),
                   ...unpackLines,
-                  `return ${this.context.emitExpression(arm.guard)};`,
+                  `return ${indentContinuation(this.context.emitExpression(arm.guard), 4)};`,
                 ];
                 guardFn = `($matched) => {\n    ${lines.join("\n    ")}\n  }`;
               } else if (scrutineeName) {
@@ -391,7 +392,7 @@ export class MatchEmitter {
                     },
                   ).join("\n    ");
                 }
-                guardFn = `($matched) => {\n    ${unpack}\n    return ${this.context.emitExpression(arm.guard)};\n  }`;
+                guardFn = `($matched) => {\n    ${unpack}\n    return ${indentContinuation(this.context.emitExpression(arm.guard), 4)};\n  }`;
               } else {
                 guardFn = `() => ${this.context.emitExpression(arm.guard)}`;
               }
@@ -622,20 +623,20 @@ export class MatchEmitter {
         }
         lines.push(...unpackLines);
         if (body.kind === "BlockStatement") {
-          return `($matched) => {\n    ${lines.join("\n    ")}\n${this.context.emitFunctionBody(body)}\n  }`;
+          return `($matched) => {\n    ${lines.join("\n    ")}\n  ${indentContinuation(this.context.emitFunctionBody(body), 2)}\n  }`;
         }
-        return `($matched) => {\n    ${lines.join("\n    ")}\n    return ${this.context.emitExpression(body)};\n  }`;
+        return `($matched) => {\n    ${lines.join("\n    ")}\n    return ${indentContinuation(this.context.emitExpression(body), 4)};\n  }`;
       }
 
       if (scrutineeName) {
         if (body.kind === "BlockStatement") {
-          return `(${scrutineeName}) => {\n${this.context.emitFunctionBody(body)}\n}`;
+          return `(${scrutineeName}) => {\n  ${indentContinuation(this.context.emitFunctionBody(body), 2)}\n  }`;
         }
         return `(${scrutineeName}) => ${this.context.emitArrowExpression(body)}`;
       }
 
       if (body.kind === "BlockStatement") {
-        return `($matched) => {\n${this.context.emitFunctionBody(body)}\n}`;
+        return `($matched) => {\n  ${indentContinuation(this.context.emitFunctionBody(body), 2)}\n  }`;
       }
       return `($matched) => ${this.context.emitArrowExpression(body)}`;
     }
@@ -650,12 +651,12 @@ export class MatchEmitter {
       lines.push(...this.emitPatternUnpackLines(pat, "$matched"));
       if (lines.length > 0) {
         if (body.kind === "BlockStatement") {
-          return `($matched) => {\n    ${lines.join("\n    ")}\n${this.context.emitFunctionBody(body)}\n  }`;
+          return `($matched) => {\n    ${lines.join("\n    ")}\n  ${indentContinuation(this.context.emitFunctionBody(body), 2)}\n  }`;
         }
-        return `($matched) => {\n    ${lines.join("\n    ")}\n    return ${this.context.emitExpression(body)};\n  }`;
+        return `($matched) => {\n    ${lines.join("\n    ")}\n    return ${indentContinuation(this.context.emitExpression(body), 4)};\n  }`;
       }
       if (body.kind === "BlockStatement") {
-        return `() => {\n${this.context.emitFunctionBody(body)}\n}`;
+        return `() => {\n  ${indentContinuation(this.context.emitFunctionBody(body), 2)}\n  }`;
       }
       return `() => ${this.context.emitArrowExpression(body)}`;
     }
@@ -674,18 +675,18 @@ export class MatchEmitter {
         }
         lines.push(...unpackLines);
         if (body.kind === "BlockStatement") {
-          return `($matched) => {\n    ${lines.join("\n    ")}\n${this.context.emitFunctionBody(body)}\n  }`;
+          return `($matched) => {\n    ${lines.join("\n    ")}\n  ${indentContinuation(this.context.emitFunctionBody(body), 2)}\n  }`;
         }
-        return `($matched) => {\n    ${lines.join("\n    ")}\n    return ${this.context.emitExpression(body)};\n  }`;
+        return `($matched) => {\n    ${lines.join("\n    ")}\n    return ${indentContinuation(this.context.emitExpression(body), 4)};\n  }`;
       }
       if (scrutineeName) {
         if (body.kind === "BlockStatement") {
-          return `(${scrutineeName}) => {\n${this.context.emitFunctionBody(body)}\n}`;
+          return `(${scrutineeName}) => {\n  ${indentContinuation(this.context.emitFunctionBody(body), 2)}\n  }`;
         }
         return `(${scrutineeName}) => ${this.context.emitArrowExpression(body)}`;
       }
       if (body.kind === "BlockStatement") {
-        return `($matched) => {\n${this.context.emitFunctionBody(body)}\n}`;
+        return `($matched) => {\n  ${indentContinuation(this.context.emitFunctionBody(body), 2)}\n  }`;
       }
       return `($matched) => ${this.context.emitArrowExpression(body)}`;
     }
@@ -701,12 +702,12 @@ export class MatchEmitter {
       if (vars.length > 0) {
         const unpack = `const { ${vars.join(", ")} } = $matched;`;
         if (body.kind === "BlockStatement") {
-          return `($matched) => {\n    ${unpack}\n${this.context.emitFunctionBody(body)}\n  }`;
+          return `($matched) => {\n    ${unpack}\n  ${indentContinuation(this.context.emitFunctionBody(body), 2)}\n  }`;
         }
-        return `($matched) => {\n    ${unpack}\n    return ${this.context.emitExpression(body)};\n  }`;
+        return `($matched) => {\n    ${unpack}\n    return ${indentContinuation(this.context.emitExpression(body), 4)};\n  }`;
       }
       if (body.kind === "BlockStatement") {
-        return `() => {\n${this.context.emitFunctionBody(body)}\n}`;
+        return `() => {\n  ${indentContinuation(this.context.emitFunctionBody(body), 2)}\n  }`;
       }
       return `() => ${this.context.emitArrowExpression(body)}`;
     }
@@ -728,16 +729,16 @@ export class MatchEmitter {
         );
         if (unpack) {
           if (body.kind === "BlockStatement")
-            return `($matched) => {\n    ${unpack}\n${this.context.emitFunctionBody(body)}\n  }`;
-          return `($matched) => {\n    ${unpack}\n    return ${this.context.emitExpression(body)};\n  }`;
+            return `($matched) => {\n    ${unpack}\n  ${indentContinuation(this.context.emitFunctionBody(body), 2)}\n  }`;
+          return `($matched) => {\n    ${unpack}\n    return ${indentContinuation(this.context.emitExpression(body), 4)};\n  }`;
         }
         if (body.kind === "BlockStatement")
-          return `() => {\n${this.context.emitFunctionBody(body)}\n}`;
+          return `() => {\n  ${indentContinuation(this.context.emitFunctionBody(body), 2)}\n  }`;
         return `() => ${this.context.emitArrowExpression(body)}`;
       }
       if (arg.kind === "LiteralPattern") {
         if (body.kind === "BlockStatement")
-          return `() => {\n${this.context.emitFunctionBody(body)}\n}`;
+          return `() => {\n  ${indentContinuation(this.context.emitFunctionBody(body), 2)}\n  }`;
         return `() => ${this.context.emitArrowExpression(body)}`;
       }
       if (
@@ -750,8 +751,8 @@ export class MatchEmitter {
             ? `const { value: ${bindingTarget} } = $matched;`
             : `const { value: ${bindingTarget} } = $matched;`;
           if (body.kind === "BlockStatement")
-            return `($matched) => {\n    ${unpack}\n${this.context.emitFunctionBody(body)}\n  }`;
-          return `($matched) => {\n    ${unpack}\n    return ${this.context.emitExpression(body)};\n  }`;
+            return `($matched) => {\n    ${unpack}\n  ${indentContinuation(this.context.emitFunctionBody(body), 2)}\n  }`;
+          return `($matched) => {\n    ${unpack}\n    return ${indentContinuation(this.context.emitExpression(body), 4)};\n  }`;
         }
       } else if (vars.length > 0) {
         const unpack = this.emitPatternUnpackLines(pat, "$matched", {
@@ -759,11 +760,11 @@ export class MatchEmitter {
           payloadFields,
         }).join("\n    ");
         if (body.kind === "BlockStatement")
-          return `($matched) => {\n    ${unpack}\n${this.context.emitFunctionBody(body)}\n  }`;
-        return `($matched) => {\n    ${unpack}\n    return ${this.context.emitExpression(body)};\n  }`;
+          return `($matched) => {\n    ${unpack}\n  ${indentContinuation(this.context.emitFunctionBody(body), 2)}\n  }`;
+        return `($matched) => {\n    ${unpack}\n    return ${indentContinuation(this.context.emitExpression(body), 4)};\n  }`;
       }
       if (body.kind === "BlockStatement")
-        return `() => {\n${this.context.emitFunctionBody(body)}\n}`;
+        return `() => {\n  ${indentContinuation(this.context.emitFunctionBody(body), 2)}\n  }`;
       return `() => ${this.context.emitArrowExpression(body)}`;
     }
     if (vars.length > 0 && pat) {
@@ -775,13 +776,13 @@ export class MatchEmitter {
               payloadFields,
             }).join("\n    ");
       if (body.kind === "BlockStatement") {
-        return `($matched) => {\n    ${unpack}\n${this.context.emitFunctionBody(body)}\n  }`;
+        return `($matched) => {\n    ${unpack}\n  ${indentContinuation(this.context.emitFunctionBody(body), 2)}\n  }`;
       }
-      return `($matched) => {\n    ${unpack}\n    return ${this.context.emitExpression(body)};\n  }`;
+      return `($matched) => {\n    ${unpack}\n    return ${indentContinuation(this.context.emitExpression(body), 4)};\n  }`;
     }
 
     if (body.kind === "BlockStatement") {
-      return `() => {\n${this.context.emitFunctionBody(body)}\n}`;
+      return `() => {\n  ${indentContinuation(this.context.emitFunctionBody(body), 2)}\n  }`;
     }
     return `() => ${this.context.emitArrowExpression(body)}`;
   }

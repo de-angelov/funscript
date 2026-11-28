@@ -1,4 +1,5 @@
 import ts from "typescript";
+import { indentContinuation } from "./indent.js";
 import {
   type BinaryExpression,
   type BindingDeclaration,
@@ -928,6 +929,37 @@ export class Emitter {
         return !this.userEffectBindings.has(localName);
       },
     );
+    // Only merge into the first source import when moving the generated import
+    // cannot change module evaluation order.
+    const firstImport = this.program?.body[0];
+    const canMergeNamedImport = (source: string): boolean =>
+      firstImport?.kind === "ImportDeclaration" &&
+      (firstImport.source.raw === JSON.stringify(source) ||
+        firstImport.source.raw === `'${source}'`) &&
+      !firstImport.isSideEffect &&
+      !firstImport.isTypeOnly &&
+      !firstImport.defaultBinding &&
+      !firstImport.namespaceBinding &&
+      firstImport.specifiers.length > 0 &&
+      !this.modularEffectImports;
+    const mergeNamedImport = (names: string[]): boolean => {
+      if (!firstImport || firstImport.kind !== "ImportDeclaration")
+        return false;
+      const original = this.emitTopLevelDeclaration(firstImport);
+      const end = original.lastIndexOf(" }");
+      if (end < 0 || !bodyCode.startsWith(original)) return false;
+      bodyCode =
+        original.slice(0, end) +
+        ", " +
+        names.join(", ") +
+        original.slice(end) +
+        bodyCode.slice(original.length);
+      return true;
+    };
+    const canMoveGeneratedImport =
+      !this.needsTsPattern &&
+      !this.needsMutative &&
+      !this.needsCheckedRecordDecoder;
     if (generatedEffectImports.length > 0) {
       if (this.modularEffectImports) {
         for (const name of generatedEffectImports.sort()) {
@@ -960,8 +992,17 @@ export class Emitter {
           bySource.set(source, list);
         }
         for (const source of [...bySource.keys()].sort()) {
-          const sorted = bySource.get(source)!.join(", ");
-          header += `import { ${sorted} } from ${JSON.stringify(source)};\n`;
+          const names = bySource.get(source)!;
+          if (
+            bySource.size === 1 &&
+            source === "effect" &&
+            this.esToolkitImports.size === 0 &&
+            canMoveGeneratedImport &&
+            canMergeNamedImport(source) &&
+            mergeNamedImport(names)
+          )
+            continue;
+          header += `import { ${names.join(", ")} } from ${JSON.stringify(source)};\n`;
         }
       }
     }
@@ -969,7 +1010,15 @@ export class Emitter {
       .filter((name) => !this.userEsToolkitBindings.has(name))
       .map((name) => (name === "slug" ? "kebabCase as slug" : name))
       .sort((a, b) => a.localeCompare(b));
-    if (generatedEsToolkitImports.length > 0) {
+    if (
+      generatedEsToolkitImports.length > 0 &&
+      !(
+        generatedEffectImports.length === 0 &&
+        canMoveGeneratedImport &&
+        canMergeNamedImport("es-toolkit") &&
+        mergeNamedImport(generatedEsToolkitImports)
+      )
+    ) {
       header += `import { ${generatedEsToolkitImports.join(", ")} } from "es-toolkit";\n`;
     }
     if (this.needsCheckedRecordDecoder) {
@@ -2267,8 +2316,20 @@ export class Emitter {
       const emitted = this.emitExpression(operand);
       return operand.kind === "FunctionExpression" ? `(${emitted})` : emitted;
     };
-    const left = emitOperand(expr.left);
+    let left = emitOperand(expr.left);
     const right = emitOperand(expr.right);
+    // A left-nested addition already has JavaScript's default grouping. Keep
+    // right-nested additions parenthesized: strings and floating point values
+    // make reassociation observable.
+    if (
+      expr.operator === "+" &&
+      expr.left.kind === "BinaryExpression" &&
+      expr.left.operator === "+" &&
+      left.startsWith("(") &&
+      left.endsWith(")")
+    ) {
+      left = left.slice(1, -1);
+    }
     const markBoolean = (operand: Expression, emitted: string) =>
       this.options.markBooleanOperands
         ? `__funscriptBooleanOperand(${operand.span.start.offset}, ${JSON.stringify(expr.operator)}, ${emitted})`
@@ -2784,7 +2845,7 @@ export class Emitter {
       const ret = isUnit
         ? "  return;"
         : body.finalExpression
-          ? `  return ${this.emitExpression(body.finalExpression)};`
+          ? `  return ${this.indentReturnedExpression(body.finalExpression)};`
           : "";
       if (stmts && ret) return `${stmts}\n${ret}`;
       if (stmts) return stmts;
@@ -2795,7 +2856,14 @@ export class Emitter {
       (body.kind === "Identifier" || body.kind === "UpperIdentifier") &&
       body.name === "Void";
     if (isUnit) return "  return;";
-    return `  return ${this.emitExpression(body)};`;
+    return `  return ${this.indentReturnedExpression(body)};`;
+  }
+
+  private indentReturnedExpression(expr: Expression): string {
+    const emitted = this.emitExpression(expr);
+    return expr.kind === "PipelineExpression" || expr.kind === "MatchExpression"
+      ? indentContinuation(emitted, 2)
+      : emitted;
   }
 
   public emitArrowExpression(expr: Expression): string {

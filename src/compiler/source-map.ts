@@ -1,4 +1,5 @@
 import MagicString, { type SourceMap } from "magic-string";
+import ts from "typescript";
 import type { Program } from "../ast/types.js";
 import { Emitter, type EmitterOptions } from "../emitter/emitter.js";
 
@@ -36,7 +37,7 @@ export function generateSourceMap(
         emitterOptions,
       );
       const singleOut = single.emit();
-      const code =
+      let code =
         decl.kind === "ImportDeclaration"
           ? singleOut.trim()
           : singleOut
@@ -44,6 +45,30 @@ export function generateSourceMap(
               .filter((l) => !l.startsWith("import "))
               .join("\n")
               .trim();
+      // A compatible first import can include generated named bindings. Map the
+      // complete emitted import back to that source declaration.
+      if (
+        i === 0 &&
+        decl.kind === "ImportDeclaration" &&
+        !typescript.includes(code)
+      ) {
+        const output = ts.createSourceFile(
+          "output.tsx",
+          typescript,
+          ts.ScriptTarget.Latest,
+          true,
+          ts.ScriptKind.TSX,
+        );
+        const first = output.statements.find(ts.isImportDeclaration);
+        if (
+          first &&
+          ts.isStringLiteral(first.moduleSpecifier) &&
+          (decl.source.raw === JSON.stringify(first.moduleSpecifier.text) ||
+            decl.source.raw === `'${first.moduleSpecifier.text}'`)
+        ) {
+          code = first.getText(output);
+        }
+      }
       const startOffset = i === 0 ? 0 : decl.span.start.offset;
       const endOffset = nextDecl ? nextDecl.span.start.offset : source.length;
       const isLast = i === ast.body.length - 1;

@@ -1055,12 +1055,10 @@ export describeShape = (shape: Shape) =>
       );
       expect(res.typescript).toContain(`match(shape)`);
       expect(res.typescript).toContain(`.with({ _tag: "Circle" }`);
-      expect(res.typescript).toContain(
-        `const [r] = Object.values(__match0) as any[];`,
-      );
+      expect(res.typescript).toContain(`const [r] = Object.values(__match0);`);
       expect(res.typescript).toContain(`.with({ _tag: "Rect" }`);
       expect(res.typescript).toContain(
-        `const [w, h] = Object.values(__match0) as any[];`,
+        `const [w, h] = Object.values(__match0);`,
       );
       expect(res.typescript).toContain(`.with({ _tag: "Point" }, () => 0)`);
       expect(res.typescript).toContain(`.otherwise(() => (-1))`);
