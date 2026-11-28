@@ -1,11 +1,41 @@
 // Program 04: JS & TS Interop with Effect Fibers
 
-import { Effect, Console } from "effect"
+import { Effect, Console, Option, Schema } from "effect"
 
 // 1. 'ts' escape hatch for raw TypeScript types
 ts { type Timestamp = number; }
 
 export schema Settings = ts { Record<string, string> }
+
+export schema Profile = {
+  name: String
+}
+
+ts {
+const findNickname = (id: string): Promise<string | null> =>
+    Promise.resolve(id === "known" ? "Ada" : null);
+  const loadProfile = (): Promise<unknown> => Promise.resolve({ name: "Ada" });
+}
+
+// A missing nickname is an ordinary result; the caller chooses a fallback.
+export nickname = (id: String) =>
+  effect {
+    found <- js findNickname(id)
+    => Option.getOrElse(found, () => "Guest")
+  }
+
+// Unknown values are decoded whole, including any nullish value.
+export profile =
+  effect {
+    raw <- js loadProfile()
+    user <- Schema.decodeUnknownEffect(Profile)(raw)
+    => user
+  }
+
+// Handle a rejected Promise or a synchronous throw at the interop seam.
+export safeGreeting = (name: String) =>
+  fetchUserGreeting(name)
+  |> catchTag("JsInteropError", (_) => Effect.succeed("Greeting unavailable"))
 
 // 2. Foreign JavaScript Promise simulation
 jsGetGreeting = (name: String) =>

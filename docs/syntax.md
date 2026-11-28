@@ -145,8 +145,11 @@ generated output, but not in idiomatic FunScript:
 Use `js` for JavaScript/Promise interop and `ts { ... }` for TypeScript escapes. `js`
 uses the resolved TypeScript type at that seam: a native `Promise<A | null | undefined>`
 becomes `Effect<Option<A>, JsInteropError>`, while `Promise<A>` becomes `Effect<A, JsInteropError>`.
-An `any`, `unknown`, or unresolved native result becomes `Effect<Option<Unknown>, JsInteropError>`;
-callers must handle `None` and decode `Some` values with a schema before use.
+An `any`, `unknown`, or unresolved native result becomes `Effect<Unknown, JsInteropError>`;
+decode the entire value with a schema before use. This preserves `null` and `undefined`
+so the schema can decide whether they are valid. Programs previously handling these
+untrusted results as `Option<Unknown>` must instead decode them or explicitly convert
+them with `fromNullishOr`.
 Native throws and Promise rejections become the typed `JsInteropError` channel, which callers
 can handle with `Effect.catchTag("JsInteropError", ...)` or map into an application error.
 Raw TypeScript backtick blocks remain an explicit escape hatch. See §1.8. The complete rejected/replacement table is in
@@ -2810,6 +2813,10 @@ payloads at runtime. Keep the runtime validator and static type derived from the
 same schema. Use `Option<T>` for absence, and `ts { ... }` for complex TypeScript
 types; a type escape hatch does not replace boundary decoding. Neither a cast
 nor `Unknown` itself proves that an external value satisfies a schema.
+
+An `export js` function returns a Promise that resolves with the Effect's success
+value and rejects if the Effect fails. An `Option` success value remains an Effect
+`Option` object; convert it explicitly if JavaScript callers need a nullish value.
 
 ### 12.3.1 Pit of Success guardrails and architectural boundaries
 

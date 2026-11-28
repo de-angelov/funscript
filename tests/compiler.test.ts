@@ -522,6 +522,11 @@ export untrusted = effect {
   value <- js untrustedNative()
   => value
 }
+ts {
+type IsUnknown<T> = unknown extends T ? ([keyof T] extends [never] ? true : false) : false;
+type AssertUnknown<T extends true> = T;
+type UntrustedResult = AssertUnknown<IsUnknown<Effect.Success<typeof untrusted>>>;
+}
 `.trim();
 
     const res = await Effect.runPromise(
@@ -549,6 +554,40 @@ export untrusted = effect {
       typeCheckSource(code, "native-interop.fun"),
     );
     expect(checked.success, checked.formattedOutput).toBe(true);
+  });
+
+  it("preserves untrusted nullish values and maps throwing then getters to JsInteropError", async () => {
+    const code = `
+ts {
+declare function untrusted(): unknown
+declare function throwingThen(): unknown
+}
+export value = effect {
+  result <- js untrusted()
+  => result
+}
+export failure = effect {
+  result <- js throwingThen()
+  => result
+}
+`.trim();
+    const cause = new Error("then getter failed");
+    for (const value of [null, undefined, { name: "Ada" }]) {
+      const output = await execute(code, {
+        scope: {
+          untrusted: () => value,
+          throwingThen: () => ({
+            get then() {
+              throw cause;
+            },
+          }),
+        },
+      });
+      expect(await Effect.runPromise(output.value)).toBe(value);
+      const failure = await Effect.runPromise(Effect.flip(output.failure));
+      expect(failure._tag).toBe("JsInteropError");
+      expect(failure.cause).toBe(cause);
+    }
   });
 
   it("guards synchronous throwing and non-throwing foreign JS calls with js", async () => {

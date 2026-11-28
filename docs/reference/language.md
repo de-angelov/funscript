@@ -842,7 +842,7 @@ export js handler = (...) => ...
 eff |> runPromise
 ```
 
-Lifts JS Promises into Effects inside effect blocks (`res <- js promiseFn()`). Native throws and rejections become the typed `JsInteropError` channel. When TypeScript declares the resolved value as `A | null | undefined`, js converts it to `Option<A>` with `Option.fromNullishOr`; non-nullable values remain `A`. An `any`, `unknown`, or unresolved native result becomes `Option<Unknown>`, requiring both absence handling and schema validation. It also compiles exported functions to Promise-returning JS functions (`export js handler`) and pipes Effects to JS Promises (`eff |> runPromise`).
+Lifts JavaScript calls and Promises into Effects inside effect blocks (`res <- js promiseFn()`). Native throws and rejections become the typed `JsInteropError` channel. Declared nullable values become `Option<A>`; non-nullable values remain `A`. An `any`, `unknown`, or unresolved result becomes `Unknown`, preserving nullish values for schema validation. Exported JS functions return Promises (`export js handler`), as does `eff |> runPromise`.
 
 ### Syntax-checked example
 
