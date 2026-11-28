@@ -910,13 +910,9 @@ export class Emitter {
   }
 
   public emit(): string {
-    let bodyCode = "";
-
-    if (this.program) {
-      for (const decl of this.program.body) {
-        bodyCode += this.emitTopLevelDeclaration(decl) + "\n\n";
-      }
-    }
+    const bodyParts =
+      this.program?.body.map((decl) => this.emitTopLevelDeclaration(decl)) ??
+      [];
 
     // Generate header imports
     let header = "";
@@ -929,37 +925,30 @@ export class Emitter {
         return !this.userEffectBindings.has(localName);
       },
     );
-    // Only merge into the first source import when moving the generated import
-    // cannot change module evaluation order.
-    const firstImport = this.program?.body[0];
-    const canMergeNamedImport = (source: string): boolean =>
-      firstImport?.kind === "ImportDeclaration" &&
-      (firstImport.source.raw === JSON.stringify(source) ||
-        firstImport.source.raw === `'${source}'`) &&
-      !firstImport.isSideEffect &&
-      !firstImport.isTypeOnly &&
-      !firstImport.defaultBinding &&
-      !firstImport.namespaceBinding &&
-      firstImport.specifiers.length > 0 &&
-      !this.modularEffectImports;
-    const mergeNamedImport = (names: string[]): boolean => {
-      if (!firstImport || firstImport.kind !== "ImportDeclaration")
-        return false;
-      const original = this.emitTopLevelDeclaration(firstImport);
-      const end = original.lastIndexOf(" }");
-      if (end < 0 || !bodyCode.startsWith(original)) return false;
-      bodyCode =
-        original.slice(0, end) +
-        ", " +
-        names.join(", ") +
-        original.slice(end) +
-        bodyCode.slice(original.length);
-      return true;
+    // Generated imports stay in the header, preserving their module evaluation
+    // order. Compatible user bindings can share that existing import.
+    const mergeNamedImport = (source: string, names: string[]): string[] => {
+      if (this.modularEffectImports) return names;
+      const decl = this.program?.body.find(
+        (item) =>
+          item.kind === "ImportDeclaration" &&
+          (item.source.raw === JSON.stringify(source) ||
+            item.source.raw === `'${source}'`) &&
+          !item.isSideEffect &&
+          !item.isTypeOnly &&
+          !item.defaultBinding &&
+          !item.namespaceBinding &&
+          item.specifiers.length > 0,
+      );
+      if (!decl || decl.kind !== "ImportDeclaration") return names;
+      const index = this.program!.body.indexOf(decl);
+      bodyParts[index] = "";
+      const userNames = decl.specifiers.map(
+        (spec) =>
+          `${spec.isTypeOnly ? "type " : ""}${spec.imported.name}${spec.imported.name === spec.local.name ? "" : ` as ${spec.local.name}`}`,
+      );
+      return [...userNames, ...names];
     };
-    const canMoveGeneratedImport =
-      !this.needsTsPattern &&
-      !this.needsMutative &&
-      !this.needsCheckedRecordDecoder;
     if (generatedEffectImports.length > 0) {
       if (this.modularEffectImports) {
         for (const name of generatedEffectImports.sort()) {
@@ -993,16 +982,8 @@ export class Emitter {
         }
         for (const source of [...bySource.keys()].sort()) {
           const names = bySource.get(source)!;
-          if (
-            bySource.size === 1 &&
-            source === "effect" &&
-            this.esToolkitImports.size === 0 &&
-            canMoveGeneratedImport &&
-            canMergeNamedImport(source) &&
-            mergeNamedImport(names)
-          )
-            continue;
-          header += `import { ${names.join(", ")} } from ${JSON.stringify(source)};\n`;
+          const combined = mergeNamedImport(source, names);
+          header += `import { ${combined.join(", ")} } from ${JSON.stringify(source)};\n`;
         }
       }
     }
@@ -1010,16 +991,12 @@ export class Emitter {
       .filter((name) => !this.userEsToolkitBindings.has(name))
       .map((name) => (name === "slug" ? "kebabCase as slug" : name))
       .sort((a, b) => a.localeCompare(b));
-    if (
-      generatedEsToolkitImports.length > 0 &&
-      !(
-        generatedEffectImports.length === 0 &&
-        canMoveGeneratedImport &&
-        canMergeNamedImport("es-toolkit") &&
-        mergeNamedImport(generatedEsToolkitImports)
-      )
-    ) {
-      header += `import { ${generatedEsToolkitImports.join(", ")} } from "es-toolkit";\n`;
+    if (generatedEsToolkitImports.length > 0) {
+      const combined = mergeNamedImport(
+        "es-toolkit",
+        generatedEsToolkitImports,
+      );
+      header += `import { ${combined.join(", ")} } from "es-toolkit";\n`;
     }
     if (this.needsCheckedRecordDecoder) {
       const helpers = ["decodeCheckedRecord as $funscriptDecodeCheckedRecord"];
@@ -1053,7 +1030,7 @@ export class Emitter {
       header += "\n";
     }
 
-    return header + bodyCode.trim() + "\n";
+    return header + bodyParts.join("\n\n").trim() + "\n";
   }
 
   private emitTopLevelDeclaration(

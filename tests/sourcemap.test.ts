@@ -48,6 +48,29 @@ export answer = 42`;
         ).toBe(line);
       }
     });
+    it("maps relocated imports and declarations with a side-effect import in between", async () => {
+      const code = `import "./setup.js"
+import { Console } from "effect"
+export clean = (name: String) => name |> String.trim
+export answer = 42`;
+      const result = await Effect.runPromise(
+        compileString(code, "relocated.fun"),
+      );
+      const tracer = new TraceMap(result.map!.toString());
+      const lines = result.typescript.split("\n");
+      for (const [fragment, line] of [
+        ["import { Console", 2],
+        ['import "./setup.js"', 1],
+        ["export const clean", 3],
+        ["export const answer", 4],
+      ] as const) {
+        const index = lines.findIndex((text) => text.includes(fragment));
+        expect(index).toBeGreaterThanOrEqual(0);
+        expect(
+          originalPositionFor(tracer, { line: index + 1, column: 0 }).line,
+        ).toBe(line);
+      }
+    });
     it("generates a valid v3 source map for simple variable bindings", async () => {
       const code = `
 export name = "Ada"
