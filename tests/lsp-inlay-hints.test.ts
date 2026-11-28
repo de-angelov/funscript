@@ -51,6 +51,18 @@ export program = effect {
     expect(msgHint?.kind).toBe(InlayHintKind.Type);
   });
 
+  it("infers the return type of a named Effect function", () => {
+    const source = `export load = () => effect {
+  result <- Effect.succeed(42)
+  => result
+}`;
+    const hints = findInlayHints(source, fixtureUri);
+    expect(
+      hints.some((hint) => String(hint.label).includes("Effect<number")),
+    ).toBe(true);
+    expect(hints.some((hint) => hint.label === ": number")).toBe(true);
+  });
+
   it("filters hints based on range", () => {
     const source = `
 export a = 1
@@ -119,5 +131,26 @@ second = () =>
     const secondHint = hints.find((h) => h.position.line === 11);
     expect(firstHint?.label).toBe(": number");
     expect(secondHint?.label).toBe(": string");
+  });
+
+  it("keeps repeated Effect binding types distinct after expanded generated declarations", () => {
+    const source = `
+schema Profile = { a: String, b: String, c: String, d: String, e: String }
+first = () => effect {
+  value <- Effect.succeed(42)
+  => value
+}
+second = () => effect {
+  value <- Effect.succeed("hello")
+  => value
+}
+`;
+    const hints = findInlayHints(source, fixtureUri);
+    expect(hints.find((hint) => hint.position.line === 3)?.label).toBe(
+      ": number",
+    );
+    expect(hints.find((hint) => hint.position.line === 7)?.label).toBe(
+      ": string",
+    );
   });
 });

@@ -133,13 +133,23 @@ export function findInlayHints(
 
   const hints: InlayHint[] = [];
 
-  const visitAst = (node: unknown): void => {
+  const visitAst = (node: unknown, scope?: ts.Node): void => {
     if (!node || typeof node !== "object") return;
     if (Array.isArray(node)) {
-      for (const item of node) visitAst(item);
+      for (const item of node) visitAst(item, scope);
       return;
     }
     const n = node as Record<string, unknown>;
+    let childScope = scope;
+    const inScope = (matches: ts.VariableDeclaration[] | undefined) =>
+      scope
+        ? matches?.filter(
+            (candidate) =>
+              candidate.getStart(checked.sourceFile) >=
+                scope.getStart(checked.sourceFile) &&
+              candidate.end <= scope.end,
+          )
+        : matches;
 
     // 1. Top-level and local binding declarations
     if (n.kind === "BindingDeclaration") {
@@ -147,18 +157,25 @@ export function findInlayHints(
       if (decl.id.kind === "Identifier" && !decl.typeAnnotation) {
         const name = decl.id.name;
         const tsDecl = pickTsDeclByPosition(
-          tsVars.get(name),
+          inScope(tsVars.get(name)),
           checked.sourceFile,
           decl.id.span.start.line - 1,
           decl.id.span.start.column - 1,
         );
         if (tsDecl) {
+          childScope = tsDecl.initializer ?? scope;
           if (decl.init.kind === "FunctionExpression") {
             const func = decl.init;
             if (!func.returnType && tsDecl.initializer) {
-              const sig = checked.checker.getSignatureFromDeclaration(
-                tsDecl.initializer as ts.FunctionLikeDeclaration,
+              // Named Effect functions are emitted as Effect.fn(...) calls,
+              // so their initializer is not necessarily a function declaration.
+              const functionType = checked.checker.getTypeAtLocation(
+                tsDecl.name,
               );
+              const sig = checked.checker.getSignaturesOfType(
+                functionType,
+                ts.SignatureKind.Call,
+              )[0];
               if (sig) {
                 const retType = checked.checker.getReturnTypeOfSignature(sig);
                 const retTypeStr = cleanTypeString(
@@ -241,7 +258,7 @@ export function findInlayHints(
       if (bind.id.kind === "Identifier") {
         const name = bind.id.name;
         const tsDecl = pickTsDeclByPosition(
-          tsVars.get(name),
+          inScope(tsVars.get(name)),
           checked.sourceFile,
           bind.id.span.start.line - 1,
           bind.id.span.start.column - 1,
@@ -282,7 +299,7 @@ export function findInlayHints(
 
     for (const key of Object.keys(n)) {
       if (key === "span") continue;
-      visitAst(n[key]);
+      visitAst(n[key], childScope);
     }
   };
 
