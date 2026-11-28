@@ -152,6 +152,9 @@ untrusted results as `Option<Unknown>` must instead decode them or explicitly co
 them with `fromNullishOr`.
 Native throws and Promise rejections become the typed `JsInteropError` channel, which callers
 can handle with `Effect.catchTag("JsInteropError", ...)` or map into an application error.
+Generated code imports a shared adapter from `funscript/js`; the FunScript package must
+therefore be available at runtime for modules that use `js`. The exported `JsInteropError`
+class has the same identity across those modules when they use the same package instance.
 Raw TypeScript backtick blocks remain an explicit escape hatch. See §1.8. The complete rejected/replacement table is in
 [rejected-syntax.md](rejected-syntax.md).
 

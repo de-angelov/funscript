@@ -19,7 +19,8 @@
     "./bun/preload": "./dist/plugins/bun-preload.js",
     "./esbuild": "./dist/plugins/esbuild.js",
     "./test": "./dist/testing/index.js",
-    "./callback": "./dist/interop/callback.js"
+    "./callback": "./dist/interop/callback.js",
+    "./js": "./dist/interop/js.js"
   },
   "scripts": {
     "build": "tsc && tsc -p editors/vscode",

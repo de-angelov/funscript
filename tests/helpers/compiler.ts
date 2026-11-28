@@ -16,6 +16,7 @@ import {
 } from "effect";
 import { match, P } from "ts-pattern";
 import { create as mutativeCreate } from "mutative";
+import { jsInterop } from "../../src/interop/js.js";
 import ts from "typescript";
 import * as fs from "node:fs";
 import * as path from "node:path";
@@ -198,6 +199,7 @@ export function getDefaultRuntimeScope(): Record<string, any> {
     match,
     P,
     create: mutativeCreate,
+    __funscriptJs: jsInterop,
   };
 }
 

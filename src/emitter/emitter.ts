@@ -1017,9 +1017,11 @@ export class Emitter {
     if (this.needsMutative) {
       header += `import { create } from "mutative";\n`;
     }
+    if (this.needsJsInterop) {
+      header += `import { jsInterop as __funscriptJs } from "funscript/js";\n`;
+    }
     header += emitRuntimeHelpers({
       referenceEquality: this.needsReferenceEquality,
-      jsInterop: this.needsJsInterop,
       decodeUnknown: this.needsDecodeUnknown,
       fromNullishOrElse: this.needsFromNullishOrElse,
       fromNullishOr: this.needsFromNullishOr,
@@ -1608,8 +1610,6 @@ export class Emitter {
   }
 
   public emitJsExpression(expr: JsExpression): string {
-    this.effectImports.add("Effect");
-    this.effectImports.add("Option");
     this.needsJsInterop = true;
     // compiler.ts replaces this provisional flag with the nullability inferred
     // from the native TypeScript return type.

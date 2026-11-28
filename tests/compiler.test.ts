@@ -449,7 +449,7 @@ export runPromiseTest = fetchUser("123") |> runPromise
 
     const res = await Effect.runPromise(compileString(code));
     expect(res.typescript).toContain(
-      `import { Effect, Option, Schema, pipe } from "effect";`,
+      `import { Effect, Schema, pipe } from "effect";`,
     );
     expect(res.typescript).toContain(
       `export const fetchUser = async (id: string) => {`,
@@ -533,9 +533,9 @@ type UntrustedResult = AssertUnknown<IsUnknown<Effect.Success<typeof untrusted>>
       compileString(code, "native-interop.fun"),
     );
     expect(res.typescript).toContain(
-      'import { Effect, Option } from "effect";',
+      'import { jsInterop as __funscriptJs } from "funscript/js";',
     );
-    expect(res.typescript).toContain("class JsInteropError extends Error");
+    expect(res.typescript).not.toContain("class JsInteropError extends Error");
     expect(res.typescript).toContain(
       "__funscriptJs(() => nullableNative(), true)",
     );
@@ -544,10 +544,6 @@ type UntrustedResult = AssertUnknown<IsUnknown<Effect.Success<typeof untrusted>>
     );
     expect(res.typescript).toContain(
       '__funscriptJs(() => untrustedNative(), "unknown")',
-    );
-    expect(res.typescript).toContain("Option.fromNullishOr");
-    expect(res.typescript).toContain(
-      "catch: (cause) => new JsInteropError(cause)",
     );
 
     const checked = await Effect.runPromise(
@@ -592,6 +588,7 @@ export failure = effect {
 
   it("awaits PromiseLike values with the resolved type and reads then once", async () => {
     const code = `
+import { Option } from "effect"
 ts {
 declare function foreign(): PromiseLike<string>
 declare function nullableForeign(): PromiseLike<string | null>
@@ -710,6 +707,7 @@ export runThrow = effect {
 
   it("preserves unions of native Promise return types", async () => {
     const code = `
+import { Option } from "effect"
 ts {
 declare function nativeUnion(): Promise<{ status: 200 }> | Promise<{ status: 404 }>
 declare function nullableUnion(): Promise<string> | Promise<null>

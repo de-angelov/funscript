@@ -9,19 +9,79 @@ import { fileURLToPath } from "node:url";
 const root = resolve(fileURLToPath(new URL("..", import.meta.url)));
 const temp = mkdtempSync(join(tmpdir(), "funscript-package-"));
 const npm = process.platform === "win32" ? "npm.cmd" : "npm";
-const run = (command, args, cwd = temp) => execFileSync(command, args, { cwd, stdio: "inherit" });
+const run = (command, args, cwd = temp) =>
+  execFileSync(command, args, { cwd, stdio: "inherit" });
 try {
   const manifest = JSON.parse(readFileSync(join(root, "package.json"), "utf8"));
-  const packed = JSON.parse(execFileSync(npm, ["pack", "--json", "--pack-destination", temp], { cwd: root, encoding: "utf8" }))[0];
+  const packed = JSON.parse(
+    execFileSync(npm, ["pack", "--json", "--pack-destination", temp], {
+      cwd: root,
+      encoding: "utf8",
+    }),
+  )[0];
   const paths = packed.files.map((file) => file.path);
   for (const prefix of ["tests/", "slopboss/", ".github/", "scripts/"]) {
-    if (paths.some((path) => path.startsWith(prefix))) throw new Error(`Unexpected package contents: ${prefix}`);
+    if (paths.some((path) => path.startsWith(prefix)))
+      throw new Error(`Unexpected package contents: ${prefix}`);
   }
-  writeFileSync(join(temp, "package.json"), JSON.stringify({ private: true, type: "module" }));
-  run(npm, ["install", "--ignore-scripts", "--no-audit", "--no-fund", "--prefer-offline", "--engine-strict", join(temp, packed.filename), "vite@^5.4.21"]);
-  const imports = Object.keys(manifest.exports).map((key) => key === "." ? manifest.name : manifest.name + key.slice(1));
-  run(process.execPath, ["--input-type=module", "-e", `for (const name of ${JSON.stringify(imports)}) await import(name);`]);
-  run(process.execPath, [join(temp, "node_modules", manifest.name, "dist", "cli", "index.js"), "--help"]);
+  writeFileSync(
+    join(temp, "package.json"),
+    JSON.stringify({ private: true, type: "module" }),
+  );
+  run(npm, [
+    "install",
+    "--ignore-scripts",
+    "--no-audit",
+    "--no-fund",
+    "--prefer-offline",
+    "--engine-strict",
+    join(temp, packed.filename),
+    "vite@^5.4.21",
+  ]);
+  const imports = Object.keys(manifest.exports).map((key) =>
+    key === "." ? manifest.name : manifest.name + key.slice(1),
+  );
+  run(process.execPath, [
+    "--input-type=module",
+    "-e",
+    `for (const name of ${JSON.stringify(imports)}) await import(name);`,
+  ]);
+  run(process.execPath, [
+    join(temp, "node_modules", manifest.name, "dist", "cli", "index.js"),
+    "--help",
+  ]);
+  writeFileSync(
+    join(temp, "interop.fun"),
+    `ts { const foreign = (): Promise<string> => Promise.resolve("ok"); }
+export result = effect {
+  value <- js foreign()
+  => value
+}
+`,
+  );
+  run(process.execPath, [
+    join(temp, "node_modules", manifest.name, "dist", "cli", "index.js"),
+    "emit",
+    "interop.fun",
+    "--out",
+    "interop.ts",
+  ]);
+  run(process.execPath, [
+    join(temp, "node_modules", "typescript", "bin", "tsc"),
+    "--module",
+    "NodeNext",
+    "--moduleResolution",
+    "NodeNext",
+    "--target",
+    "ES2022",
+    "--skipLibCheck",
+    "interop.ts",
+  ]);
+  run(process.execPath, [
+    "--input-type=module",
+    "-e",
+    `import { result } from "./interop.js"; import { Effect } from "effect"; if (await Effect.runPromise(result) !== "ok") throw new Error("interop runtime failed");`,
+  ]);
   console.log(`Package smoke test passed (${paths.length} files).`);
 } finally {
   rmSync(temp, { recursive: true, force: true });

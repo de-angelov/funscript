@@ -34,8 +34,9 @@ export area = (shape: Shape) =>
 ```
 
 That becomes ordinary TypeScript built on `Data.TaggedEnum`, `Schema`, and `ts-pattern`.
-The output remains readable, debuggable, and portable: FunScript does not hide a custom runtime
-or standard library behind the generated code.
+The output remains readable and debuggable. JavaScript interop uses a small shared
+`funscript/js` runtime adapter, so projects using that feature need the FunScript package
+available at runtime.
 
 ## What works today
 

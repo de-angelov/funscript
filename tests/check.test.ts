@@ -97,9 +97,7 @@ export result = effect {
 
       expect(result.success).toBe(false);
       expect(
-        result.diagnostics.some((d) =>
-          d.message.includes("Property 'name' does not exist"),
-        ),
+        result.diagnostics.some((d) => d.diagnosticCode === "TS18046"),
       ).toBe(true);
     });
 

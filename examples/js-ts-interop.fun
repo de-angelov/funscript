@@ -1,6 +1,7 @@
 // Program 04: JS & TS Interop with Effect Fibers
 
 import { Effect, Console, Option, Schema } from "effect"
+import { findNickname, loadProfile } from "./js-interop-native.js"
 
 // 1. 'ts' escape hatch for raw TypeScript types
 ts { type Timestamp = number; }
@@ -9,12 +10,6 @@ export schema Settings = ts { Record<string, string> }
 
 export schema Profile = {
   name: String
-}
-
-ts {
-const findNickname = (id: string): Promise<string | null> =>
-    Promise.resolve(id === "known" ? "Ada" : null);
-  const loadProfile = (): Promise<unknown> => Promise.resolve({ name: "Ada" });
 }
 
 // A missing nickname is an ordinary result; the caller chooses a fallback.

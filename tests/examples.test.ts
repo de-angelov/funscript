@@ -49,13 +49,7 @@ describe("Sample Applications & Real-World Programs", () => {
 
       // Effect imports & features
       expect(res.typescript).toContain(
-        'import { Array, Console, Effect, Fiber, Layer, Number, Ref, Schedule, pipe } from "effect";',
-      );
-      expect(res.typescript).not.toContain(
-        'import { Context, Data, Effect, Number, Schema, pipe } from "effect";',
-      );
-      expect(res.typescript).toContain(
-        'import { Context, Data, Schema } from "effect";',
+        'import { Array, Console, Effect, Fiber, Layer, Number, Ref, Schedule, pipe, Context, Data, Schema } from "effect";',
       );
       expect(res.typescript).toContain(
         'import { match, P } from "ts-pattern";',

@@ -17,3 +17,4 @@ Package: `funscript` 0.2.3.
 | `funscript/esbuild` | `./dist/plugins/esbuild.js` |
 | `funscript/test` | `./dist/testing/index.js` |
 | `funscript/callback` | `./dist/interop/callback.js` |
+| `funscript/js` | `./dist/interop/js.js` |
