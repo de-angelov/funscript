@@ -2815,7 +2815,7 @@ types; a type escape hatch does not replace boundary decoding. Neither a cast
 nor `Unknown` itself proves that an external value satisfies a schema.
 
 An `export js` function returns a Promise that resolves with the Effect's success
-value and rejects if the Effect fails. An `Option` success value remains an Effect
+value and rejects if argument validation or the Effect fails. An `Option` success value remains an Effect
 `Option` object; convert it explicitly if JavaScript callers need a nullish value.
 
 ### 12.3.1 Pit of Success guardrails and architectural boundaries

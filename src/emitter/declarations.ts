@@ -819,14 +819,14 @@ export function emitBindingDeclaration(
             ? ctx.emitExpression(fn.body.finalExpression)
             : "undefined";
           if (fn.body.statements.length === 0) {
-            return `${exp}${keyword} ${target} = (${params}) => {\n${prefix}  return Effect.runPromise(${retExpr});\n};`;
+            return `${exp}${keyword} ${target} = async (${params}) => {\n${prefix}  return Effect.runPromise(${retExpr});\n};`;
           }
           const stmts = fn.body.statements
             .map((s) => "    " + ctx.emitStatement(s))
             .join("\n");
-          return `${exp}${keyword} ${target} = (${params}) => {\n${prefix}  return Effect.runPromise(Effect.gen(function* () {\n${stmts}\n    return ${retExpr};\n  }));\n};`;
+          return `${exp}${keyword} ${target} = async (${params}) => {\n${prefix}  return Effect.runPromise(Effect.gen(function* () {\n${stmts}\n    return ${retExpr};\n  }));\n};`;
         }
-        return `${exp}${keyword} ${target} = (${params}) => {\n${prefix}  return Effect.runPromise(${ctx.emitExpression(fn.body)});\n};`;
+        return `${exp}${keyword} ${target} = async (${params}) => {\n${prefix}  return Effect.runPromise(${ctx.emitExpression(fn.body)});\n};`;
       } finally {
         ctx.primitiveIdentifiers = prevPrimitiveIdentifiers;
         ctx.recordScopes.pop();

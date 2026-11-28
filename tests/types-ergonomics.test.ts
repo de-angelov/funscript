@@ -927,7 +927,7 @@ export js render = (props: Props) => effect {
     ).toBe("Hello, stranger");
     expect(clicked).toBe(true);
 
-    expect(() => render({ label: 123, onClick: () => {} })).toThrow();
+    await expect(render({ label: 123, onClick: () => {} })).rejects.toThrow();
   });
 
   it("automatically lowers Option into foreign optional and null parameters and record properties", () => {
@@ -1108,7 +1108,7 @@ export js handleServer = ({ host, port }: ServerConfig) =>
     const res = Effect.runSync(compileString(src));
     expect(res.typescript).toContain("export const { host, port } = cfg;");
     expect(res.typescript).toContain(
-      "export const handleServer = ($funscriptParam0: ServerConfig) =>",
+      "export const handleServer = async ($funscriptParam0: ServerConfig) =>",
     );
 
     const host = evaluateTsFunction(res.typescript, "host");

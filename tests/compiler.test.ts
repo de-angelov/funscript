@@ -452,7 +452,7 @@ export runPromiseTest = fetchUser("123") |> runPromise
       `import { Effect, Option, Schema, pipe } from "effect";`,
     );
     expect(res.typescript).toContain(
-      `export const fetchUser = (id: string) => {`,
+      `export const fetchUser = async (id: string) => {`,
     );
     expect(res.typescript).toContain(
       `id = Schema.decodeUnknownSync(Schema.String)(id);`,
@@ -588,6 +588,57 @@ export failure = effect {
       expect(failure._tag).toBe("JsInteropError");
       expect(failure.cause).toBe(cause);
     }
+  });
+
+  it("awaits PromiseLike values with the resolved type and reads then once", async () => {
+    const code = `
+ts {
+declare function foreign(): PromiseLike<string>
+declare function nullableForeign(): PromiseLike<string | null>
+declare function rejectedForeign(): PromiseLike<string>
+type EqualTypes<A, B> = (<T>() => T extends A ? 1 : 2) extends (<T>() => T extends B ? 1 : 2) ? true : false;
+type Assert<T extends true> = T;
+type Value = Assert<EqualTypes<Effect.Success<typeof value>, string>>;
+type NullableValue = Assert<EqualTypes<Effect.Success<typeof nullable>, Option.Option<string>>>;
+}
+export value = effect {
+  result <- js foreign()
+  => result
+}
+export nullable = effect {
+  result <- js nullableForeign()
+  => result
+}
+export rejected = effect {
+  result <- js rejectedForeign()
+  => result
+}
+`.trim();
+    let reads = 0;
+    const cause = new Error("thenable rejected");
+    const output = await execute(code, {
+      scope: {
+        foreign: () => ({
+          get then() {
+            reads++;
+            if (reads > 1) throw new Error("then read twice");
+            return (resolve: (value: string) => void) => resolve("resolved");
+          },
+        }),
+        nullableForeign: () => Promise.resolve(null),
+        rejectedForeign: () => Promise.reject(cause),
+      },
+    });
+    expect(await Effect.runPromise(output.value)).toBe("resolved");
+    expect(reads).toBe(1);
+    expect(Option.isNone(await Effect.runPromise(output.nullable))).toBe(true);
+    const failure = await Effect.runPromise(Effect.flip(output.rejected));
+    expect(failure._tag).toBe("JsInteropError");
+    expect(failure.cause).toBe(cause);
+    const checked = await Effect.runPromise(
+      typeCheckSource(code, "thenable.fun"),
+    );
+    expect(checked.success, checked.formattedOutput).toBe(true);
   });
 
   it("guards synchronous throwing and non-throwing foreign JS calls with js", async () => {

@@ -5,7 +5,8 @@ import { compileString } from "../src/compiler.js";
 
 const evaluate = async (source: string, names: string[]) => {
   const result = await Effect.runPromise(compileString(source));
-  const code = ts.transpile(result.typescript, { module: ts.ModuleKind.ESNext })
+  const code = ts
+    .transpile(result.typescript, { module: ts.ModuleKind.ESNext })
     .replace(/^export const /gm, "const ")
     .replace(/^export \{.*\};?\n/gm, "")
     .replace(/^export type .*;\n/gm, "")
@@ -21,28 +22,42 @@ const evaluate = async (source: string, names: string[]) => {
       return Reflect.get(target, prop, receiver);
     },
   });
-  return new Function("Effect", "Schema", "pipe", `${executable}; return { ${names.join(", ")} };`)(Effect, schemaProxy, pipe) as Record<string, (...args: unknown[]) => unknown>;
+  return new Function(
+    "Effect",
+    "Schema",
+    "pipe",
+    `${executable}; return { ${names.join(", ")} };`,
+  )(Effect, schemaProxy, pipe) as Record<
+    string,
+    (...args: unknown[]) => unknown
+  >;
 };
 
 describe("runtime boundary validation", () => {
   it("validates exported JavaScript function arguments before running the body", async () => {
-    const { greet } = await evaluate(`
+    const { greet } = await evaluate(
+      `
 export js greet = (name: String) =>
   effect {
     => "Hello, " + name
   }
-`, ["greet"]);
+`,
+      ["greet"],
+    );
 
     await expect(greet("Ada")).resolves.toBe("Hello, Ada");
-    expect(() => greet(42)).toThrow(/Expected string/);
+    await expect(greet(42)).rejects.toThrow(/Expected string/);
   });
 
   it("provides runtime-validating constructors for record schemas", async () => {
-    const { UserFromUnknown } = await evaluate(`
+    const { UserFromUnknown } = await evaluate(
+      `
 export schema User = {
   name: String
 }
-`, ["UserFromUnknown"]);
+`,
+      ["UserFromUnknown"],
+    );
 
     expect(UserFromUnknown({ name: "Ada" })).toEqual({ name: "Ada" });
     expect(() => UserFromUnknown({ name: 42 })).toThrow(/Expected string/);
@@ -62,10 +77,22 @@ export parseVote = (dict: Unknown) =>
     expect(result.typescript).toContain("Schema.decodeUnknown(VotePayload)");
 
     const { parseVote } = await evaluate(source, ["parseVote"]);
-    const valid = await Effect.runPromise(parseVote({ countryCode: "BG", voteType: "upvote" }) as Effect.Effect<any, any>);
+    const valid = await Effect.runPromise(
+      parseVote({ countryCode: "BG", voteType: "upvote" }) as Effect.Effect<
+        any,
+        any
+      >,
+    );
     expect(valid).toEqual({ countryCode: "BG", voteType: "upvote" });
 
-    const failure = await Effect.runPromise(Effect.flip(parseVote({ countryCode: 123, voteType: "upvote" }) as Effect.Effect<any, any>));
+    const failure = await Effect.runPromise(
+      Effect.flip(
+        parseVote({ countryCode: 123, voteType: "upvote" }) as Effect.Effect<
+          any,
+          any
+        >,
+      ),
+    );
     expect(failure).toBeDefined();
     expect(failure._tag).toBe("SchemaError");
   });
@@ -87,10 +114,22 @@ export processVote = (dict: Unknown) =>
     expect(result.typescript).toContain("Schema.decodeUnknown(VotePayload)");
 
     const { processVote } = await evaluate(source, ["processVote"]);
-    const country = await Effect.runPromise(processVote({ countryCode: "US", voteType: "vote" }) as Effect.Effect<any, any>);
+    const country = await Effect.runPromise(
+      processVote({ countryCode: "US", voteType: "vote" }) as Effect.Effect<
+        any,
+        any
+      >,
+    );
     expect(country).toBe("US");
 
-    const failure = await Effect.runPromise(Effect.flip(processVote({ countryCode: 42, voteType: "vote" }) as Effect.Effect<any, any>));
+    const failure = await Effect.runPromise(
+      Effect.flip(
+        processVote({ countryCode: 42, voteType: "vote" }) as Effect.Effect<
+          any,
+          any
+        >,
+      ),
+    );
     expect(failure).toBeDefined();
     expect(failure._tag).toBe("SchemaError");
   });
